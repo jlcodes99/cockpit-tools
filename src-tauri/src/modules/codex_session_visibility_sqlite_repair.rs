@@ -38,9 +38,10 @@ fn count_sqlite_rows_to_update_for_options(
     };
     for db_path in sqlite_candidate_paths_for_options(data_dir, options) {
         let item = count_sqlite_rows_to_update_for_db(
+            data_dir,
             &db_path,
             target_provider,
-            options.sidebar_visible_only,
+            options,
             facts.as_ref(),
             selection,
         )?;
@@ -51,9 +52,10 @@ fn count_sqlite_rows_to_update_for_options(
 }
 
 fn count_sqlite_rows_to_update_for_db(
+    data_dir: &Path,
     db_path: &Path,
     target_provider: &str,
-    sidebar_visible_only: bool,
+    options: CodexSessionVisibilityRepairOptions,
     facts: Option<&RolloutThreadFacts>,
     selection: &RepairTargetSelection,
 ) -> Result<SqliteProviderScan, String> {
@@ -105,15 +107,20 @@ fn count_sqlite_rows_to_update_for_db(
         });
     };
     let mut count = 0i64;
-    if let Some(where_clause) = build_threads_repair_where_clause(columns, sidebar_visible_only) {
-        if let Some(facts) = facts {
+    if let Some(where_clause) = build_threads_repair_where_clause(columns, options.sidebar_visible_only) {
+        let rollout_root = (matches!(options.mode, CodexSessionVisibilityRepairMode::Quick)
+            && columns.id
+            && columns.rollout_path)
+            .then_some(data_dir);
+        if facts.is_some() || rollout_root.is_some() {
             count += collect_eligible_thread_ids_for_repair(
                 &connection,
                 columns,
                 &where_clause,
                 target_provider,
                 selection,
-                &facts.subagent_thread_ids,
+                facts.map(|facts| &facts.subagent_thread_ids),
+                rollout_root,
             )?
             .len() as i64;
         } else if let Some(session_ids) = selection.session_ids() {
@@ -252,9 +259,10 @@ fn update_sqlite_provider_for_options(
     let mut total = 0usize;
     for db_path in sqlite_candidate_paths_for_options(data_dir, options) {
         total += update_sqlite_provider_for_db(
+            data_dir,
             &db_path,
             target_provider,
-            options.sidebar_visible_only,
+            options,
             facts.as_ref(),
             selection,
         )?;
@@ -263,9 +271,10 @@ fn update_sqlite_provider_for_options(
 }
 
 fn update_sqlite_provider_for_db(
+    data_dir: &Path,
     db_path: &Path,
     target_provider: &str,
-    sidebar_visible_only: bool,
+    options: CodexSessionVisibilityRepairOptions,
     facts: Option<&RolloutThreadFacts>,
     selection: &RepairTargetSelection,
 ) -> Result<usize, String> {
@@ -322,16 +331,21 @@ fn update_sqlite_provider_for_db(
         .transaction()
         .map_err(|error| format_sqlite_write_error(db_path, &error))?;
     let mut updated_rows = 0usize;
-    if let Some(where_clause) = build_threads_repair_where_clause(columns, sidebar_visible_only) {
+    if let Some(where_clause) = build_threads_repair_where_clause(columns, options.sidebar_visible_only) {
         let set_clause = build_threads_repair_set_clause(columns);
-        if let Some(facts) = facts {
+        let rollout_root = (matches!(options.mode, CodexSessionVisibilityRepairMode::Quick)
+            && columns.id
+            && columns.rollout_path)
+            .then_some(data_dir);
+        if facts.is_some() || rollout_root.is_some() {
             let thread_ids = collect_eligible_thread_ids_for_repair(
                 &transaction,
                 columns,
                 &where_clause,
                 target_provider,
                 selection,
-                &facts.subagent_thread_ids,
+                facts.map(|facts| &facts.subagent_thread_ids),
+                rollout_root,
             )?;
             if columns.model_provider {
                 let sql = format!("UPDATE threads SET {set_clause} WHERE id = ?2");
@@ -538,40 +552,49 @@ fn collect_eligible_thread_ids_for_repair(
     where_clause: &str,
     target_provider: &str,
     selection: &RepairTargetSelection,
-    excluded_thread_ids: &HashSet<String>,
+    excluded_thread_ids: Option<&HashSet<String>>,
+    rollout_root: Option<&Path>,
 ) -> Result<Vec<String>, String> {
     if !columns.id {
         return Ok(Vec::new());
     }
-    let sql = format!("SELECT id FROM threads WHERE {where_clause}");
+    let rollout_column = if rollout_root.is_some() {
+        "rollout_path"
+    } else {
+        "NULL"
+    };
+    let sql = format!("SELECT id, {rollout_column} FROM threads WHERE {where_clause}");
     let mut statement = connection
         .prepare(&sql)
         .map_err(|error| format!("准备 SQLite 会话筛选失败: {}", error))?;
     let mut ids = Vec::new();
-    if columns.model_provider {
-        let rows = statement
-            .query_map([target_provider], |row| row.get::<_, String>(0))
-            .map_err(|error| format!("查询 SQLite 会话筛选失败: {}", error))?;
-        for row in rows {
-            let thread_id = row.map_err(|error| format!("读取 SQLite 会话筛选失败: {}", error))?;
-            if selection.includes_session_id(&thread_id)
-                && !excluded_thread_ids.contains(&thread_id)
+    let params = rusqlite::params_from_iter(columns.model_provider.then_some(target_provider));
+    let rows = statement
+        .query_map(params, |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?))
+        })
+        .map_err(|error| format!("查询 SQLite 会话筛选失败: {}", error))?;
+    for row in rows {
+        let (thread_id, rollout_path) =
+            row.map_err(|error| format!("读取 SQLite 会话筛选失败: {}", error))?;
+        if !selection.includes_session_id(&thread_id)
+            || excluded_thread_ids.is_some_and(|ids| ids.contains(&thread_id))
+        {
+            continue;
+        }
+        if let Some(root) = rollout_root {
+            let Some(rollout_path) = rollout_path else {
+                continue;
+            };
+            let path = resolve_rollout_path(root, &rollout_path);
+            if !path.is_file()
+                && !(path.extension().is_some_and(|ext| ext == "jsonl")
+                    && path.with_extension("jsonl.zst").is_file())
             {
-                ids.push(thread_id);
+                continue;
             }
         }
-    } else {
-        let rows = statement
-            .query_map([], |row| row.get::<_, String>(0))
-            .map_err(|error| format!("查询 SQLite 会话筛选失败: {}", error))?;
-        for row in rows {
-            let thread_id = row.map_err(|error| format!("读取 SQLite 会话筛选失败: {}", error))?;
-            if selection.includes_session_id(&thread_id)
-                && !excluded_thread_ids.contains(&thread_id)
-            {
-                ids.push(thread_id);
-            }
-        }
+        ids.push(thread_id);
     }
     Ok(ids)
 }

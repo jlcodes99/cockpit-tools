@@ -13,6 +13,8 @@ import type {
   CodexSessionRecord,
   CodexSessionSearchOptions,
   CodexSessionTokenStats,
+  CodexSessionUsageCursor,
+  CodexSessionUsagePage,
   CodexSessionUsageQuery,
   CodexSessionUsageReport,
   CodexSessionUsageSyncResult,
@@ -427,13 +429,47 @@ export async function querySessionUsage(
   return await invoke("codex_query_session_usage", { query });
 }
 
+export async function querySessionUsageRequests(
+  query: CodexSessionUsageQuery,
+  cursor: CodexSessionUsageCursor | null,
+): Promise<CodexSessionUsagePage> {
+  return await invoke("codex_query_session_usage_requests", { query, cursor });
+}
+
+const sessionUsageScopeFields = [
+  "fromTimestamp", "toTimestamp", "instanceId", "model", "projectKey", "sessionId",
+] as const;
+
+let sessionUsageScan: {
+  query: CodexSessionUsageQuery;
+  promise: Promise<CodexSessionUsageSyncResult>;
+} | undefined;
+
 export async function syncSessionUsage(
   options: { rebuild?: boolean; query?: CodexSessionUsageQuery } = {},
 ): Promise<CodexSessionUsageSyncResult> {
-  return await invoke("codex_sync_session_usage", {
-    rebuild: options.rebuild ?? false,
-    query: options.query ?? {},
-  });
+  const { rebuild = false, query = {} } = options;
+  const active = sessionUsageScan;
+  if (active && !rebuild) {
+    const result = await active.promise;
+    if (
+      sessionUsageScopeFields.every((field) => (active.query[field] ?? null) === (query[field] ?? null))
+      && Boolean(active.query.includeProjects) === Boolean(query.includeProjects)
+    ) {
+      return result;
+    }
+    return { ...result, report: await querySessionUsage(query) };
+  }
+
+  const promise = invoke<CodexSessionUsageSyncResult>("codex_sync_session_usage", { rebuild, query });
+  // An explicit rebuild still goes through the backend's exclusive scan lock.
+  if (active) return await promise;
+  sessionUsageScan = { query, promise };
+  try {
+    return await promise;
+  } finally {
+    sessionUsageScan = undefined;
+  }
 }
 
 export async function moveSessionsToTrashAcrossInstances(

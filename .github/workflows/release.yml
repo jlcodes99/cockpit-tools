@@ -948,6 +948,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # Host Mesa 25+ needs wayland >= 1.24 (wl_fixes_interface). Do not
+          # ship the Ubuntu 22.04 libwayland-* copies inside the AppImage.
+          LINUXDEPLOY_EXCLUDED_LIBRARIES: libwayland-*
         run: |
           set -euo pipefail
           npx tauri build --ci --config src-tauri/tauri.prebuilt-frontend.conf.json

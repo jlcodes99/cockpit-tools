@@ -245,6 +245,7 @@ async fn stop_gateway_locked_checked(
             endpoint,
         )
     };
+    crate::modules::ssh_server::close_api_service_tunnels();
 
     if endpoint.is_some() || child.is_some() || task.is_some() {
         logger::log_codex_api_info(&format!(
@@ -1115,6 +1116,101 @@ pub(crate) async fn bound_oauth_account_id_for_instance_start() -> Result<Option
     };
     let account = validate_local_access_bound_oauth_account(&bound_id)?;
     Ok(Some(account.id))
+}
+
+#[derive(Clone, PartialEq, Eq)]
+pub(crate) struct SshApiService {
+    pub(crate) port: u16,
+    api_key: String,
+    supports_websockets: bool,
+    catalog_modified: Option<std::time::SystemTime>,
+}
+
+impl SshApiService {
+    pub(crate) fn remote_account(&self, remote_port: u16) -> CodexAccount {
+        let mut account = build_runtime_account(
+            build_base_url_with_host(remote_port, CodexLocalAccessClientBaseUrlHost::Ipv4Loopback),
+            self.api_key.clone(),
+            None,
+            self.supports_websockets,
+        );
+        account.email = CODEX_LOCAL_ACCESS_RUNTIME_PROVIDER_NAME.into();
+        account
+    }
+}
+
+pub(crate) async fn running_api_service_for_ssh() -> Option<SshApiService> {
+    let runtime = gateway_runtime().lock().await;
+    let collection = runtime.collection.as_ref()?;
+    let handle = runtime.native_handle.as_ref()?;
+    if !local_access_gateway_should_run(collection)
+        || !runtime.running
+        || handle.is_finished()
+        || handle.addr.port() != collection.port
+    {
+        return None;
+    }
+    let mut service = SshApiService {
+        port: collection.port,
+        api_key: collection.api_key.clone(),
+        supports_websockets: profile_api_key_supports_websockets(collection, &collection.api_key),
+        catalog_modified: None,
+    };
+    drop(runtime);
+    service.catalog_modified = std::fs::metadata(api_service_ssh_catalog_path())
+        .and_then(|metadata| metadata.modified())
+        .ok();
+    Some(service)
+}
+
+fn api_service_ssh_catalog_path() -> PathBuf {
+    codex_account::get_codex_home().join(CODEX_MANAGED_MODEL_CATALOG_FILE)
+}
+
+pub(crate) fn api_service_model_catalog_for_ssh() -> Result<Option<String>, String> {
+    read_optional_profile_file(&api_service_ssh_catalog_path())
+}
+
+#[cfg(test)]
+#[test]
+fn ssh_api_service_bundle_uses_remote_port_and_keeps_unrelated_settings() {
+    let service = SshApiService {
+        port: 9000,
+        api_key: "sk-fixture-service".into(),
+        supports_websockets: true,
+        catalog_modified: None,
+    };
+    let account = service.remote_account(45000);
+    let catalog = r#"{"models":[]}"#;
+    let bundle = codex_account::build_projection_bundle_for_remote(
+        &account,
+        Some(r#"
+cli_auth_credentials_store = "ephemeral"
+
+[features]
+web_search = true
+
+[model_providers.codex_local_access]
+env_key = "STALE_KEY"
+"#),
+        Some(catalog),
+    ).expect("build a projection portable across hosts");
+    let file = |name| bundle.files.iter().find(|file| file.relative_path == name).unwrap();
+    let config = crate::modules::codex_config_format::read_codex_config_doc_from_str(
+        &file("config.toml").content,
+    ).unwrap();
+    assert_eq!(config["model_provider"].as_str(), Some(CODEX_LOCAL_ACCESS_RUNTIME_PROVIDER_ID));
+    let provider = &config["model_providers"][CODEX_LOCAL_ACCESS_RUNTIME_PROVIDER_ID];
+    assert_eq!(provider["base_url"].as_str(), Some("http://127.0.0.1:45000/v1"));
+    assert_eq!(provider["wire_api"].as_str(), Some("responses"));
+    assert!(provider.get("env_key").is_none());
+    assert_eq!(config["cli_auth_credentials_store"].as_str(), Some("file"));
+    assert_eq!(config["features"]["web_search"].as_bool(), Some(true));
+    assert_eq!(config["model_catalog_json"].as_str(), Some(CODEX_MANAGED_MODEL_CATALOG_FILE));
+    assert_eq!(file(CODEX_MANAGED_MODEL_CATALOG_FILE).content, catalog);
+    let auth: Value = serde_json::from_str(&file("auth.json").content).unwrap();
+    assert_eq!(auth["OPENAI_API_KEY"], "sk-fixture-service");
+    assert!(bundle.files.iter().all(|file| file.mode == 0o600));
 }
 
 pub async fn activate_local_access_for_dir(

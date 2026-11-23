@@ -25,6 +25,8 @@ export function formatQoderError(error: unknown): string {
       return i18n.t('qoder.diagnostics.renewalFailed');
     case 'QODER_SESSION_CHANGED':
       return i18n.t('qoder.diagnostics.sessionChanged');
+    case 'QODER_PLATFORM_MISMATCH':
+    case 'QODER_REGION_UNSUPPORTED':
     case 'QODER_SESSION_ENDPOINT_UNAVAILABLE':
       return i18n.t('qoder.diagnostics.endpointUnavailable');
     case 'QODER_LAUNCH_UNCONFIRMED':

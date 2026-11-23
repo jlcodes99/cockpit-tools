@@ -256,6 +256,12 @@ pub struct CodexAccount {
     pub bound_oauth_account_id: Option<String>,
     #[serde(default, skip_serializing_if = "is_false")]
     pub bound_oauth_use_local_gateway: bool,
+    /// 外部供应商凭据引用：只保存来源账号 ID，不保存来源账号密钥。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub api_credential_ref: Option<String>,
+    /// 外部供应商适配器类型，例如 `zcode_api_key`。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub api_credential_kind: Option<String>,
     /// 上游凭据来自 Grok 平台账号（OAuth）的供应商账号。
     ///
     /// 该账号自身不带上游 API Key：本地网关会把绑定的 Grok 平台账号的 OAuth
@@ -295,6 +301,9 @@ pub struct CodexAccount {
     /// Explicit opt-out: bypass account/shared proxies without changing other accounts.
     #[serde(default)]
     pub egress_proxy_disabled: bool,
+    /// Preserve client .env/system settings, ignoring Cockpit account/shared exits.
+    #[serde(default)]
+    pub egress_proxy_client_defaults: bool,
     /// Codex OAuth 设备指纹收敛模式。未设置时按 `off` 处理。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     // Legacy import/export metadata only; never projected into runtime credentials.
@@ -692,6 +701,8 @@ impl CodexAccount {
             api_image_generation_account_models: HashMap::new(),
             bound_oauth_account_id: None,
             bound_oauth_use_local_gateway: false,
+            api_credential_ref: None,
+            api_credential_kind: None,
             upstream_grok_account_id: None,
             api_service_source_account_id: None,
             official_registration_id: None,
@@ -707,6 +718,7 @@ impl CodexAccount {
             account_note: None,
             egress_proxy_url: None,
             egress_proxy_disabled: false,
+            egress_proxy_client_defaults: false,
             codex_fingerprint_mode: None,
             codex_cli_only: false,
             codex_cli_only_allow_app_server: false,

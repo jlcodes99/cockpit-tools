@@ -1,4 +1,4 @@
-import { isLaunchPathApp, readMissingLaunchPathApp } from '../utils/appLaunchPath';
+import { isLaunchPathApp, readInvalidWorkbuddyPath, readMissingLaunchPathApp } from '../utils/appLaunchPath';
 import { useDurableUiSetting } from '../hooks/useDurableUiSetting';
 import { previewDurableUiSetting } from '../utils/durableUiSettings';
 import { isCodexLaunchCancelled } from '../utils/codexLaunchCancellation';
@@ -1710,7 +1710,8 @@ export function InstancesManager<TAccount extends AccountLike>({
   const handleMissingPathError = (error: unknown, instanceId?: string) => {
     if (isCodexApp && isCodexLaunchCancelled(error)) return true;
     const message = String(error ?? "");
-    const app = message === 'APP_PATH_NOT_FOUND:antigravity_legacy'
+    const invalidWorkbuddyPath = readInvalidWorkbuddyPath(error);
+    const app = invalidWorkbuddyPath ? 'workbuddy' : message === 'APP_PATH_NOT_FOUND:antigravity_legacy'
       ? 'antigravity'
       : message.startsWith('CLAUDE_MULTI_INSTANCE_REQUIRES_EXE:')
         ? 'claude'
@@ -1728,7 +1729,7 @@ export function InstancesManager<TAccount extends AccountLike>({
       ? { kind: "instance" as const, instanceId, runtimeTarget }
       : { kind: "default" as const, runtimeTarget };
     window.dispatchEvent(
-      new CustomEvent("app-path-missing", { detail: { app, pathRuntimeTarget, retry } }),
+      new CustomEvent("app-path-missing", { detail: { app, pathRuntimeTarget, retry, invalidWorkbuddyPath } }),
     );
     return true;
   };

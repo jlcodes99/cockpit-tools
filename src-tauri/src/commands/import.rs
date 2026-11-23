@@ -102,7 +102,7 @@ mod tests {
     use std::fs;
 
     #[test]
-    fn pending_oauth_export_omits_refresh_token_and_preserves_notes() {
+    fn pending_oauth_export_omits_refresh_token_and_preserves_tags_and_notes() {
         let _lock = crate::modules::test_support::env_lock()
             .lock()
             .unwrap_or_else(|error| error.into_inner());
@@ -127,6 +127,8 @@ mod tests {
             },
         )
         .expect("create pending account");
+        modules::account::update_account_tags(&account.id, vec!["work".to_string()])
+            .expect("save account tags");
         let runtime = tokio::runtime::Runtime::new().expect("create runtime");
         let raw = runtime
             .block_on(export_accounts(vec![account.id]))
@@ -136,6 +138,7 @@ mod tests {
 
         assert_eq!(exported["pending_oauth"], true);
         assert!(exported.get("refresh_token").is_none());
+        assert_eq!(exported["tags"], serde_json::json!(["work"]));
         assert_eq!(exported["notes"], "delivery note");
         assert_eq!(exported["account_password"], "password-1");
         assert_eq!(exported["two_factor_secret"], "JBSWY3DPEHPK3PXP");

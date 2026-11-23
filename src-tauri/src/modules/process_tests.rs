@@ -208,7 +208,19 @@ fn linux_close_accepts_an_unreaped_exited_child() {
 
 #[cfg(test)]
 mod codex_native_probe_policy_tests {
-    use super::{complete_native_codex_entries_or_probe, fresh_codex_entries_or_probe};
+    use super::{complete_native_codex_entries_or_probe, fresh_codex_entries_or_probe, is_other_windows_package};
+
+    #[test]
+    fn same_named_executable_is_ignored_only_for_a_proven_other_package() {
+        let codex = r"C:\Program Files\WindowsApps\OpenAI.Codex_26.1.0.0_x64__publisher\app\ChatGPT.exe";
+        assert!(is_other_windows_package(codex, "OpenAI.ChatGPT_publisher"));
+        assert!(!is_other_windows_package(codex, "OPENAI.CODEX_publisher"));
+        assert!(!is_other_windows_package(codex, ""));
+        assert!(!is_other_windows_package(codex, "unidentified"));
+        assert!(!is_other_windows_package(
+            r"C:\Tools\Codex\ChatGPT.exe", "OpenAI.ChatGPT_publisher"
+        ));
+    }
 
     #[test]
     fn complete_native_snapshot_including_no_client_avoids_powershell() {
@@ -1250,6 +1262,21 @@ mod tests {
             Path::new(
                 r"C:\Program Files\WindowsApps\OpenAI.Codex_26.707.9564.0_x64__2p2nqsd0c76g0\app\Codex.exe"
             ),
+            signature,
+        ));
+    }
+
+    #[test]
+    fn running_workbuddy_match_rejects_bundled_node() {
+        let signature = windows_app_launch_signature("workbuddy").unwrap();
+        assert!(running_app_candidate_matches(
+            "workbuddy",
+            Path::new(r"C:\WorkBuddy\WorkBuddy.exe"),
+            signature,
+        ));
+        assert!(!running_app_candidate_matches(
+            "workbuddy",
+            Path::new(r"C:\WorkBuddy\resources\app\node.exe"),
             signature,
         ));
     }

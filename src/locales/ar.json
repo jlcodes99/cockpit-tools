@@ -198,6 +198,22 @@
     "providerClear": "مسح التحديد"
   },
   "common": {
+    "automation": {
+      "invalidPlatform": "منصة حساب غير معروفة. شغّل cockpit-cli account platforms لعرض المعرّفات المدعومة.",
+      "hostUnavailable": "شغّل تطبيق Cockpit Tools لسطح المكتب باستخدام مجلد البيانات هذا، ثم أعد المحاولة.",
+      "responseTimeout": "لم يُرجع Cockpit Tools نتيجة في الوقت المحدد. تحقّق من الحالة الحالية قبل تكرار التغيير.",
+      "versionMismatch": "إصدار بروتوكول أتمتة الحسابات مختلف بين CLI وتطبيق سطح المكتب. حدّثهما معًا.",
+      "unauthorized": "تعذّرت مصادقة طلب أتمتة الحسابات المحلي.",
+      "invalidAccountId": "استخدم معرّف حساب من المنصة المختارة أو قائمة أعضاء خدمة API.",
+      "accountNotFound": "لم يُعثر على الحساب في المنصة المختارة.",
+      "operationFailed": "تعذّر على Cockpit Tools إكمال العملية. راجع سجلات التطبيق.",
+      "appPathMissing": "اضبط مسار العميل في Cockpit Tools ثم أعد محاولة التبديل.",
+      "appPathMissingAfterSwitch": "تم تبديل الحساب. اضبط مسار العميل قبل تشغيله.",
+      "switchBusy": "يجري تبديل حساب لهذا العميل بالفعل. أعد المحاولة بعد اكتماله.",
+      "quotaUnsupported": "لا يدعم هذا النوع من الحسابات تحديث الحصة مباشرةً بهذا الأمر. اعرض الحصة المحفوظة دون --refresh.",
+      "quotaRefreshFailed": "فشل تحديث الحصة الأخير. اعرض الحصة المحفوظة دون --refresh."
+    },
+    "previewTruncated": "يُعرض جزء من المعاينة. يتضمن النسخ أو التنزيل ملف JSON كاملاً.",
     "collapseAll": "طي الكل",
     "expandAll": "توسيع الكل",
     "syncing": "جارٍ المزامنة…",
@@ -323,6 +339,9 @@
       "success": "نجاح",
       "failed": "فشل",
       "cancelled": "ملغى",
+      "clientDisconnected": "انقطع اتصال العميل",
+      "upstreamOverloaded": "الخادم الوسيط مثقل",
+      "requestServiceUnavailable": "الخدمة غير متاحة",
       "incomplete": "تدفق غير مكتمل",
       "recovered": "مسار بديل",
       "official": "تفويض رسمي",
@@ -1174,7 +1193,8 @@
         "stopPrevious": "إيقاف المثيل السابق",
         "prepareCredentials": "تجهيز بيانات الدخول",
         "writeProfile": "كتابة ملف المثيل",
-        "startClient": "تشغيل عميل Codex"
+        "startClient": "تشغيل عميل Codex",
+        "checkProxyCountry": "فحص دولة الخروج"
       },
       "detail": {
         "checkingInstance": "جارٍ قراءة إعدادات المثيل...",
@@ -1347,7 +1367,7 @@
       "trayIconStyleDesc": "اختر أيقونة النظام أحادية اللون أو أيقونة التطبيق الأصلية الملونة",
       "trayIconStyleTemplate": "أيقونة أحادية اللون",
       "trayIconStyleColor": "أيقونة ملونة",
-      "menuBarLeftClick": "النقر الأيسر على أيقونة شريط القوائم",
+      "menuBarLeftClick": "النقر بالزر الأيسر في شريط القوائم",
       "menuBarLeftClickMenu": "فتح قائمة الحصص",
       "menuBarLeftClickWindow": "فتح النافذة الرئيسية",
       "floatingCardStartup": "إظهار البطاقة العائمة عند التشغيل",
@@ -1612,16 +1632,15 @@
       "webdavAllowedDomainsDesc": "مفصولة بفواصل؛ فارغ = بلا حد",
       "claudeQuotaDisplayRemaining": "حصة Claude كنسبة متبقية",
       "claudeQuotaDisplayRemainingDesc": "الافتراضي: % مستخدم. التفعيل = % متبقي. التبديل والتنبيهات حسب الاستخدام.",
-      "menuBarLeftClick": "النقر بالزر الأيسر في شريط القوائم",
       "menuBarLeftClickDesc": "يفتح النقر بالزر الأيمن دائمًا قائمة الحصة.",
       "menuBarLeftClickQuotaMenu": "قائمة الحصة",
       "menuBarLeftClickMainWindow": "النافذة الرئيسية",
       "menuBarQuota": "عرض الحصة الحية في شريط القوائم",
       "menuBarQuotaDesc": "عند التفعيل، تُعرض الحصة المتبقية للحساب الحالي للمنصة المختارة بجانب أيقونة شريط القوائم. خيارات المنصة في مربع حوار.",
-      "menuBarQuotaEnabledDesc": "مفعّل · {{platform}} · المتبقي لحساب هذه المنصة الحالي (الأدنى بين الحصص)",
+      "menuBarQuotaEnabledDesc": "مفعّل · {{platform}} · الحصص المتاحة للحساب الحالي",
       "menuBarQuotaConfigure": "تهيئة",
       "menuBarQuotaModalTitle": "حصة شريط القوائم",
-      "menuBarQuotaModalDesc": "خيارات مخصصة لهذه الميزة فقط: تتبع الحساب الحالي. خدمة API لـ Codex: «API + نسبة متبقية من المجموعة»؛ حساب مفتاح API: «API + الرصيد المتبقي»؛ عادي: بادئة البريد + النسبة (الأدنى؛ أحمر/برتقالي/أخضر).",
+      "menuBarQuotaModalDesc": "يتبع الحساب الحالي للمنصة المحددة ويعرض فترات الحصة المتاحة. تحدد أقل حصة متبقية اللون. تعرض حسابات Codex API Service / API Key علامة API دائمًا.",
       "menuBarAntigravityMetric": "حصة شريط القائمة",
       "menuBarQuotaLowest": "أقل حصة",
       "menuBarQuotaPlatform": "منصة حساب الحصة",
@@ -1652,10 +1671,11 @@
       },
       "timeDisplayMode": "عرض الوقت",
       "timeDisplayModeDesc": "الوقت المعروض في بطاقات الحسابات وقوائمها. الافتراضي هو وقت تبديل الحساب",
-      "menuBarLeftClick": "النقر بالزر الأيسر في شريط القوائم",
-      "menuBarLeftClickDesc": "يفتح النقر بالزر الأيمن دائمًا قائمة الحصة.",
-      "menuBarLeftClickQuotaMenu": "قائمة الحصة",
-      "menuBarLeftClickMainWindow": "النافذة الرئيسية"
+      "menuBarQuotaLayout": "تخطيط الحصة",
+      "menuBarQuotaLayoutDesc": "يستخدم السطر الأفقي الواحد نصًا أكبر. يعرض السطران المدمجان الحصص المتبقية لكلتا الفترتين مع توفير مساحة في شريط القوائم. عند توفر فترة واحدة، يعود العرض إلى سطر أفقي واحد.",
+      "menuBarQuotaLayoutPreview": "معاينة التخطيط مع حصص توضيحية",
+      "menuBarQuotaLayoutHorizontal": "سطر أفقي واحد",
+      "menuBarQuotaLayoutStacked": "سطران مدمجان"
     },
     "network": {
       "apiTitle": "واجهة برمجة تطبيقات قمرة القيادة المضادة للجاذبية",
@@ -2720,7 +2740,8 @@
     "stopApiServiceFailed": "تعذّر إيقاف خدمة API. عطّلها أولًا ثم أعد المحاولة.",
     "stopApiServiceFailedContinue": "لم تتوقف خدمة API بشكل صحيح. ستتم متابعة إعادة التشغيل...",
     "skipThisVersion": "تخطي هذا الإصدار",
-    "skipFailed": "تعذر تخطي هذا التحديث: {{error}}"
+    "skipFailed": "تعذر تخطي هذا التحديث: {{error}}",
+    "installFailedTranslocated": "يعمل التطبيق من موقع للقراءة فقط (macOS App Translocation)، لذا لا يمكن تثبيت التحديث. أغلق Cockpit Tools، وانقله إلى مجلد التطبيقات في Finder، ثم افتحه مجددًا وأعد محاولة التحديث."
   },
   "closeDialog": {
     "minimizeWindow": "تصغير",
@@ -4287,6 +4308,28 @@
       }
     },
     "sessionUsage": {
+      "analysis": {
+        "localUsage": "استخدام الجلسات المحلية",
+        "selectedScope": "عوامل التصفية الحالية",
+        "project": "المشروع",
+        "allModels": "كل النماذج",
+        "allProjects": "كل المشاريع",
+        "unknownProject": "مشروع غير معروف",
+        "requests": "الطلبات",
+        "time": "الوقت",
+        "freshInput": "إدخال جديد",
+        "cached": "إصابات ذاكرة التخزين المؤقت",
+        "referenceCost": "التكلفة المقدّرة",
+        "cacheRate": "معدل الإصابة",
+        "viewSession": "عرض طلبات الجلسة",
+        "clearSession": "مسح تصفية الجلسة",
+        "sort": "فرز",
+        "indexingProjects": "جارٍ فهرسة المشاريع السابقة…",
+        "noResults": "لا سجلات مطابقة لعوامل التصفية",
+        "unpriced": "بعض الاستخدام بلا سعر للنموذج",
+        "costHelp": "تقدير حسب أسعار واجهة النموذج",
+        "page": "الصفحة {{page}}"
+      },
       "comparison": {
         "localTotal": "رموز الجلسات المحلية · الفترة والنسخ المحددة",
         "profileTotal": "الملف الرسمي · إجمالي الرموز منذ البداية",
@@ -4921,6 +4964,8 @@
       "daysLeft": "{{count}}ي",
       "over99Days": "99+ي",
       "titleWithDate": "ينتهي الاشتراك: {{date}}",
+      "expiryUnconfirmed": "غير مؤكّد",
+      "titleWithUnconfirmedDate": "تعذّر تأكيد انتهاء الاشتراك. آخر موعد مسجّل: {{date}}",
       "titleUnknown": "أعد التفويض لجلب انتهاء الاشتراك",
       "filterLabel": "تصفية الانتهاء",
       "filterAll": "كلها ({{count}})",
@@ -4943,7 +4988,8 @@
         "refreshTokens": "تحديث بيانات الدخول",
         "writeCredentials": "كتابة بيانات العميل",
         "syncSettings": "مزامنة إعدادات الحساب",
-        "startClient": "تشغيل عميل Codex"
+        "startClient": "تشغيل عميل Codex",
+        "checkProxyCountry": "فحص دولة الخروج"
       },
       "status": {
         "pending": "انتظار",
@@ -5927,7 +5973,7 @@
         "viewAll": "عرض الكل"
       },
       "previewTitle": "معاينة الوكيل",
-      "modeDisabled": "بلا وكيل",
+      "modeDisabled": "فرض الاتصال المباشر",
       "disableAction": "إلغاء الوكيل",
       "setIndependent": "وكيل خاص",
       "disabledHint": "تجاوز الوكيل الخاص والمشترك ومحاولة الاتصال المباشر للاتصالات الجديدة.",
@@ -5973,7 +6019,7 @@
       "restoreEntryNotRunning": "لم يُعثر على تطبيق سطح مكتب يعمل ويستخدم مدخل وكيل مسجل تابع لنسخة Cockpit هذه.",
       "restoreEntryBusy": "استعادة الوكيل جارية بالفعل. أعد المحاولة بعد قليل.",
       "restoreEntryTimeout": "انتهت مهلة استعادة الوكيل. أعد المحاولة.",
-      "restartHint": "ينتقل العملاء الذين بدأوا عبر المُرحّل المحلي عند إنشاء اتصال جديد. يحتاج العملاء الآخرون إلى إعادة تشغيل مرة واحدة. يستمع جسر سطح المكتب على واجهة الاسترجاع المحلية فقط، لكنه لا يعزل المستخدمين المحليين الآخرين. لا تتغير إعدادات وكيل النظام.",
+      "restartHint": "أعد تشغيل Codex بعد الربط أو تغيير وضع الوكيل أو إلغاء الربط لتستخدم الواجهة والخلفية الإعدادات نفسها. عند فشل الوكيل لن يتم الرجوع إلى اتصال مباشر.",
       "exportHint": "لا تتضمن صادرات الحساب بيانات اعتماد الوكيل؛ أعد إعدادها بعد الاستيراد.",
       "backToAccounts": "العودة إلى الحسابات",
       "accountsTitle": "الحسابات",
@@ -6365,7 +6411,76 @@
       "noCurrentNode": "العقدة الحالية غير متاحة بعد",
       "runtimeBusy": "الوكيل المحلي مشغول. التحديث غير متاح مؤقتًا.",
       "runtimeCapacity": "هناك عدد كبير من الوكلاء قيد التشغيل. أوقف الوكلاء غير المستخدمة وأعد المحاولة.",
-      "runtimeReadFailed": "حالة الوكيل المحلي غير متاحة مؤقتًا. أعد المحاولة."
+      "runtimeReadFailed": "حالة الوكيل المحلي غير متاحة مؤقتًا. أعد المحاولة.",
+      "modeClient": "استخدام إعدادات العميل",
+      "clientHint": "الاحتفاظ بإعدادات .env ووكيل النظام الأصلية لهذا الحساب، دون تطبيق وكيل الحساب أو الوكيل المشترك من Cockpit.",
+      "launch": {
+        "envChanged": "تغيرت إعدادات الوكيل خارج هذه العملية. تم الاحتفاظ بالملف؛ راجع إعدادات الوكيل في .env قبل إعادة المحاولة.",
+        "envStorage": "تعذرت قراءة إعدادات الوكيل أو حفظها بأمان. تم الاحتفاظ بالملف الأصلي؛ تحقق من أذونات المجلد.",
+        "envUnsupported": "تعذرت إدارة تنسيق .env بأمان ولم تتم الكتابة فوقه. تحقق من علامات الاقتباس غير المغلقة أو استمرار الأسطر.",
+        "stopFailed": "تعذر إيقاف نسخة Codex ذات الإعدادات غير المتطابقة. أغلقها قبل إعادة المحاولة."
+      },
+      "country": {
+        "title": "فحص بلد الخروج قبل التشغيل",
+        "hint": "اختياري لكل الحسابات، مع ربط وكيل أو بدونه. يفحص مخرج HTTP عبر ChatGPT Cloudflare trace عند التشغيل من داخل Cockpit. لا يغيّر اختصارات سطح المكتب.",
+        "expected": "البلد أو المنطقة المتوقعة",
+        "choose": "اختر بلدًا أو منطقة",
+        "save": "حفظ فحص البلد",
+        "saved": "تم حفظ إعدادات فحص البلد",
+        "mismatch": "بلد الخروج غير مطابق: المتوقع {{expected}}، والمكتشف {{actual}}. لم يتم تشغيل Codex.",
+        "unavailable": "تعذر تأكيد بلد الخروج. لم يتم تشغيل Codex؛ تحقق من الاتصال ثم أعد المحاولة.",
+        "routeUnknown": "تعذر تحديد مسار وكيل العميل. لم يتم تشغيل Codex؛ راجع إعدادات الوكيل وملف .env.",
+        "changed": "تغيرت إعدادات البلد أثناء الفحص. أعد المحاولة للتحقق من الإعدادات الحالية.",
+        "storage": "تعذرت قراءة إعدادات فحص البلد أو حفظها.",
+        "invalid": "اختر بلدًا أو منطقة صالحة.",
+        "search": "البحث باسم الدولة أو رمزها",
+        "actual": "الدولة أو المنطقة المرصودة",
+        "route": "الإعدادات التي تم فحصها",
+        "checkedAt": "وقت الفحص",
+        "notDetected": "لم تُكتشف",
+        "notRequired": "غير مفعّل",
+        "resultTitle": "نتيجة فحص دولة الخروج",
+        "evidenceHint": "يُفحص مسار HTTP المحفوظ للتشغيل فقط. السجلات هنا تخص جلسة Cockpit الحالية، ويحفظ سجل التطبيق النتائج. النتيجة السابقة لا تؤكد الاتصال الحالي.",
+        "saveFirst": "احفظ وضع الوكيل والدولة قبل الفحص.",
+        "noChecks": "لا توجد فحوصات في هذه الجلسة.",
+        "checkNow": "افحص الآن",
+        "history": "الفحوصات السابقة في هذه الجلسة",
+        "historyFailed": "تعذرت قراءة الفحوصات الأخيرة.",
+        "result_checking": "جارٍ فحص دولة الخروج…",
+        "result_passed": "نجح الفحص",
+        "result_blocked": "فشل الفحص",
+        "result_stale": "تغيرت الإعدادات؛ أعد الفحص",
+        "route_account": "وكيل حساب Cockpit",
+        "route_direct": "اتصال مباشر إجباري",
+        "route_env": "ملف .env الخاص بالعميل",
+        "route_environment": "البيئة الموروثة",
+        "route_system": "وكيل Windows",
+        "route_network": "مسار الشبكة الافتراضي",
+        "route_unknown": "لم يُحدد بعد",
+        "progressCountries": "المتوقعة: {{expected}} · المرصودة: {{actual}}",
+        "progressTime": "المدة: {{ms}} مللي ثانية"
+      },
+      "env": {
+        "title": "متغيرات وكيل العميل",
+        "source": "المصدر المكتشف: {{source}}",
+        "source_saved": "إعدادات محفوظة لهذا الحساب",
+        "source_env": "ملف .env للعميل",
+        "source_environment": "متغيرات البيئة الموروثة",
+        "source_system": "وكيل نظام Windows",
+        "source_none": "لم يُكتشف وكيل صريح",
+        "source_unknown": "تعذر التعرف",
+        "hint": "تُقبل فقط HTTP_PROXY وHTTPS_PROXY وALL_PROXY وNO_PROXY. تُطبق عند التشغيل التالي من Cockpit بإعدادات العميل، مع الحفاظ على بقية إدخالات .env.",
+        "variables": "متغيرات الوكيل",
+        "recognize": "إعادة القراءة",
+        "save": "حفظ إعدادات ENV",
+        "saved": "حُفظت للتشغيل التالي",
+        "unrecognized": "تعذرت قراءة متغيرات الوكيل الحالية بأمان. يمكنك إدخال قيم ثابتة هنا؛ لن يتغير ملف العميل الآن.",
+        "noneHint": "لم يُعثر على وكيل صريح. قد تظل واجهة TUN أو طبقة شبكة أخرى نشطة.",
+        "readFailed": "تعذرت قراءة إعدادات ENV. أعد المحاولة قبل التعديل.",
+        "saveFailed": "تعذر حفظ إعدادات ENV.",
+        "changed": "تغيرت الإعدادات في موضع آخر. أعد قراءتها قبل الحفظ.",
+        "invalid": "أدخل قيماً ثابتة فقط لـ HTTP_PROXY وHTTPS_PROXY وALL_PROXY وNO_PROXY دون أسماء مكررة. البروتوكولات المدعومة: http وhttps وsocks5 وsocks5h."
+      }
     },
     "more": {
       "title": "المزيد",
@@ -7911,6 +8026,10 @@
     }
   },
   "workbuddy": {
+    "errors": {
+      "nodeAppPath": "يشير هذا المسار إلى بيئة تشغيل Node ‏({{path}}). اختر WorkBuddy.exe.",
+      "keyProcessFailed": "تعذّرت قراءة مفتاح WorkBuddy الرسمي. بقيت بيانات تسجيل الدخول كما هي. تحقّق من مسار التطبيق ({{path}}) في الإعدادات، ثم تحقّق من وجود تحديثات."
+    },
     "desktopEdition": "WorkBuddy (إصدار الصين)",
     "credits": {
       "planBase": "رصيد الباقة الأساسي",
@@ -7939,7 +8058,11 @@
       "creditUsed": "الرصيد المستخدم",
       "model": "النموذج",
       "recentUsage": "أحدث 5 سجلات",
-      "viewMore": "عرض المزيد"
+      "viewMore": "عرض المزيد",
+      "expiringHintTitle": "عرض تفاصيل الأرصدة المنتهية قريبًا",
+      "expiringSoon": "{{amount}} خلال 24 ساعة",
+      "expiringSoonTitle": "أرصدة تنتهي خلال 24 ساعة",
+      "expiringSoonSummary": "الإجمالي {{amount}} · {{packageCount}} حزمة"
     },
     "title": "إدارة حسابات WorkBuddy",
     "noAccounts": "لا توجد حسابات WorkBuddy",

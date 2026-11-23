@@ -115,6 +115,7 @@ import { prepareCodexLocalAccessForRestart } from './services/codexLocalAccessSe
 import { applyReducedMotion } from './utils/reducedMotion';
 import { initLocalTimeZone } from './utils/localTimeZone';
 import { isCodexInstanceAccountConflict } from './utils/codexInstanceLaunchConflict';
+import { resolveUpdateApplyFailureMessage, type UpdateApplyFailureStage } from './utils/updateApplyFailureMessage';
 import {
   applyWebviewUiScale,
   isUiScaleResetKey,
@@ -438,6 +439,7 @@ interface GeneralConfig extends GeneralConfigTheme, GeneralConfigLanguage {
 
 type AppPathMissingDetail = {
   pathRuntimeTarget?: string;
+  invalidWorkbuddyPath?: string;
   app: LaunchPathApp | CliPathApp;
   resume?: () => Promise<void>;
   cancel?: () => void;
@@ -1664,7 +1666,7 @@ function MainApp() {
     const shouldInstall = updateAction.state === 'ready'
       ? updateAction.requiresInstall
       : Boolean(pendingSilentUpdateRef.current);
-    let failureStage: 'prepare' | 'install' | 'relaunch' = 'prepare';
+    let failureStage: UpdateApplyFailureStage = 'prepare';
     try {
       writeUpdateLog(
         'info',
@@ -1700,11 +1702,11 @@ function MainApp() {
     } catch (error) {
       console.error('[App] Failed to apply pending update:', error);
       const compactError = sanitizeUpdaterErrorMessage(error);
-      const errorMessage = failureStage === 'prepare'
-        ? t('update_notification.stopApiServiceFailed', '无法关闭 API 服务，请先停用后重试。')
-        : failureStage === 'install'
-          ? t('update_notification.installFailed', '系统安装失败，请稍后重试或手动下载安装。')
-          : t('update_notification.restartRequiredAfterInstall', '更新已安装，请手动重启应用完成切换。');
+      const errorMessage = resolveUpdateApplyFailureMessage(
+        t,
+        failureStage,
+        updateRuntimeInfo?.macos_translocated === true,
+      );
       setUpdateRetryStatus('');
       setUpdateDownloadError(errorMessage);
       setUpdateErrorDetails(compactError);
@@ -1720,6 +1722,7 @@ function MainApp() {
     restoreCodexLocalAccessAfterRelaunchFailure,
     silentUpdateVersion,
     updateAction,
+    updateRuntimeInfo,
     t,
     writeUpdateLog,
   ]);
@@ -3191,7 +3194,8 @@ function MainApp() {
         return;
       }
       if (retry?.kind === 'switchAccount' && retry.accountId) {
-        const store = app === 'workbuddy_ai' ? useWorkbuddyAiAccountStore
+        const store = app === 'workbuddy' ? useWorkbuddyAccountStore
+          : app === 'workbuddy_ai' ? useWorkbuddyAiAccountStore
           : app === 'minimaxcode' ? useMinimaxCodeAccountStore
           : app === 'zcode' ? useZcodeAccountStore
           : app === 'qoder' ? useQoderAccountStore
@@ -3529,7 +3533,9 @@ function MainApp() {
             <div className="modal-body qs-body">
               <div className="qs-section">
                 <p className="app-path-missing-desc">
-                  {appPathMissing.retry?.kind === 'configure' ? t('appPath.missing.configureHint')
+                  {appPathMissing.invalidWorkbuddyPath
+                    ? t('workbuddy.errors.nodeAppPath', { path: appPathMissing.invalidWorkbuddyPath })
+                    : appPathMissing.retry?.kind === 'configure' ? t('appPath.missing.configureHint')
                     : isCliPathApp(appPathMissing.app) ? t('appPath.missing.cliHint', { app: appPathMissingAppName })
                     : t('appPath.missing.desc', { app: appPathMissingAppName })}
                 </p>

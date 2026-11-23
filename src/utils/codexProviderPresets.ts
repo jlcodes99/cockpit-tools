@@ -424,6 +424,45 @@ export const CODEX_API_PROVIDER_PRESETS: readonly CodexApiProviderPreset[] = [
     baseUrls: ["https://api.therouter.ai/v1"],
     website: "https://therouter.ai/",
   },
+  {
+    id: "atlascloud",
+    name: "Atlas Cloud",
+    baseUrls: ["https://api.atlascloud.ai/v1"],
+    modelCatalog: ["openai/gpt-6.1-terra", "deepseek-ai/deepseek-v4-flash"],
+    website: "https://www.atlascloud.ai/",
+    apiKeyUrl: "https://console.atlascloud.ai/api-keys",
+  },
+  {
+    id: "aigrow",
+    name: "AIGROW",
+    baseUrls: ["https://aigrow.gg/v1"],
+    modelCatalog: [
+      "gpt-6.2-sol",
+      "gpt-6.2-astra",
+      "gpt-6-astra",
+      "gpt-6.1-sol",
+      "gpt-6.1-terra",
+      "gpt-6-luna",
+    ],
+    website: "https://aigrow.gg/ai-api",
+    apiKeyUrl: "https://aigrow.gg/dashboard/api",
+  },
+  {
+    id: "lazu",
+    name: "Lazu",
+    baseUrls: ["https://api.lazu.ai/v1"],
+    modelCatalog: ["gpt-6.2-astra", "gpt-6.2-sol", "gpt-6.1-terra"],
+    website: "https://lazu.ai/",
+    apiKeyUrl: "https://lazu.ai/console/token",
+  },
+  {
+    id: "worldrouter",
+    name: "WorldRouter",
+    baseUrls: ["https://inference-api.worldrouter.ai/v1"],
+    modelCatalog: ["gpt-5.4", "gpt-6.2-astra"],
+    website: "https://www.worldrouter.ai/",
+    apiKeyUrl: "https://www.worldrouter.ai/dashboard/api-keys",
+  },
 ];
 
 function normalizeCodexProviderBaseUrl(value: string): string | null {

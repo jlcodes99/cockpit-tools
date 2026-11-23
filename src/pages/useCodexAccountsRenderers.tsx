@@ -11,6 +11,7 @@ import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { useCodexCardReorder } from "../hooks/useCodexCardReorder";
 import { codexWakeupResultLabel, useCodexAccountWakeupResults } from "../hooks/useCodexAccountWakeupResults";
 import { mergeCodexCardOrder } from "../utils/codexCardOrder";
+import { writeCodexCustomSortActive, writeCodexCustomSortOrder } from "../utils/codexAccountOverview";
 import { RefreshCw, Upload, Trash2, X, Power, Database, Copy, Check, Play, RotateCw, CircleAlert, Info, Calendar, Tag, Eye, EyeOff, FileText, ExternalLink, Pencil, FolderPlus, ChevronRight, Wrench, Terminal, Link2, Waypoints } from "lucide-react";
 import { AccountLastUsed } from '../components/AccountLastUsed';
 import { isCodexApiKeyAccount, isCodexAgentIdentityAccount, isCodexChatCompletionsApiKeyAccount, isCodexNewApiAccount } from "../types/codex";
@@ -171,6 +172,7 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
   | "setActiveTab"
   | "setApiKeyUsageDetailAccountId"
   | "setCockpitApiPanelAccountId"
+  | "customSortOrder"
   | "setCustomSortOrder"
   | "setEditingApiKeyNameValue"
   | "setExternalImportSyncError"
@@ -309,6 +311,7 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
     setActiveTab,
     setApiKeyUsageDetailAccountId,
     setCockpitApiPanelAccountId,
+    customSortOrder,
     setCustomSortOrder,
     setEditingApiKeyNameValue,
     setExternalImportSyncError,
@@ -423,8 +426,11 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
       paginatedAccounts.map((account) => [account.id, account.tags]),
     ]),
     onReorder: (ids) => {
-      setCustomSortOrder((previous) => mergeCodexCardOrder(previous, ids));
+      const next = mergeCodexCardOrder(customSortOrder, ids);
+      setCustomSortOrder(next);
+      writeCodexCustomSortOrder(next);
       setSortBy("custom");
+      writeCodexCustomSortActive(true);
     },
   });
   const renderCompactRows = (

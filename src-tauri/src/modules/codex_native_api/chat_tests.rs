@@ -205,3 +205,21 @@ fn native_chat_legacy_completion() {
     assert_eq!(out["object"], "text_completion");
     assert_eq!(out["choices"][0]["text"], "yes");
 }
+
+#[test]
+fn chat_compaction_omits_tool_choice_when_no_tools_remain() {
+    let request = |tools, choice| json!({"model":"fixture","input":"hi","tools":tools,"tool_choice":choice});
+    for convert in [chat_upstream::responses_to_chat, chat_upstream::responses_to_native_chat] {
+        let wire = convert(&request(json!([]), json!("auto"))).unwrap();
+        assert!(wire.get("tools").is_none());
+        assert!(wire.get("tool_choice").is_none());
+        let wire = convert(&request(json!([]), json!("none"))).unwrap();
+        assert_eq!(wire["tool_choice"], "none");
+        let wire = convert(&request(
+            json!([{"type":"function","name":"read","parameters":{"type":"object"}}]),
+            json!("auto"),
+        )).unwrap();
+        assert_eq!(wire["tool_choice"], "auto");
+        assert_eq!(wire["tools"].as_array().unwrap().len(), 1);
+    }
+}

@@ -135,6 +135,10 @@
 }
 
 .antigravityCredits {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--text-secondary);
   font-size: 11px;
 }
@@ -160,10 +164,6 @@
 .antigravityCard {
   flex-wrap: wrap;
   row-gap: 4px;
-}
-
-.antigravityCardTime {
-  flex-basis: 100%;
 }
 
 .cardCurrent {

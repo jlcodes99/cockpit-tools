@@ -212,21 +212,28 @@ pub async fn workbuddy_delete_instance(instance_id: String) -> Result<(), String
 
 #[tauri::command]
 pub async fn workbuddy_start_instance(instance_id: String) -> Result<InstanceProfileView, String> {
+    start_workbuddy_instance_with_account(&instance_id, None).await
+}
+
+pub(super) async fn start_workbuddy_instance_with_account(
+    instance_id: &str,
+    switch_account_id: Option<&str>,
+) -> Result<InstanceProfileView, String> {
     modules::process::ensure_workbuddy_launch_path_configured()?;
 
     if instance_id == DEFAULT_INSTANCE_ID {
         let default_dir = modules::workbuddy_instance::get_default_workbuddy_user_data_dir()?;
         let default_dir_str = default_dir.to_string_lossy().to_string();
         let default_settings = modules::workbuddy_instance::load_default_settings()?;
+        let bind_account_id = switch_account_id
+            .map(str::to_owned)
+            .or(default_settings.bind_account_id);
 
         close_workbuddy_instance(&default_dir_str).await?;
         let _ = modules::workbuddy_instance::update_default_pid(None)?;
 
-        inject_bound_account_for_instance_start(
-            &default_dir_str,
-            default_settings.bind_account_id.as_deref(),
-        )
-        .await?;
+        inject_bound_account_for_instance_start(&default_dir_str, bind_account_id.as_deref())
+            .await?;
 
         let extra_args = modules::process::parse_extra_args(&default_settings.extra_args);
         let pid =
@@ -240,7 +247,7 @@ pub async fn workbuddy_start_instance(instance_id: String) -> Result<InstancePro
             user_data_dir: default_dir_str,
             working_dir: None,
             extra_args: default_settings.extra_args,
-            bind_account_id: default_settings.bind_account_id,
+            bind_account_id,
             created_at: 0,
             last_launched_at: None,
             last_pid: running_pid,

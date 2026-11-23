@@ -9,6 +9,10 @@ use std::{
     time::Duration,
 };
 
+pub(crate) fn local_service_id(created_at: i64) -> String {
+    format!("cockpit-{created_at}")
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct KeyQuery {

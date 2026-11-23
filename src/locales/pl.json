@@ -198,6 +198,22 @@
     "providerClear": "Wyczyść wybór"
   },
   "common": {
+    "automation": {
+      "invalidPlatform": "Nieznana platforma konta. Polecenie cockpit-cli account platforms wyświetla obsługiwane identyfikatory.",
+      "hostUnavailable": "Uruchom aplikację Cockpit Tools z tym katalogiem danych i spróbuj ponownie.",
+      "responseTimeout": "Cockpit Tools nie odpowiedział w wyznaczonym czasie. Sprawdź bieżący stan przed ponowieniem zmiany.",
+      "versionMismatch": "CLI i aplikacja używają różnych wersji automatyzacji kont. Zaktualizuj je razem.",
+      "unauthorized": "Nie udało się uwierzytelnić lokalnego żądania automatyzacji kont.",
+      "invalidAccountId": "Podaj identyfikator konta z wybranej platformy lub listy członków usługi API.",
+      "accountNotFound": "Nie znaleziono konta na wybranej platformie.",
+      "operationFailed": "Cockpit Tools nie mógł ukończyć operacji. Sprawdź dzienniki aplikacji.",
+      "appPathMissing": "Ustaw ścieżkę klienta w Cockpit Tools i ponów przełączenie konta.",
+      "appPathMissingAfterSwitch": "Konto zostało przełączone. Ustaw ścieżkę klienta przed jego uruchomieniem.",
+      "switchBusy": "Trwa już przełączanie konta tego klienta. Spróbuj ponownie po zakończeniu.",
+      "quotaUnsupported": "To polecenie nie odświeża limitu tego typu konta na żywo. Sprawdź ostatni zapisany limit bez --refresh.",
+      "quotaRefreshFailed": "Ostatnie odświeżanie limitu nie powiodło się. Sprawdź ostatni zapisany limit bez --refresh."
+    },
+    "previewTruncated": "Podgląd pokazuje tylko część treści. Kopiowanie lub pobieranie obejmuje cały JSON.",
     "collapseAll": "Zwiń wszystko",
     "expandAll": "Rozwiń wszystko",
     "syncing": "Synchronizacja…",
@@ -323,6 +339,9 @@
       "success": "Sukces",
       "failed": "Błąd",
       "cancelled": "Anulowano",
+      "clientDisconnected": "Klient rozłączony",
+      "upstreamOverloaded": "Serwer nadrzędny przeciążony",
+      "requestServiceUnavailable": "Usługa niedostępna",
       "incomplete": "Strumień niepełny",
       "recovered": "Trasa zapasowa",
       "official": "Oficjalna aut.",
@@ -1127,7 +1146,8 @@
         "stopPrevious": "Zatrzymaj poprzednią instancję",
         "prepareCredentials": "Przygotuj dane logowania",
         "writeProfile": "Zapisz profil instancji",
-        "startClient": "Uruchom klienta Codex"
+        "startClient": "Uruchom klienta Codex",
+        "checkProxyCountry": "Sprawdź kraj wyjściowy"
       },
       "detail": {
         "checkingInstance": "Odczytywanie konfiguracji instancji...",
@@ -1304,7 +1324,7 @@
       "trayIconStyleDesc": "Wybierz systemową ikonę monochromatyczną albo oryginalną kolorową ikonę aplikacji",
       "trayIconStyleTemplate": "Ikona monochromatyczna",
       "trayIconStyleColor": "Ikona kolorowa",
-      "menuBarLeftClick": "Działanie lewego kliknięcia ikony na pasku menu",
+      "menuBarLeftClick": "Lewy przycisk na pasku menu",
       "menuBarLeftClickMenu": "Otwórz menu limitów",
       "menuBarLeftClickWindow": "Otwórz główne okno",
       "floatingCardStartup": "Pokaż kartę pływającą przy starcie",
@@ -1565,16 +1585,15 @@
       "webdavAllowedDomainsDesc": "Po przecinku; puste = bez limitu",
       "claudeQuotaDisplayRemaining": "Limit Claude jako % pozostały",
       "claudeQuotaDisplayRemainingDesc": "Domyślnie % zużycia. Włącz = % pozostały. Auto-przełączanie i alerty wg zużycia.",
-      "menuBarLeftClick": "Lewy przycisk na pasku menu",
       "menuBarLeftClickDesc": "Kliknięcie prawym przyciskiem zawsze otwiera menu limitów.",
       "menuBarLeftClickQuotaMenu": "Menu limitów",
       "menuBarLeftClickMainWindow": "Okno główne",
       "menuBarQuota": "Bieżący limit na pasku menu",
       "menuBarQuotaDesc": "Po włączeniu pokazuje pozostały limit bieżącego konta wybranej platformy obok ikony. Opcje platformy w oknie dialogowym.",
-      "menuBarQuotaEnabledDesc": "Wł. · {{platform}} · pozostały limit bieżącego konta tej platformy (najniższy z limitów)",
+      "menuBarQuotaEnabledDesc": "Włączono · {{platform}} · Dostępne limity bieżącego konta",
       "menuBarQuotaConfigure": "Konfiguruj",
       "menuBarQuotaModalTitle": "Limit paska menu",
-      "menuBarQuotaModalDesc": "Tylko opcje tej funkcji: śledzi bieżące konto. Usługa API Codex: „API + % puli”; konto API Key: „API + pozostałe saldo”; zwykłe: prefiks e-mail + % (najniższy; czerwień/pomarańcz/zieleń).",
+      "menuBarQuotaModalDesc": "Śledzi bieżące konto wybranej platformy i pokazuje dostępne okresy limitów. Kolor zależy od najniższego pozostałego limitu. Konta Codex API Service / API Key zawsze pokazują etykietę API.",
       "menuBarAntigravityMetric": "Limit na pasku menu",
       "menuBarQuotaLowest": "Najniższy limit",
       "menuBarQuotaPlatform": "Platforma konta",
@@ -1605,10 +1624,11 @@
       },
       "timeDisplayMode": "Wyświetlany czas",
       "timeDisplayModeDesc": "Czas na kartach i listach kont. Domyślnie czas przełączenia konta",
-      "menuBarLeftClick": "Lewy przycisk na pasku menu",
-      "menuBarLeftClickDesc": "Kliknięcie prawym przyciskiem zawsze otwiera menu limitów.",
-      "menuBarLeftClickQuotaMenu": "Menu limitów",
-      "menuBarLeftClickMainWindow": "Okno główne"
+      "menuBarQuotaLayout": "Układ limitu",
+      "menuBarQuotaLayoutDesc": "Jeden wiersz poziomy używa większej czcionki. Dwa zwarte wiersze pokazują jednocześnie pozostałe limity obu okresów i oszczędzają miejsce na pasku menu. Przy jednym okresie wyświetlany jest jeden wiersz poziomy.",
+      "menuBarQuotaLayoutPreview": "Podgląd układu z przykładowymi limitami",
+      "menuBarQuotaLayoutHorizontal": "Jeden wiersz poziomy",
+      "menuBarQuotaLayoutStacked": "Dwa zwarte wiersze"
     },
     "network": {
       "apiTitle": "API kokpitu antygrawitacyjnego",
@@ -2673,7 +2693,8 @@
     "stopApiServiceFailed": "Nie udało się zatrzymać usługi API. Najpierw ją wyłącz i spróbuj ponownie.",
     "stopApiServiceFailedContinue": "Usługa API nie zatrzymała się poprawnie. Mimo to trwa ponowne uruchamianie...",
     "skipThisVersion": "Pomiń tę wersję",
-    "skipFailed": "Nie udało się pominąć tej aktualizacji: {{error}}"
+    "skipFailed": "Nie udało się pominąć tej aktualizacji: {{error}}",
+    "installFailedTranslocated": "Aplikacja działa z lokalizacji tylko do odczytu (macOS App Translocation), więc nie można zainstalować aktualizacji. Zamknij Cockpit Tools, przenieś aplikację do folderu Aplikacje w Finderze, otwórz ją ponownie i ponów aktualizację."
   },
   "closeDialog": {
     "minimizeWindow": "Minimalizuj",
@@ -4240,6 +4261,28 @@
       }
     },
     "sessionUsage": {
+      "analysis": {
+        "localUsage": "Użycie sesji lokalnych",
+        "selectedScope": "Bieżące filtry",
+        "project": "Projekt",
+        "allModels": "Wszystkie modele",
+        "allProjects": "Wszystkie projekty",
+        "unknownProject": "Nieznany projekt",
+        "requests": "Żądania",
+        "time": "Czas",
+        "freshInput": "Nowe wejście",
+        "cached": "Trafienia w pamięć podręczną",
+        "referenceCost": "Szacowany koszt",
+        "cacheRate": "Wskaźnik trafień",
+        "viewSession": "Pokaż żądania sesji",
+        "clearSession": "Wyczyść filtr sesji",
+        "sort": "Sortuj",
+        "indexingProjects": "Indeksowanie wcześniejszych projektów…",
+        "noResults": "Brak rekordów pasujących do filtrów",
+        "unpriced": "Brak cen części użytych modeli",
+        "costHelp": "Szacunek według cen API modelu",
+        "page": "Strona {{page}}"
+      },
       "comparison": {
         "localTotal": "Tokeny sesji lokalnych · wybrany okres i instancje",
         "profileTotal": "Oficjalny profil · łączna liczba tokenów",
@@ -4874,6 +4917,8 @@
       "daysLeft": "{{count}} dni",
       "over99Days": "99+ dni",
       "titleWithDate": "Subskrypcja wygasa: {{date}}",
+      "expiryUnconfirmed": "Niepotwierdzone",
+      "titleWithUnconfirmedDate": "Nie udało się potwierdzić terminu subskrypcji. Ostatni zapis: {{date}}",
       "titleUnknown": "Autoryzuj ponownie, aby pobrać termin",
       "filterLabel": "Filtr wygasania",
       "filterAll": "Wszystkie ({{count}})",
@@ -4896,7 +4941,8 @@
         "refreshTokens": "Odśwież dane logowania",
         "writeCredentials": "Zapisz dane klienta",
         "syncSettings": "Zsynchronizuj ustawienia",
-        "startClient": "Uruchom klienta Codex"
+        "startClient": "Uruchom klienta Codex",
+        "checkProxyCountry": "Sprawdź kraj wyjściowy"
       },
       "status": {
         "pending": "Oczekuje",
@@ -5880,7 +5926,7 @@
         "viewAll": "Pokaż wszystko"
       },
       "previewTitle": "Podgląd proxy",
-      "modeDisabled": "Bez proxy",
+      "modeDisabled": "Wymuś połączenie bezpośrednie",
       "disableAction": "Odłącz proxy",
       "setIndependent": "Własne proxy",
       "disabledHint": "Pomiń indywidualne i wspólne proxy; próbuj łączyć się bezpośrednio.",
@@ -5926,7 +5972,7 @@
       "restoreEntryNotRunning": "Nie znaleziono uruchomionej aplikacji korzystającej z zapisanego wejścia proxy tej instancji Cockpit.",
       "restoreEntryBusy": "Przywracanie proxy już trwa. Spróbuj ponownie za chwilę.",
       "restoreEntryTimeout": "Upłynął limit czasu przywracania proxy. Spróbuj ponownie.",
-      "restartHint": "Klienty uruchomione przez lokalnego pośrednika przełączą nowe połączenia. Pozostałe działające klienty wymagają jednego restartu. Most klienta nasłuchuje tylko na interfejsie zwrotnym, ale nie izoluje innych lokalnych użytkowników. Proxy systemowe pozostaje bez zmian.",
+      "restartHint": "Uruchom ponownie Codex po przypisaniu, zmianie trybu proxy lub usunięciu przypisania, aby interfejs i backend używały tych samych ustawień. Błąd proxy nigdy nie powoduje połączenia bezpośredniego.",
       "exportHint": "Eksport kont nie obejmuje danych logowania proxy; skonfiguruj je ponownie po imporcie.",
       "backToAccounts": "Wróć do kont",
       "accountsTitle": "Konta",
@@ -6318,7 +6364,76 @@
       "noCurrentNode": "Bieżący węzeł nie jest jeszcze dostępny",
       "runtimeBusy": "Lokalny serwer proxy jest zajęty. Aktualizacja jest chwilowo niedostępna.",
       "runtimeCapacity": "Działa zbyt wiele serwerów proxy. Zatrzymaj nieużywane i spróbuj ponownie.",
-      "runtimeReadFailed": "Stan lokalnego serwera proxy jest chwilowo niedostępny. Spróbuj ponownie."
+      "runtimeReadFailed": "Stan lokalnego serwera proxy jest chwilowo niedostępny. Spróbuj ponownie.",
+      "modeClient": "Użyj ustawień klienta",
+      "clientHint": "Zachowaj pierwotne ustawienia .env i systemowego proxy tego konta; nie stosuj proxy konta ani współdzielonego proxy Cockpit.",
+      "launch": {
+        "envChanged": "Konfiguracja proxy zmieniła się poza tą operacją. Plik zachowano; przed ponowną próbą sprawdź proxy w .env.",
+        "envStorage": "Nie można bezpiecznie odczytać lub zapisać konfiguracji proxy. Oryginalny plik zachowano; sprawdź uprawnienia folderu.",
+        "envUnsupported": "Nie można bezpiecznie obsłużyć formatu .env i plik nie został nadpisany. Sprawdź niedomknięte cudzysłowy i kontynuacje wierszy.",
+        "stopFailed": "Nie można zatrzymać instancji Codex z niezgodnymi ustawieniami. Zamknij ją przed ponowną próbą."
+      },
+      "country": {
+        "title": "Sprawdź kraj wyjścia przed uruchomieniem",
+        "hint": "Opcjonalne dla wszystkich kont, z przypisanym proxy lub bez. Sprawdza wyjście HTTP przez ChatGPT Cloudflare trace podczas uruchamiania z Cockpit. Skróty na pulpicie pozostają bez zmian.",
+        "expected": "Oczekiwany kraj lub region",
+        "choose": "Wybierz kraj lub region",
+        "save": "Zapisz kontrolę kraju",
+        "saved": "Zapisano ustawienia kontroli kraju",
+        "mismatch": "Kraj wyjścia jest inny: oczekiwano {{expected}}, wykryto {{actual}}. Codex nie został uruchomiony.",
+        "unavailable": "Nie można potwierdzić kraju wyjścia. Codex nie został uruchomiony; sprawdź połączenie i ponów próbę.",
+        "routeUnknown": "Nie można określić trasy proxy klienta. Codex nie został uruchomiony; sprawdź proxy klienta i .env.",
+        "changed": "Ustawienia kraju zmieniły się podczas sprawdzania. Ponów sprawdzanie bieżących ustawień.",
+        "storage": "Nie można odczytać lub zapisać ustawień kontroli kraju.",
+        "invalid": "Wybierz prawidłowy kraj lub region.",
+        "search": "Szukaj kraju lub kodu",
+        "actual": "Wykryty kraj lub region",
+        "route": "Sprawdzana konfiguracja",
+        "checkedAt": "Czas sprawdzenia",
+        "notDetected": "Nie wykryto",
+        "notRequired": "Nie włączono",
+        "resultTitle": "Wynik sprawdzenia kraju wyjściowego",
+        "evidenceHint": "Sprawdzana jest tylko zapisana trasa HTTP uruchomienia. Widoczne wpisy dotyczą bieżącej sesji Cockpitu; wyniki pozostają w dzienniku aplikacji. Wcześniejszy wynik nie potwierdza bieżącego połączenia.",
+        "saveFirst": "Przed sprawdzeniem zapisz tryb proxy i kraj.",
+        "noChecks": "Brak sprawdzeń w tej sesji.",
+        "checkNow": "Sprawdź teraz",
+        "history": "Wcześniejsze sprawdzenia w tej sesji",
+        "historyFailed": "Nie można odczytać ostatnich sprawdzeń.",
+        "result_checking": "Sprawdzanie kraju wyjściowego…",
+        "result_passed": "Sprawdzenie pomyślne",
+        "result_blocked": "Sprawdzenie nieudane",
+        "result_stale": "Ustawienia zmienione; sprawdź ponownie",
+        "route_account": "Proxy konta Cockpit",
+        "route_direct": "Wymuszone połączenie bezpośrednie",
+        "route_env": "Plik .env aplikacji klienckiej",
+        "route_environment": "Odziedziczone środowisko",
+        "route_system": "Proxy Windows",
+        "route_network": "Domyślna trasa sieciowa",
+        "route_unknown": "Jeszcze nie ustalono",
+        "progressCountries": "Oczekiwany: {{expected}} · Wykryty: {{actual}}",
+        "progressTime": "Czas: {{ms}} ms"
+      },
+      "env": {
+        "title": "Zmienne proxy klienta",
+        "source": "Rozpoznane źródło: {{source}}",
+        "source_saved": "Zapisane dla tego konta",
+        "source_env": "Plik .env klienta",
+        "source_environment": "Odziedziczone zmienne",
+        "source_system": "Systemowe proxy Windows",
+        "source_none": "Nie wykryto jawnego proxy",
+        "source_unknown": "Nie rozpoznano",
+        "hint": "Tylko HTTP_PROXY, HTTPS_PROXY, ALL_PROXY i NO_PROXY. Zostaną użyte przy następnym uruchomieniu z Cockpitu z ustawieniami klienta; pozostałe wpisy .env zostaną zachowane.",
+        "variables": "Zmienne proxy",
+        "recognize": "Odczytaj ponownie",
+        "save": "Zapisz ustawienia ENV",
+        "saved": "Zapisano na następne uruchomienie",
+        "unrecognized": "Nie można bezpiecznie odczytać istniejących zmiennych proxy. Można wpisać stałe wartości; plik klienta nie jest teraz zmieniany.",
+        "noneHint": "Nie wykryto jawnego proxy. TUN lub inna warstwa sieciowa może nadal działać.",
+        "readFailed": "Nie można odczytać ustawień ENV. Spróbuj ponownie przed edycją.",
+        "saveFailed": "Nie można zapisać ustawień ENV.",
+        "changed": "Ustawienia zmieniono w innym miejscu. Odczytaj je ponownie przed zapisem.",
+        "invalid": "Wpisz tylko stałe wartości HTTP_PROXY, HTTPS_PROXY, ALL_PROXY i NO_PROXY, bez powtórzonych nazw. Obsługiwane protokoły: http, https, socks5, socks5h."
+      }
     },
     "more": {
       "title": "Więcej",
@@ -7864,6 +7979,10 @@
     }
   },
   "workbuddy": {
+    "errors": {
+      "nodeAppPath": "Ta ścieżka wskazuje środowisko uruchomieniowe Node ({{path}}). Wybierz WorkBuddy.exe.",
+      "keyProcessFailed": "Nie udało się odczytać oficjalnego klucza WorkBuddy. Dane logowania zostały zachowane. Sprawdź ścieżkę klienta ({{path}}) w ustawieniach, a następnie sprawdź dostępność aktualizacji."
+    },
     "desktopEdition": "WorkBuddy (edycja chińska)",
     "credits": {
       "planBase": "Kredyty podstawowe",
@@ -7892,7 +8011,11 @@
       "creditUsed": "Zużyte kredyty",
       "model": "Model AI",
       "recentUsage": "Ostatnie 5 wpisów",
-      "viewMore": "Zobacz więcej"
+      "viewMore": "Zobacz więcej",
+      "expiringHintTitle": "Zobacz szczegóły punktów wygasających wkrótce",
+      "expiringSoon": "{{amount}} w 24 h",
+      "expiringSoonTitle": "Kredyty wygasające w ciągu 24 godzin",
+      "expiringSoonSummary": "Razem {{amount}} · {{packageCount}} pakietów"
     },
     "title": "Zarządzanie kontami WorkBuddy",
     "noAccounts": "Brak kont WorkBuddy",

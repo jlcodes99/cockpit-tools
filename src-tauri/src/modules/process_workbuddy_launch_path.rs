@@ -66,11 +66,40 @@ fn workbuddy_install_is_international(executable: &Path) -> bool {
     }
 }
 
+pub(crate) const WORKBUDDY_NODE_PATH_PREFIX: &str = "WORKBUDDY_NODE_APP_PATH:";
+
+#[cfg(any(target_os = "windows", test))]
+fn is_workbuddy_node_runtime(path: &Path) -> bool {
+    path.file_name()
+        .is_some_and(|name| name.eq_ignore_ascii_case("node.exe"))
+}
+
+#[cfg(any(target_os = "windows", test))]
+pub(crate) fn validate_workbuddy_app_path(path: &Path) -> Result<(), String> {
+    if is_workbuddy_node_runtime(path) {
+        return Err(format!("{WORKBUDDY_NODE_PATH_PREFIX}{}", path.display()));
+    }
+    Ok(())
+}
+
+pub(crate) fn format_workbuddy_app_path_error(error: String, locale: &str) -> String {
+    match error.strip_prefix(WORKBUDDY_NODE_PATH_PREFIX) {
+        Some(path) => crate::modules::i18n::translate(
+            locale,
+            "workbuddy.errors.nodeAppPath",
+            &[("path", path)],
+        ),
+        None => error,
+    }
+}
+
 fn select_workbuddy_launch_path(
     custom: Option<&str>,
     detect: impl FnOnce() -> Option<std::path::PathBuf>,
 ) -> Result<std::path::PathBuf, String> {
     if let Some(custom) = custom {
+        #[cfg(target_os = "windows")]
+        validate_workbuddy_app_path(Path::new(custom))?;
         let executable = resolve_workbuddy_macos_exec_path(custom)
             .ok_or_else(|| app_path_missing_error("workbuddy"))?;
         if !workbuddy_install_is_international(&executable) {
@@ -102,6 +131,17 @@ fn workbuddy_macos_main_command_matches(cmdline: &str, expected: &str) -> bool {
 #[cfg(test)]
 mod workbuddy_launch_path_tests {
     use super::*;
+
+    #[test]
+    fn workbuddy_path_validation_rejects_node_and_accepts_the_desktop_executable() {
+        let node = "C:/WorkBuddy/resources/Node.EXE";
+        assert_eq!(
+            validate_workbuddy_app_path(Path::new(node)).unwrap_err(),
+            format!("{WORKBUDDY_NODE_PATH_PREFIX}{node}")
+        );
+        assert!(validate_workbuddy_app_path(Path::new("C:/WorkBuddy/WorkBuddy.exe")).is_ok());
+        assert!(validate_workbuddy_app_path(Path::new("")).is_ok());
+    }
 
     #[test]
     fn same_windows_executable_name_is_distinguished_by_installed_product_metadata() {

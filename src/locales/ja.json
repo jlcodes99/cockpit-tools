@@ -198,6 +198,22 @@
     "providerClear": "選択を解除"
   },
   "common": {
+    "automation": {
+      "invalidPlatform": "不明なアカウントプラットフォームです。cockpit-cli account platforms で対応する ID を確認してください。",
+      "hostUnavailable": "このデータディレクトリを使う Cockpit Tools のデスクトップアプリを起動してから再試行してください。",
+      "responseTimeout": "Cockpit Tools から時間内に結果が返りませんでした。変更を再実行する前に現在の状態を確認してください。",
+      "versionMismatch": "CLI とデスクトップアプリのアカウント自動操作のバージョンが異なります。両方を更新してください。",
+      "unauthorized": "ローカルのアカウント自動操作リクエストを認証できませんでした。",
+      "invalidAccountId": "選択したプラットフォームまたは API サービスのメンバー一覧にあるアカウント ID を指定してください。",
+      "accountNotFound": "選択したプラットフォームにアカウントが見つかりません。",
+      "operationFailed": "Cockpit Tools が操作を完了できませんでした。アプリのログを確認してください。",
+      "appPathMissing": "Cockpit Tools でクライアントのパスを設定してから切り替えを再試行してください。",
+      "appPathMissingAfterSwitch": "アカウントは切り替わりました。起動前にクライアントのパスを設定してください。",
+      "switchBusy": "このクライアントのアカウントを切り替え中です。完了後に再試行してください。",
+      "quotaUnsupported": "このアカウント種別では、このコマンドでクォータを即時更新できません。--refresh を外して保存済みクォータを確認してください。",
+      "quotaRefreshFailed": "クォータの更新に失敗しました。--refresh を外して保存済みクォータを確認してください。"
+    },
+    "previewTruncated": "プレビューには内容の一部だけが表示されます。コピーやダウンロードには JSON 全体が含まれます。",
     "collapseAll": "すべて折りたたむ",
     "expandAll": "すべて展開",
     "syncing": "同期中…",
@@ -323,6 +339,9 @@
       "success": "成功",
       "failed": "失敗",
       "cancelled": "キャンセル",
+      "clientDisconnected": "クライアント切断",
+      "upstreamOverloaded": "上流サーバーが過負荷",
+      "requestServiceUnavailable": "サービス利用不可",
       "incomplete": "ストリーム未完了",
       "recovered": "フォールバック済み",
       "official": "公式認証",
@@ -1127,7 +1146,8 @@
         "stopPrevious": "元のインスタンスを停止",
         "prepareCredentials": "認証情報を準備",
         "writeProfile": "インスタンス設定を書き込み",
-        "startClient": "Codex クライアントを起動"
+        "startClient": "Codex クライアントを起動",
+        "checkProxyCountry": "出口の国を確認"
       },
       "detail": {
         "checkingInstance": "インスタンス設定を読み込んでいます...",
@@ -1304,7 +1324,7 @@
       "trayIconStyleDesc": "システムの単色アイコンまたは元のカラーアプリアイコンを選択します",
       "trayIconStyleTemplate": "単色アイコン",
       "trayIconStyleColor": "カラーアイコン",
-      "menuBarLeftClick": "メニューバーアイコンの左クリック操作",
+      "menuBarLeftClick": "メニューバーの左クリック",
       "menuBarLeftClickMenu": "使用枠メニューを開く",
       "menuBarLeftClickWindow": "メインウインドウを開く",
       "floatingCardStartup": "起動時にフローティングカードを表示",
@@ -1565,16 +1585,15 @@
       "webdavAllowedDomainsDesc": "カンマ区切り。空なら制限なし",
       "claudeQuotaDisplayRemaining": "Claude 残量%表示",
       "claudeQuotaDisplayRemainingDesc": "既定は使用済み%。オンで残量%。自動切替と警告は使用率基準のままです。",
-      "menuBarLeftClick": "メニューバーの左クリック",
       "menuBarLeftClickDesc": "右クリックでは常に利用枠メニューを開きます。",
       "menuBarLeftClickQuotaMenu": "利用枠メニュー",
       "menuBarLeftClickMainWindow": "メインウィンドウ",
       "menuBarQuota": "メニューバーにリアルタイム枠を表示",
       "menuBarQuotaDesc": "有効にすると、選択したプラットフォームの現在アカウントの残枠をメニューバーアイコン横に表示。プラットフォーム等はダイアログで設定",
-      "menuBarQuotaEnabledDesc": "有効 · {{platform}} · そのプラットフォームの現在アカウント残枠（複数は最小）",
+      "menuBarQuotaEnabledDesc": "有効 · {{platform}} · 現在のアカウントの利用可能な残量",
       "menuBarQuotaConfigure": "設定",
       "menuBarQuotaModalTitle": "メニューバー枠",
-      "menuBarQuotaModalDesc": "メニューバー枠専用の設定です。選択プラットフォームの現在アカウントに追従します。Codex が API サービスのときは「API + プール残%」、API Key アカウントは「API + 残額」、通常はメール先頭と残%（複数は最小、低赤・中橙・高緑）。",
+      "menuBarQuotaModalDesc": "選択したプラットフォームの現在のアカウントに追従し、利用可能な期間の残量を表示します。色は最も少ない残量で決まります。Codex API サービス / API Key は常に API ラベルを表示します。",
       "menuBarAntigravityMetric": "メニューバーの使用枠",
       "menuBarQuotaLowest": "残り最少の枠",
       "menuBarQuotaPlatform": "枠のアカウントプラットフォーム",
@@ -1605,10 +1624,11 @@
       },
       "timeDisplayMode": "時刻表示",
       "timeDisplayModeDesc": "アカウントカードと一覧に表示する時刻。既定は切替時刻です",
-      "menuBarLeftClick": "メニューバーの左クリック",
-      "menuBarLeftClickDesc": "右クリックでは常に利用枠メニューを開きます。",
-      "menuBarLeftClickQuotaMenu": "利用枠メニュー",
-      "menuBarLeftClickMainWindow": "メインウィンドウ"
+      "menuBarQuotaLayout": "使用量のレイアウト",
+      "menuBarQuotaLayoutDesc": "横並び1行は大きな文字を使用します。コンパクトな2行は両期間の残量を同時に表示し、メニューバーのスペースを節約します。期間が1つの場合は横並び1行に戻ります。",
+      "menuBarQuotaLayoutPreview": "レイアウトの例（使用量はサンプル）",
+      "menuBarQuotaLayoutHorizontal": "横並び1行",
+      "menuBarQuotaLayoutStacked": "コンパクトな2行"
     },
     "network": {
       "apiTitle": "反重力コックピット API",
@@ -2673,7 +2693,8 @@
     "stopApiServiceFailed": "API サービスを停止できませんでした。先に無効化してから再試行してください。",
     "stopApiServiceFailedContinue": "API サービスは正常に停止しませんでした。再起動を続行します...",
     "skipThisVersion": "このバージョンをスキップ",
-    "skipFailed": "この更新をスキップできませんでした: {{error}}"
+    "skipFailed": "この更新をスキップできませんでした: {{error}}",
+    "installFailedTranslocated": "アプリが読み取り専用の場所から実行されているため（macOS App Translocation）、アップデートをインストールできません。Cockpit Tools を終了し、Finder で「アプリケーション」フォルダに移動してから再度開き、アップデートをやり直してください。"
   },
   "closeDialog": {
     "minimizeWindow": "最小化",
@@ -4240,6 +4261,28 @@
       }
     },
     "sessionUsage": {
+      "analysis": {
+        "localUsage": "ローカルセッションの使用量",
+        "selectedScope": "現在の絞り込み",
+        "project": "プロジェクト",
+        "allModels": "すべてのモデル",
+        "allProjects": "すべてのプロジェクト",
+        "unknownProject": "不明なプロジェクト",
+        "requests": "リクエスト明細",
+        "time": "時刻",
+        "freshInput": "新規入力",
+        "cached": "キャッシュヒット",
+        "referenceCost": "推定費用",
+        "cacheRate": "ヒット率",
+        "viewSession": "セッションのリクエストを表示",
+        "clearSession": "セッションの絞り込みを解除",
+        "sort": "並べ替え",
+        "indexingProjects": "過去のプロジェクトを整理中…",
+        "noResults": "条件に一致する記録がありません",
+        "unpriced": "一部の使用量にモデル料金がありません",
+        "costHelp": "モデルの API 料金から推定",
+        "page": "{{page}} ページ"
+      },
       "comparison": {
         "localTotal": "ローカルセッションのトークン数 · 選択した期間とインスタンス",
         "profileTotal": "公式プロフィール · 累計トークン数",
@@ -4874,6 +4917,8 @@
       "daysLeft": "{{count}}日",
       "over99Days": "99日超",
       "titleWithDate": "契約期限: {{date}}",
+      "expiryUnconfirmed": "未確認",
+      "titleWithUnconfirmedDate": "契約期限を確認できませんでした。前回の記録：{{date}}",
       "titleUnknown": "再認証して契約期限を取得",
       "filterLabel": "期限フィルター",
       "filterAll": "すべて ({{count}})",
@@ -4896,7 +4941,8 @@
         "refreshTokens": "ログイン情報を更新",
         "writeCredentials": "クライアント認証情報を書き込み",
         "syncSettings": "アカウント設定を同期",
-        "startClient": "Codex クライアントを起動"
+        "startClient": "Codex クライアントを起動",
+        "checkProxyCountry": "出口の国を確認"
       },
       "status": {
         "pending": "待機中",
@@ -5880,7 +5926,7 @@
         "viewAll": "すべて表示"
       },
       "previewTitle": "プロキシの概要",
-      "modeDisabled": "プロキシなし",
+      "modeDisabled": "直接接続を強制",
       "disableAction": "プロキシ解除",
       "setIndependent": "個別設定",
       "disabledHint": "個別・共通プロキシを使わず、新規接続は直接接続を試みます。",
@@ -5926,7 +5972,7 @@
       "restoreEntryNotRunning": "この Cockpit に記録されたプロキシ入口を使用する、実行中のデスクトップが見つかりません。",
       "restoreEntryBusy": "プロキシの復元中です。しばらくしてから再試行してください。",
       "restoreEntryTimeout": "プロキシの復元がタイムアウトしました。再試行してください。",
-      "restartHint": "ローカル転送で起動したクライアントは新しい接続から切り替わります。それ以外は一度再起動が必要です。デスクトップ中継はループバックのみで待ち受けますが、他のローカルユーザーを隔離しません。システムプロキシは変更しません。",
+      "restartHint": "プロキシの割り当て、モード変更、解除後は Codex を再起動し、画面とバックエンドに同じ設定を適用してください。プロキシ障害時に直接接続へ切り替わることはありません。",
       "exportHint": "アカウントのエクスポートにプロキシ認証情報は含まれません。インポート後に再設定してください。",
       "backToAccounts": "アカウントに戻る",
       "accountsTitle": "アカウント",
@@ -6318,7 +6364,76 @@
       "noCurrentNode": "現在のノードはまだ取得できていません",
       "runtimeBusy": "ローカルプロキシが混雑しているため、一時的に更新できません。",
       "runtimeCapacity": "実行中のプロキシが多すぎます。不要なプロキシを停止して再試行してください。",
-      "runtimeReadFailed": "ローカルプロキシの状態を一時的に取得できません。再試行してください。"
+      "runtimeReadFailed": "ローカルプロキシの状態を一時的に取得できません。再試行してください。",
+      "modeClient": "クライアントの設定を使用",
+      "clientHint": "このアカウントの元の .env とシステムプロキシ設定を保持し、Cockpit のアカウント用・共有プロキシは適用しません。",
+      "launch": {
+        "envChanged": "この操作の外でプロキシ設定が変更されました。ファイルは保持されています。再試行前に .env のプロキシ設定を確認してください。",
+        "envStorage": "プロキシ設定を安全に読み書きできませんでした。元のファイルは保持されています。フォルダーの権限を確認してください。",
+        "envUnsupported": ".env の形式を安全に管理できなかったため、上書きしていません。閉じていない引用符や行継続を確認してください。",
+        "stopFailed": "設定が一致しない Codex を停止できませんでした。終了してから再試行してください。"
+      },
+      "country": {
+        "title": "起動前に出口の国を確認",
+        "hint": "プロキシ割り当ての有無に関係なく、全アカウントで選択できます。Cockpit からの起動時に ChatGPT Cloudflare trace で HTTP 出口を確認します。デスクトップショートカットは変更しません。",
+        "expected": "想定する国または地域",
+        "choose": "国または地域を選択",
+        "save": "国の確認設定を保存",
+        "saved": "国の確認設定を保存しました",
+        "mismatch": "出口の国が一致しません。想定：{{expected}}、検出：{{actual}}。Codex は起動していません。",
+        "unavailable": "出口の国を確認できませんでした。Codex は起動していません。接続を確認して再試行してください。",
+        "routeUnknown": "クライアントのプロキシ経路を特定できませんでした。Codex は起動していません。プロキシと .env を確認してください。",
+        "changed": "確認中に国の設定が変更されました。現在の設定で再試行してください。",
+        "storage": "国の確認設定を読み取りまたは保存できませんでした。",
+        "invalid": "有効な国または地域を選択してください。",
+        "search": "国名または国コードを検索",
+        "actual": "検出された国・地域",
+        "route": "確認した接続設定",
+        "checkedAt": "確認時刻",
+        "notDetected": "未検出",
+        "notRequired": "無効",
+        "resultTitle": "接続先から見える国の確認結果",
+        "evidenceHint": "保存済みの HTTP 起動経路のみ確認します。表示する履歴は今回の Cockpit 起動中のものです。結果はアプリログにも残ります。過去の結果は現在の接続を保証しません。",
+        "saveFirst": "確認前にプロキシモードと国の設定を保存してください。",
+        "noChecks": "今回の起動中の確認履歴はありません。",
+        "checkNow": "今すぐ確認",
+        "history": "今回の起動中の以前の確認",
+        "historyFailed": "最近の確認履歴を読み取れません。",
+        "result_checking": "出口の国を確認中…",
+        "result_passed": "確認に成功しました",
+        "result_blocked": "確認に失敗しました",
+        "result_stale": "設定が変更されました。再確認してください",
+        "route_account": "Cockpit のアカウントプロキシ",
+        "route_direct": "直接接続を強制",
+        "route_env": "クライアント .env ファイル",
+        "route_environment": "継承された環境",
+        "route_system": "Windows のプロキシ",
+        "route_network": "既定のネットワーク経路",
+        "route_unknown": "未確定",
+        "progressCountries": "予定：{{expected}} · 検出：{{actual}}",
+        "progressTime": "所要時間：{{ms}} ミリ秒"
+      },
+      "env": {
+        "title": "クライアントのプロキシ環境変数",
+        "source": "検出元：{{source}}",
+        "source_saved": "このアカウントの保存済み設定",
+        "source_env": "クライアントの .env",
+        "source_environment": "継承された環境変数",
+        "source_system": "Windows システムプロキシ",
+        "source_none": "明示的なプロキシは未検出",
+        "source_unknown": "検出できません",
+        "hint": "HTTP_PROXY、HTTPS_PROXY、ALL_PROXY、NO_PROXY のみ対応。次回 Cockpit からクライアント設定で起動するときに適用し、.env の他の項目は保持します。",
+        "variables": "プロキシ変数",
+        "recognize": "再読み込み",
+        "save": "ENV 設定を保存",
+        "saved": "次回起動用に保存しました",
+        "unrecognized": "既存のプロキシ変数を安全に読み取れません。固定値を手入力できます。現時点ではクライアントのファイルを変更しません。",
+        "noneHint": "明示的なプロキシは見つかりませんでした。TUN などのネットワーク機能の有無は判定できません。",
+        "readFailed": "ENV 設定を読み取れません。編集前に再試行してください。",
+        "saveFailed": "ENV 設定を保存できません。",
+        "changed": "設定が別の場所で変更されました。再読み込みしてから保存してください。",
+        "invalid": "HTTP_PROXY、HTTPS_PROXY、ALL_PROXY、NO_PROXY に重複のない固定値を入力してください。プロキシ URL は http、https、socks5、socks5h に対応します。"
+      }
     },
     "more": {
       "title": "その他",
@@ -7864,6 +7979,10 @@
     }
   },
   "workbuddy": {
+    "errors": {
+      "nodeAppPath": "このパスは Node ランタイム（{{path}}）を指しています。WorkBuddy.exe を選択してください。",
+      "keyProcessFailed": "WorkBuddy の公式キーを読み込めなかったため、ログイン情報の上書きを中止しました。設定でクライアントのパス（{{path}}）を確認し、正しければ更新を確認してください。"
+    },
     "desktopEdition": "WorkBuddy（中国版）",
     "credits": {
       "planBase": "プラン基本クレジット",
@@ -7892,7 +8011,11 @@
       "creditUsed": "消費クレジット",
       "model": "モデル",
       "recentUsage": "最新の5件",
-      "viewMore": "もっと見る"
+      "viewMore": "もっと見る",
+      "expiringHintTitle": "期限切れ間近のクレジット詳細を見る",
+      "expiringSoon": "24時間以内 {{amount}}",
+      "expiringSoonTitle": "24時間以内に期限が切れるクレジット",
+      "expiringSoonSummary": "合計 {{amount}} · {{packageCount}} 件"
     },
     "title": "WorkBuddyアカウント管理",
     "noAccounts": "WorkBuddy アカウントがありません",

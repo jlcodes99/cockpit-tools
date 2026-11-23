@@ -218,7 +218,7 @@ export function CodexSshServersPanel({ embedded = false }: CodexSshServersPanelP
             <p className="codex-ssh-panel__subtitle">
               {t(
                 'codex.ssh.subtitle',
-                '选中的服务器会在 Codex 切号后接收当前账号鉴权包。',
+                '选中的服务器会同步当前 Codex 账号，或通过 SSH 隧道接入本机 API 服务。',
               )}
             </p>
           </div>

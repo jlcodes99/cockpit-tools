@@ -507,6 +507,7 @@ async fn forward_with_policy(
             finished: false,
             sequence: 0,
             pending_error: None,
+            abort_downstream: false,
             idle_deadline: tokio::time::Instant::now() + policy.idle_timeout,
             keepalive_deadline: tokio::time::Instant::now() + policy.keepalive,
             deadline,
@@ -516,6 +517,22 @@ async fn forward_with_policy(
         let keepalive = stream_state.policy.keepalive;
         let body = Body::from_stream(stream::unfold(stream_state, move |mut current| async move {
             loop {
+                if current.abort_downstream {
+                    // A silent zero-token `response.incomplete` was dropped in
+                    // `observe_frames`: finish the body abruptly so the client
+                    // sees a premature stream end and runs its own stream
+                    // reconnect instead of treating an orphan terminal as final.
+                    // Checked before `finished`: the terminal observation marks
+                    // the stream finished while observed frames are still due.
+                    current.finished = true;
+                    return Some((
+                        Err(std::io::Error::new(
+                            std::io::ErrorKind::UnexpectedEof,
+                            "upstream ended with a silent zero-token response.incomplete",
+                        )),
+                        current,
+                    ));
+                }
                 if current.finished {
                     return None;
                 }
@@ -583,6 +600,16 @@ async fn forward_with_policy(
                         }
                         if !bytes.is_empty() {
                             return Some((Ok(bytes), current));
+                        }
+                        if current.abort_downstream {
+                            current.finished = true;
+                            return Some((
+                                Err(std::io::Error::new(
+                                    std::io::ErrorKind::UnexpectedEof,
+                                    "upstream ended with a silent zero-token response.incomplete",
+                                )),
+                                current,
+                            ));
                         }
                         if current.finished {
                             return None;
@@ -850,6 +877,7 @@ struct StreamingResponse {
     recovery_generation: u64,
     sequence: u64,
     pending_error: Option<ServiceError>,
+    abort_downstream: bool,
     policy: ExecutionPolicy,
     deadline: Deadline,
     idle_deadline: tokio::time::Instant,
@@ -922,6 +950,19 @@ impl StreamingResponse {
                     );
                     let codex = super::output_error::is_codex_client(&self.prepared.source_headers);
                     bytes.extend_from_slice(&super::output_error::event_sse(&self.wire.failure(&error, codex, event_sequence)));
+                    break;
+                }
+                if super::events::response_terminal_kind(&event) == Some("response.incomplete")
+                    && super::events::silent_incomplete_termination(&event)
+                {
+                    // An unexplained zero-token `response.incomplete` is an
+                    // upstream glitch, not a semantic terminal: forwarding it
+                    // makes Codex clients abort the turn as a non-retryable
+                    // error (`Incomplete response returned, reason: unknown`)
+                    // and skips their built-in stream reconnect. Drop the frame;
+                    // the body loop aborts the stream after flushing what was
+                    // already observed.
+                    self.abort_downstream = true;
                     break;
                 }
                 if !super::response_wire::visible(&event, super::output_error::is_codex_client(&self.prepared.source_headers)) { continue; }
@@ -1399,3 +1440,7 @@ mod preparation_timeout_tests;
 #[cfg(test)]
 #[path = "official_late_rejection_tests.rs"]
 mod official_late_rejection_tests;
+
+#[cfg(test)]
+#[path = "http_silent_incomplete_tests.rs"]
+mod http_silent_incomplete_tests;

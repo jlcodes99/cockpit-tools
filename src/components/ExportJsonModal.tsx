@@ -5,6 +5,8 @@ import { ModalErrorMessage } from './ModalErrorMessage';
 import { useEscCloseTopmost } from '../hooks/useEscClose';
 import { useModalFocusTrap } from '../hooks/useModalFocusTrap';
 
+const MAX_PREVIEW_LENGTH = 300 * 1024;
+
 interface ExportJsonModalProps {
   isOpen: boolean;
   active?: boolean;
@@ -57,7 +59,7 @@ function maskJsonValues(value: unknown): unknown {
   return value;
 }
 
-export function maskJsonPreviewContent(jsonContent: string): string {
+function maskJsonPreviewContent(jsonContent: string): string {
   if (!jsonContent) return '';
   try {
     const parsed = JSON.parse(jsonContent) as unknown;
@@ -66,6 +68,43 @@ export function maskJsonPreviewContent(jsonContent: string): string {
   } catch {
     return jsonContent.replace(/[^\s]/g, '*');
   }
+}
+
+export function ExportJsonPreview({
+  jsonContent,
+  hidden,
+  className = 'export-json-textarea',
+}: {
+  jsonContent: string;
+  hidden: boolean;
+  className?: string;
+}) {
+  const { t } = useTranslation();
+  const previewNoteId = useId();
+  const maskedContent = useMemo(() => maskJsonPreviewContent(jsonContent), [jsonContent]);
+  const previewContent = hidden ? maskedContent : jsonContent;
+  const previewTruncated = previewContent.length > MAX_PREVIEW_LENGTH;
+  // Avoid leaving half of a surrogate pair at the end of the preview.
+  const displayedPreview = previewTruncated
+    ? previewContent.slice(0, MAX_PREVIEW_LENGTH).replace(/[\uD800-\uDBFF]$/, '')
+    : previewContent;
+
+  return (
+    <>
+      {previewTruncated && (
+        <p id={previewNoteId} className="export-json-preview-note">
+          {t('common.previewTruncated')}
+        </p>
+      )}
+      <textarea
+        className={className}
+        aria-describedby={previewTruncated ? previewNoteId : undefined}
+        readOnly
+        spellCheck={false}
+        value={displayedPreview}
+      />
+    </>
+  );
 }
 
 export function ExportJsonModal(props: ExportJsonModalProps) {
@@ -96,10 +135,6 @@ export function ExportJsonModal(props: ExportJsonModalProps) {
   const titleId = useId();
   useEscCloseTopmost(isOpen && active, onClose, dialog);
   useModalFocusTrap(dialog, isOpen, true, active);
-
-  const maskedContent = useMemo(() => {
-    return maskJsonPreviewContent(jsonContent);
-  }, [jsonContent]);
 
   if (!isOpen) return null;
 
@@ -141,12 +176,7 @@ export function ExportJsonModal(props: ExportJsonModalProps) {
                 </button>
               </div>
 
-              <textarea
-                className="export-json-textarea"
-                readOnly
-                spellCheck={false}
-                value={hidden ? maskedContent : jsonContent}
-              />
+              <ExportJsonPreview jsonContent={jsonContent} hidden={hidden} />
 
               {savedPath && (
                 <div className="export-json-path-box">

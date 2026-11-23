@@ -198,6 +198,22 @@
     "providerClear": "清除選取"
   },
   "common": {
+    "automation": {
+      "invalidPlatform": "未知的帳號平台。執行 cockpit-cli account platforms 可查看支援的平台 ID。",
+      "hostUnavailable": "請啟動使用此資料目錄的 Cockpit Tools 桌面版後再試一次。",
+      "responseTimeout": "Cockpit Tools 未在時限內傳回結果。再次變更前，請先確認目前狀態。",
+      "versionMismatch": "CLI 與桌面版的帳號自動化協定版本不同，請一併更新。",
+      "unauthorized": "無法驗證本機帳號自動化請求。",
+      "invalidAccountId": "請輸入所選平台或 API 服務成員清單中的帳號 ID。",
+      "accountNotFound": "在所選平台找不到該帳號。",
+      "operationFailed": "Cockpit Tools 無法完成操作，請查看應用程式記錄。",
+      "appPathMissing": "請在 Cockpit Tools 中設定用戶端路徑後再試著切換帳號。",
+      "appPathMissingAfterSwitch": "帳號已切換，請先設定用戶端路徑再啟動。",
+      "switchBusy": "此用戶端正在切換帳號，請等完成後再試。",
+      "quotaUnsupported": "此帳號類型無法透過這個命令即時重新整理配額。移除 --refresh 即可查詢上次儲存的配額。",
+      "quotaRefreshFailed": "最近一次配額重新整理失敗。移除 --refresh 即可查詢上次儲存的配額。"
+    },
+    "previewTruncated": "預覽僅顯示部分內容。複製或下載時會包含完整的 JSON。",
     "collapseAll": "全部收起",
     "expandAll": "全部展開",
     "syncing": "同步中…",
@@ -323,6 +339,9 @@
       "success": "成功",
       "failed": "失敗",
       "cancelled": "取消",
+      "clientDisconnected": "用戶端已中斷連線",
+      "upstreamOverloaded": "上游服務過載",
+      "requestServiceUnavailable": "服務無法使用",
       "incomplete": "串流未完成",
       "recovered": "已回退",
       "official": "官方授權",
@@ -1127,7 +1146,8 @@
         "stopPrevious": "停止原執行個體",
         "prepareCredentials": "準備登入憑證",
         "writeProfile": "寫入執行個體設定",
-        "startClient": "啟動 Codex 用戶端"
+        "startClient": "啟動 Codex 用戶端",
+        "checkProxyCountry": "檢查出口國家"
       },
       "detail": {
         "checkingInstance": "正在讀取執行個體設定...",
@@ -1300,7 +1320,7 @@
       "trayIconStyleDesc": "選擇系統單色圖示或原彩色 App 圖示",
       "trayIconStyleTemplate": "單色圖示",
       "trayIconStyleColor": "彩色圖示",
-      "menuBarLeftClick": "選單列圖示左鍵行為",
+      "menuBarLeftClick": "選單列左鍵操作",
       "menuBarLeftClickMenu": "開啟原生額度選單",
       "menuBarLeftClickWindow": "直接開啟主視窗",
       "floatingCardStartup": "啟動時顯示懸浮卡片",
@@ -1565,16 +1585,15 @@
       "webdavAllowedDomainsDesc": "逗號分隔；留空不限制",
       "claudeQuotaDisplayRemaining": "Claude 額度顯示剩餘%",
       "claudeQuotaDisplayRemainingDesc": "預設顯示已用百分比；開啟後改為顯示剩餘百分比。自動切號與預警仍依已用比例計算。",
-      "menuBarLeftClick": "選單列左鍵操作",
       "menuBarLeftClickDesc": "右鍵一律開啟額度選單。",
       "menuBarLeftClickQuotaMenu": "額度選單",
       "menuBarLeftClickMainWindow": "主視窗",
       "menuBarQuota": "選單列顯示即時額度",
       "menuBarQuotaDesc": "啟用後在選單列圖示旁顯示所選平台目前帳號的剩餘額度；平台等專屬選項在彈窗中設定",
-      "menuBarQuotaEnabledDesc": "已啟用 · {{platform}} · 顯示該平台目前帳號剩餘額度（多條取最低）",
+      "menuBarQuotaEnabledDesc": "已啟用 · {{platform}} · 顯示該平台目前帳號的可用額度",
       "menuBarQuotaConfigure": "設定",
       "menuBarQuotaModalTitle": "選單列額度",
-      "menuBarQuotaModalDesc": "以下為選單列額度的專屬選項：跟隨所選平台目前帳號。Codex 目前為 API 服務時顯示「API + 池剩餘%」；API Key 帳號顯示「API + 剩餘額度」；一般帳號顯示信箱前綴與剩餘%（多條取最低；低紅、中橙、高綠）。",
+      "menuBarQuotaModalDesc": "跟隨所選平台目前帳號，顯示可用視窗的剩餘額度；顏色依最低剩餘額度決定。Codex API 服務 / API Key 帳號一律顯示 API 標籤。",
       "menuBarAntigravityMetric": "選單列配額",
       "menuBarQuotaLowest": "最低剩餘額度",
       "menuBarQuotaPlatform": "額度帳號平台",
@@ -1605,10 +1624,11 @@
       },
       "timeDisplayMode": "時間顯示",
       "timeDisplayModeDesc": "選擇帳號卡片與列表的時間內容，預設為切換時間",
-      "menuBarLeftClick": "選單列左鍵操作",
-      "menuBarLeftClickDesc": "右鍵一律開啟額度選單。",
-      "menuBarLeftClickQuotaMenu": "額度選單",
-      "menuBarLeftClickMainWindow": "主視窗"
+      "menuBarQuotaLayout": "額度版面",
+      "menuBarQuotaLayoutDesc": "橫向單行使用較大字體；緊湊雙行同時顯示兩種視窗的剩餘額度，節省選單列空間，只有一個視窗時回復為橫向單行。",
+      "menuBarQuotaLayoutPreview": "版面示意，額度為範例資料",
+      "menuBarQuotaLayoutHorizontal": "橫向單行",
+      "menuBarQuotaLayoutStacked": "緊湊雙行"
     },
     "network": {
       "apiTitle": "反重力駕駛艙 API",
@@ -2673,7 +2693,8 @@
     "stopApiServiceFailed": "無法關閉 API 服務，請先停用後重試。",
     "stopApiServiceFailedContinue": "API 服務未正常關閉，將繼續重新啟動...",
     "skipThisVersion": "跳過此版本",
-    "skipFailed": "跳過此更新失敗：{{error}}"
+    "skipFailed": "跳過此更新失敗：{{error}}",
+    "installFailedTranslocated": "應用程式正在唯讀位置執行（macOS App Translocation），無法安裝更新。請結束 Cockpit Tools，在 Finder 中將其移至「應用程式」檔案夾，重新開啟後再重試更新。"
   },
   "closeDialog": {
     "minimizeWindow": "最小化",
@@ -4372,6 +4393,28 @@
       }
     },
     "sessionUsage": {
+      "analysis": {
+        "localUsage": "本機工作階段用量",
+        "selectedScope": "目前篩選範圍",
+        "project": "專案",
+        "allModels": "所有模型",
+        "allProjects": "所有專案",
+        "unknownProject": "未知專案",
+        "requests": "請求明細",
+        "time": "時間",
+        "freshInput": "新增輸入",
+        "cached": "快取命中",
+        "referenceCost": "參考成本",
+        "cacheRate": "命中率",
+        "viewSession": "查看此工作階段的請求",
+        "clearSession": "清除工作階段篩選",
+        "sort": "排序",
+        "indexingProjects": "正在補齊歷史專案歸屬…",
+        "noResults": "沒有符合篩選條件的記錄",
+        "unpriced": "部分用量缺少模型定價",
+        "costHelp": "依模型 API 單價估算",
+        "page": "第 {{page}} 頁"
+      },
       "comparison": {
         "localTotal": "本機工作階段 Token · 所選時間和執行個體",
         "profileTotal": "官方個人資料 · 累計 Token 數",
@@ -4874,6 +4917,8 @@
       "daysLeft": "{{count}} 天",
       "over99Days": "99+ 天",
       "titleWithDate": "訂閱到期：{{date}}",
+      "expiryUnconfirmed": "未確認",
+      "titleWithUnconfirmedDate": "無法確認訂閱到期時間。最近記錄：{{date}}",
       "titleUnknown": "重新授權以取得訂閱到期時間",
       "filterLabel": "到期篩選",
       "filterAll": "全部到期 ({{count}})",
@@ -4896,7 +4941,8 @@
         "refreshTokens": "更新登入憑證",
         "writeCredentials": "寫入客戶端憑證",
         "syncSettings": "同步帳號設定",
-        "startClient": "啟動 Codex 客戶端"
+        "startClient": "啟動 Codex 客戶端",
+        "checkProxyCountry": "檢查出口國家"
       },
       "status": {
         "pending": "等待",
@@ -5880,7 +5926,7 @@
         "viewAll": "查看全部"
       },
       "previewTitle": "代理預覽",
-      "modeDisabled": "不使用代理",
+      "modeDisabled": "强制直连",
       "disableAction": "解除代理",
       "setIndependent": "設定獨立代理",
       "disabledHint": "略過獨立與統一代理，新連線嘗試直連。",
@@ -5926,7 +5972,7 @@
       "restoreEntryNotRunning": "找不到仍在執行且使用目前 Cockpit 已記錄代理入口的桌面端。",
       "restoreEntryBusy": "代理正在恢復，請稍後重試。",
       "restoreEntryTimeout": "代理恢復逾時，請重試。",
-      "restartHint": "透過本機轉接啟動的用戶端，新連線會自動使用新出口；其他執行中的用戶端需重啟一次。桌面轉接僅監聽本機，但不隔離本機其他使用者；不變更系統代理。",
+      "restartHint": "首次绑定、切换代理模式或解绑后，重新启动 Codex 以同时应用界面和后台代理设置。代理连接失败时不会回退直连。",
       "exportHint": "帳號匯出不含代理憑證，匯入後需重新設定。",
       "backToAccounts": "返回帳號",
       "accountsTitle": "帳號",
@@ -6318,7 +6364,76 @@
       "noCurrentNode": "尚未取得目前節點",
       "runtimeBusy": "本機代理忙碌，暫時無法更新",
       "runtimeCapacity": "執行中的代理過多，請停止不使用的代理後重試",
-      "runtimeReadFailed": "暫時無法讀取本機代理狀態，請重試"
+      "runtimeReadFailed": "暫時無法讀取本機代理狀態，請重試",
+      "modeClient": "使用客户端原设置",
+      "clientHint": "保留此账号原有的 .env 和系统代理设置，不使用 Cockpit 的账号或统一代理。",
+      "launch": {
+        "envChanged": "检测到代理配置被其他操作修改。原文件已保留，请检查 .env 中的代理设置后重试。",
+        "envStorage": "无法安全读取或保存代理配置，原文件已保留。请检查目录权限后重试。",
+        "envUnsupported": "当前 .env 使用了无法安全接管的格式，未覆盖文件。请检查未闭合引号或跨行设置。",
+        "stopFailed": "未能停止配置不匹配的 Codex 实例。请先退出该实例，再重试。"
+      },
+      "country": {
+        "title": "啟動前檢查出口國家",
+        "hint": "可選功能，有無帳號代理皆可啟用。僅在 Cockpit 內啟動時，透過 ChatGPT 的 Cloudflare trace 檢查目前 HTTP 出口。桌面捷徑不受影響。",
+        "expected": "預期國家或地區",
+        "choose": "選擇國家或地區",
+        "save": "儲存國家檢查",
+        "saved": "國家檢查設定已儲存",
+        "mismatch": "出口國家不符：預期 {{expected}}，實際 {{actual}}。未啟動 Codex。",
+        "unavailable": "無法確認出口國家，未啟動 Codex。請檢查連線後重試。",
+        "routeUnknown": "無法確定用戶端的代理出口，未啟動 Codex。請檢查用戶端代理與 .env 設定。",
+        "changed": "檢查期間國家設定已變更，請重試以檢查目前設定。",
+        "storage": "無法讀取或儲存國家檢查設定。",
+        "invalid": "請選擇有效的國家或地區。",
+        "search": "搜尋國家名稱或代碼",
+        "actual": "實際國家或地區",
+        "route": "檢查使用的設定",
+        "checkedAt": "檢查時間",
+        "notDetected": "未偵測到",
+        "notRequired": "未啟用",
+        "resultTitle": "出口國家檢查結果",
+        "evidenceHint": "僅檢查已儲存的 HTTP 啟動出口。下方顯示本次 Cockpit 執行期間的紀錄，程式日誌會保留檢查結果；歷史結果不代表目前連線。",
+        "saveFirst": "請先儲存代理模式與國家設定，再檢查目前出口。",
+        "noChecks": "本次執行尚無檢查紀錄。",
+        "checkNow": "立即檢查",
+        "history": "本次執行的較早紀錄",
+        "historyFailed": "無法讀取最近的國家檢查紀錄。",
+        "result_checking": "正在檢查出口國家…",
+        "result_passed": "檢查通過",
+        "result_blocked": "檢查未通過",
+        "result_stale": "設定已變更，請重新檢查",
+        "route_account": "Cockpit 帳號代理",
+        "route_direct": "強制直連",
+        "route_env": "用戶端 .env",
+        "route_environment": "繼承的環境變數",
+        "route_system": "Windows 系統代理",
+        "route_network": "預設網路出口",
+        "route_unknown": "尚未確定",
+        "progressCountries": "預期：{{expected}} · 實際：{{actual}}",
+        "progressTime": "耗時：{{ms}} 毫秒"
+      },
+      "env": {
+        "title": "用戶端代理環境變數",
+        "source": "識別來源：{{source}}",
+        "source_saved": "此帳號已儲存的設定",
+        "source_env": "用戶端 .env",
+        "source_environment": "繼承的環境變數",
+        "source_system": "Windows 系統代理",
+        "source_none": "未識別到明確的代理",
+        "source_unknown": "無法識別",
+        "hint": "僅支援 HTTP_PROXY、HTTPS_PROXY、ALL_PROXY、NO_PROXY。儲存後，在 Cockpit 下次以「使用用戶端原設定」啟動此帳號時套用；保留 .env 中的其他內容。",
+        "variables": "代理變數",
+        "recognize": "重新讀取",
+        "save": "儲存 ENV 設定",
+        "saved": "已儲存，下次啟動時套用",
+        "unrecognized": "無法安全識別現有代理變數，可在此手動輸入固定值；目前不會更動用戶端檔案。",
+        "noneHint": "未發現明確的代理，不代表未使用 TUN 或其他網路代理。",
+        "readFailed": "無法讀取已儲存的 ENV 設定，請重試後再編輯。",
+        "saveFailed": "無法儲存 ENV 設定。",
+        "changed": "設定已在別處變更，請重新讀取後再儲存。",
+        "invalid": "只能填寫 HTTP_PROXY、HTTPS_PROXY、ALL_PROXY、NO_PROXY 的固定值，不可重複；代理位址支援 http、https、socks5、socks5h。"
+      }
     },
     "more": {
       "title": "更多",
@@ -7864,6 +7979,10 @@
     }
   },
   "workbuddy": {
+    "errors": {
+      "nodeAppPath": "目前路徑指向 Node 執行環境（{{path}}）。請選擇 WorkBuddy.exe。",
+      "keyProcessFailed": "無法讀取 WorkBuddy 官方金鑰，已停止覆寫登入資訊。請在設定中核對用戶端路徑（{{path}}），確認路徑正確後再檢查用戶端更新。"
+    },
     "desktopEdition": "WorkBuddy 中國版",
     "credits": {
       "planBase": "方案基礎點數",
@@ -7892,7 +8011,11 @@
       "creditUsed": "消耗點數",
       "model": "模型",
       "recentUsage": "僅顯示最近 5 筆資料",
-      "viewMore": "查看更多"
+      "viewMore": "查看更多",
+      "expiringHintTitle": "查看即將到期的積分明細",
+      "expiringSoon": "24h內 {{amount}}",
+      "expiringSoonTitle": "24小時內到期的積分",
+      "expiringSoonSummary": "合計 {{amount}} · {{packageCount}} 個積分包"
     },
     "title": "WorkBuddy 帳號管理",
     "noAccounts": "暫無 WorkBuddy 帳號",

@@ -49,7 +49,7 @@
     if (!root.dialogState || root.dialogState.threadId !== (root.threadId || null) || root.dialogState.binding !== binding(root)) {
       if (root.dialogState) cancel(root);
       root.dialogState = {threadId:root.threadId || null, binding:binding(root), tab:'overview', scope:'chat', period:'week', rows:[], nextCursor:null,
-        summary:null, session:null, pending:null, handled:null, loaded:false, available:null, unavailableReason:null,
+        summary:null, session:null, pending:null, handled:null, loaded:false, available:null, unavailableReason:null, remoteLogs:null,
         error:false, requestedAt:0, paged:false, retryCount:0, retryAt:null, hostAvailable:root.hostAvailable !== false,
         scopeCaches:Object.create(null), summaryCaches:Object.create(null)};
     }
@@ -102,6 +102,7 @@
     if (q.view === 'openLogs') { issue(root); return; }
     const page = response.requests;
     if (q.view === 'logs' && page && Array.isArray(page.rows)) {
+      if (typeof response.remote === 'boolean') s.remoteLogs = response.remote;
       if (q.cursor == null) s.rows = [];
       const known = new Set(s.rows.map(row => row.id));
       for (const row of page.rows) if (row && !known.has(row.id)) { s.rows.push(row); known.add(row.id); }
@@ -163,49 +164,50 @@
   }
   function rate(value) { return finite(value) && value > 0 ? (value >= 1 ? String(Math.round(value)) : value < 0.1 ? '< 0.1' : value.toFixed(1)) + ' tok/s' : missingLabel; }
   function metricList(items) { return '<dl class="cell-metrics">' + items.map(([key,value]) => '<div><dt>' + esc(label(key)) + '</dt><dd>' + esc(value) + '</dd></div>').join('') + '</dl>'; }
-  function tiers(row) {
-    // Keep parity with requestServiceTierPresentation and the explicit
-    // recordedServiceTierAdaptation evidence used by API Service.
-    const requested = String(row.requestedServiceTier || '').trim();
-    const response = String(row.responseServiceTier || '').trim();
-    const legacy = !requested && !response ? String(row.serviceTier || '').trim() : '';
-    const value = row.serviceTierAdaptation;
-    const adaptation = value?.reason === 'official_default_only' && value.sentTier === 'default'
-      && typeof value.requestedTier === 'string' && value.requestedTier.trim() ? value : null;
-    const tierLabel = tier => {
-      const keys = {priority:'tierFast',fast:'tierFast',ultrafast:'tierUltrafast',standard:'tierStandard',default:'tierStandard',auto:'tierAuto'};
-      return tier ? Object.hasOwn(keys,tier.toLowerCase()) ? label(keys[tier.toLowerCase()]) : tier : label('tierUnknown');
-    };
-    const entry = (key,tier) => '<span class="cell-tier" title="' + esc(label('tierHint')) + '">'
-      + esc(label(key).replace(/\{\{\s*tier\s*\}\}/g, key === 'requestTier' ? tierLabel(tier) : tier || label('tierUnknown'))) + '</span>';
-    return entry('requestTier',adaptation?.requestedTier || requested) + entry('responseTier',response)
-      + (legacy ? entry('legacyTier',legacy) : '')
-      + (adaptation ? '<span class="cell-tier adjusted" title="' + esc(label('tierHint')) + '">' + esc(label('tierAdjusted')) + '</span>' : '');
+  function requestSpeedLabel(row) {
+    // Match the short speed labels in API Service request logs.
+    const adaptation = row.serviceTierAdaptation;
+    const adjusted = adaptation?.reason === 'official_default_only' && adaptation.sentTier === 'default'
+      && typeof adaptation.requestedTier === 'string' && adaptation.requestedTier.trim();
+    const requested = adjusted ? adaptation.requestedTier.trim() : String(row.requestedServiceTier || '').trim();
+    const keys = {priority:'tierFast',fast:'tierFast',ultrafast:'tierUltrafast',standard:'tierStandard',default:'tierStandard'};
+    const key = requested.toLowerCase();
+    const speed = Object.hasOwn(keys,key) ? label(keys[key]) : '';
+    if (adjusted) {
+      const text = label('speedAdjusted').replace(/\{\{\s*tier\s*\}\}/g, () => speed || (key === 'auto' ? label('tierAuto') : requested));
+      return '<span class="cell-tier adjusted" title="' + esc(label('officialDefaultSpeed')) + '">' + esc(text) + '</span>';
+    }
+    return speed ? '<span class="cell-tier">' + esc(speed) + '</span>' : '';
   }
   function requestRow(row, remote = false) {
     const date = finite(row.timestamp) && row.timestamp > 0 ? new Date(row.timestamp) : null;
     const timestamp = date && Number.isFinite(date.getTime()) ? date : null;
     const category = String(row.errorCategory || '').trim().toLowerCase();
     const outcome = row.httpStatus === 499 || ['client_canceled','client_cancelled'].includes(category) ? 'cancelled' : category === 'stream_incomplete' ? 'incomplete' : row.success ? 'success' : 'failed';
+    const reason = category === 'client_disconnected' || (!category && row.httpStatus === 499) ? label('clientDisconnected')
+      : ['server_is_overloaded', 'model_at_capacity'].includes(category) ? label('upstreamOverloaded')
+      : !category && row.httpStatus === 503 ? label('requestServiceUnavailable') : row.errorCategory;
+    const reasonTitle = reason === row.errorCategory ? row.errorMessage || reason : reason;
     const authorization = row.authorizationRoute || (['official','local_gateway'].includes(row.transport) ? row.transport : null);
     const route = authorization === 'official' ? label('official') : authorization === 'local_gateway' ? label('local')
       : row.accountId ? label(String(row.accountId).startsWith('chatgpt_plan_') ? 'official' : 'local') : missingLabel;
     const address = typeof row.accountEmail === 'string' ? row.accountEmail.trim() : '';
     const visibleAddress = !/^(?:codex_|chatgpt_plan_|api-key-[a-f0-9]{8}$)/i.test(address) || address.includes('@') ? address : '';
-    const email = row.accountDisplayName || visibleAddress || missingLabel;
+    const accountHint = row.accountReference ? label('account') + ' · ' + row.accountReference : missingLabel;
+    const account = row.accountDisplayName || visibleAddress || accountHint;
     const imageKind = {image_generation:'imageGeneration',image_edit:'imageEdit'}[row.requestKind];
     return '<tr class="request-row"><td><span class="cell-date">' + esc(timestamp ? timestamp.toLocaleDateString(undefined, {month:'2-digit',day:'2-digit'}) : missingLabel)
       + '</span><time class="cell-time">' + esc(timestamp ? timestamp.toLocaleTimeString(undefined, {hour12:false}) : missingLabel) + '</time></td>'
-      + (remote ? '<td><span class="cell-email" title="' + esc(row.requestId || missingLabel) + '">' + esc(row.requestId || missingLabel) + '</span></td>' : '<td><span class="cell-email" title="' + esc(email) + '">' + esc(email) + '</span>' + badge(row.plan) + '<span class="cell-route">' + esc(route) + '</span></td>')
+      + (remote ? '<td><span class="cell-email" title="' + esc(row.requestId || missingLabel) + '">' + esc(row.requestId || missingLabel) + '</span></td>' : '<td><span class="cell-email" title="' + esc(account) + '">' + esc(account) + '</span>' + badge(row.plan) + '<span class="cell-route">' + esc(route) + '</span></td>')
       + '<td><span class="cell-model" title="' + esc(row.requestedModel || row.model || missingLabel) + '">' + esc(row.requestedModel || row.model || missingLabel) + '</span>'
       + (!remote && row.upstreamModel ? '<span class="cell-upstream" title="' + esc(row.upstreamModel) + '">↳ ' + esc(row.upstreamModel) + '</span>' : '')
-      + (imageKind ? '<span class="cell-muted">' + esc(label(imageKind)) + '</span>' : '<span class="cell-muted">' + esc(row.reasoningEffort || missingLabel) + '</span>' + tiers(row)) + '</td>'
+      + (imageKind ? '<span class="cell-muted">' + esc(label(imageKind)) + '</span>' : '<span class="cell-muted">' + esc(row.reasoningEffort || missingLabel) + '</span>' + requestSpeedLabel(row)) + '</td>'
       + '<td>' + metricList([['input',number(row.inputTokens)],['output',number(row.outputTokens)],['cached',number(row.cachedTokens)],['total',number(row.totalTokens)]]) + '</td>'
       + '<td>' + metricList([['firstResponse',ms(row.firstResponseMs)],['totalDuration',ms(row.latencyMs)],['speed',rate(rowSpeed(row))]]) + '</td>'
       + '<td><span class="cell-result ' + (outcome === 'success' ? '' : 'failed') + '">' + dot(outcome === 'success' ? 'green' : '') + esc(label(outcome)) + '</span>'
       + '<span class="cell-code">' + esc(row.httpStatus ? 'HTTP ' + row.httpStatus : missingLabel) + '</span>'
       + (row.recovered ? '<span class="cell-recovery">↳ ' + esc(label('recovered')) + '</span>' : '')
-      + (row.errorCategory ? '<span class="cell-error" title="' + esc(row.errorMessage || row.errorCategory) + '">' + esc(row.errorCategory) + '</span>' : '') + '</td></tr>';
+      + (reason ? '<span class="cell-error" title="' + esc(reasonTitle) + '">' + esc(reason) + '</span>' : '') + '</td></tr>';
   }
   function quotaContent(root, input) {
     const {badgeKind:kind,formatMoney,shortProductLabel} = input;
@@ -277,7 +279,7 @@
   }
   function logs(root) {
     const s = state(root), busy = loading(s);
-    const remote = root.usageState?.__remoteService?.product === 'cockpit-tools';
+    const remote = isRemoteLogView(root, s);
     const empty = root.hostAvailable === false ? label('hostUnavailable') : s.error ? label('dataFailed') : busy ? label('loading')
       : !s.threadId && s.scope === 'chat' || s.unavailableReason === 'unlinked_session' ? label('unlinkedSession')
       : s.available === false ? unavailableText(s) : label('noRequests');
@@ -287,6 +289,9 @@
       + (!s.rows.length ? '<tr><td colspan="6" class="empty-state">' + esc(empty) + '</td></tr>' : '') + '</tbody></table></div><div class="load-more-row"><span class="records-count" role="status" aria-live="polite">'
       + esc(label('shownRows').replace(/\{\{\s*count\s*\}\}/g, String(s.rows.length))) + '</span><button class="load-more" type="button" data-cockpit-dialog-action="more"' + (busy || (remote && (!s.nextCursor || s.rows.length >= 200)) || (s.scope === 'chat' && !s.threadId) || root.hostAvailable === false ? ' disabled' : '') + '>'
       + esc(label('more')) + '</button></div></section>';
+  }
+  function isRemoteLogView(root, s) {
+    return s.remoteLogs ?? (root.usageState?.__remoteService?.product === 'cockpit-tools');
   }
   function fit(details) {
     const width = details.getBoundingClientRect().width;
@@ -366,7 +371,7 @@
         }
         else if (action === 'period' && ['today','week'].includes(value)) { if (s.period === value) return; s.period = value; s.summary = s.summaryCaches[value] || null; issue(root); }
         else if (action === 'more' && (s.scope === 'service' || s.threadId)) {
-          if (root.usageState?.__remoteService?.product === 'cockpit-tools') {if(s.nextCursor && s.rows.length < 200) issue(root,s.nextCursor,true,'logs');}
+          if (isRemoteLogView(root, s)) {if(s.nextCursor && s.rows.length < 200) issue(root,s.nextCursor,true,'logs');}
           else issue(root,null,false,'openLogs');
         }
         else if (action === 'retry') { issue(root,s.pending?.cursor || null,false,s.pending?.view); }

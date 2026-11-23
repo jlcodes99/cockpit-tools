@@ -198,6 +198,22 @@
     "providerClear": "Auswahl leeren"
   },
   "common": {
+    "automation": {
+      "invalidPlatform": "Unbekannte Kontoplattform. Unterstützte IDs zeigt cockpit-cli account platforms an.",
+      "hostUnavailable": "Starten Sie die Cockpit Tools-Desktop-App mit diesem Datenverzeichnis und versuchen Sie es erneut.",
+      "responseTimeout": "Cockpit Tools hat nicht rechtzeitig geantwortet. Prüfen Sie vor einer erneuten Änderung den aktuellen Status.",
+      "versionMismatch": "CLI und Desktop-App verwenden unterschiedliche Versionen der Kontoautomatisierung. Aktualisieren Sie beide gemeinsam.",
+      "unauthorized": "Die lokale Anfrage zur Kontoautomatisierung konnte nicht authentifiziert werden.",
+      "invalidAccountId": "Geben Sie eine Konto-ID der gewählten Plattform oder aus der Mitgliederliste des API-Dienstes an.",
+      "accountNotFound": "Das Konto wurde auf der gewählten Plattform nicht gefunden.",
+      "operationFailed": "Cockpit Tools konnte den Vorgang nicht abschließen. Details stehen im Anwendungsprotokoll.",
+      "appPathMissing": "Legen Sie den Clientpfad in Cockpit Tools fest und wiederholen Sie den Kontowechsel.",
+      "appPathMissingAfterSwitch": "Das Konto wurde gewechselt. Legen Sie vor dem Start den Clientpfad fest.",
+      "switchBusy": "Für diesen Client läuft bereits ein Kontowechsel. Versuchen Sie es nach dessen Abschluss erneut.",
+      "quotaUnsupported": "Für diesen Kontotyp kann der Befehl das Kontingent nicht live abrufen. Rufen Sie den letzten gespeicherten Stand ohne --refresh ab.",
+      "quotaRefreshFailed": "Die letzte Kontingentaktualisierung ist fehlgeschlagen. Rufen Sie den gespeicherten Stand ohne --refresh ab."
+    },
+    "previewTruncated": "Die Vorschau ist gekürzt. Beim Kopieren oder Herunterladen wird der vollständige JSON-Inhalt übernommen.",
     "collapseAll": "Alle einklappen",
     "expandAll": "Alle ausklappen",
     "syncing": "Synchronisierung…",
@@ -323,6 +339,9 @@
       "success": "Erfolg",
       "failed": "Fehler",
       "cancelled": "Abgebrochen",
+      "clientDisconnected": "Client getrennt",
+      "upstreamOverloaded": "Vorgelagerter Dienst überlastet",
+      "requestServiceUnavailable": "Dienst nicht verfügbar",
       "incomplete": "Unvollständig",
       "recovered": "Fallback genutzt",
       "official": "Offizielle Auth.",
@@ -1127,7 +1146,8 @@
         "stopPrevious": "Vorherige Instanz stoppen",
         "prepareCredentials": "Anmeldedaten vorbereiten",
         "writeProfile": "Instanzprofil schreiben",
-        "startClient": "Codex-Client starten"
+        "startClient": "Codex-Client starten",
+        "checkProxyCountry": "Ausgangsland prüfen"
       },
       "detail": {
         "checkingInstance": "Instanzkonfiguration wird gelesen...",
@@ -1304,7 +1324,7 @@
       "trayIconStyleDesc": "Systemvorlagen-Symbol oder ursprüngliches farbiges App-Symbol wählen",
       "trayIconStyleTemplate": "Vorlagen-Symbol",
       "trayIconStyleColor": "Farbiges Symbol",
-      "menuBarLeftClick": "Linksklick auf das Menüleistensymbol",
+      "menuBarLeftClick": "Linksklick in der Menüleiste",
       "menuBarLeftClickMenu": "Kontingentmenü öffnen",
       "menuBarLeftClickWindow": "Hauptfenster öffnen",
       "floatingCardStartup": "Schwebende Karte beim Start anzeigen",
@@ -1565,16 +1585,15 @@
       "webdavAllowedDomainsDesc": "Kommagetrennt; leer = kein Limit",
       "claudeQuotaDisplayRemaining": "Claude-Kontingent als Rest-%",
       "claudeQuotaDisplayRemainingDesc": "Standard: verbraucht %. Ein = Rest %. Auto-Wechsel/Warnungen weiter nach Verbrauch.",
-      "menuBarLeftClick": "Linksklick in der Menüleiste",
       "menuBarLeftClickDesc": "Ein Rechtsklick öffnet immer das Kontingentmenü.",
       "menuBarLeftClickQuotaMenu": "Kontingentmenü",
       "menuBarLeftClickMainWindow": "Hauptfenster",
       "menuBarQuota": "Live-Kontingent in der Menüleiste",
       "menuBarQuotaDesc": "Zeigt bei Aktivierung das Restkontingent des aktuellen Kontos der gewählten Plattform neben dem Menüleistensymbol. Plattformoptionen im Dialog.",
-      "menuBarQuotaEnabledDesc": "An · {{platform}} · Rest des aktuellen Kontos dieser Plattform (niedrigstes Kontingent)",
+      "menuBarQuotaEnabledDesc": "Aktiviert · {{platform}} · Verfügbare Kontingente des aktuellen Kontos",
       "menuBarQuotaConfigure": "Konfigurieren",
       "menuBarQuotaModalTitle": "Menüleisten-Kontingent",
-      "menuBarQuotaModalDesc": "Nur für das Menüleisten-Kontingent: folgt dem aktuellen Konto der gewählten Plattform. Codex-API-Dienst: „API + Pool-Rest-%“; API-Key-Konto: „API + Restguthaben“; normal: E-Mail-Präfix + Rest-% (niedrigstes Kontingent; rot/orange/grün).",
+      "menuBarQuotaModalDesc": "Folgt dem aktuellen Konto der gewählten Plattform und zeigt die verfügbaren Kontingentzeitfenster. Das niedrigste Restkontingent bestimmt die Farbe. Codex-API-Dienst / API-Key-Konten zeigen immer die API-Kennung.",
       "menuBarAntigravityMetric": "Kontingent in der Menüleiste",
       "menuBarQuotaLowest": "Niedrigstes Kontingent",
       "menuBarQuotaPlatform": "Kontingent-Plattform",
@@ -1605,10 +1624,11 @@
       },
       "timeDisplayMode": "Zeitanzeige",
       "timeDisplayModeDesc": "Zeitangabe auf Kontokarten und in Listen. Standard ist der Kontowechsel",
-      "menuBarLeftClick": "Linksklick in der Menüleiste",
-      "menuBarLeftClickDesc": "Ein Rechtsklick öffnet immer das Kontingentmenü.",
-      "menuBarLeftClickQuotaMenu": "Kontingentmenü",
-      "menuBarLeftClickMainWindow": "Hauptfenster"
+      "menuBarQuotaLayout": "Kontingentlayout",
+      "menuBarQuotaLayoutDesc": "Horizontal einzeilig nutzt größere Schrift. Zwei kompakte Zeilen zeigen die Restkontingente beider Zeitfenster und sparen Platz in der Menüleiste. Bei nur einem Zeitfenster wird eine horizontale Zeile angezeigt.",
+      "menuBarQuotaLayoutPreview": "Layoutvorschau mit Beispielkontingenten",
+      "menuBarQuotaLayoutHorizontal": "Horizontal einzeilig",
+      "menuBarQuotaLayoutStacked": "Zwei kompakte Zeilen"
     },
     "network": {
       "apiTitle": "Antigravity-Cockpit-API",
@@ -2673,7 +2693,8 @@
     "stopApiServiceFailed": "Der API-Dienst konnte nicht beendet werden. Deaktivieren Sie ihn zuerst und versuchen Sie es erneut.",
     "stopApiServiceFailedContinue": "Der API-Dienst wurde nicht sauber beendet. Neustart wird fortgesetzt...",
     "skipThisVersion": "Diese Version überspringen",
-    "skipFailed": "Dieses Update konnte nicht übersprungen werden: {{error}}"
+    "skipFailed": "Dieses Update konnte nicht übersprungen werden: {{error}}",
+    "installFailedTranslocated": "Die App wird von einem schreibgeschützten Ort ausgeführt (macOS App Translocation), daher kann das Update nicht installiert werden. Beenden Sie Cockpit Tools, verschieben Sie die App im Finder in den Ordner „Programme“, öffnen Sie sie erneut und wiederholen Sie dann das Update."
   },
   "closeDialog": {
     "minimizeWindow": "Minimieren",
@@ -4240,6 +4261,28 @@
       }
     },
     "sessionUsage": {
+      "analysis": {
+        "localUsage": "Lokale Sitzungsnutzung",
+        "selectedScope": "Aktuelle Filter",
+        "project": "Projekt",
+        "allModels": "Alle Modelle",
+        "allProjects": "Alle Projekte",
+        "unknownProject": "Unbekanntes Projekt",
+        "requests": "Anfragen",
+        "time": "Zeit",
+        "freshInput": "Neue Eingabe",
+        "cached": "Cache-Treffer",
+        "referenceCost": "Geschätzte Kosten",
+        "cacheRate": "Trefferquote",
+        "viewSession": "Sitzungsanfragen anzeigen",
+        "clearSession": "Sitzungsfilter löschen",
+        "sort": "Sortieren",
+        "indexingProjects": "Frühere Projekte werden indexiert…",
+        "noResults": "Keine Einträge entsprechen den Filtern",
+        "unpriced": "Für einen Teil der Nutzung fehlen Modellpreise",
+        "costHelp": "Schätzung anhand der Modell-API-Preise",
+        "page": "Seite {{page}}"
+      },
       "comparison": {
         "localTotal": "Lokale Sitzungstoken · gewählter Zeitraum und Instanzen",
         "profileTotal": "Offizielles Profil · Token insgesamt",
@@ -4874,6 +4917,8 @@
       "daysLeft": "{{count}} T.",
       "over99Days": "99+ T.",
       "titleWithDate": "Abo endet: {{date}}",
+      "expiryUnconfirmed": "Unbestätigt",
+      "titleWithUnconfirmedDate": "Abo-Ende nicht bestätigt. Zuletzt erfasst: {{date}}",
       "titleUnknown": "Neu autorisieren, um den Abo-Ablauf abzurufen",
       "filterLabel": "Ablauffilter",
       "filterAll": "Alle ({{count}})",
@@ -4896,7 +4941,8 @@
         "refreshTokens": "Anmeldedaten aktualisieren",
         "writeCredentials": "Client-Daten schreiben",
         "syncSettings": "Kontoeinstellungen abgleichen",
-        "startClient": "Codex-Client starten"
+        "startClient": "Codex-Client starten",
+        "checkProxyCountry": "Ausgangsland prüfen"
       },
       "status": {
         "pending": "Wartet",
@@ -5880,7 +5926,7 @@
         "viewAll": "Alle anzeigen"
       },
       "previewTitle": "Proxy-Vorschau",
-      "modeDisabled": "Ohne Proxy",
+      "modeDisabled": "Direkte Verbindung erzwingen",
       "disableAction": "Proxy entfernen",
       "setIndependent": "Eigenen Proxy setzen",
       "disabledHint": "Individuelle und gemeinsame Proxys umgehen; neue Verbindungen erfolgen direkt.",
@@ -5926,7 +5972,7 @@
       "restoreEntryNotRunning": "Keine laufende Desktop-App gefunden, die einen gespeicherten Proxy-Eingang dieser Cockpit-Instanz verwendet.",
       "restoreEntryBusy": "Die Proxy-Wiederherstellung läuft bereits. Bitte gleich erneut versuchen.",
       "restoreEntryTimeout": "Zeitüberschreitung bei der Proxy-Wiederherstellung. Bitte erneut versuchen.",
-      "restartHint": "Über den lokalen Vermittler gestartete Clients wechseln bei neuen Verbindungen. Andere laufende Clients müssen einmal neu starten. Die Desktop-Brücke lauscht nur auf Loopback, isoliert aber keine anderen lokalen Benutzer. Der Systemproxy bleibt unverändert.",
+      "restartHint": "Starten Sie Codex nach dem Binden, Ändern des Proxymodus oder Aufheben der Bindung neu, damit Oberfläche und Backend dieselben Einstellungen verwenden. Bei einem Proxyfehler wird nicht direkt verbunden.",
       "exportHint": "Kontoexporte enthalten keine Proxy-Zugangsdaten. Richten Sie diese nach dem Import erneut ein.",
       "backToAccounts": "Zurück zu Konten",
       "accountsTitle": "Konten",
@@ -6318,7 +6364,76 @@
       "noCurrentNode": "Aktueller Knoten noch nicht verfügbar",
       "runtimeBusy": "Lokaler Proxy ist ausgelastet. Aktualisierung derzeit nicht möglich.",
       "runtimeCapacity": "Zu viele Proxys laufen. Ungenutzte Proxys stoppen und erneut versuchen.",
-      "runtimeReadFailed": "Lokaler Proxy-Status derzeit nicht verfügbar. Bitte erneut versuchen."
+      "runtimeReadFailed": "Lokaler Proxy-Status derzeit nicht verfügbar. Bitte erneut versuchen.",
+      "modeClient": "Client-Einstellungen verwenden",
+      "clientHint": "Die ursprünglichen .env- und Systemproxy-Einstellungen dieses Kontos beibehalten; keinen Konto- oder gemeinsamen Proxy von Cockpit anwenden.",
+      "launch": {
+        "envChanged": "Die Proxykonfiguration wurde außerhalb dieses Vorgangs geändert. Die Datei wurde beibehalten; prüfen Sie die Proxyeinstellungen in .env vor dem erneuten Versuch.",
+        "envStorage": "Die Proxykonfiguration konnte nicht sicher gelesen oder gespeichert werden. Die ursprüngliche Datei wurde beibehalten; prüfen Sie die Verzeichnisberechtigungen.",
+        "envUnsupported": "Das .env-Format konnte nicht sicher verwaltet werden und wurde nicht überschrieben. Prüfen Sie offene Anführungszeichen und Zeilenfortsetzungen.",
+        "stopFailed": "Die Codex-Instanz mit abweichenden Einstellungen konnte nicht beendet werden. Beenden Sie sie vor dem erneuten Versuch."
+      },
+      "country": {
+        "title": "Ausgangsland vor dem Start prüfen",
+        "hint": "Optional für alle Konten, mit oder ohne Proxybindung. Prüft den aktuellen HTTP-Ausgang über ChatGPT Cloudflare trace beim Start in Cockpit. Desktopverknüpfungen bleiben unverändert.",
+        "expected": "Erwartetes Land oder Region",
+        "choose": "Land oder Region auswählen",
+        "save": "Länderprüfung speichern",
+        "saved": "Einstellungen der Länderprüfung gespeichert",
+        "mismatch": "Ausgangsland stimmt nicht überein: erwartet {{expected}}, erkannt {{actual}}. Codex wurde nicht gestartet.",
+        "unavailable": "Das Ausgangsland konnte nicht bestätigt werden. Codex wurde nicht gestartet; prüfen Sie die Verbindung und versuchen Sie es erneut.",
+        "routeUnknown": "Die Proxyroute des Clients konnte nicht ermittelt werden. Codex wurde nicht gestartet; prüfen Sie Clientproxy und .env.",
+        "changed": "Die Länderprüfung wurde während der Überprüfung geändert. Wiederholen Sie die Prüfung mit den aktuellen Einstellungen.",
+        "storage": "Die Einstellungen der Länderprüfung konnten nicht gelesen oder gespeichert werden.",
+        "invalid": "Wählen Sie ein gültiges Land oder eine gültige Region.",
+        "search": "Land oder Ländercode suchen",
+        "actual": "Erkanntes Land oder Gebiet",
+        "route": "Konfiguration der Prüfung",
+        "checkedAt": "Prüfzeit",
+        "notDetected": "Nicht erkannt",
+        "notRequired": "Nicht aktiviert",
+        "resultTitle": "Ergebnis der Ausgangsland-Prüfung",
+        "evidenceHint": "Prüft nur den gespeicherten HTTP-Startweg. Hier erscheinen Einträge dieser Cockpit-Sitzung; das Anwendungsprotokoll speichert die Ergebnisse. Frühere Ergebnisse bestätigen keine aktuelle Verbindung.",
+        "saveFirst": "Proxy-Modus und Ländereinstellung vor der Prüfung speichern.",
+        "noChecks": "Keine Prüfungen in dieser Sitzung.",
+        "checkNow": "Jetzt prüfen",
+        "history": "Frühere Prüfungen dieser Sitzung",
+        "historyFailed": "Letzte Länderprüfungen konnten nicht gelesen werden.",
+        "result_checking": "Ausgangsland wird geprüft…",
+        "result_passed": "Prüfung bestanden",
+        "result_blocked": "Prüfung fehlgeschlagen",
+        "result_stale": "Einstellungen geändert; erneut prüfen",
+        "route_account": "Cockpit-Kontoproxy",
+        "route_direct": "Erzwungene Direktverbindung",
+        "route_env": "Client-.env-Datei",
+        "route_environment": "Geerbte Umgebung",
+        "route_system": "Systemproxy von Windows",
+        "route_network": "Standard-Netzwerkroute",
+        "route_unknown": "Noch nicht bestimmt",
+        "progressCountries": "Erwartet: {{expected}} · Erkannt: {{actual}}",
+        "progressTime": "Dauer: {{ms}} ms"
+      },
+      "env": {
+        "title": "Proxy-Umgebung des Clients",
+        "source": "Erkannte Quelle: {{source}}",
+        "source_saved": "Für dieses Konto gespeichert",
+        "source_env": "Client-.env",
+        "source_environment": "Geerbte Umgebungsvariablen",
+        "source_system": "Windows-Systemproxy",
+        "source_none": "Kein expliziter Proxy erkannt",
+        "source_unknown": "Nicht erkannt",
+        "hint": "Nur HTTP_PROXY, HTTPS_PROXY, ALL_PROXY und NO_PROXY. Gilt beim nächsten Cockpit-Start mit Client-Einstellungen; andere .env-Einträge bleiben erhalten.",
+        "variables": "Proxy-Variablen",
+        "recognize": "Erneut lesen",
+        "save": "ENV-Einstellungen speichern",
+        "saved": "Für den nächsten Start gespeichert",
+        "unrecognized": "Vorhandene Proxy-Variablen konnten nicht sicher gelesen werden. Feste Werte können hier eingegeben werden; die Client-Datei bleibt vorerst unverändert.",
+        "noneHint": "Kein expliziter Proxy gefunden. Ein TUN oder andere Netzwerkschichten können trotzdem aktiv sein.",
+        "readFailed": "ENV-Einstellungen konnten nicht gelesen werden. Vor dem Bearbeiten erneut versuchen.",
+        "saveFailed": "ENV-Einstellungen konnten nicht gespeichert werden.",
+        "changed": "Die Einstellungen wurden anderweitig geändert. Vor dem Speichern erneut lesen.",
+        "invalid": "Nur feste Werte für HTTP_PROXY, HTTPS_PROXY, ALL_PROXY und NO_PROXY, ohne doppelte Namen. Proxy-Adressen müssen http, https, socks5 oder socks5h verwenden."
+      }
     },
     "more": {
       "title": "Mehr",
@@ -7864,6 +7979,10 @@
     }
   },
   "workbuddy": {
+    "errors": {
+      "nodeAppPath": "Dieser Pfad verweist auf die Node-Laufzeit ({{path}}). Wähle WorkBuddy.exe aus.",
+      "keyProcessFailed": "Der offizielle WorkBuddy-Schlüssel konnte nicht gelesen werden. Die Anmeldedaten wurden beibehalten. Prüfe den Clientpfad ({{path}}) in den Einstellungen und suche danach nach Updates."
+    },
     "desktopEdition": "WorkBuddy (China-Version)",
     "credits": {
       "planBase": "Tarifguthaben",
@@ -7892,7 +8011,11 @@
       "creditUsed": "Verbrauchte Credits",
       "model": "Modell",
       "recentUsage": "Letzte 5 Einträge",
-      "viewMore": "Mehr anzeigen"
+      "viewMore": "Mehr anzeigen",
+      "expiringHintTitle": "Details zu bald ablaufenden Guthaben anzeigen",
+      "expiringSoon": "{{amount}} in 24 Std.",
+      "expiringSoonTitle": "Credits, die in 24 Stunden verfallen",
+      "expiringSoonSummary": "Gesamt {{amount}} · {{packageCount}} Pakete"
     },
     "title": "WorkBuddy-Kontenverwaltung",
     "noAccounts": "Keine WorkBuddy-Konten",

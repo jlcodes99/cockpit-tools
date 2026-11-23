@@ -133,6 +133,35 @@
   border: 1px dashed var(--border);
 }
 
+.antigravity-account-list-metadata {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.antigravity-account-list-metadata .tag-pill:not(.more),
+.antigravity-account-list-note {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.antigravity-account-list-metadata .tag-pill:not(.more) {
+  max-width: 35%;
+}
+
+.antigravity-account-list-metadata .tag-pill.more {
+  flex: none;
+}
+
+.antigravity-account-list-note {
+  flex: 1;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
 /* Card Quota Grid - Redesigned */
 .card-quota-grid {
   display: grid;

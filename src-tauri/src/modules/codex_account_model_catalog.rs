@@ -1989,7 +1989,7 @@ const CODEX_MODEL_MANAGEMENT_DEFAULT_OFF_MARKER_FILE: &str =
 /// 只在首次执行时生效（成功后写入标记文件），用户之后自己再开启模型管理不再被干预；
 /// 已保存的模型清单文件会保留，用户重新开启时仍能看到自己的清单。
 pub fn migrate_model_management_default_off_once(base_dir: &Path) -> Result<bool, String> {
-    if base_dir.as_os_str().is_empty() {
+    if base_dir.as_os_str().is_empty() || !base_dir.is_dir() {
         return Ok(false);
     }
     migrate_retired_chatgpt_default_for_dir(base_dir)?;
@@ -3711,6 +3711,9 @@ fn write_api_key_bearer_provider_override_to_config_toml(
     let provider_table = model_providers[CODEX_RUNTIME_MODEL_PROVIDER_ID]
         .as_table_mut()
         .ok_or("config.toml 中目标 provider 不是合法表结构")?;
+    let was_loopback = is_loopback_http_base_url(
+        provider_table.get("base_url").and_then(toml_edit::Item::as_str),
+    );
     provider_table["name"] = value(provider_name);
     provider_table["base_url"] = value(base_url);
     provider_table["wire_api"] = value(wire_api);
@@ -3723,6 +3726,17 @@ fn write_api_key_bearer_provider_override_to_config_toml(
     let is_local_access_loopback = provider_config.provider_id.as_deref()
         == Some(CODEX_RUNTIME_MODEL_PROVIDER_ID)
         && is_loopback_http_base_url(Some(base_url));
+    if is_local_access_loopback {
+        // The local gateway routes the hosted web search per model: official
+        // upstreams keep the native `web_search` tool (the managed catalog
+        // marks those models `web_search_provider = "standalone"`), while
+        // third-party upstreams already have hosted web tools stripped at
+        // request time. Declaring the capability on the generated provider
+        // makes the Codex client advertise the native web search tool again.
+        provider_table["supports_standalone_web_search"] = value(true);
+    } else if was_loopback {
+        provider_table.remove("supports_standalone_web_search");
+    }
     if supports_image_generation {
         set_imagegen_headers(provider_table, is_local_access_loopback);
     } else {

@@ -198,6 +198,22 @@
     "providerClear": "Hapus pilihan"
   },
   "common": {
+    "automation": {
+      "invalidPlatform": "Platform akun tidak dikenal. Jalankan cockpit-cli account platforms untuk melihat ID yang didukung.",
+      "hostUnavailable": "Jalankan aplikasi desktop Cockpit Tools dengan direktori data ini, lalu coba lagi.",
+      "responseTimeout": "Cockpit Tools tidak memberikan hasil tepat waktu. Periksa status saat ini sebelum mengulangi perubahan.",
+      "versionMismatch": "CLI dan aplikasi desktop memakai versi otomatisasi akun yang berbeda. Perbarui keduanya bersamaan.",
+      "unauthorized": "Permintaan otomatisasi akun lokal tidak dapat diautentikasi.",
+      "invalidAccountId": "Masukkan ID akun dari platform yang dipilih atau daftar anggota layanan API.",
+      "accountNotFound": "Akun tidak ditemukan pada platform yang dipilih.",
+      "operationFailed": "Cockpit Tools tidak dapat menyelesaikan operasi. Lihat log aplikasi untuk detailnya.",
+      "appPathMissing": "Atur lokasi klien di Cockpit Tools, lalu coba beralih akun lagi.",
+      "appPathMissingAfterSwitch": "Akun telah dialihkan. Atur lokasi klien sebelum menjalankannya.",
+      "switchBusy": "Peralihan akun sedang berlangsung untuk klien ini. Coba lagi setelah selesai.",
+      "quotaUnsupported": "Jenis akun ini tidak mendukung penyegaran kuota langsung lewat perintah ini. Lihat kuota terakhir yang disimpan tanpa --refresh.",
+      "quotaRefreshFailed": "Penyegaran kuota terakhir gagal. Lihat kuota terakhir yang disimpan tanpa --refresh."
+    },
+    "previewTruncated": "Pratinjau hanya menampilkan sebagian konten. Penyalinan atau pengunduhan mencakup seluruh JSON.",
     "collapseAll": "Ciutkan semua",
     "expandAll": "Perluas semua",
     "syncing": "Menyinkronkan…",
@@ -323,6 +339,9 @@
       "success": "Berhasil",
       "failed": "Gagal",
       "cancelled": "Dibatalkan",
+      "clientDisconnected": "Klien terputus",
+      "upstreamOverloaded": "Server hulu kelebihan beban",
+      "requestServiceUnavailable": "Layanan tidak tersedia",
       "incomplete": "Belum lengkap",
       "recovered": "Jalur cadangan",
       "official": "Otorisasi resmi",
@@ -1186,7 +1205,8 @@
         "stopPrevious": "Hentikan instans sebelumnya",
         "prepareCredentials": "Siapkan kredensial",
         "writeProfile": "Tulis profil instans",
-        "startClient": "Mulai klien Codex"
+        "startClient": "Mulai klien Codex",
+        "checkProxyCountry": "Periksa negara keluar"
       },
       "detail": {
         "checkingInstance": "Membaca konfigurasi instans...",
@@ -1353,7 +1373,7 @@
       "trayIconStyleDesc": "Pilih ikon template sistem atau ikon app asli berwarna",
       "trayIconStyleTemplate": "Ikon template",
       "trayIconStyleColor": "Ikon berwarna",
-      "menuBarLeftClick": "Tindakan klik kiri pada ikon bar menu",
+      "menuBarLeftClick": "Klik kiri di bar menu",
       "menuBarLeftClickMenu": "Buka menu kuota",
       "menuBarLeftClickWindow": "Buka jendela utama",
       "floatingCardStartup": "Tampilkan kartu mengambang saat mulai",
@@ -1612,16 +1632,15 @@
       "webdavAllowedDomainsDesc": "Pisahkan koma; kosong = tanpa batas",
       "claudeQuotaDisplayRemaining": "Kuota Claude sebagai % sisa",
       "claudeQuotaDisplayRemainingDesc": "Default: % terpakai. Aktif = % sisa. Auto-switch & peringatan tetap pakai rasio terpakai.",
-      "menuBarLeftClick": "Klik kiri di bar menu",
       "menuBarLeftClickDesc": "Klik kanan selalu membuka menu kuota.",
       "menuBarLeftClickQuotaMenu": "Menu kuota",
       "menuBarLeftClickMainWindow": "Jendela utama",
       "menuBarQuota": "Kuota langsung di bilah menu",
       "menuBarQuotaDesc": "Saat diaktifkan, tampilkan sisa kuota akun saat ini platform terpilih di samping ikon. Opsi platform di dialog.",
-      "menuBarQuotaEnabledDesc": "Aktif · {{platform}} · sisa akun saat ini platform itu (terendah dari kuota)",
+      "menuBarQuotaEnabledDesc": "Aktif · {{platform}} · Kuota yang tersedia untuk akun aktif",
       "menuBarQuotaConfigure": "Atur",
       "menuBarQuotaModalTitle": "Kuota bilah menu",
-      "menuBarQuotaModalDesc": "Hanya opsi fitur ini: mengikuti akun saat ini. Layanan API Codex: “API + % sisa pool”; akun API Key: “API + sisa saldo”; normal: awalan email + % (terendah; merah/oranye/hijau).",
+      "menuBarQuotaModalDesc": "Mengikuti akun aktif pada platform pilihan dan menampilkan periode kuota yang tersedia. Sisa kuota terendah menentukan warna. Akun Codex API Service / API Key selalu menampilkan label API.",
       "menuBarAntigravityMetric": "Kuota bilah menu",
       "menuBarQuotaLowest": "Kuota terendah",
       "menuBarQuotaPlatform": "Platform akun",
@@ -1652,10 +1671,11 @@
       },
       "timeDisplayMode": "Tampilan waktu",
       "timeDisplayModeDesc": "Waktu pada kartu dan daftar akun. Bawaan menggunakan waktu pergantian akun",
-      "menuBarLeftClick": "Klik kiri di bar menu",
-      "menuBarLeftClickDesc": "Klik kanan selalu membuka menu kuota.",
-      "menuBarLeftClickQuotaMenu": "Menu kuota",
-      "menuBarLeftClickMainWindow": "Jendela utama"
+      "menuBarQuotaLayout": "Tata letak kuota",
+      "menuBarQuotaLayoutDesc": "Satu baris mendatar memakai teks lebih besar. Dua baris ringkas menampilkan sisa kuota kedua periode sekaligus dan menghemat ruang bilah menu. Jika hanya ada satu periode, tampilan kembali ke satu baris mendatar.",
+      "menuBarQuotaLayoutPreview": "Pratinjau tata letak dengan contoh kuota",
+      "menuBarQuotaLayoutHorizontal": "Satu baris mendatar",
+      "menuBarQuotaLayoutStacked": "Dua baris ringkas"
     },
     "network": {
       "apiTitle": "API Antigravity Cockpit",
@@ -2720,7 +2740,8 @@
     "restartRequiredAfterInstall": "Pembaruan terpasang. Mulai ulang aplikasi secara manual untuk menyelesaikan peralihan.",
     "stoppingApiService": "Menghentikan layanan API...",
     "stopApiServiceFailed": "Layanan API tidak dapat dihentikan. Nonaktifkan dulu, lalu coba lagi.",
-    "stopApiServiceFailedContinue": "Layanan API tidak berhenti dengan benar. Tetap melanjutkan mulai ulang..."
+    "stopApiServiceFailedContinue": "Layanan API tidak berhenti dengan benar. Tetap melanjutkan mulai ulang...",
+    "installFailedTranslocated": "Aplikasi berjalan dari lokasi baca-saja (macOS App Translocation), sehingga pembaruan tidak dapat dipasang. Keluar dari Cockpit Tools, pindahkan ke folder Applications di Finder, buka kembali, lalu coba perbarui lagi."
   },
   "closeDialog": {
     "minimizeWindow": "Perkecil",
@@ -4419,6 +4440,28 @@
       }
     },
     "sessionUsage": {
+      "analysis": {
+        "localUsage": "Penggunaan sesi lokal",
+        "selectedScope": "Filter saat ini",
+        "project": "Proyek",
+        "allModels": "Semua model",
+        "allProjects": "Semua proyek",
+        "unknownProject": "Proyek tidak dikenal",
+        "requests": "Permintaan",
+        "time": "Waktu",
+        "freshInput": "Input baru",
+        "cached": "Hit tembolok",
+        "referenceCost": "Perkiraan biaya",
+        "cacheRate": "Rasio hit",
+        "viewSession": "Lihat permintaan sesi",
+        "clearSession": "Hapus filter sesi",
+        "sort": "Urutkan",
+        "indexingProjects": "Mengindeks proyek lama…",
+        "noResults": "Tidak ada catatan yang cocok dengan filter",
+        "unpriced": "Harga model tidak tersedia untuk sebagian penggunaan",
+        "costHelp": "Perkiraan berdasarkan harga API model",
+        "page": "Halaman {{page}}"
+      },
       "comparison": {
         "localTotal": "Token sesi lokal · periode dan instans terpilih",
         "profileTotal": "Profil resmi · total token sepanjang waktu",
@@ -4921,6 +4964,8 @@
       "daysLeft": "{{count}} hr",
       "over99Days": "99+ hr",
       "titleWithDate": "Langganan berakhir: {{date}}",
+      "expiryUnconfirmed": "Belum dikonfirmasi",
+      "titleWithUnconfirmedDate": "Akhir langganan belum dikonfirmasi. Terakhir tercatat: {{date}}",
       "titleUnknown": "Otorisasi ulang untuk mengambil akhir langganan",
       "filterLabel": "Filter akhir",
       "filterAll": "Semua ({{count}})",
@@ -4943,7 +4988,8 @@
         "refreshTokens": "Perbarui kredensial masuk",
         "writeCredentials": "Tulis kredensial klien",
         "syncSettings": "Sinkronkan pengaturan akun",
-        "startClient": "Jalankan klien Codex"
+        "startClient": "Jalankan klien Codex",
+        "checkProxyCountry": "Periksa negara keluar"
       },
       "status": {
         "pending": "Menunggu",
@@ -5927,7 +5973,7 @@
         "viewAll": "Lihat semua"
       },
       "previewTitle": "Pratinjau proksi",
-      "modeDisabled": "Tanpa proksi",
+      "modeDisabled": "Paksa koneksi langsung",
       "disableAction": "Lepas proksi",
       "setIndependent": "Proksi sendiri",
       "disabledHint": "Lewati proksi akun dan bersama; coba koneksi langsung untuk sambungan baru.",
@@ -5973,7 +6019,7 @@
       "restoreEntryNotRunning": "Tidak ditemukan desktop aktif yang memakai pintu masuk proksi tercatat milik Cockpit ini.",
       "restoreEntryBusy": "Pemulihan proksi sedang berlangsung. Coba lagi sebentar.",
       "restoreEntryTimeout": "Pemulihan proksi kehabisan waktu. Coba lagi.",
-      "restartHint": "Klien yang dibuka melalui penerus lokal beralih pada koneksi baru. Klien aktif lainnya perlu sekali dimulai ulang. Jembatan desktop hanya mendengarkan pada loopback, tetapi tidak mengisolasi pengguna lokal lain. Proksi sistem tidak berubah.",
+      "restartHint": "Mulai ulang Codex setelah mengikat, mengubah mode proxy, atau melepas ikatan agar antarmuka dan backend memakai pengaturan yang sama. Kegagalan proxy tidak akan beralih ke koneksi langsung.",
       "exportHint": "Ekspor akun tidak menyertakan kredensial proksi; atur kembali setelah mengimpor.",
       "backToAccounts": "Kembali ke akun",
       "accountsTitle": "Akun",
@@ -6365,7 +6411,76 @@
       "noCurrentNode": "Node saat ini belum tersedia",
       "runtimeBusy": "Proksi lokal sibuk. Pembaruan sementara tidak tersedia.",
       "runtimeCapacity": "Terlalu banyak proksi aktif. Hentikan yang tidak digunakan dan coba lagi.",
-      "runtimeReadFailed": "Status proksi lokal sementara tidak tersedia. Coba lagi."
+      "runtimeReadFailed": "Status proksi lokal sementara tidak tersedia. Coba lagi.",
+      "modeClient": "Gunakan pengaturan klien",
+      "clientHint": "Pertahankan pengaturan .env dan proxy sistem asli akun ini; jangan terapkan proxy akun atau proxy bersama Cockpit.",
+      "launch": {
+        "envChanged": "Konfigurasi proxy berubah di luar operasi ini. Berkas dipertahankan; tinjau proxy dalam .env sebelum mencoba lagi.",
+        "envStorage": "Konfigurasi proxy tidak dapat dibaca atau disimpan dengan aman. Berkas asli dipertahankan; periksa izin folder.",
+        "envUnsupported": "Format .env tidak dapat dikelola dengan aman dan tidak ditimpa. Periksa tanda kutip yang belum ditutup atau kelanjutan baris.",
+        "stopFailed": "Instans Codex dengan pengaturan berbeda tidak dapat dihentikan. Tutup sebelum mencoba lagi."
+      },
+      "country": {
+        "title": "Periksa negara keluar sebelum peluncuran",
+        "hint": "Opsional untuk semua akun, dengan atau tanpa proxy terikat. Memeriksa keluaran HTTP melalui ChatGPT Cloudflare trace saat diluncurkan dari Cockpit. Pintasan desktop tidak diubah.",
+        "expected": "Negara atau wilayah yang diharapkan",
+        "choose": "Pilih negara atau wilayah",
+        "save": "Simpan pemeriksaan negara",
+        "saved": "Pengaturan pemeriksaan negara disimpan",
+        "mismatch": "Negara keluar tidak cocok: diharapkan {{expected}}, terdeteksi {{actual}}. Codex tidak diluncurkan.",
+        "unavailable": "Negara keluar tidak dapat dikonfirmasi. Codex tidak diluncurkan; periksa koneksi dan coba lagi.",
+        "routeUnknown": "Rute proxy klien tidak dapat ditentukan. Codex tidak diluncurkan; tinjau proxy klien dan .env.",
+        "changed": "Pengaturan negara berubah selama pemeriksaan. Coba lagi untuk memeriksa pengaturan terbaru.",
+        "storage": "Pengaturan pemeriksaan negara tidak dapat dibaca atau disimpan.",
+        "invalid": "Pilih negara atau wilayah yang valid.",
+        "search": "Cari nama atau kode negara",
+        "actual": "Negara atau wilayah terdeteksi",
+        "route": "Konfigurasi yang diperiksa",
+        "checkedAt": "Waktu pemeriksaan",
+        "notDetected": "Tidak terdeteksi",
+        "notRequired": "Tidak diaktifkan",
+        "resultTitle": "Hasil pemeriksaan negara keluar",
+        "evidenceHint": "Hanya memeriksa jalur HTTP peluncuran yang tersimpan. Riwayat di sini berasal dari sesi Cockpit ini; log aplikasi menyimpan hasilnya. Hasil lama tidak menjamin koneksi saat ini.",
+        "saveFirst": "Simpan mode proksi dan negara sebelum memeriksa.",
+        "noChecks": "Belum ada pemeriksaan dalam sesi ini.",
+        "checkNow": "Periksa sekarang",
+        "history": "Pemeriksaan sebelumnya dalam sesi ini",
+        "historyFailed": "Riwayat pemeriksaan terbaru tidak dapat dibaca.",
+        "result_checking": "Memeriksa negara keluar…",
+        "result_passed": "Pemeriksaan berhasil",
+        "result_blocked": "Pemeriksaan gagal",
+        "result_stale": "Pengaturan berubah; periksa ulang",
+        "route_account": "Proksi akun Cockpit",
+        "route_direct": "Koneksi langsung paksa",
+        "route_env": "Berkas .env milik klien",
+        "route_environment": "Lingkungan turunan",
+        "route_system": "Proksi Windows",
+        "route_network": "Jalur jaringan bawaan",
+        "route_unknown": "Belum ditentukan",
+        "progressCountries": "Diharapkan: {{expected}} · Terdeteksi: {{actual}}",
+        "progressTime": "Durasi: {{ms}} ms"
+      },
+      "env": {
+        "title": "Variabel proksi klien",
+        "source": "Sumber terdeteksi: {{source}}",
+        "source_saved": "Disimpan untuk akun ini",
+        "source_env": "Berkas .env klien",
+        "source_environment": "Variabel lingkungan turunan",
+        "source_system": "Proksi sistem Windows",
+        "source_none": "Proksi eksplisit tidak ditemukan",
+        "source_unknown": "Tidak terdeteksi",
+        "hint": "Hanya HTTP_PROXY, HTTPS_PROXY, ALL_PROXY dan NO_PROXY. Diterapkan saat peluncuran Cockpit berikutnya dengan pengaturan klien; entri .env lainnya dipertahankan.",
+        "variables": "Variabel proksi",
+        "recognize": "Baca ulang",
+        "save": "Simpan pengaturan ENV",
+        "saved": "Disimpan untuk peluncuran berikutnya",
+        "unrecognized": "Variabel proksi yang ada tidak dapat dibaca dengan aman. Isi nilai tetap di sini; berkas klien belum diubah.",
+        "noneHint": "Proksi eksplisit tidak ditemukan. TUN atau lapisan jaringan lain mungkin tetap aktif.",
+        "readFailed": "Pengaturan ENV tidak dapat dibaca. Coba lagi sebelum mengedit.",
+        "saveFailed": "Pengaturan ENV tidak dapat disimpan.",
+        "changed": "Pengaturan berubah di tempat lain. Baca ulang sebelum menyimpan.",
+        "invalid": "Isi nilai tetap HTTP_PROXY, HTTPS_PROXY, ALL_PROXY dan NO_PROXY tanpa nama duplikat. Protokol yang didukung: http, https, socks5, socks5h."
+      }
     },
     "more": {
       "title": "Lainnya",
@@ -8039,6 +8154,10 @@
     }
   },
   "workbuddy": {
+    "errors": {
+      "nodeAppPath": "Jalur ini mengarah ke lingkungan runtime Node ({{path}}). Pilih WorkBuddy.exe.",
+      "keyProcessFailed": "Kunci resmi WorkBuddy tidak dapat dibaca. Data login tetap tersimpan. Periksa jalur klien ({{path}}) di Pengaturan, lalu periksa pembaruan klien."
+    },
     "desktopEdition": "WorkBuddy (edisi Tiongkok)",
     "credits": {
       "planBase": "Kredit dasar paket",
@@ -8067,7 +8186,11 @@
       "creditUsed": "Kredit terpakai",
       "model": "Model AI",
       "recentUsage": "5 catatan terakhir",
-      "viewMore": "Lihat lainnya"
+      "viewMore": "Lihat lainnya",
+      "expiringHintTitle": "Lihat rincian kredit yang segera kedaluwarsa",
+      "expiringSoon": "{{amount}} dalam 24 jam",
+      "expiringSoonTitle": "Kredit yang kedaluwarsa dalam 24 jam",
+      "expiringSoonSummary": "Total {{amount}} · {{packageCount}} paket"
     },
     "title": "Akun WorkBuddy",
     "noAccounts": "Tidak ada akun WorkBuddy",

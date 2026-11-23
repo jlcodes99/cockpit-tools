@@ -151,6 +151,7 @@ pub struct GeneralConfig {
     pub menu_bar_left_click_opens_main_window: bool,
     /// 是否在 macOS 菜单栏显示当前账号剩余额度
     pub menu_bar_quota_enabled: bool,
+    pub menu_bar_quota_layout: String,
     /// 是否显示账号标识前 4 位
     pub menu_bar_show_account_prefix: bool,
     /// 菜单栏额度监控平台
@@ -1278,6 +1279,7 @@ fn is_general_config_patch_field(key: &str) -> bool {
             | "tray_icon_style"
             | "menu_bar_left_click_opens_main_window"
             | "menu_bar_quota_enabled"
+            | "menu_bar_quota_layout"
             | "menu_bar_show_account_prefix"
             | "menu_bar_quota_platform"
             | "menu_bar_antigravity_metric"
@@ -1465,6 +1467,13 @@ fn apply_general_config_updates(
     if updates.contains_key("theme_color") {
         next.theme_color = config::normalize_theme_color(&next.theme_color);
     }
+    if updates.contains_key("menu_bar_quota_layout") {
+        next.menu_bar_quota_layout = match next.menu_bar_quota_layout.trim() {
+            "stacked" => "stacked",
+            _ => "horizontal",
+        }
+        .to_string();
+    }
     if updates.contains_key("menu_bar_quota_platform") {
         let platform = next.menu_bar_quota_platform.trim();
         next.menu_bar_quota_platform = if platform == config::MENU_BAR_QUOTA_CLAUDE_CLI {
@@ -1528,6 +1537,15 @@ fn apply_general_config_updates(
     trim_string_field!("trae_cn_app_scan_roots", trae_cn_app_scan_roots);
     trim_string_field!("trae_solo_cn_app_scan_roots", trae_solo_cn_app_scan_roots);
     normalize_app_path_field!("workbuddy_app_path", workbuddy_app_path);
+    #[cfg(target_os = "windows")]
+    if updates.contains_key("workbuddy_app_path")
+        && next.workbuddy_app_path != current.workbuddy_app_path
+    {
+        modules::process::validate_workbuddy_app_path(std::path::Path::new(&next.workbuddy_app_path))
+            .map_err(|error| {
+                modules::process::format_workbuddy_app_path_error(error, &next.language)
+            })?;
+    }
     normalize_app_path_field!("minimax_code_app_path", minimax_code_app_path);
 
     if updates.contains_key("auto_switch_scope_mode") {

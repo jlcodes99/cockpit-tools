@@ -164,3 +164,80 @@ fn invalid_platform_and_unimplemented_operations_fail_on_stderr() {
         assert!(!output.stderr.is_empty(), "{args:?}");
     }
 }
+
+#[tokio::test]
+async fn automation_cli_correlates_host_responses_and_preserves_remote_errors() {
+    use futures_util::{SinkExt, StreamExt};
+    use tokio::net::TcpListener;
+    use tokio_tungstenite::{accept_async, tungstenite::Message};
+
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path().to_path_buf();
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    write_json(
+        &root.join("data/server.json"),
+        json!({
+            "ws_port": listener.local_addr().unwrap().port(),
+            "auth_token": "fixture-session-token",
+            "automation_version": 1,
+        }),
+    );
+
+    let host = tokio::spawn(async move {
+        for (command, reply) in [
+            (
+                json!({"operation":"list", "platform":"workbuddy_ai"}),
+                json!({"status":"ok", "data":[{"id":"fixture-account", "plan":"Pro"}]}),
+            ),
+            (
+                json!({"operation":"api_remove", "accountIds":["fixture-account"]}),
+                json!({"status":"error", "code":"operation_failed", "message":"fixture failure"}),
+            ),
+        ] {
+            let (stream, _) = listener.accept().await.unwrap();
+            let mut socket = accept_async(stream).await.unwrap();
+            let request: Value =
+                serde_json::from_str(&socket.next().await.unwrap().unwrap().into_text().unwrap())
+                    .unwrap();
+            assert_eq!(request["type"], "request.automation");
+            assert_eq!(request["payload"]["authToken"], "fixture-session-token");
+            assert_eq!(request["payload"]["version"], 1);
+            assert_eq!(request["payload"]["command"], command);
+            socket.send(Message::Text(
+                r#"{"type":"response.automation","payload":{"requestId":"another-request","status":"ok","data":"wrong response"}}"#.into()
+            )).await.unwrap();
+            let mut payload = reply;
+            payload["version"] = json!(1);
+            payload["requestId"] = request["payload"]["requestId"].clone();
+            socket
+                .send(Message::Text(
+                    json!({"type":"response.automation", "payload":payload})
+                        .to_string()
+                        .into(),
+                ))
+                .await
+                .unwrap();
+        }
+    });
+
+    let client = tokio::task::spawn_blocking(move || {
+        let list = success_json(run(&root, &["account", "list", "workbuddy_ai", "--json"]));
+        assert_eq!(list[0]["id"], "fixture-account");
+        let remove = run(
+            &root,
+            &["api-service", "remove", "fixture-account", "--json"],
+        );
+        assert!(!remove.status.success());
+        assert!(remove.stdout.is_empty());
+        assert!(
+            String::from_utf8_lossy(&remove.stderr).contains("operation_failed: fixture failure")
+        );
+    });
+    let (host, client) = tokio::time::timeout(std::time::Duration::from_secs(15), async {
+        tokio::join!(host, client)
+    })
+    .await
+    .expect("CLI and mock host did not exchange both commands");
+    host.unwrap();
+    client.unwrap();
+}

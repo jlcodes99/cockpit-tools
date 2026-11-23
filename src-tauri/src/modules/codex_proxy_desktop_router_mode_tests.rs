@@ -17,7 +17,7 @@ async fn connect_target(entry_port: u16, port: u16) -> TcpStream {
 }
 
 #[tokio::test]
-async fn disabling_proxy_preserves_entry_and_live_connection_but_new_connections_go_direct() {
+async fn disabling_proxy_preserves_live_connection_but_blocks_new_connections_until_restart() {
     let fixture = LaunchFixture::new("mode-transition");
     tokio::time::timeout(Duration::from_secs(10), async {
         let proxy = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
@@ -32,10 +32,6 @@ async fn disabling_proxy_preserves_entry_and_live_connection_but_new_connections
         });
         let destination = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
         let port = destination.local_addr().unwrap().port();
-        let direct_task = tokio::spawn(async move {
-            let (mut stream, _) = destination.accept().await.unwrap();
-            stream.write_all(b"direct").await.unwrap();
-        });
         let mut account = eligible_account("mode-transition");
         account.egress_proxy_url = Some(proxy_address.clone());
         fixture.save(&account);
@@ -58,10 +54,12 @@ async fn disabling_proxy_preserves_entry_and_live_connection_but_new_connections
         existing.write_all(b"after!").await.unwrap();
         existing.read_exact(&mut bytes).await.unwrap();
         assert_eq!(&bytes, b"after!", "existing connection retains its route");
-        let mut fresh = connect_target(entry, port).await;
-        fresh.read_exact(&mut bytes).await.unwrap();
-        assert_eq!(&bytes, b"direct", "new connection bypasses both account and shared proxies");
-        direct_task.await.unwrap();
+        let mut fresh = TcpStream::connect((Ipv4Addr::LOCALHOST, entry)).await.unwrap();
+        fresh.write_all(format!("CONNECT 127.0.0.1:{port} HTTP/1.1\r\n\r\n").as_bytes()).await.unwrap();
+        let mut response = [0; 12];
+        fresh.read_exact(&mut response).await.unwrap();
+        assert_eq!(&response, b"HTTP/1.1 502");
+        assert!(tokio::time::timeout(Duration::from_millis(100), destination.accept()).await.is_err());
         drop(existing);
         proxy_task.await.unwrap();
 

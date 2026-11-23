@@ -1931,6 +1931,10 @@ $rows = foreach ($process in (Get-CimInstance Win32_Process -Filter "Name='ChatG
   # CIM may capture a process as it exits, after its identity becomes unreadable.
   # A failed query or a process still present remains an incomplete probe.
   if (Get-CimInstance Win32_Process -Filter "ProcessId=$($process.ProcessId)") {{
+    if ($reason -eq 'Could not identify a potential Codex process' -and (Get-WindowsAppsFamily $expected)) {{
+      "unidentified|$($process.ProcessId)"
+      continue
+    }}
     throw $reason
   }}
 }}
@@ -1978,6 +1982,13 @@ fn try_collect_codex_process_entries_from_powershell(
         let line = line.trim();
         if line.is_empty() {
             continue;
+        }
+        if let Some(pid) = line.strip_prefix("unidentified|") {
+            let pid = pid.parse::<u32>().map_err(|_| "Windows 进程探测返回不完整的记录")?;
+            if windows_pid_is_other_packaged_app(pid, expected_exe_path) {
+                continue;
+            }
+            return Err("Windows 进程探测返回不完整的记录".into());
         }
         let mut parts = line.splitn(3, '|');
         let pid = parts.next().and_then(|part| part.trim().parse::<u32>().ok());
@@ -2030,6 +2041,36 @@ fn windowsapps_package_family(path: &str) -> Option<String> {
         return None;
     }
     Some(family.to_string())
+}
+
+#[cfg(any(test, target_os = "windows"))]
+fn is_other_windows_package(expected_exe: &str, observed_family: &str) -> bool {
+    let Some(expected) = windowsapps_package_family(expected_exe) else {
+        return false;
+    };
+    observed_family
+        .rsplit_once('_')
+        .is_some_and(|(name, publisher)| {
+            !name.is_empty() && !publisher.is_empty() && !name.eq_ignore_ascii_case(&expected)
+        })
+}
+
+#[cfg(target_os = "windows")]
+fn windows_pid_is_other_packaged_app(pid: u32, expected_exe: &str) -> bool {
+    use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
+
+    if windowsapps_package_family(expected_exe).is_none() {
+        return false;
+    }
+    unsafe {
+        let Ok(handle) = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) else {
+            return false;
+        };
+        let family = read_windows_process_package_family(handle, pid);
+        let _ = CloseHandle(handle);
+        family.is_ok_and(|family| is_other_windows_package(expected_exe, &family))
+    }
 }
 
 /// 判断进程实际可执行路径是否匹配期望的 Codex 启动路径。
@@ -2113,7 +2154,7 @@ fn collect_codex_process_snapshot_from_sysinfo(
         let (resolved_exe, _) = resolve_windows_process_exe_for_match(process);
         let resolved_exe = resolved_exe.unwrap_or_default();
         if resolved_exe.is_empty() {
-            complete = false;
+            complete &= windows_pid_is_other_packaged_app(pid_u32, &expected);
             continue;
         }
         if !is_matching_codex_windows_exe(&resolved_exe, &expected) {

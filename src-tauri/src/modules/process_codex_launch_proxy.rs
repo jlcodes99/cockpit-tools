@@ -4,11 +4,13 @@ pub enum CodexLaunchProxy {
     Inherit,
     Direct,
     Managed(u16),
+    ClientDefaults,
 }
 
 impl CodexLaunchProxy {
     pub fn append_electron_args(&self, args: &mut Vec<String>) {
         match self {
+            Self::ClientDefaults => (),
             Self::Inherit => append_global_electron_proxy_args(args),
             Self::Direct => {
                 clear_electron_proxy_args(args);
@@ -22,6 +24,12 @@ impl CodexLaunchProxy {
         }
     }
 
+    pub(crate) fn dotenv_overrides(&self) -> Result<Vec<(&'static str, String)>, String> {
+        if matches!(self, Self::Managed(0)) { return Err("PROXY_ENV_STORAGE".into()); }
+        if matches!(self, Self::Inherit | Self::ClientDefaults) { return Ok(Vec::new()); }
+        Ok(self.env_overrides())
+    }
+
     // Explicit empty overrides also work across LaunchServices and the Windows
     // package helper, whose child can inherit an environment different from ours.
     pub(crate) fn env_overrides(&self) -> Vec<(&'static str, String)> {
@@ -33,6 +41,8 @@ impl CodexLaunchProxy {
                 }
                 proxy_env_with_direct_hosts(managed_proxy_env_pairs_for_launch(true), &direct_hosts)
             }
+            Self::ClientDefaults => ["http_proxy", "https_proxy", "all_proxy", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "no_proxy", "NO_PROXY"]
+                .into_iter().map(|key| (key, std::env::var(key).unwrap_or_default())).collect(),
             Self::Managed(port) => {
                 let mut pairs = account_proxy_env_pairs(&format!("socks5h://127.0.0.1:{port}"));
                 // HTTPS uses CONNECT in the custom-CA client. Plain HTTP
@@ -276,4 +286,19 @@ mod codex_direct_launch_tests {
             }
         }
     }
+}
+
+pub(crate) fn proxy_environment_for_check(proxy: &CodexLaunchProxy) -> std::collections::BTreeMap<String, String> {
+    let mut result = std::collections::BTreeMap::new();
+    for key in ["http_proxy", "https_proxy", "all_proxy", "no_proxy"] {
+        if let Ok(value) = std::env::var(key).or_else(|_| std::env::var(key.to_ascii_uppercase())) {
+            result.insert(key.to_owned(), value);
+        }
+    }
+    let mut command = Command::new("never-launched-proxy-check");
+    apply_effective_proxy_env_to_command(&mut command, proxy);
+    for (key, value) in command.get_envs() {
+        result.insert(key.to_string_lossy().to_ascii_lowercase(), value.map(|v| v.to_string_lossy().into_owned()).unwrap_or_default());
+    }
+    result
 }

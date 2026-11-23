@@ -198,6 +198,22 @@
     "providerClear": "清空选择"
   },
   "common": {
+    "automation": {
+      "invalidPlatform": "未知账号平台。运行 cockpit-cli account platforms 查看支持的平台 ID。",
+      "hostUnavailable": "请启动使用此数据目录的 Cockpit Tools 桌面端后重试。",
+      "responseTimeout": "Cockpit Tools 未在限时内返回结果。重复修改前，请先核对当前状态。",
+      "versionMismatch": "CLI 与桌面端的账号自动化协议版本不一致，请同步更新。",
+      "unauthorized": "本机账号自动化请求鉴权失败。",
+      "invalidAccountId": "请传入所选平台或 API 服务成员列表中的账号 ID。",
+      "accountNotFound": "在所选平台中未找到该账号。",
+      "operationFailed": "Cockpit Tools 未能完成操作，请查看应用日志。",
+      "appPathMissing": "请在 Cockpit Tools 中设置客户端路径后重试切号。",
+      "appPathMissingAfterSwitch": "账号已切换，请先设置客户端路径再启动。",
+      "switchBusy": "该客户端正在切号，请等待完成后重试。",
+      "quotaUnsupported": "此账号类型无法通过该命令实时刷新额度，可去掉 --refresh 查询上次保存的额度。",
+      "quotaRefreshFailed": "最新额度刷新失败，可去掉 --refresh 查询上次保存的额度。"
+    },
+    "previewTruncated": "预览仅显示部分内容。复制或下载将包含完整 JSON。",
     "collapseAll": "全部收起",
     "expandAll": "全部展开",
     "syncing": "同步中…",
@@ -323,6 +339,9 @@
       "success": "成功",
       "failed": "失败",
       "cancelled": "取消",
+      "clientDisconnected": "客户端已断开",
+      "upstreamOverloaded": "上游服务过载",
+      "requestServiceUnavailable": "服务不可用",
       "incomplete": "流未完成",
       "recovered": "已回退",
       "official": "官方授权",
@@ -1381,7 +1400,8 @@
         "stopPrevious": "停止原实例",
         "prepareCredentials": "准备登录凭据",
         "writeProfile": "写入实例配置",
-        "startClient": "启动 Codex 客户端"
+        "startClient": "启动 Codex 客户端",
+        "checkProxyCountry": "检查出口国家"
       },
       "detail": {
         "checkingInstance": "正在读取实例配置...",
@@ -1549,7 +1569,7 @@
       "trayIconStyleDesc": "选择系统单色图标或原彩色 App 图标",
       "trayIconStyleTemplate": "单色图标",
       "trayIconStyleColor": "彩色图标",
-      "menuBarLeftClick": "菜单栏图标左键行为",
+      "menuBarLeftClick": "菜单栏左键操作",
       "menuBarLeftClickMenu": "打开原生额度菜单",
       "menuBarLeftClickWindow": "直接打开主窗口",
       "floatingCardStartup": "启动时显示悬浮卡片",
@@ -1803,16 +1823,15 @@
       "webdavAllowedDomainsDesc": "逗号分隔；留空不限制。非空时同步 URL 主机必须匹配",
       "claudeQuotaDisplayRemaining": "Claude 额度显示剩余%",
       "claudeQuotaDisplayRemainingDesc": "默认显示已用百分比；开启后改为显示剩余百分比。自动切号与预警仍按已用比例计算。",
-      "menuBarLeftClick": "菜单栏左键操作",
       "menuBarLeftClickDesc": "右键始终打开额度菜单。",
       "menuBarLeftClickQuotaMenu": "额度菜单",
       "menuBarLeftClickMainWindow": "主窗口",
       "menuBarQuota": "菜单栏显示实时额度",
       "menuBarQuotaDesc": "启用后在菜单栏图标旁显示所选平台当前账号的剩余额度；平台等专属选项在弹框中配置",
-      "menuBarQuotaEnabledDesc": "已启用 · {{platform}} · 显示该平台当前账号剩余额度（多条取最低）",
+      "menuBarQuotaEnabledDesc": "已启用 · {{platform}} · 显示该平台当前账号的可用额度",
       "menuBarQuotaConfigure": "配置",
       "menuBarQuotaModalTitle": "菜单栏额度",
-      "menuBarQuotaModalDesc": "以下为菜单栏额度的专属选项：跟随所选平台当前账号。Codex 当前为 API 服务时显示「API + 池剩余%」；API Key 账号显示「API + 剩余额度」；普通账号显示邮箱前缀与剩余%（多条取最低；低红、中橙、高绿）。",
+      "menuBarQuotaModalDesc": "跟随所选平台当前账号，显示可用窗口期的剩余额度；颜色由最低剩余额度决定。Codex API 服务 / API Key 账号始终显示 API 标签。",
       "menuBarAntigravityMetric": "菜单栏配额",
       "menuBarQuotaLowest": "最低剩余额度",
       "menuBarQuotaPlatform": "额度账号平台",
@@ -1841,10 +1860,11 @@
         "nativePredictions": "原生下一步预测（Tab）",
         "nativePredictionsDesc": "默认开启。使用当前对话的 API 供应商和模型生成下一条消息建议，会产生额外的 API 用量。修改后请重启相关 Codex 实例，并保持 Cockpit Tools 运行。"
       },
-      "menuBarLeftClick": "菜单栏左键操作",
-      "menuBarLeftClickDesc": "右键始终打开额度菜单。",
-      "menuBarLeftClickQuotaMenu": "额度菜单",
-      "menuBarLeftClickMainWindow": "主窗口"
+      "menuBarQuotaLayout": "额度布局",
+      "menuBarQuotaLayoutDesc": "横向单行使用较大字体；紧凑双行同时展示两种窗口期剩余额度，节省菜单栏占用空间，仅有一个窗口期时回落为横向单行。",
+      "menuBarQuotaLayoutPreview": "布局示意，额度为示例数据",
+      "menuBarQuotaLayoutHorizontal": "横向单行",
+      "menuBarQuotaLayoutStacked": "紧凑双行"
     },
     "tabs": {
       "general": "通用",
@@ -2915,7 +2935,8 @@
     "restartRequiredAfterInstall": "更新已安装，请手动重启应用完成切换。",
     "stoppingApiService": "正在关闭 API 服务...",
     "stopApiServiceFailed": "无法关闭 API 服务，请先停用后重试。",
-    "stopApiServiceFailedContinue": "API 服务未正常关闭，将继续重启..."
+    "stopApiServiceFailedContinue": "API 服务未正常关闭，将继续重启...",
+    "installFailedTranslocated": "应用正在只读位置运行（macOS App Translocation），无法安装更新。请退出 Cockpit Tools，在访达中将其移动到“应用程序”文件夹，重新打开后再重试更新。"
   },
   "closeDialog": {
     "minimizeWindow": "最小化",
@@ -3352,7 +3373,8 @@
         "refreshTokens": "更新登录凭据",
         "writeCredentials": "写入客户端凭据",
         "syncSettings": "同步账号配置",
-        "startClient": "启动 Codex 客户端"
+        "startClient": "启动 Codex 客户端",
+        "checkProxyCountry": "检查出口国家"
       },
       "status": {
         "pending": "等待",
@@ -4666,6 +4688,8 @@
       "daysLeft": "{{count}}天",
       "over99Days": "99+天",
       "titleWithDate": "订阅有效至：{{date}}",
+      "expiryUnconfirmed": "未确认",
+      "titleWithUnconfirmedDate": "未能确认订阅到期时间。最近记录：{{date}}",
       "titleUnknown": "未获得订阅信息",
       "filterLabel": "有效期筛选",
       "filterAll": "有效期 全部 ({{count}})",
@@ -5183,6 +5207,28 @@
       }
     },
     "sessionUsage": {
+      "analysis": {
+        "localUsage": "本机会话用量",
+        "selectedScope": "当前筛选范围",
+        "project": "项目",
+        "allModels": "全部模型",
+        "allProjects": "全部项目",
+        "unknownProject": "未知项目",
+        "requests": "请求明细",
+        "time": "时间",
+        "freshInput": "新增输入",
+        "cached": "缓存命中",
+        "referenceCost": "参考成本",
+        "cacheRate": "命中率",
+        "viewSession": "查看该会话的请求",
+        "clearSession": "清除会话筛选",
+        "sort": "排序",
+        "indexingProjects": "正在补齐历史项目归属…",
+        "noResults": "当前筛选没有匹配记录",
+        "unpriced": "部分用量缺少模型定价",
+        "costHelp": "按模型 API 单价估算",
+        "page": "第 {{page}} 页"
+      },
       "comparison": {
         "localTotal": "本机会话 Token · 所选时间和实例",
         "profileTotal": "官方资料 · 累计 Token 数",
@@ -5786,12 +5832,12 @@
     },
     "ssh": {
       "syncSwitch": "切号同步 SSH",
-      "syncSwitchDesc": "开启后配置 SSH 主机；Codex 切号时把当前账号同步到远端。",
+      "syncSwitchDesc": "切换 Codex 账号或 API 服务时，自动同步到选中的 SSH 主机。",
       "configure": "配置",
       "modalTitle": "SSH 同步配置",
-      "modalHint": "添加并选中一台 SSH 服务器，开启「切号后自动同步」后，Codex 切号会把当前账号同步到远端。",
+      "modalHint": "选中主机并启用「切号后自动同步」。切换到 API 服务时，Cockpit 会通过 SSH 隧道让远端 Codex 使用本机网关。",
       "title": "SSH 服务器",
-      "subtitle": "选中的服务器会在 Codex 切号后接收当前账号鉴权包。",
+      "subtitle": "选中的服务器会同步当前 Codex 账号，或通过 SSH 隧道接入本机 API 服务。",
       "addServer": "添加服务器",
       "editServer": "编辑服务器",
       "name": "名称",
@@ -6122,7 +6168,7 @@
         "viewAll": "查看全部"
       },
       "previewTitle": "代理预览",
-      "modeDisabled": "不使用代理",
+      "modeDisabled": "强制直连",
       "disableAction": "解除代理",
       "setIndependent": "设置独立代理",
       "disabledHint": "跳过独立与统一代理，新连接尝试直连。",
@@ -6168,7 +6214,7 @@
       "restoreEntryNotRunning": "未找到仍在运行且使用当前 Cockpit 已记录代理入口的桌面端。",
       "restoreEntryBusy": "代理正在恢复，请稍后重试。",
       "restoreEntryTimeout": "代理恢复超时，请重试。",
-      "restartHint": "通过本地转接启动的客户端，新连接自动使用新出口；其他运行中的客户端需重启一次。桌面转接仅监听本机，但不隔离本机其他用户；不修改系统代理。",
+      "restartHint": "首次绑定、切换代理模式或解绑后，重新启动 Codex 以同时应用界面和后台代理设置。代理连接失败时不会回退直连。",
       "exportHint": "账号导出不含代理凭据，导入后需重新配置。",
       "backToAccounts": "返回账号",
       "accountsTitle": "账号",
@@ -6560,7 +6606,76 @@
       "noCurrentNode": "尚未获取当前节点",
       "runtimeBusy": "本地代理繁忙，暂时无法更新",
       "runtimeCapacity": "运行中的代理过多，请停止不用的代理后重试",
-      "runtimeReadFailed": "本地代理状态暂时无法读取，请重试"
+      "runtimeReadFailed": "本地代理状态暂时无法读取，请重试",
+      "modeClient": "使用客户端原设置",
+      "clientHint": "保留此账号原有的 .env 和系统代理设置，不使用 Cockpit 的账号或统一代理。",
+      "launch": {
+        "envChanged": "检测到代理配置被其他操作修改。原文件已保留，请检查 .env 中的代理设置后重试。",
+        "envStorage": "无法安全读取或保存代理配置，原文件已保留。请检查目录权限后重试。",
+        "envUnsupported": "当前 .env 使用了无法安全接管的格式，未覆盖文件。请检查未闭合引号或跨行设置。",
+        "stopFailed": "未能停止配置不匹配的 Codex 实例。请先退出该实例，再重试。"
+      },
+      "country": {
+        "title": "启动前检查出口国家",
+        "hint": "可选功能，有无账号代理均可开启。仅在 Cockpit 内启动时，通过 ChatGPT 的 Cloudflare trace 检查当前 HTTP 出口。桌面快捷方式不受影响。",
+        "expected": "预期国家或地区",
+        "choose": "选择国家或地区",
+        "save": "保存国家检查",
+        "saved": "国家检查设置已保存",
+        "mismatch": "出口国家不符：预期 {{expected}}，实际 {{actual}}。未启动 Codex。",
+        "unavailable": "无法确认出口国家，未启动 Codex。请检查连接后重试。",
+        "routeUnknown": "无法确定客户端的代理出口，未启动 Codex。请检查客户端代理和 .env 设置。",
+        "changed": "检查期间国家设置发生变化，请重试以检查当前设置。",
+        "storage": "无法读取或保存国家检查设置。",
+        "invalid": "请选择有效的国家或地区。",
+        "search": "搜索国家名称或代码，如 日本 / Japan / JP",
+        "actual": "实际国家或地区",
+        "route": "检查所用配置",
+        "checkedAt": "检查时间",
+        "notDetected": "未检测到",
+        "notRequired": "未开启",
+        "resultTitle": "出口国家检查结果",
+        "evidenceHint": "仅检查已保存的 HTTP 启动出口。下方显示本次 Cockpit 运行期间的记录，程序日志会保留检查结果；历史结果不代表当前连接。",
+        "saveFirst": "请先保存代理模式与国家设置，再检查当前出口。",
+        "noChecks": "本次运行还没有检查记录。",
+        "checkNow": "立即检查",
+        "history": "本次运行的更早记录",
+        "historyFailed": "无法读取最近的国家检查记录。",
+        "result_checking": "正在检查出口国家…",
+        "result_passed": "检查通过",
+        "result_blocked": "检查未通过",
+        "result_stale": "配置已变化，请重新检查",
+        "route_account": "Cockpit 账号代理",
+        "route_direct": "强制直连",
+        "route_env": "客户端 .env",
+        "route_environment": "继承的环境变量",
+        "route_system": "Windows 系统代理",
+        "route_network": "默认网络出口",
+        "route_unknown": "尚未确定",
+        "progressCountries": "预期：{{expected}} · 实际：{{actual}}",
+        "progressTime": "耗时：{{ms}} 毫秒"
+      },
+      "env": {
+        "title": "客户端代理环境变量",
+        "source": "识别来源：{{source}}",
+        "source_saved": "此账号已保存的设置",
+        "source_env": "客户端 .env",
+        "source_environment": "继承的环境变量",
+        "source_system": "Windows 系统代理",
+        "source_none": "未识别到显式代理",
+        "source_unknown": "未能识别",
+        "hint": "仅支持 HTTP_PROXY、HTTPS_PROXY、ALL_PROXY、NO_PROXY。保存后，在 Cockpit 下次以“使用客户端原设置”启动此账号时应用；保留 .env 中的其他内容。",
+        "variables": "代理变量",
+        "recognize": "重新读取",
+        "save": "保存 ENV 配置",
+        "saved": "已保存，下次启动时应用",
+        "unrecognized": "无法安全识别现有代理变量，可在此手填固定值；当前不会改动客户端文件。",
+        "noneHint": "未发现显式代理，不代表未使用 TUN 或其他网络代理。",
+        "readFailed": "无法读取已保存的 ENV 配置，请重试后再编辑。",
+        "saveFailed": "无法保存 ENV 配置。",
+        "changed": "配置已在别处更改，请重新读取后再保存。",
+        "invalid": "只能填写 HTTP_PROXY、HTTPS_PROXY、ALL_PROXY、NO_PROXY 的固定值，不能重复；代理地址支持 http、https、socks5、socks5h。"
+      }
     },
     "more": {
       "title": "更多",
@@ -8234,6 +8349,10 @@
     }
   },
   "workbuddy": {
+    "errors": {
+      "nodeAppPath": "当前路径指向 Node 运行时（{{path}}）。请选择 WorkBuddy.exe。",
+      "keyProcessFailed": "读取 WorkBuddy 官方密钥失败，已停止覆盖登录信息。请在设置中核对客户端路径（{{path}}），并在确认路径正确后检查客户端更新。"
+    },
     "desktopEdition": "WorkBuddy 国内版",
     "credits": {
       "planBase": "套餐基础积分",
@@ -8262,7 +8381,11 @@
       "creditUsed": "积分消耗",
       "model": "模型",
       "recentUsage": "仅展示最近的 5 条数据",
-      "viewMore": "查看更多"
+      "viewMore": "查看更多",
+      "expiringHintTitle": "查看即将到期的积分明细",
+      "expiringSoon": "24h内 {{amount}}",
+      "expiringSoonTitle": "24小时内到期的积分",
+      "expiringSoonSummary": "合计 {{amount}} · {{packageCount}} 个积分包"
     },
     "title": "WorkBuddy 账号管理",
     "noAccounts": "暂无 WorkBuddy 账号",

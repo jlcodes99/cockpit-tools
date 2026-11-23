@@ -14,13 +14,7 @@ const usageLabels = { ...labels.common.codexUsage,
   requestId: labels.common.requestId,
   imageGeneration: labels.codex.localAccess.requestKind.imageGeneration,
   imageEdit: labels.codex.localAccess.requestKind.imageEdit,
-  requestTier: labels.codex.apiService.logs.requestedTier,
-  responseTier: labels.codex.apiService.logs.responseTier,
-  legacyTier: labels.codex.apiService.logs.legacyTier,
-  tierHint: labels.codex.apiService.logs.serviceTierHint,
-  tierFast: labels.codex.speed.fast, tierUltrafast: labels.codex.speed.ultrafast,
-  tierStandard: labels.codex.speed.standard, tierAuto: labels.codex.contextOverride.automatic,
-  tierUnknown: labels.common.requestProxy.unknown,
+  tierFast: labels.codex.speed.fast,
   providerQuotaStale: labels.codex.apiService.providerQuotaStale,
   providerQuotaUnitUnknown: labels.codex.apiService.providerQuotaUnitUnknown,
 };
@@ -61,14 +55,25 @@ test('remote failures distinguish unsupported services, preparing data and netwo
   }
 });
 
+test('verified local request rows override a cached remote service hint', () => {
+  const h = harness();
+  h.root.usageState.__remoteService = { product: 'cockpit-tools', keyLabel: 'B' };
+  h.action('tab', 'logs');
+  h.respond({ remote: false, requests: { rows: [row(1)], nextCursor: null } });
+  assert.match(h.details.innerHTML, /<th scope="col">Account<\/th>/);
+  assert.match(h.details.innerHTML, /user@example\.com/);
+  h.action('more');
+  assert.equal(h.api.query(h.root).view, 'openLogs');
+});
+
 test('image requests have explicit operation labels without text reasoning or speed mode rows', () => {
   for (const [kind,labelKey] of [['image_generation','imageGeneration'],['image_edit','imageEdit']]) {
     const h=harness();h.root.usageState.__remoteService={product:'cockpit-tools'};
     h.action('tab','logs');
-    h.respond({requests:{rows:[row(1,{model:'gpt-image-2.5',requestKind:kind,reasoningEffort:null})]}});
+    h.respond({requests:{rows:[row(1,{model:'gpt-image-2.5',requestKind:kind,reasoningEffort:null,requestedServiceTier:'fast'})]}});
     assert.ok(h.details.innerHTML.includes('gpt-image-2.5'));
     assert.ok(h.details.innerHTML.includes(usageLabels[labelKey]));
-    assert.ok(!h.details.innerHTML.includes(usageLabels.requestTier.split('{{')[0]));
+    assert.doesNotMatch(h.details.innerHTML, /class="cell-tier/);
   }
 });
 
@@ -360,24 +365,24 @@ test('unlinked chat and unavailable service have different messages, neither cla
   assert.ok(!h.details.innerHTML.includes(usageLabels.noRequests));
 });
 
-test('tiers show explicit requested aliases separately from raw response, retain legacy provenance and escape content', () => {
+test('request rows keep identifiable accounts and show the reason for failed and canceled requests', () => {
   const h = harness();
   h.action('tab', 'logs');
   h.respond({ requests: { rows: [
-    row(1, { requestedServiceTier: 'FAST', responseServiceTier: 'default' }),
-    row(2, { serviceTier: 'priority' }),
-    row(3, { requestedServiceTier: 'auto', serviceTierAdaptation: { requestedTier: 'priority', sentTier: 'default', reason: 'official_default_only' } }),
-    row(4, { requestedServiceTier: '<script>bad()</script>', responseServiceTier: 'priority' }),
+    row(1),
+    row(2, { accountDisplayName: null, accountId: 'codex_deleted_123abc', accountReference: '47cf93aa',
+      success: false, httpStatus: 499, errorCategory: 'client_disconnected',
+      errorMessage: 'private request payload' }),
+    row(3, { accountDisplayName: 'fallback@example.test',
+      success: false, httpStatus: 503, errorCategory: 'server_is_overloaded' }),
+    row(4, { success: false, httpStatus: 503 }),
   ] } });
   const html = h.details.innerHTML;
-  assert.ok(html.includes(usageLabels.requestTier.replace('{{tier}}', usageLabels.tierFast)));
-  assert.ok(html.includes(usageLabels.responseTier.replace('{{tier}}', 'default')));
-  assert.ok(html.includes(usageLabels.legacyTier.replace('{{tier}}', 'priority')));
-  assert.ok(html.includes(usageLabels.tierAdjusted));
-  assert.ok(html.includes(usageLabels.tierUnknown));
-  assert.ok(html.includes('high'));
-  assert.ok(!html.includes('<script>bad()'));
-  h.action('tab', 'overview');
-  assert.ok(h.details.innerHTML.includes(usageLabels.averageSpeed));
-  assert.ok(h.details.innerHTML.includes('29'));
+  assert.match(html, /class="cell-email" title="user@example.com"/);
+  assert.match(html, /class="cell-email" title="Account · 47cf93aa"/);
+  assert.match(html, /class="cell-email" title="fallback@example.test"/);
+  assert.match(html, /class="cell-error"[^>]*>Client disconnected</);
+  assert.match(html, /class="cell-error"[^>]*>Upstream overloaded</);
+  assert.match(html, /class="cell-error"[^>]*>Service unavailable</);
+  assert.doesNotMatch(html, /codex_deleted_123abc|private request payload/);
 });

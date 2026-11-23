@@ -21,7 +21,11 @@ pub fn is_shutdown_started() -> bool {
 
 pub fn begin_shutdown() -> bool {
     let _spawn_guard = lock_process_spawn();
-    !SHUTDOWN_STARTED.swap(true, Ordering::SeqCst)
+    let first = !SHUTDOWN_STARTED.swap(true, Ordering::SeqCst);
+    if first {
+        crate::modules::ssh_server::close_api_service_tunnels();
+    }
+    first
 }
 
 #[cfg(target_os = "windows")]

@@ -692,10 +692,19 @@ pub fn create_pending_oauth_account(
     email: String,
     update: AccountNoteUpdate,
 ) -> Result<Account, String> {
+    create_pending_oauth_account_with_tags(email, update, Vec::new())
+}
+
+pub(super) fn create_pending_oauth_account_with_tags(
+    email: String,
+    update: AccountNoteUpdate,
+    tags: Vec<String>,
+) -> Result<Account, String> {
     let email = email.trim().to_string();
     if email.is_empty() || !email.contains('@') {
         return Err("账号邮箱不能为空或格式无效".to_string());
     }
+    let tags = normalize_tags(tags)?;
     let _lock = lock_account_index()?;
     let mut index = load_account_index_locked()?;
     let target_id = build_account_storage_id(&email);
@@ -728,6 +737,9 @@ pub fn create_pending_oauth_account(
     };
 
     update.apply_to(&mut account);
+    if !tags.is_empty() {
+        account.tags = tags;
+    }
     account.update_last_used();
 
     save_account(&account)?;

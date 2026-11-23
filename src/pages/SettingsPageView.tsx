@@ -33,6 +33,7 @@ export function SettingsPageView(props: SettingsPageViewProps) {
     handleDownloadReleaseVersion,
     handleOpenReleaseHistory,
     handleSaveNetworkConfig,
+    menuBarQuotaDraftLayout,
     menuBarQuotaDraftPlatform,
     menuBarAntigravityAccounts,
     menuBarAntigravityMetricDraft,
@@ -61,6 +62,7 @@ export function SettingsPageView(props: SettingsPageViewProps) {
     setGlobalProxyEnabled,
     setGlobalProxyNoProxy,
     setGlobalProxyUrl,
+    setMenuBarQuotaDraftLayout,
     setMenuBarQuotaDraftPlatform,
     setMenuBarAntigravityMetricDraft,
     setMenuBarQuotaDraftShowPrefix,
@@ -531,7 +533,7 @@ export function SettingsPageView(props: SettingsPageViewProps) {
               <p className="settings-menu-bar-quota-modal-desc">
                 {t(
                   'settings.general.menuBarQuotaModalDesc',
-                  '以下为菜单栏额度的专属选项：跟随所选平台当前账号。Codex 当前为 API 服务时显示「API + 池剩余%」；API Key 账号显示「API + 剩余额度」；普通账号显示邮箱前缀与剩余%（多条取最低；低红、中橙、高绿）。'
+                  '跟随所选平台当前账号，显示可用窗口期的剩余额度；颜色由最低剩余额度决定。Codex API 服务 / API Key 账号始终显示 API 标签。'
                 )}
               </p>
               <div className="settings-menu-bar-quota-modal-field">
@@ -556,6 +558,57 @@ export function SettingsPageView(props: SettingsPageViewProps) {
                   }
                   ariaLabel={t('settings.general.menuBarQuotaPlatform', '额度账号平台')}
                 />
+              </div>
+              <div className="settings-menu-bar-quota-modal-field">
+                <span className="settings-menu-bar-quota-modal-label">
+                  {t('settings.general.menuBarQuotaLayout', '额度布局')}
+                </span>
+                <p className="settings-menu-bar-quota-modal-field-desc">
+                  {t(
+                    'settings.general.menuBarQuotaLayoutDesc',
+                    '横向单行使用较大字体；紧凑双行同时展示两种窗口期剩余额度，节省菜单栏占用空间，仅有一个窗口期时回落为横向单行。'
+                  )}
+                </p>
+                <SingleSelectDropdown
+                  className="settings-dropdown settings-menu-bar-quota-modal-select"
+                  value={menuBarQuotaDraftLayout}
+                  options={[
+                    { value: 'horizontal', label: t('settings.general.menuBarQuotaLayoutHorizontal', '横向单行') },
+                    { value: 'stacked', label: t('settings.general.menuBarQuotaLayoutStacked', '紧凑双行') },
+                  ]}
+                  onChange={(value) => setMenuBarQuotaDraftLayout(value === 'stacked' ? 'stacked' : 'horizontal')}
+                  ariaLabel={t('settings.general.menuBarQuotaLayout', '额度布局')}
+                />
+                <div className="settings-menu-bar-quota-previews">
+                  {(['horizontal', 'stacked'] as const).map((layout) => (
+                    <label
+                      key={layout}
+                      className={`settings-menu-bar-quota-preview${menuBarQuotaDraftLayout === layout ? ' is-selected' : ''}`}
+                    >
+                      <input
+                        type="radio"
+                        name="menu-bar-quota-layout"
+                        value={layout}
+                        checked={menuBarQuotaDraftLayout === layout}
+                        onChange={() => setMenuBarQuotaDraftLayout(layout)}
+                        aria-label={layout === 'horizontal'
+                          ? t('settings.general.menuBarQuotaLayoutHorizontal', '横向单行')
+                          : t('settings.general.menuBarQuotaLayoutStacked', '紧凑双行')}
+                      />
+                      <div className="settings-menu-bar-quota-preview-bar" aria-hidden="true">
+                        <span className="settings-menu-bar-quota-preview-icon" />
+                        <span className={`settings-menu-bar-quota-preview-values ${layout}`}>
+                          <span className="settings-menu-bar-quota-preview-window"><span>5h</span> <span>36%</span></span>
+                          {layout === 'horizontal' && <span> · </span>}
+                          <span className="settings-menu-bar-quota-preview-window"><span>{t('codex.localAccess.quotaPool.weeklyShort', '周')}</span> <span>64%</span></span>
+                        </span>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+                <p className="settings-menu-bar-quota-modal-field-desc">
+                  {t('settings.general.menuBarQuotaLayoutPreview', '布局示意，额度为示例数据')}
+                </p>
               </div>
               {menuBarQuotaDraftPlatform === 'antigravity' && (
                 <div className="settings-menu-bar-quota-modal-field">

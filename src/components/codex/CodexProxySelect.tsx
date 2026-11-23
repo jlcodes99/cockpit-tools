@@ -9,6 +9,7 @@ export interface ProxySelectOption {
   value: string;
   label: string;
   detail?: string;
+  searchText?: string;
   badge?: ReactNode;
   disabled?: boolean;
   delay?: number;
@@ -71,7 +72,7 @@ export function CodexProxySelect({ value, options, label, placeholder, searchPla
   const selected = options.find((option) => option.value === value);
   const ordered = useMemo(() => orderProxySelectOptions(options, sort,
     measuring && ordering.current?.sort === sort ? ordering.current.ids : undefined), [options, sort, measuring]);
-  const visible = ordered.filter((option) => option.label.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
+  const visible = ordered.filter((option) => (option.label + ' ' + (option.searchText ?? '')).toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
   const close = () => { setOpen(false); trigger.current?.focus({ preventScroll: true }); };
 
   // The shared stack runs at window capture before the underlying modal's Escape handler.

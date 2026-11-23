@@ -296,7 +296,10 @@ mod tests {
         fs::write(profile.join("config.toml"), format!(
             "model = 'gpt-6.1-sol'\nfeatures = {{ shell_tool = false }}\nmodel_provider = '{API_PROVIDER}'\nmodel_catalog_json = '{MANAGED_FILE}'\n[model_providers.{API_PROVIDER}]\nbase_url = 'http://127.0.0.1:2783/v1'\n"
         )).unwrap();
-        prepare_dynamic_api_service_catalog(profile, || true).unwrap();
+        prepare_dynamic_api_service_catalog(profile, || {
+            crate::modules::process::supports_codex_catalog_url_version("codex-cli 0.166.0")
+        })
+        .unwrap();
         let doc = read_doc(profile).unwrap();
         assert!(uses_dynamic_api_service_catalog(&doc));
         assert_eq!(doc["features"][API_KEY_DISCOVERY].as_bool(), Some(true));
@@ -304,12 +307,19 @@ mod tests {
         assert_eq!(doc["model"].as_str(), Some("gpt-6.1-sol"));
         assert!(profile.join(MANAGED_FILE).exists());
 
-        prepare_dynamic_api_service_catalog(profile, || false).unwrap();
-        let doc = read_doc(profile).unwrap();
-        assert!(!uses_dynamic_api_service_catalog(&doc));
-        assert!(doc["features"].get(API_KEY_DISCOVERY).is_none());
-        assert_eq!(doc["features"]["shell_tool"].as_bool(), Some(false));
-        assert_eq!(doc["model_catalog_json"].as_str(), Some(MANAGED_FILE));
+        let dynamic_config = fs::read_to_string(profile.join("config.toml")).unwrap();
+        for older_or_unknown in ["codex-cli 0.151.0", "codex-cli 0.166.0-alpha.1", "codex-wrapper"] {
+            fs::write(profile.join("config.toml"), &dynamic_config).unwrap();
+            prepare_dynamic_api_service_catalog(profile, || {
+                crate::modules::process::supports_codex_catalog_url_version(older_or_unknown)
+            })
+            .unwrap();
+            let doc = read_doc(profile).unwrap();
+            assert!(!uses_dynamic_api_service_catalog(&doc), "{older_or_unknown}");
+            assert!(doc["features"].get(API_KEY_DISCOVERY).is_none());
+            assert_eq!(doc["features"]["shell_tool"].as_bool(), Some(false));
+            assert_eq!(doc["model_catalog_json"].as_str(), Some(MANAGED_FILE));
+        }
 
         fs::write(profile.join("config.toml"), format!(
             "model_provider = '{API_PROVIDER}'\nmodel_catalog_json = 'my-own.json'\n[model_providers.{API_PROVIDER}]\nbase_url = 'http://127.0.0.1:2783/v1'\n"

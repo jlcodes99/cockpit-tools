@@ -27,6 +27,10 @@ export function isLaunchPathApp(app: string): app is LaunchPathApp {
   return Object.prototype.hasOwnProperty.call(APP_PATH_LABELS, app);
 }
 
+export function readInvalidWorkbuddyPath(error: unknown): string | undefined {
+  return String(error).match(/^(?:Error: )?WORKBUDDY_NODE_APP_PATH:(.+)$/s)?.[1];
+}
+
 export function readMissingLaunchPathApp(error: unknown): LaunchPathApp | undefined {
   const code = String(error).replace(/^Error: /, '');
   const app = code.match(/^APP_PATH_(?:NOT_FOUND|MISSING_AFTER_SWITCH):([a-z_]+)$/)?.[1];

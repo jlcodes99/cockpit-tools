@@ -102,8 +102,6 @@ pub fn data_transfer_apply_user_config(
     let mut language_changed = false;
     let mut tray_visibility_changed = false;
     #[cfg(target_os = "macos")]
-    let mut hide_dock_icon_changed = false;
-    #[cfg(target_os = "macos")]
     let mut tray_icon_style_changed = false;
 
     let patch_result = config::patch_user_config(|current| {
@@ -130,8 +128,6 @@ pub fn data_transfer_apply_user_config(
         tray_visibility_changed = current.show_tray_icon != next_config.show_tray_icon;
         #[cfg(target_os = "macos")]
         {
-            hide_dock_icon_changed =
-                crate::should_hide_dock_icon(current) != crate::should_hide_dock_icon(&next_config);
             tray_icon_style_changed = current.tray_icon_style != next_config.tray_icon_style;
         }
         *current = next_config.clone();
@@ -159,9 +155,7 @@ pub fn data_transfer_apply_user_config(
     }
 
     #[cfg(target_os = "macos")]
-    if hide_dock_icon_changed && !tray_visibility_changed {
-        crate::apply_macos_activation_policy(&app);
-    }
+    modules::app_presence::apply_configured_policy(&app);
 
     #[cfg(target_os = "macos")]
     if tray_icon_style_changed {

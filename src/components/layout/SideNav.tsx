@@ -19,7 +19,7 @@ import {
   resolveEntryIdForPlatform,
   usePlatformLayoutStore,
 } from '../../stores/usePlatformLayoutStore';
-import { SIDEBAR_ENTRY_LIMITS, useSideNavLayoutStore } from '../../stores/useSideNavLayoutStore';
+import { useSideNavLayoutStore } from '../../stores/useSideNavLayoutStore';
 import { useGlobalModal } from '../../hooks/useGlobalModal';
 import { getPlatformLabel, renderPlatformIcon } from '../../utils/platformMeta';
 import { useRemoteConfigStore } from '../../stores/useRemoteConfigStore';
@@ -322,11 +322,7 @@ export function SideNav({
     return visible;
   }), [orderedEntries, sidebarSet, t]);
 
-  const sidebarEntryLimit = SIDEBAR_ENTRY_LIMITS[sideNavLayoutMode];
-  const sidebarMenuEntries = useMemo(
-    () => sidebarVisibleEntries.slice(0, sidebarEntryLimit),
-    [sidebarVisibleEntries, sidebarEntryLimit],
-  );
+  const sidebarMenuEntries = sidebarVisibleEntries;
 
   const navigateToPlatform = useCallback((platformId: PlatformId) => {
     setPage(PLATFORM_PAGE_MAP[platformId]);

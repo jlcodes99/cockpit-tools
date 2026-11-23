@@ -939,12 +939,15 @@ dependencies = [
  "chrono",
  "clap",
  "cockpit-core",
+ "futures-util",
  "rusqlite",
  "serde",
  "serde_json",
  "tabled",
  "tempfile",
  "tokio",
+ "tokio-tungstenite 0.26.2",
+ "uuid",
 ]
 
 [[package]]

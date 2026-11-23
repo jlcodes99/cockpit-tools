@@ -1936,7 +1936,7 @@ fn append_trae_rows(rows: &mut Vec<ReportRow>) {
     }
 }
 
-fn pick_preferred_trae_pack<'a>(usage_raw: Option<&'a Value>) -> Option<&'a Value> {
+pub(super) fn pick_preferred_trae_pack<'a>(usage_raw: Option<&'a Value>) -> Option<&'a Value> {
     let packs = get_nested_value(usage_raw?, &["user_entitlement_pack_list"])?.as_array()?;
     let priority = [6.0_f64, 4.0, 1.0, 9.0, 8.0, 0.0];
 
@@ -1961,7 +1961,7 @@ fn pick_preferred_trae_pack<'a>(usage_raw: Option<&'a Value>) -> Option<&'a Valu
     packs.first()
 }
 
-fn pick_trae_pack_reset(pack: &Value) -> Option<String> {
+pub(super) fn pick_trae_pack_reset(pack: &Value) -> Option<String> {
     let raw = pick_first_number(pack, &[&["entitlement_base_info", "end_time"]])?;
     if raw <= 0.0 {
         return None;
@@ -2019,7 +2019,7 @@ fn append_copilot_snapshot_rows(
     count
 }
 
-fn get_copilot_snapshot<'a>(snapshots: &'a Value, key: &str) -> Option<&'a Value> {
+pub(super) fn get_copilot_snapshot<'a>(snapshots: &'a Value, key: &str) -> Option<&'a Value> {
     if matches!(key, "premium_models" | "premium_interactions") {
         return get_nested_value(snapshots, &["premium_models"])
             .or_else(|| get_nested_value(snapshots, &["premium_interactions"]));
@@ -2057,7 +2057,7 @@ fn pick_copilot_reset_text(reset_unix: Option<i64>, reset_iso: Option<&str>) -> 
         .unwrap_or_else(|| "-".to_string())
 }
 
-fn extract_codebuddy_resources(account: &CodebuddyAccount) -> Vec<&serde_json::Map<String, Value>> {
+pub(super) fn extract_codebuddy_resources(account: &CodebuddyAccount) -> Vec<&serde_json::Map<String, Value>> {
     let mut out = Vec::new();
 
     if let Some(quota_raw) = account.quota_raw.as_ref() {
@@ -2093,7 +2093,7 @@ fn extract_codebuddy_resources(account: &CodebuddyAccount) -> Vec<&serde_json::M
     out
 }
 
-fn extract_workbuddy_resources(account: &WorkbuddyAccount) -> Vec<&serde_json::Map<String, Value>> {
+pub(super) fn extract_workbuddy_resources(account: &WorkbuddyAccount) -> Vec<&serde_json::Map<String, Value>> {
     let mut out = Vec::new();
 
     if let Some(quota_raw) = account.quota_raw.as_ref() {
@@ -2151,7 +2151,7 @@ fn parse_numeric_text(value: Option<&str>) -> Option<f64> {
     value.and_then(|raw| raw.trim().parse::<f64>().ok())
 }
 
-fn pick_number_in_item(item: &serde_json::Map<String, Value>, keys: &[&str]) -> Option<f64> {
+pub(super) fn pick_number_in_item(item: &serde_json::Map<String, Value>, keys: &[&str]) -> Option<f64> {
     for key in keys {
         if let Some(value) = item.get(*key).and_then(as_f64) {
             return Some(value);
@@ -2160,7 +2160,7 @@ fn pick_number_in_item(item: &serde_json::Map<String, Value>, keys: &[&str]) -> 
     None
 }
 
-fn pick_string_in_item(item: &serde_json::Map<String, Value>, keys: &[&str]) -> Option<String> {
+pub(super) fn pick_string_in_item(item: &serde_json::Map<String, Value>, keys: &[&str]) -> Option<String> {
     for key in keys {
         if let Some(value) = item.get(*key).and_then(Value::as_str) {
             let trimmed = value.trim();
@@ -2172,7 +2172,7 @@ fn pick_string_in_item(item: &serde_json::Map<String, Value>, keys: &[&str]) -> 
     None
 }
 
-fn compute_cursor_used_percent_from_amount(raw_usage: &Value) -> Option<f64> {
+pub(super) fn compute_cursor_used_percent_from_amount(raw_usage: &Value) -> Option<f64> {
     let used = pick_first_number(
         raw_usage,
         &[
@@ -2199,7 +2199,7 @@ fn compute_cursor_used_percent_from_amount(raw_usage: &Value) -> Option<f64> {
     Some((used / limit) * 100.0)
 }
 
-fn pick_first_number(value: &Value, paths: &[&[&str]]) -> Option<f64> {
+pub(super) fn pick_first_number(value: &Value, paths: &[&[&str]]) -> Option<f64> {
     for path in paths {
         if let Some(parsed) = get_nested_value(value, path).and_then(as_f64) {
             return Some(parsed);
@@ -2208,7 +2208,7 @@ fn pick_first_number(value: &Value, paths: &[&[&str]]) -> Option<f64> {
     None
 }
 
-fn pick_first_string(value: &Value, paths: &[&[&str]]) -> Option<String> {
+pub(super) fn pick_first_string(value: &Value, paths: &[&[&str]]) -> Option<String> {
     for path in paths {
         if let Some(text) = get_nested_value(value, path).and_then(Value::as_str) {
             let trimmed = text.trim();

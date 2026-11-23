@@ -353,26 +353,54 @@ fn upsert_account_with_import_hints(
     )
 }
 
+/// Reauthorization identity verification prefers the target's still-parseable
+/// saved tokens: cached identity fields can go stale after legacy imports,
+/// while the saved id/access tokens keep the authoritative claims.
+fn verified_oauth_identity_fields(
+    target: &CodexAccount,
+) -> (Option<String>, Option<String>, Option<String>) {
+    if let Ok((_, user_id, _, _, id_token_account_id, id_token_org_id)) =
+        extract_user_info(&target.tokens.id_token)
+    {
+        let account_id = normalize_optional_value(
+            extract_chatgpt_account_id_from_access_token(&target.tokens.access_token)
+                .or(id_token_account_id),
+        );
+        let organization_id = normalize_optional_value(
+            extract_chatgpt_organization_id_from_access_token(&target.tokens.access_token)
+                .or(id_token_org_id),
+        );
+        return (normalize_optional_value(user_id), account_id, organization_id);
+    }
+    (
+        normalize_optional_value(target.user_id.clone()),
+        normalize_optional_value(target.account_id.clone()),
+        normalize_optional_value(target.organization_id.clone()),
+    )
+}
+
 fn oauth_reauth_matches_user_and_workspace(
     target: &CodexAccount,
     user_id: Option<&str>,
     account_id: Option<&str>,
     organization_id: Option<&str>,
 ) -> bool {
+    let (verified_user_id, verified_account_id, verified_organization_id) =
+        verified_oauth_identity_fields(target);
     let matches_id = |stored: Option<&str>, received: Option<&str>| {
         let stored = normalize_optional_ref(stored);
         stored.is_some() && stored == normalize_optional_ref(received)
     };
     let organization_matches = match (
-        normalize_optional_ref(target.organization_id.as_deref()),
+        normalize_optional_ref(verified_organization_id.as_deref()),
         normalize_optional_ref(organization_id),
     ) {
         (Some(stored), Some(received)) => stored == received,
         _ => true,
     };
     !target.is_web_session_auth()
-        && matches_id(target.user_id.as_deref(), user_id)
-        && matches_id(target.account_id.as_deref(), account_id)
+        && matches_id(verified_user_id.as_deref(), user_id)
+        && matches_id(verified_account_id.as_deref(), account_id)
         && organization_matches
 }
 
@@ -383,6 +411,7 @@ fn resolve_reauth_target_account_id(
     account_id: Option<&str>,
     organization_id: Option<&str>,
     generated_id: &str,
+    index_accounts: &[CodexAccountSummary],
 ) -> Result<Option<String>, String> {
     let Some(target_id) = normalize_optional_ref(target_account_id) else {
         return Ok(None);
@@ -399,6 +428,18 @@ fn resolve_reauth_target_account_id(
             return Err(format!(
                 "CODEX_OAUTH_RESTART_REQUIRED: 重新授权账号邮箱不匹配: 目标账号为 {}，本次授权为 {}",
                 target.email, email
+            ));
+        }
+        // 换邮箱后，新地址若已归属其他记录，重新授权绝不接管该记录：
+        // 目标账号原地更新，冲突记录保持原样，由用户显式处理。
+        if index_accounts.iter().any(|item| {
+            item.id != target_id
+                && item.id != target.id
+                && item.email.trim().eq_ignore_ascii_case(email.trim())
+        }) {
+            return Err(format!(
+                "CODEX_OAUTH_RESTART_REQUIRED: Codex 账号已存在: {}",
+                email
             ));
         }
         // 重新授权会清理衍生 ID 下的重复记录，换邮箱时先确认该记录的身份。
@@ -485,6 +526,7 @@ fn upsert_account_with_hints_and_reauth_target(
         account_id.as_deref(),
         organization_id.as_deref(),
         &generated_id,
+        &index.accounts,
     )?;
     let has_reauth_target = reauth_target.is_some();
 
@@ -575,6 +617,7 @@ fn upsert_account_with_hints_and_reauth_target(
     if let Some(proxy) = selected_proxy {
         account.egress_proxy_url = Some(proxy);
         account.egress_proxy_disabled = false;
+        account.egress_proxy_client_defaults = false;
     }
 
     // Save the replacement before removing an existing duplicate.

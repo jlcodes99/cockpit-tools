@@ -4,7 +4,7 @@ use std::fs::File;
 use std::io::{self, BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
 
-const METADATA_LIMIT: u64 = 1024 * 1024;
+pub(super) const METADATA_LIMIT: u64 = 1024 * 1024;
 
 // Detect the frame itself: restore/import staging files deliberately use .tmp.
 pub(in crate::modules) fn open(path: &Path) -> io::Result<Box<dyn Read>> {
@@ -21,6 +21,10 @@ pub(in crate::modules) fn open(path: &Path) -> io::Result<Box<dyn Read>> {
 }
 
 pub(super) fn metadata(path: &Path) -> io::Result<Option<serde_json::Value>> {
+    metadata_with_bytes(path).map(|(value, _)| value)
+}
+
+pub(super) fn metadata_with_bytes(path: &Path) -> io::Result<(Option<serde_json::Value>, u64)> {
     let mut reader = BufReader::new(open(path)?.take(METADATA_LIMIT + 1));
     let mut consumed = 0usize;
     let mut line = Vec::new();
@@ -28,7 +32,7 @@ pub(super) fn metadata(path: &Path) -> io::Result<Option<serde_json::Value>> {
         line.clear();
         let count = reader.read_until(b'\n', &mut line)?;
         if count == 0 {
-            return Ok(None);
+            return Ok((None, consumed as u64));
         }
         consumed += count;
         if consumed as u64 > METADATA_LIMIT {
@@ -41,12 +45,13 @@ pub(super) fn metadata(path: &Path) -> io::Result<Option<serde_json::Value>> {
             continue;
         }
         let Ok(value) = serde_json::from_slice::<serde_json::Value>(&line) else {
-            return Ok(None);
+            return Ok((None, consumed as u64));
         };
-        return Ok(
+        return Ok((
             (value.get("type").and_then(serde_json::Value::as_str) == Some("session_meta"))
                 .then_some(value),
-        );
+            consumed as u64,
+        ));
     }
 }
 

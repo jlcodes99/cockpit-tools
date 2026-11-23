@@ -66,7 +66,9 @@ const config: CodebuddySuiteAccountsPlatformConfig<WorkbuddyAccount> = {
   hasQuotaData: (_account, groups) => groups.some((group) => group.items.length > 0),
   renderQuotaSummary: (account) => {
     const credits = getWorkbuddyAiCredits(account);
-    return credits.left == null ? null : <WorkbuddyCreditsSummary credits={credits} international showBreakdown={credits.hasBreakdown} />;
+    return credits.left == null ? null : (
+      <WorkbuddyCreditsSummary credits={credits} account={account} international showBreakdown={credits.hasBreakdown} />
+    );
   },
   usagePrefix: 'workbuddy',
   quotaPrefix: 'workbuddy',

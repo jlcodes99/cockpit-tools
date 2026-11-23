@@ -335,6 +335,14 @@ pub async fn inject_windsurf_to_vscode(
     app: AppHandle,
     account_id: String,
 ) -> Result<String, String> {
+    switch_windsurf(app, account_id, false).await
+}
+
+pub(crate) async fn switch_windsurf(
+    app: AppHandle,
+    account_id: String,
+    require_binding: bool,
+) -> Result<String, String> {
     let started_at = Instant::now();
     logger::log_info(&format!(
         "[Windsurf Switch] 开始切换账号: account_id={}",
@@ -353,6 +361,9 @@ pub async fn inject_windsurf_to_vscode(
         None,
         Some(false),
     ) {
+        if require_binding {
+            return Err(e);
+        }
         logger::log_warn(&format!("更新 Windsurf 默认实例绑定账号失败: {}", e));
     }
     crate::modules::provider_current_state::set_current_account_id(

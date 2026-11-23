@@ -1147,6 +1147,10 @@ fn running_app_candidate_matches(
         return false;
     }
 
+    if app == "workbuddy" && is_workbuddy_node_runtime(path) {
+        return false;
+    }
+
     #[cfg(target_os = "windows")]
     if let Some(platform) = windows_trae_platform_for_app(app) {
         if !windows_trae_candidate_matches_platform(path, platform) {
@@ -1894,6 +1898,7 @@ fn account_proxy_env_pairs(proxy_url: &str) -> Vec<(&'static str, String)> {
 }
 
 pub fn apply_effective_proxy_env_to_command(cmd: &mut Command, launch_proxy: &CodexLaunchProxy) {
+    if matches!(launch_proxy, CodexLaunchProxy::ClientDefaults) { return; }
     let pairs = match launch_proxy {
         CodexLaunchProxy::Inherit => {
             let direct_hosts = config::get_codex_proxy_direct_hosts();

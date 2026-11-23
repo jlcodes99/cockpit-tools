@@ -104,6 +104,27 @@ fn expected(table: &str) -> (&[(&str, &str, bool, u32)], &[(&str, &str, bool)]) 
     }
 }
 
+const REALTIME_OBSERVATION_INDEXES: [(&str, &str); 3] = [
+    (
+        "idx_thread_realtime_observed",
+        "CREATE INDEX idx_thread_realtime_observed
+         ON thread_realtime_items(thread_id, json_extract(item_json, '$.observed_at_ms'), rollout_ordinal, item_id)
+         WHERE json_extract(item_json, '$.observed_at_ms') IS NOT NULL",
+    ),
+    (
+        "idx_thread_realtime_session_observed",
+        "CREATE INDEX idx_thread_realtime_session_observed
+         ON thread_realtime_items(thread_id, json_extract(item_json, '$.realtime_session_id'), json_extract(item_json, '$.observed_at_ms'), rollout_ordinal, item_id)
+         WHERE json_extract(item_json, '$.observed_at_ms') IS NOT NULL",
+    ),
+    (
+        "idx_thread_realtime_session_position",
+        "CREATE INDEX idx_thread_realtime_session_position
+         ON thread_realtime_items(thread_id, json_extract(item_json, '$.realtime_session_id'), rollout_ordinal, item_id)
+         WHERE json_extract(item_json, '$.observed_at_ms') IS NOT NULL",
+    ),
+];
+
 fn normalize_sql(sql: &str) -> String {
     sql.chars()
         .filter(|c| !c.is_ascii_whitespace())
@@ -157,7 +178,7 @@ pub(super) fn schema(db: &Connection) -> Result<Schema, String> {
         let mut expected_version = 1;
         for row in rows {
             let (version, success) = row.map_err(|e| error("SCHEMA", e))?;
-            if version != expected_version || version > 8 || success != 1 {
+            if version != expected_version || version > 9 || success != 1 {
                 return Err(error(
                     "SCHEMA",
                     "incomplete or unsupported history migrations",
@@ -165,6 +186,20 @@ pub(super) fn schema(db: &Connection) -> Result<Schema, String> {
             }
             expected_version += 1;
             migrations.push((version, success));
+        }
+    }
+    let observation_indexes_migrated = migrations.last().is_some_and(|&(version, _)| version == 9);
+    if observation_indexes_migrated {
+        for (name, expected_sql) in REALTIME_OBSERVATION_INDEXES {
+            // index_info does not expose the expressions or the partial-index predicate.
+            let matches = objects.iter().any(|(kind, actual_name, sql)| {
+                kind == "index"
+                    && actual_name == name
+                    && sql.split_ascii_whitespace().eq(expected_sql.split_ascii_whitespace())
+            });
+            if !matches {
+                return Err(error("SCHEMA", format!("unsupported history index {name}")));
+            }
         }
     }
     let mut tables = Vec::new();
@@ -255,7 +290,7 @@ pub(super) fn schema(db: &Connection) -> Result<Schema, String> {
         {
             return Err(error("SCHEMA", "history foreign keys are unsupported"));
         }
-        validate_indexes(db, name)?;
+        validate_indexes(db, name, observation_indexes_migrated)?;
         tables.push(Table {
             name: name.to_owned(),
             columns,
@@ -269,7 +304,11 @@ pub(super) fn schema(db: &Connection) -> Result<Schema, String> {
     })
 }
 
-fn validate_indexes(db: &Connection, table: &str) -> Result<(), String> {
+fn validate_indexes(
+    db: &Connection,
+    table: &str,
+    observation_indexes_migrated: bool,
+) -> Result<(), String> {
     let mut statement = db
         .prepare(&format!("PRAGMA index_list({table})"))
         .map_err(|e| error("SCHEMA", e))?;
@@ -287,6 +326,11 @@ fn validate_indexes(db: &Connection, table: &str) -> Result<(), String> {
         .map_err(|e| error("SCHEMA", e))?;
     for (name, unique, origin, partial) in indexes {
         if origin == "pk" {
+            continue;
+        }
+        if observation_indexes_migrated
+            && REALTIME_OBSERVATION_INDEXES.iter().any(|&(index, _)| index == name)
+        {
             continue;
         }
         let (owner, expected_unique, expected_partial, columns): (&str, bool, bool, &[&str]) =

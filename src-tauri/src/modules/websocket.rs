@@ -15,6 +15,7 @@ use tokio::sync::{broadcast, oneshot, Mutex, RwLock};
 use tokio_tungstenite::tungstenite::Message;
 
 use super::config::{get_preferred_port, init_server_status, PORT_RANGE};
+use super::automation_protocol;
 
 const WS_AUTH_TOKEN_BYTES: usize = 32;
 
@@ -86,6 +87,12 @@ pub enum WsMessage {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         launch_on_switch: Option<bool>,
     },
+
+    #[serde(rename = "request.automation")]
+    Automation(automation_protocol::Request),
+
+    #[serde(rename = "response.automation")]
+    AutomationReply(automation_protocol::Reply),
 
     /// 请求设置语言
     #[serde(rename = "request.set_language")]
@@ -598,7 +605,7 @@ async fn handle_connection(server: Arc<WsServer>, stream: TcpStream, addr: Socke
             msg = ws_receiver.next() => {
                 match msg {
                     Some(Ok(Message::Text(text))) => {
-                        if let Err(e) = handle_client_message(&server, &mut ws_sender, &text).await {
+                        if let Err(e) = handle_client_message(&server, &mut ws_sender, addr, &text).await {
                             crate::modules::logger::log_error(&format!("[WS] 处理消息失败: {}", e));
                         }
                     }
@@ -641,11 +648,22 @@ async fn handle_client_message(
         tokio_tungstenite::WebSocketStream<TcpStream>,
         Message,
     >,
+    peer: SocketAddr,
     text: &str,
 ) -> Result<(), String> {
     let msg: WsMessage = serde_json::from_str(text).map_err(|e| format!("解析消息失败: {}", e))?;
 
     match msg {
+        WsMessage::Automation(request) => {
+            let authorized = peer.ip().is_loopback()
+                && require_ws_auth(Some(&request.auth_token), "automation").is_ok();
+            let reply = super::automation::handle(request, authorized).await;
+            let json = serde_json::to_string(&WsMessage::AutomationReply(reply))
+                .map_err(|error| error.to_string())?;
+            sender.send(Message::Text(json.into())).await
+                .map_err(|error| error.to_string())?;
+        }
+
         WsMessage::Ping => {
             let pong = serde_json::to_string(&WsMessage::Pong).unwrap();
             sender

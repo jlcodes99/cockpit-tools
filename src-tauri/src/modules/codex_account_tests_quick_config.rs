@@ -1843,6 +1843,14 @@ wire_api = "responses"
         assert!(!catalog.exists());
     }
 
+    #[test]
+    fn model_management_default_off_migration_does_not_create_missing_profiles() {
+        let parent = tempfile::tempdir().unwrap();
+        let profile = parent.path().join("missing-profile");
+        assert!(!super::migrate_model_management_default_off_once(&profile).unwrap());
+        assert!(!profile.exists());
+    }
+
     /// 只执行一次，且保留用户已保存的模型清单（重新开启后仍可用）。
     #[test]
     fn model_management_default_off_migration_runs_once_and_keeps_definitions() {

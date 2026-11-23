@@ -75,7 +75,7 @@ pub struct SshServer {
     pub last_sync: Option<SshCodexSyncStatus>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum SshAuthConfig {
     Agent,
@@ -104,4 +104,10 @@ pub struct SshCodexSyncResult {
     pub verified: bool,
     pub error: Option<String>,
     pub synced_at: i64,
+}
+
+impl SshCodexSyncResult {
+    pub(crate) fn succeeded(&self) -> bool {
+        self.verified && self.error.is_none()
+    }
 }

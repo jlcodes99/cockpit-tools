@@ -215,7 +215,7 @@ async fn probe_with_client(
                         // 服务端可能不推送 agent_message_chunk 文本块
                         //（usage.outputTokens 已证明模型执行、stopReason=end_turn）。
                         // prompt 正常结束即视为可用，回复文本有则带上。
-                        None if reply.prompt_done || !reply.text.trim().is_empty() => Ok(reply.text),
+                        None if reply.has_prompt_result() || !reply.text.trim().is_empty() => Ok(reply.text),
                         None => Err("WORKBUDDY_PROBE_NO_REPLY".into()),
                     }
                 }

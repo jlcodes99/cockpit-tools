@@ -45,7 +45,7 @@ fn backup_path(path: &Path) -> PathBuf {
     backup.into()
 }
 
-fn read_at<T: DeserializeOwned>(root: &Path, path: &Path) -> Result<T, String> {
+pub(super) fn read_at<T: DeserializeOwned>(root: &Path, path: &Path) -> Result<T, String> {
     let content = fs::read_to_string(path).map_err(|error| format!("读取账号详情失败: {error}"))?;
     decode(root, &content).or_else(|error| {
         // Keep recovery reads non-mutating. A missing primary is an absence, not an old backup.
@@ -66,7 +66,7 @@ pub(crate) fn read_account_file<T: DeserializeOwned>(path: &Path) -> Result<T, S
     read_at(&account::get_data_dir()?, path)
 }
 
-fn write_at<T: Serialize>(
+pub(super) fn write_at<T: Serialize>(
     root: &Path,
     path: &Path,
     kind: &str,

@@ -119,3 +119,28 @@ fn remote_dialog_legacy_and_binding_changes_do_not_query_local_logs() {
         "binding_changed"
     );
 }
+
+#[test]
+fn only_the_local_gateway_port_and_enabled_key_can_override_remote_discovery() {
+    let config = json!({
+        "port": 58554,
+        "createdAt": 101,
+        "enabled": true,
+        "apiKey":"legacy-fixture",
+        "apiKeys":[{"key":"local-fixture","enabled":true},{"key":"disabled-fixture","enabled":false}]
+    });
+    let base = "http://127.0.0.1:58554/v1";
+    let local_id = remote::local_service_id(101);
+    let owns = |url, key| owns_local_service(url, key, &local_id, &config);
+    assert!(owns(base, "local-fixture"));
+    assert!(owns("https://[::1]:58554/v1/", "local-fixture"));
+    assert!(!owns(base, "disabled-fixture"));
+    assert!(!owns(base, "legacy-fixture"));
+    assert!(!owns(base, "ssh-fixture"));
+    assert!(!owns("http://127.0.0.1:58555/v1", "local-fixture"));
+    assert!(!owns("https://remote.example.invalid:58554/v1", "local-fixture"));
+    assert!(!owns_local_service(base, "local-fixture", "cockpit-102", &config));
+    assert!(owns_local_service(base, "legacy-fixture", &local_id, &json!({
+        "port":58554,"createdAt":101,"apiKey":"legacy-fixture"
+    })));
+}

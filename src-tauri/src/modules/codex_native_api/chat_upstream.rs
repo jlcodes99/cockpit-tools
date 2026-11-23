@@ -103,11 +103,16 @@ fn responses_to_chat_inner(body: &Value, native: bool) -> Result<Value, ServiceE
         out.insert("response_format".into(), value);
     }
     let converted = context.tools(native);
+    let has_tools = !converted.is_empty();
     out.remove("tools");
-    if !converted.is_empty() {
+    if has_tools {
         out.insert("tools".into(), json!(converted));
     }
-    if let Some(choice) = body.get("tool_choice") {
+    // Codex compaction can send "auto" with no tools. Strict Chat upstreams
+    // reject that combination after conversion omits the empty tools array.
+    if let Some(choice) = body.get("tool_choice").filter(|choice| {
+        has_tools || choice.as_str().is_some_and(|mode| mode.eq_ignore_ascii_case("none"))
+    }) {
         out.insert(
             "tool_choice".into(),
             choice_to_chat(choice, &context, native)?,

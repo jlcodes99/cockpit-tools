@@ -398,6 +398,40 @@
     }
 
     #[test]
+    fn workspace_credits_keep_zero_window_accounts_out_of_quota_cooldown() {
+        let now = 1_800_000_i64;
+        let raw = serde_json::json!({
+            "plan_type": "team",
+            "spend_control": { "individual_limit": null, "reached": false },
+            "credits": {
+                "balance": null, "unlimited": false, "has_credits": true,
+                "overage_limit_reached": false
+            },
+            "ambient_usage": { "default": { "source": { "kind": "credits" } } }
+        });
+        let account = oauth_account_with_quota(0, 0, Some(raw.clone()));
+        assert!(!super::account_quota_cooldown(&account, now).unwrap().exhausted);
+        assert_eq!(super::resolve_remaining_quota(&account), Some(1));
+        assert!(super::account_quota_cooldown_at_floor(&account, now, 5).unwrap().exhausted);
+
+        for (pointer, value) in [
+            ("/plan_type", serde_json::json!("plus")),
+            ("/spend_control/reached", serde_json::json!(true)),
+            ("/credits/overage_limit_reached", serde_json::json!(true)),
+            ("/credits/has_credits", serde_json::json!(false)),
+            ("/credits/balance", serde_json::json!(0)),
+        ] {
+            let mut blocked = raw.clone();
+            *blocked.pointer_mut(pointer).unwrap() = value;
+            if matches!(pointer, "/spend_control/reached" | "/credits/overage_limit_reached") {
+                blocked["credits"]["balance"] = serde_json::json!(100);
+            }
+            let account = oauth_account_with_quota(0, 0, Some(blocked));
+            assert!(super::account_quota_cooldown(&account, now).unwrap().exhausted, "{pointer}");
+        }
+    }
+
+    #[test]
     fn catalog_context_windows_keep_official_and_override_third_party() {
         let official = super::ProviderGatewayModelSlot {
             client_model: "gpt-6.1-sol".to_string(),

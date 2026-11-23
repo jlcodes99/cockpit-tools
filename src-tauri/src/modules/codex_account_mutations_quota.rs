@@ -681,9 +681,20 @@ pub fn update_account_egress_proxy(
     }
     if disabled && egress_proxy_url.is_some() { return Err("PROXY_INVALID_URL".into()); }
     account.egress_proxy_disabled = disabled;
+    account.egress_proxy_client_defaults = false;
     let normalized = normalize_optional_value(egress_proxy_url);
     account.egress_proxy_url = normalized.as_deref()
         .map(crate::modules::codex_proxy_runtime::normalize_binding).transpose()?;
+    save_account(&account)?;
+    Ok(account)
+}
+
+pub fn update_account_client_proxy_defaults(account_id: &str) -> Result<CodexAccount, String> {
+    let mut account = load_account(account_id).ok_or("PROXY_ACCOUNT_NOT_FOUND")?;
+    if !crate::modules::codex_account_proxy::eligible(&account) { return Err("PROXY_ACCOUNT_UNSUPPORTED".into()); }
+    account.egress_proxy_url = None;
+    account.egress_proxy_disabled = false;
+    account.egress_proxy_client_defaults = true;
     save_account(&account)?;
     Ok(account)
 }

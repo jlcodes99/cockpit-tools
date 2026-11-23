@@ -461,7 +461,7 @@ pub enum WakeupTransportMode {
     Clientless,
 }
 
-fn resolve_wakeup_transport_mode(mode: Option<WakeupTransportMode>) -> WakeupTransportMode {
+pub(crate) fn resolve_wakeup_transport_mode(mode: Option<WakeupTransportMode>) -> WakeupTransportMode {
     mode.unwrap_or_else(|| {
         match std::env::var("AG_WAKEUP_TRANSPORT_MODE")
             .ok()

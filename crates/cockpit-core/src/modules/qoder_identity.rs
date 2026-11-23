@@ -32,6 +32,26 @@ pub(crate) fn matches(
     }
 }
 
+pub(crate) fn normalize_account_id(account_id: &str) -> Result<String, String> {
+    let trimmed = account_id.trim();
+    if trimmed.is_empty() {
+        return Err("账号 ID 不能为空".to_string());
+    }
+
+    if trimmed.contains('/') || trimmed.contains('\\') || trimmed.contains("..") {
+        return Err("账号 ID 非法，包含路径字符".to_string());
+    }
+
+    let valid = trimmed
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || ch == '_' || ch == '-' || ch == '.');
+    if !valid {
+        return Err("账号 ID 非法，仅允许字母/数字/._-".to_string());
+    }
+
+    Ok(trimmed.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

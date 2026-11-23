@@ -28,7 +28,12 @@ pub(crate) mod antigravity_shared_switch;
 pub mod antigravity_switch_history;
 pub mod antigravity_token_usage;
 pub mod app_lifecycle;
+#[cfg(target_os = "macos")]
+pub mod app_presence;
 pub mod atomic_write;
+#[path = "../../../crates/cockpit-core/src/modules/automation_protocol.rs"]
+pub(crate) mod automation_protocol;
+pub(crate) mod automation;
 pub mod auto_local_import;
 pub mod backup_directory_recovery;
 pub mod backup_storage;
@@ -51,6 +56,9 @@ pub mod codex_device_restrictions;
 pub mod chatgpt_plan;
 pub mod chatgpt_plan_service;
 pub mod codex_account_proxy;
+pub mod codex_proxy_dotenv;
+pub mod codex_proxy_env;
+pub mod codex_proxy_launch_guard;
 pub mod codex_proxy_probe;
 pub mod codex_proxy_engine;
 pub mod codex_proxy_engine_preflight;
@@ -59,8 +67,6 @@ pub mod codex_proxy_engine_install;
 mod codex_proxy_engine_archive;
 pub mod codex_proxy_runtime;
 pub mod codex_proxy_desktop_router;
-#[cfg(any(test, target_os = "windows"))]
-pub(crate) mod codex_proxy_dotenv;
 pub mod codex_proxy_node_parser;
 pub mod codex_agent_identity;
 pub mod codex_app_injection;
@@ -170,6 +176,8 @@ pub mod process_timeout;
 pub mod provider_current_state;
 pub mod provider_token_keeper;
 pub mod qoder_account;
+#[path = "../../../crates/cockpit-core/src/modules/qoder_channel.rs"]
+mod qoder_channel;
 #[path = "../../../crates/cockpit-core/src/modules/qoder_identity.rs"]
 mod qoder_identity;
 pub mod qoder_instance;

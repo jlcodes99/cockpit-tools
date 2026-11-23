@@ -662,6 +662,7 @@ fn restore_config_toml_from_takeover_backup_with_realtime_ownership(
             let provider = providers[CODEX_LOCAL_ACCESS_RUNTIME_PROVIDER_ID]
                 .as_table_mut()
                 .ok_or("config.toml 中 codex_local_access provider 不是合法表结构")?;
+            provider.remove("supports_standalone_web_search");
             for key in [
                 "name",
                 "base_url",
@@ -669,6 +670,7 @@ fn restore_config_toml_from_takeover_backup_with_realtime_ownership(
                 "requires_openai_auth",
                 "experimental_bearer_token",
                 "supports_websockets",
+                "supports_standalone_web_search",
             ] {
                 if let Some(item) = backup_provider.get(key) {
                     provider[key] = item.clone();

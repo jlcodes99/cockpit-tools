@@ -198,6 +198,22 @@
     "providerClear": "Bỏ chọn"
   },
   "common": {
+    "automation": {
+      "invalidPlatform": "Không nhận ra nền tảng tài khoản. Chạy cockpit-cli account platforms để xem các mã được hỗ trợ.",
+      "hostUnavailable": "Khởi động ứng dụng Cockpit Tools với thư mục dữ liệu này rồi thử lại.",
+      "responseTimeout": "Cockpit Tools không trả kết quả đúng hạn. Kiểm tra trạng thái hiện tại trước khi lặp lại thay đổi.",
+      "versionMismatch": "CLI và ứng dụng máy tính dùng các phiên bản tự động hóa tài khoản khác nhau. Hãy cập nhật cả hai.",
+      "unauthorized": "Không thể xác thực yêu cầu tự động hóa tài khoản cục bộ.",
+      "invalidAccountId": "Nhập mã tài khoản từ nền tảng đã chọn hoặc danh sách thành viên dịch vụ API.",
+      "accountNotFound": "Không tìm thấy tài khoản trên nền tảng đã chọn.",
+      "operationFailed": "Cockpit Tools không thể hoàn tất thao tác. Hãy xem nhật ký ứng dụng.",
+      "appPathMissing": "Đặt đường dẫn ứng dụng khách trong Cockpit Tools rồi thử chuyển tài khoản lại.",
+      "appPathMissingAfterSwitch": "Đã chuyển tài khoản. Đặt đường dẫn ứng dụng khách trước khi khởi động.",
+      "switchBusy": "Ứng dụng khách này đang chuyển tài khoản. Thử lại sau khi hoàn tất.",
+      "quotaUnsupported": "Loại tài khoản này không thể làm mới hạn mức trực tiếp bằng lệnh này. Xem hạn mức đã lưu khi bỏ --refresh.",
+      "quotaRefreshFailed": "Lần làm mới hạn mức gần nhất thất bại. Xem hạn mức đã lưu khi bỏ --refresh."
+    },
+    "previewTruncated": "Bản xem trước chỉ hiển thị một phần nội dung. Khi sao chép hoặc tải xuống, toàn bộ JSON sẽ được bao gồm.",
     "collapseAll": "Thu gọn tất cả",
     "expandAll": "Mở rộng tất cả",
     "syncing": "Đang đồng bộ…",
@@ -323,6 +339,9 @@
       "success": "Thành công",
       "failed": "Thất bại",
       "cancelled": "Đã hủy",
+      "clientDisconnected": "Máy khách đã ngắt kết nối",
+      "upstreamOverloaded": "Máy chủ thượng nguồn quá tải",
+      "requestServiceUnavailable": "Dịch vụ không khả dụng",
       "incomplete": "Luồng chưa xong",
       "recovered": "Đã dùng dự phòng",
       "official": "Ủy quyền chính thức",
@@ -1127,7 +1146,8 @@
         "stopPrevious": "Dừng phiên bản trước",
         "prepareCredentials": "Chuẩn bị thông tin đăng nhập",
         "writeProfile": "Ghi hồ sơ phiên bản",
-        "startClient": "Khởi động ứng dụng Codex"
+        "startClient": "Khởi động ứng dụng Codex",
+        "checkProxyCountry": "Kiểm tra quốc gia đầu ra"
       },
       "detail": {
         "checkingInstance": "Đang đọc cấu hình phiên bản...",
@@ -1304,7 +1324,7 @@
       "trayIconStyleDesc": "Chọn biểu tượng đơn sắc của hệ thống hoặc biểu tượng app gốc có màu",
       "trayIconStyleTemplate": "Biểu tượng đơn sắc",
       "trayIconStyleColor": "Biểu tượng màu",
-      "menuBarLeftClick": "Thao tác nhấp chuột trái vào biểu tượng thanh menu",
+      "menuBarLeftClick": "Nhấp trái trên thanh menu",
       "menuBarLeftClickMenu": "Mở menu hạn mức",
       "menuBarLeftClickWindow": "Mở cửa sổ chính",
       "floatingCardStartup": "Hiển thị thẻ nổi khi khởi động",
@@ -1565,16 +1585,15 @@
       "webdavAllowedDomainsDesc": "Cách nhau bằng dấu phẩy; trống = không giới hạn",
       "claudeQuotaDisplayRemaining": "Claude hiển thị % còn lại",
       "claudeQuotaDisplayRemainingDesc": "Mặc định % đã dùng. Bật = % còn lại. Tự chuyển và cảnh báo vẫn theo đã dùng.",
-      "menuBarLeftClick": "Nhấp trái trên thanh menu",
       "menuBarLeftClickDesc": "Nhấp phải luôn mở menu hạn mức.",
       "menuBarLeftClickQuotaMenu": "Menu hạn mức",
       "menuBarLeftClickMainWindow": "Cửa sổ chính",
       "menuBarQuota": "Hạn mức trực tiếp trên thanh menu",
       "menuBarQuotaDesc": "Khi bật, hiển thị hạn mức còn lại của tài khoản hiện tại nền tảng đã chọn cạnh biểu tượng. Tùy chọn nền tảng trong hộp thoại.",
-      "menuBarQuotaEnabledDesc": "Đang bật · {{platform}} · còn lại của tài khoản hiện tại nền tảng đó (thấp nhất trong các hạn mức)",
+      "menuBarQuotaEnabledDesc": "Đã bật · {{platform}} · Hạn mức có sẵn của tài khoản hiện tại",
       "menuBarQuotaConfigure": "Cấu hình",
       "menuBarQuotaModalTitle": "Hạn mức thanh menu",
-      "menuBarQuotaModalDesc": "Chỉ tùy chọn của tính năng này: theo tài khoản hiện tại. Dịch vụ API Codex: “API + % còn lại của pool”; tài khoản API Key: “API + số dư còn lại”; thường: tiền tố email + % (thấp nhất; đỏ/cam/xanh).",
+      "menuBarQuotaModalDesc": "Theo tài khoản hiện tại của nền tảng đã chọn và hiển thị các kỳ hạn mức có sẵn. Hạn mức còn lại thấp nhất quyết định màu. Tài khoản Codex API Service / API Key luôn hiển thị nhãn API.",
       "menuBarAntigravityMetric": "Hạn mức trên thanh menu",
       "menuBarQuotaLowest": "Hạn mức thấp nhất",
       "menuBarQuotaPlatform": "Nền tảng tài khoản",
@@ -1605,10 +1624,11 @@
       },
       "timeDisplayMode": "Hiển thị thời gian",
       "timeDisplayModeDesc": "Thời gian trên thẻ và danh sách tài khoản. Mặc định là thời gian chuyển tài khoản",
-      "menuBarLeftClick": "Nhấp trái trên thanh menu",
-      "menuBarLeftClickDesc": "Nhấp phải luôn mở menu hạn mức.",
-      "menuBarLeftClickQuotaMenu": "Menu hạn mức",
-      "menuBarLeftClickMainWindow": "Cửa sổ chính"
+      "menuBarQuotaLayout": "Bố cục hạn mức",
+      "menuBarQuotaLayoutDesc": "Một dòng ngang dùng chữ lớn hơn. Hai dòng gọn hiển thị đồng thời hạn mức còn lại của cả hai kỳ và tiết kiệm không gian thanh menu. Khi chỉ có một kỳ, bố cục trở về một dòng ngang.",
+      "menuBarQuotaLayoutPreview": "Minh họa bố cục với hạn mức ví dụ",
+      "menuBarQuotaLayoutHorizontal": "Một dòng ngang",
+      "menuBarQuotaLayoutStacked": "Hai dòng gọn"
     },
     "network": {
       "apiTitle": "API Antigravity Cockpit",
@@ -2673,7 +2693,8 @@
     "stopApiServiceFailed": "Không thể dừng dịch vụ API. Hãy tắt dịch vụ trước rồi thử lại.",
     "stopApiServiceFailedContinue": "Dịch vụ API chưa dừng đúng cách. Vẫn tiếp tục khởi động lại...",
     "skipThisVersion": "Bỏ qua phiên bản này",
-    "skipFailed": "Không thể bỏ qua bản cập nhật này: {{error}}"
+    "skipFailed": "Không thể bỏ qua bản cập nhật này: {{error}}",
+    "installFailedTranslocated": "Ứng dụng đang chạy từ vị trí chỉ đọc (macOS App Translocation), nên không thể cài đặt bản cập nhật. Hãy thoát Cockpit Tools, di chuyển ứng dụng vào thư mục Applications trong Finder, mở lại rồi thử cập nhật lại."
   },
   "closeDialog": {
     "minimizeWindow": "Thu nhỏ",
@@ -4240,6 +4261,28 @@
       }
     },
     "sessionUsage": {
+      "analysis": {
+        "localUsage": "Mức dùng phiên cục bộ",
+        "selectedScope": "Bộ lọc hiện tại",
+        "project": "Dự án",
+        "allModels": "Tất cả mô hình",
+        "allProjects": "Tất cả dự án",
+        "unknownProject": "Dự án không xác định",
+        "requests": "Yêu cầu",
+        "time": "Thời gian",
+        "freshInput": "Đầu vào mới",
+        "cached": "Lượt trúng bộ nhớ đệm",
+        "referenceCost": "Chi phí ước tính",
+        "cacheRate": "Tỷ lệ trúng",
+        "viewSession": "Xem yêu cầu của phiên",
+        "clearSession": "Xóa bộ lọc phiên",
+        "sort": "Sắp xếp",
+        "indexingProjects": "Đang lập chỉ mục dự án cũ…",
+        "noResults": "Không có bản ghi khớp bộ lọc",
+        "unpriced": "Một số lượt dùng chưa có giá mô hình",
+        "costHelp": "Ước tính theo đơn giá API của mô hình",
+        "page": "Trang {{page}}"
+      },
       "comparison": {
         "localTotal": "Token phiên cục bộ · khoảng thời gian và phiên bản đã chọn",
         "profileTotal": "Hồ sơ chính thức · tổng token từ trước đến nay",
@@ -4874,6 +4917,8 @@
       "daysLeft": "{{count}} ngày",
       "over99Days": "99+ ngày",
       "titleWithDate": "Gói hết hạn: {{date}}",
+      "expiryUnconfirmed": "Chưa xác nhận",
+      "titleWithUnconfirmedDate": "Không thể xác nhận ngày gói hết hạn. Lần ghi nhận gần nhất: {{date}}",
       "titleUnknown": "Ủy quyền lại để lấy hạn gói",
       "filterLabel": "Lọc hạn",
       "filterAll": "Tất cả ({{count}})",
@@ -4896,7 +4941,8 @@
         "refreshTokens": "Cập nhật thông tin đăng nhập",
         "writeCredentials": "Ghi thông tin ứng dụng",
         "syncSettings": "Đồng bộ cài đặt tài khoản",
-        "startClient": "Khởi động ứng dụng Codex"
+        "startClient": "Khởi động ứng dụng Codex",
+        "checkProxyCountry": "Kiểm tra quốc gia đầu ra"
       },
       "status": {
         "pending": "Đang chờ",
@@ -5880,7 +5926,7 @@
         "viewAll": "Xem tất cả"
       },
       "previewTitle": "Xem trước proxy",
-      "modeDisabled": "Không dùng proxy",
+      "modeDisabled": "Buộc kết nối trực tiếp",
       "disableAction": "Gỡ proxy",
       "setIndependent": "Proxy riêng",
       "disabledHint": "Bỏ qua proxy riêng và chung; thử kết nối trực tiếp cho kết nối mới.",
@@ -5926,7 +5972,7 @@
       "restoreEntryNotRunning": "Không tìm thấy ứng dụng máy tính đang chạy sử dụng đầu vào proxy đã ghi thuộc phiên bản Cockpit này.",
       "restoreEntryBusy": "Proxy đang được khôi phục. Vui lòng thử lại sau ít phút.",
       "restoreEntryTimeout": "Khôi phục proxy đã hết thời gian chờ. Vui lòng thử lại.",
-      "restartHint": "Ứng dụng khởi chạy qua bộ chuyển tiếp cục bộ chuyển ở kết nối mới. Ứng dụng khác đang chạy cần khởi động lại một lần. Cầu nối máy tính chỉ lắng nghe trên loopback nhưng không cách ly người dùng khác trên máy. Proxy hệ thống không thay đổi.",
+      "restartHint": "Khởi động lại Codex sau khi gán, đổi chế độ hoặc bỏ gán proxy để giao diện và phần xử lý nền dùng cùng thiết lập. Khi proxy lỗi, ứng dụng không chuyển sang kết nối trực tiếp.",
       "exportHint": "Dữ liệu xuất tài khoản không chứa thông tin xác thực proxy; cần thiết lập lại sau khi nhập.",
       "backToAccounts": "Về danh sách tài khoản",
       "accountsTitle": "Tài khoản",
@@ -6318,7 +6364,76 @@
       "noCurrentNode": "Chưa có thông tin về nút hiện tại",
       "runtimeBusy": "Proxy cục bộ đang bận. Tạm thời không thể cập nhật.",
       "runtimeCapacity": "Có quá nhiều proxy đang chạy. Hãy dừng các proxy không dùng rồi thử lại.",
-      "runtimeReadFailed": "Tạm thời không thể đọc trạng thái proxy cục bộ. Vui lòng thử lại."
+      "runtimeReadFailed": "Tạm thời không thể đọc trạng thái proxy cục bộ. Vui lòng thử lại.",
+      "modeClient": "Dùng thiết lập của ứng dụng khách",
+      "clientHint": "Giữ thiết lập .env và proxy hệ thống ban đầu của tài khoản; không áp dụng proxy tài khoản hoặc proxy chung của Cockpit.",
+      "launch": {
+        "envChanged": "Cấu hình proxy đã thay đổi ngoài thao tác này. Tệp được giữ nguyên; hãy xem lại proxy trong .env trước khi thử lại.",
+        "envStorage": "Không thể đọc hoặc lưu cấu hình proxy an toàn. Tệp ban đầu được giữ nguyên; hãy kiểm tra quyền thư mục.",
+        "envUnsupported": "Không thể quản lý định dạng .env an toàn nên tệp không bị ghi đè. Hãy kiểm tra dấu nháy chưa đóng hoặc phần nối dòng.",
+        "stopFailed": "Không thể dừng phiên Codex có thiết lập không khớp. Hãy đóng phiên trước khi thử lại."
+      },
+      "country": {
+        "title": "Kiểm tra quốc gia đầu ra trước khi khởi chạy",
+        "hint": "Tùy chọn cho mọi tài khoản, có hoặc không gán proxy. Kiểm tra đầu ra HTTP bằng ChatGPT Cloudflare trace khi khởi chạy trong Cockpit. Không thay đổi lối tắt màn hình nền.",
+        "expected": "Quốc gia hoặc khu vực mong muốn",
+        "choose": "Chọn quốc gia hoặc khu vực",
+        "save": "Lưu kiểm tra quốc gia",
+        "saved": "Đã lưu thiết lập kiểm tra quốc gia",
+        "mismatch": "Quốc gia đầu ra không khớp: mong muốn {{expected}}, phát hiện {{actual}}. Chưa khởi chạy Codex.",
+        "unavailable": "Không thể xác nhận quốc gia đầu ra. Chưa khởi chạy Codex; hãy kiểm tra kết nối và thử lại.",
+        "routeUnknown": "Không thể xác định tuyến proxy của ứng dụng khách. Chưa khởi chạy Codex; hãy xem lại proxy và .env.",
+        "changed": "Thiết lập quốc gia đã thay đổi trong khi kiểm tra. Hãy thử lại để kiểm tra thiết lập hiện tại.",
+        "storage": "Không thể đọc hoặc lưu thiết lập kiểm tra quốc gia.",
+        "invalid": "Hãy chọn quốc gia hoặc khu vực hợp lệ.",
+        "search": "Tìm tên hoặc mã quốc gia",
+        "actual": "Quốc gia hoặc khu vực ghi nhận",
+        "route": "Cấu hình được kiểm tra",
+        "checkedAt": "Thời gian kiểm tra",
+        "notDetected": "Chưa phát hiện",
+        "notRequired": "Chưa bật",
+        "resultTitle": "Kết quả kiểm tra quốc gia đầu ra",
+        "evidenceHint": "Chỉ kiểm tra tuyến HTTP khởi chạy đã lưu. Lịch sử ở đây thuộc phiên Cockpit này; nhật ký ứng dụng lưu lại kết quả. Kết quả cũ không xác nhận kết nối hiện tại.",
+        "saveFirst": "Lưu chế độ proxy và quốc gia trước khi kiểm tra.",
+        "noChecks": "Chưa có kiểm tra trong phiên này.",
+        "checkNow": "Kiểm tra ngay",
+        "history": "Các lần kiểm tra trước trong phiên",
+        "historyFailed": "Không đọc được lịch sử kiểm tra gần đây.",
+        "result_checking": "Đang kiểm tra quốc gia đầu ra…",
+        "result_passed": "Kiểm tra thành công",
+        "result_blocked": "Kiểm tra thất bại",
+        "result_stale": "Cấu hình đã đổi; hãy kiểm tra lại",
+        "route_account": "Proxy tài khoản Cockpit",
+        "route_direct": "Buộc kết nối trực tiếp",
+        "route_env": "Tệp .env phía ứng dụng",
+        "route_environment": "Môi trường kế thừa",
+        "route_system": "Proxy Windows",
+        "route_network": "Tuyến mạng mặc định",
+        "route_unknown": "Chưa xác định",
+        "progressCountries": "Dự kiến: {{expected}} · Ghi nhận: {{actual}}",
+        "progressTime": "Thời lượng: {{ms}} ms"
+      },
+      "env": {
+        "title": "Biến môi trường proxy của ứng dụng",
+        "source": "Nguồn nhận diện: {{source}}",
+        "source_saved": "Đã lưu cho tài khoản này",
+        "source_env": "Tệp .env của ứng dụng",
+        "source_environment": "Biến môi trường kế thừa",
+        "source_system": "Proxy hệ thống Windows",
+        "source_none": "Không tìm thấy proxy tường minh",
+        "source_unknown": "Không nhận diện được",
+        "hint": "Chỉ hỗ trợ HTTP_PROXY, HTTPS_PROXY, ALL_PROXY và NO_PROXY. Áp dụng lần khởi chạy tiếp theo từ Cockpit với cài đặt ứng dụng; giữ nguyên các mục .env khác.",
+        "variables": "Biến proxy",
+        "recognize": "Đọc lại",
+        "save": "Lưu cấu hình ENV",
+        "saved": "Đã lưu cho lần khởi chạy tiếp theo",
+        "unrecognized": "Không thể đọc an toàn các biến proxy hiện có. Có thể nhập giá trị cố định tại đây; tệp của ứng dụng chưa bị thay đổi.",
+        "noneHint": "Không tìm thấy proxy tường minh. TUN hoặc lớp mạng khác vẫn có thể đang hoạt động.",
+        "readFailed": "Không đọc được cấu hình ENV. Hãy thử lại trước khi sửa.",
+        "saveFailed": "Không lưu được cấu hình ENV.",
+        "changed": "Cấu hình đã thay đổi ở nơi khác. Hãy đọc lại trước khi lưu.",
+        "invalid": "Chỉ nhập giá trị cố định cho HTTP_PROXY, HTTPS_PROXY, ALL_PROXY và NO_PROXY, không trùng tên. Hỗ trợ http, https, socks5 và socks5h."
+      }
     },
     "more": {
       "title": "Thêm",
@@ -7864,6 +7979,10 @@
     }
   },
   "workbuddy": {
+    "errors": {
+      "nodeAppPath": "Đường dẫn này trỏ đến môi trường chạy Node ({{path}}). Hãy chọn WorkBuddy.exe.",
+      "keyProcessFailed": "Không đọc được khóa chính thức của WorkBuddy. Dữ liệu đăng nhập được giữ nguyên. Hãy kiểm tra đường dẫn ứng dụng ({{path}}) trong Cài đặt, sau đó kiểm tra bản cập nhật."
+    },
     "desktopEdition": "WorkBuddy (bản Trung Quốc)",
     "credits": {
       "planBase": "Điểm cơ bản của gói",
@@ -7892,7 +8011,11 @@
       "creditUsed": "Điểm đã dùng",
       "model": "Mô hình",
       "recentUsage": "5 mục gần nhất",
-      "viewMore": "Xem thêm"
+      "viewMore": "Xem thêm",
+      "expiringHintTitle": "Xem chi tiết tín dụng sắp hết hạn",
+      "expiringSoon": "{{amount}} trong 24 giờ",
+      "expiringSoonTitle": "Tín dụng hết hạn trong 24 giờ",
+      "expiringSoonSummary": "Tổng {{amount}} · {{packageCount}} gói"
     },
     "title": "Quản lý tài khoản WorkBuddy",
     "noAccounts": "Chưa có tài khoản WorkBuddy",

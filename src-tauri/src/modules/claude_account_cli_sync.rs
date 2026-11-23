@@ -91,6 +91,23 @@ fn cli_config_matches_account(account: &ClaudeAccount, config: &Value) -> bool {
         }
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum CliCredentialSource {
+    Explicit,
+    BoundInstance,
+    DefaultCli,
+}
+
+impl CliCredentialSource {
+    fn matches_account(self, account: &ClaudeAccount, config: &Value) -> bool {
+        cli_config_matches_account(account, config)
+            && (self != Self::DefaultCli
+                || config_oauth_account(config)
+                    .and_then(|identity| read_string_path(identity, &["organizationUuid"]))
+                    == account.organization_uuid)
+    }
+}
+
 fn bound_cli_config_dirs(
     store: &crate::models::InstanceStore,
     account_id: &str,
@@ -113,43 +130,57 @@ fn bound_cli_config_dirs(
     dirs
 }
 
-async fn read_bound_cli_oauth_before_refresh(account_id: &str) -> Result<ClaudeAccount, String> {
+async fn read_cli_oauth_before_refresh(account_id: &str) -> Result<ClaudeAccount, String> {
     let account_id = account_id.to_owned();
     tauri::async_runtime::spawn_blocking(move || {
-        let account_id = account_id.as_str();
-        match crate::modules::claude_instance::load_instance_store() {
-            Ok(store) => {
-                let dirs = bound_cli_config_dirs(
-                    &store,
-                    account_id,
-                    get_default_claude_code_config_dir().ok(),
-                );
-                for config_dir in dirs {
-                    if !config_dir.is_dir() {
-                        continue;
-                    }
-                    if let Err(error) = sync_cli_account_from_config_dir(
-                        account_id,
-                        &config_dir,
-                        true,
-                        read_claude_code_credentials_for_sync,
-                    ) {
-                        logger::log_warn(&format!(
-                            "[Claude CLI] 刷新前读取绑定实例失败: account_id={}, error={error}",
-                            account_id
-                        ));
-                    }
-                }
-            }
-            Err(error) => logger::log_warn(&format!(
-                "[Claude CLI] 刷新前读取实例配置失败: account_id={}, error={error}",
-                account_id
-            )),
-        }
-        load_account(account_id).ok_or_else(|| "Claude 账号不存在".to_string())
+        read_cli_oauth_before_refresh_blocking(
+            &account_id,
+            get_default_claude_code_config_dir().ok(),
+            read_claude_code_credentials_for_sync,
+        )
     })
     .await
     .map_err(|error| error.to_string())?
+}
+
+fn read_cli_oauth_before_refresh_blocking(
+    account_id: &str,
+    default_dir: Option<PathBuf>,
+    read_credentials: impl Fn(&Path) -> Result<Value, String>,
+) -> Result<ClaudeAccount, String> {
+    let read_source = |config_dir: &Path, source| {
+        if config_dir.is_dir() {
+            if let Err(error) =
+                sync_cli_account_from_config_dir(account_id, config_dir, source, &read_credentials)
+            {
+                logger::log_warn(&format!(
+                    "[Claude CLI] 刷新前读取本地凭证失败: account_id={}, error={error}",
+                    account_id
+                ));
+            }
+        }
+    };
+    let default_is_bound = match crate::modules::claude_instance::load_instance_store() {
+        Ok(store) => {
+            let dirs = bound_cli_config_dirs(&store, account_id, default_dir.clone());
+            for config_dir in &dirs {
+                read_source(config_dir, CliCredentialSource::BoundInstance);
+            }
+            default_dir.as_ref().is_some_and(|dir| dirs.contains(dir))
+        }
+        Err(error) => {
+            logger::log_warn(&format!(
+                "[Claude CLI] 刷新前读取实例配置失败: account_id={}, error={error}",
+                account_id
+            ));
+            false
+        }
+    };
+    // The official CLI can rotate its credentials without a Cockpit instance binding.
+    if let Some(config_dir) = default_dir.as_deref().filter(|_| !default_is_bound) {
+        read_source(config_dir, CliCredentialSource::DefaultCli);
+    }
+    load_account(account_id).ok_or_else(|| "Claude 账号不存在".to_string())
 }
 
 fn sync_account_oauth_to_bound_cli_instances(account_id: &str) -> Result<(), String> {

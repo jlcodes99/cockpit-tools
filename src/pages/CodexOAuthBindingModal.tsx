@@ -32,13 +32,10 @@ import "./CodexOAuthBindingModal.css";
  */
 export function CodexOAuthBindingModal(props: CodexAccountsViewProps) {
   const {
-    clearFilterTypes,
-    clearTagFilter,
     closeOAuthBindingModal,
     closeOAuthBindingQuotaReserveEditor,
     codexAccountSortOptions,
     confirmOAuthBindingQuotaReserveEditor,
-    filterTypes,
     handleClearOAuthBinding,
     handleOAuthBindingQuotaReserveToggle,
     handleReauthorizeOAuthBinding,
@@ -52,6 +49,7 @@ export function CodexOAuthBindingModal(props: CodexAccountsViewProps) {
     oauthBindingError,
     oauthBindingErrorScrollKey,
     oauthBindingFilteredAccounts,
+    oauthBindingFilters,
     oauthBindingHasExistingBinding,
     oauthBindingHourlyReserveDraft,
     oauthBindingHourlyReserveInputRef,
@@ -71,25 +69,30 @@ export function CodexOAuthBindingModal(props: CodexAccountsViewProps) {
     openOAuthBindingQuotaReserveEditor,
     resolvePresentation,
     resolveSubscriptionPresentation,
-    searchQuery,
     selectedOAuthBindingAccount,
     setOauthBindingError,
+    setOauthBindingFilters,
     setOauthBindingHourlyReserveDraft,
     setOauthBindingQuotaReserveFieldErrors,
     setOauthBindingSelectedAccountId,
     setOauthBindingWeeklyReserveDraft,
-    setSearchQuery,
     setSortBy,
     setSortDirection,
     sortBy,
     sortDirection,
     t,
-    tagFilter,
-    toggleFilterTypeValue,
-    toggleTagFilterValue,
     validateOAuthBindingQuotaReserveField,
   } = props;
 
+  const { searchQuery, filterTypes, tagFilter } = oauthBindingFilters;
+  const toggleFilter = (field: "filterTypes" | "tagFilter", value: string) => {
+    setOauthBindingFilters((current) => ({
+      ...current,
+      [field]: current[field].includes(value)
+        ? current[field].filter((item) => item !== value)
+        : [...current[field], value],
+    }));
+  };
   const bindingDialogRef = useRef<HTMLDivElement>(null);
   const reserveDialogRef = useRef<HTMLDivElement>(null);
   const bindingOpen = Boolean(oauthBindingTargetActive);
@@ -301,9 +304,10 @@ export function CodexOAuthBindingModal(props: CodexAccountsViewProps) {
                               "搜索账号...",
                             )}
                             value={searchQuery}
-                            onChange={(event) =>
-                              setSearchQuery(event.target.value)
-                            }
+                            onChange={(event) => {
+                              const searchQuery = event.target.value;
+                              setOauthBindingFilters((current) => ({ ...current, searchQuery }));
+                            }}
                             disabled={oauthBindingSaving}
                           />
                         </div>
@@ -317,14 +321,14 @@ export function CodexOAuthBindingModal(props: CodexAccountsViewProps) {
                           clearLabel={t("accounts.clearFilter", "清空筛选")}
                           emptyLabel={t("common.none", "暂无")}
                           ariaLabel={t("common.shared.filterLabel", "筛选")}
-                          onToggleValue={toggleFilterTypeValue}
-                          onClear={clearFilterTypes}
+                          onToggleValue={(value) => toggleFilter("filterTypes", value)}
+                          onClear={() => setOauthBindingFilters((current) => ({ ...current, filterTypes: [] }))}
                         />
                         <AccountTagFilterDropdown
                           availableTags={oauthBindingAvailableTags}
                           selectedTags={tagFilter}
-                          onToggleTag={toggleTagFilterValue}
-                          onClear={clearTagFilter}
+                          onToggleTag={(value) => toggleFilter("tagFilter", value)}
+                          onClear={() => setOauthBindingFilters((current) => ({ ...current, tagFilter: [] }))}
                         />
                         <SingleSelectFilterDropdown
                           value={sortBy}

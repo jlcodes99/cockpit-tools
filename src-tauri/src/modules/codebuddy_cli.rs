@@ -11,7 +11,7 @@ use crate::models::codebuddy::CodebuddyAccount;
 use crate::modules::{account, atomic_write, secure_account_storage};
 
 pub(crate) const RUN_ARG: &str = "--cockpit-codebuddy-cli";
-const INSTANCES_FILE: &str = "codebuddy_cli_instances.json";
+pub(super) const INSTANCES_FILE: &str = "codebuddy_cli_instances.json";
 const WORKING_DIR_FILE: &str = "working-dir.json";
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]

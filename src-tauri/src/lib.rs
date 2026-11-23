@@ -57,8 +57,6 @@ pub fn try_run_codex_cli_resume() -> Option<i32> {
 use modules::config::CloseWindowBehavior;
 use modules::logger;
 use std::sync::OnceLock;
-#[cfg(target_os = "macos")]
-use tauri::ActivationPolicy;
 use tauri::RunEvent;
 use tauri::WindowEvent;
 use tauri::{Emitter, Manager};
@@ -133,6 +131,16 @@ mod tests {
         config.hide_dock_icon = false;
 
         assert!(!should_hide_startup_minimized_window(&config, true));
+    }
+
+    #[test]
+    fn startup_minimized_hides_even_without_tray_when_dock_icon_is_hidden() {
+        let mut config = UserConfig::default();
+        config.startup_minimized = true;
+        config.hide_dock_icon = true;
+        config.show_tray_icon = false;
+
+        assert!(should_hide_startup_minimized_window(&config, true));
     }
 
     #[test]
@@ -272,11 +280,7 @@ fn should_hide_startup_minimized_window(
     config: &modules::config::UserConfig,
     is_macos: bool,
 ) -> bool {
-    config.startup_minimized && is_macos && should_hide_dock_icon(config)
-}
-
-fn should_hide_dock_icon(config: &modules::config::UserConfig) -> bool {
-    config.show_tray_icon && config.hide_dock_icon
+    config.startup_minimized && is_macos && config.hide_dock_icon
 }
 
 fn should_preserve_main_window_for_menu_bar_refresh(
@@ -345,50 +349,8 @@ fn apply_startup_minimized(app: &tauri::AppHandle) {
     }
 }
 
-#[cfg(target_os = "macos")]
-fn apply_macos_activation_policy(app: &tauri::AppHandle) {
-    let config = modules::config::get_user_config();
-    if let Err(err) = set_macos_dock_policy(app, should_hide_dock_icon(&config)) {
-        logger::log_warn(&format!("[Window] 应用 macOS Dock 图标策略失败: {}", err));
-    }
-}
-
-#[cfg(target_os = "macos")]
-fn set_macos_dock_policy(app: &tauri::AppHandle, hide_dock_icon: bool) -> tauri::Result<()> {
-    let (policy, dock_visible, policy_label) = if hide_dock_icon {
-        (ActivationPolicy::Accessory, false, "hidden")
-    } else {
-        (ActivationPolicy::Regular, true, "visible")
-    };
-
-    app.set_activation_policy(policy)?;
-    app.set_dock_visibility(dock_visible)?;
-
-    if dock_visible {
-        let _ = app.show();
-        if let Some(window) = app.get_webview_window("main") {
-            let _ = window.show();
-        }
-    }
-
-    info!("[Window] 已应用 macOS Dock 图标策略: {}", policy_label);
-    Ok(())
-}
-
 fn apply_tray_visibility(app: &tauri::AppHandle, visible: bool) -> Result<(), String> {
-    #[cfg(target_os = "macos")]
-    if !visible {
-        set_macos_dock_policy(app, false).map_err(|err| err.to_string())?;
-    }
-    modules::tray::set_tray_visibility(app, visible)?;
-    #[cfg(target_os = "macos")]
-    if visible {
-        let config = modules::config::get_user_config();
-        if should_hide_dock_icon(&config) {
-            set_macos_dock_policy(app, true).map_err(|err| err.to_string())?;
-        }
-    }
-    Ok(())
+    modules::tray::set_tray_visibility(app, visible)
 }
 
 fn handle_zcode_oauth_deep_links(args: &[String]) -> bool {
@@ -451,6 +413,13 @@ pub fn run() {
     // Tauri and the tray's window recreation both read this configuration.
     let mut context = tauri::generate_context!();
     configure_main_window_decorations(context.config_mut(), cfg!(target_os = "linux"));
+    let startup_main_window_state = context
+        .config_mut()
+        .app
+        .windows
+        .iter_mut()
+        .find(|window| window.label == "main")
+        .and_then(modules::main_window_state::apply_state_to_window_config);
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
@@ -481,7 +450,7 @@ pub fn run() {
                 logger::log_warn(&format!("[Window] 单实例唤起恢复主窗口失败: {}", err));
             }
         }))
-        .setup(|app| {
+        .setup(move |app| {
             info!("Cockpit Tools 启动...");
             let current_exe = std::env::current_exe()
                 .map(|path| path.display().to_string())
@@ -612,6 +581,7 @@ pub fn run() {
             modules::codex_reset_automation::schedule_migration();
             tauri::async_runtime::spawn(modules::codex_subscription_refresh::run());
             tauri::async_runtime::spawn(modules::codex_proxy_desktop_router::restore_on_startup());
+            tauri::async_runtime::spawn(modules::ssh_server::run_api_service_sync());
 
             // 启动 WebSocket 服务（使用 Tauri 的 async runtime）
             tauri::async_runtime::spawn(async {
@@ -714,7 +684,7 @@ pub fn run() {
             }
 
             #[cfg(target_os = "macos")]
-            apply_macos_activation_policy(&app.handle());
+            modules::app_presence::apply_configured_policy(&app.handle());
 
             #[cfg(any(windows, target_os = "linux"))]
             {
@@ -823,9 +793,11 @@ pub fn run() {
                 startup_external_import_handled
             ));
 
-            // Restore last main-window size/position before optional startup minimize (#948 / #1132).
-            if let Some(main) = app.get_webview_window("main") {
-                modules::main_window_state::restore_to_window(&main);
+            // The initial size is already in the config. Restore placement before startup minimize.
+            if let (Some(main), Some(state)) =
+                (app.get_webview_window("main"), startup_main_window_state)
+            {
+                modules::main_window_state::restore_saved_placement(&main, state);
             }
 
             apply_startup_minimized(&app.handle());
@@ -1146,6 +1118,7 @@ pub fn run() {
             commands::logs::logs_get_snapshot,
             commands::logs::logs_open_log_directory,
             // Wakeup Commands
+            commands::wakeup::wakeup_get_default_transport_mode,
             commands::wakeup::wakeup_ensure_runtime_ready,
             commands::wakeup::trigger_wakeup,
             commands::wakeup::fetch_available_models,
@@ -1297,8 +1270,16 @@ pub fn run() {
             commands::codex::add_codex_account_with_token,
             commands::codex::add_codex_account_with_api_key,
             commands::codex::add_codex_account_from_grok,
+            commands::codex::add_codex_account_from_zcode,
             commands::codex::update_codex_account_name,
             commands::codex::update_codex_account_egress_proxy,
+            commands::codex::use_codex_client_proxy_defaults,
+            commands::codex_proxy_country::get_codex_proxy_country_policy,
+            commands::codex_proxy_country::set_codex_proxy_country_policy,
+            commands::codex_proxy_country::get_codex_proxy_env,
+            commands::codex_proxy_country::set_codex_proxy_env,
+            commands::codex_proxy_country::get_codex_proxy_country_checks,
+            commands::codex_proxy_country::check_codex_proxy_country,
             commands::codex::test_codex_account_egress_proxy,
             commands::codex::cancel_codex_account_egress_proxy,
             commands::codex::get_codex_account_proxy_status,
@@ -1896,6 +1877,7 @@ pub fn run() {
             commands::codex_instance::codex_list_sessions_across_instances,
             commands::codex_instance::codex_get_session_token_stats_across_instances,
             commands::codex_instance::codex_query_session_usage,
+            commands::codex_session_usage::codex_query_session_usage_requests,
             commands::codex_instance::codex_sync_session_usage,
             commands::codex_instance::codex_move_sessions_to_trash_across_instances,
             commands::codex_instance::codex_list_trashed_sessions_across_instances,

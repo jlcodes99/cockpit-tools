@@ -16,7 +16,7 @@ export interface CodexProxyExitChoice {
 export type CodexProxyExitFilter = 'all' | 'bound' | 'unbound' | 'disabled';
 
 /** Effective exit per account. `stale` means the saved catalog reference no longer resolves. */
-export type CodexProxyExitMode = 'independent' | 'unified' | 'default' | 'stale' | 'disabled';
+export type CodexProxyExitMode = 'independent' | 'unified' | 'default' | 'stale' | 'disabled' | 'client';
 
 export interface CodexProxyCatalogState {
   catalog: ProxyCatalog;
@@ -27,6 +27,7 @@ export interface CodexProxyCatalogState {
 export const EMPTY_CODEX_PROXY_EXIT_CHOICE: CodexProxyExitChoice = { sourceId: '', itemId: '', groupId: '', selections: {} };
 
 const exitModeKeys: Record<CodexProxyExitMode, string> = {
+  client: 'codex.proxy.modeClient',
   disabled: 'codex.proxy.modeDisabled',
   independent: 'codex.proxy.modeIndependent',
   unified: 'codex.proxy.modeUnified',
@@ -90,7 +91,8 @@ export function exitDraftState(binding: ProxyBindingValue, restored: CodexProxyE
  * Direct HTTP/SOCKS bindings cannot go stale, and a catalog that is still loading or failed
  * must never be reported as stale.
  */
-export function resolveExitMode(binding: ProxyBindingValue, state: CodexProxyCatalogState, followingUnified: boolean, disabled = false): CodexProxyExitMode {
+export function resolveExitMode(binding: ProxyBindingValue, state: CodexProxyCatalogState, followingUnified: boolean, disabled = false, clientDefaults = false): CodexProxyExitMode {
+  if (clientDefaults) return 'client';
   if (disabled) return 'disabled';
   if (!binding) return followingUnified ? 'unified' : 'default';
   if (!binding.sourceId || state.loading || state.failed) return 'independent';
@@ -112,7 +114,7 @@ export function unifiedFollowingIds(
   unified: CodexUnifiedProxyView | null | undefined,
 ): string[] {
   if (!unifiedProxyActive(unified)) return [];
-  return accounts.filter((account) => !account.egress_proxy_disabled && !saved(account)).map((account) => account.id);
+  return accounts.filter((account) => !account.egress_proxy_disabled && !account.egress_proxy_client_defaults && !saved(account)).map((account) => account.id);
 }
 
 export function filterProxyAccounts(accounts: CodexAccount[], options: {
@@ -135,7 +137,7 @@ export function batchUnbindTargets(
   accounts: CodexAccount[],
   saved: (account: CodexAccount) => ProxyBindingValue,
 ): BatchBindTarget[] {
-  return accounts.flatMap((account) => saved(account) || account.egress_proxy_disabled ? [{ account, willOverwrite: true }] : []);
+  return accounts.flatMap((account) => saved(account) || account.egress_proxy_disabled || account.egress_proxy_client_defaults ? [{ account, willOverwrite: true }] : []);
 }
 
 export interface CodexProxyBatchFailure {

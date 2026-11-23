@@ -274,3 +274,19 @@ test("release lookup and publication failures stop before public verification", 
     assert.doesNotMatch(result.stdout, /VERIFY /);
   }
 });
+
+test("Linux AppImage builds exclude host-graphics libwayland libraries", () => {
+  const linux = jobBody("build-linux", "build-linux-cli");
+  assert.match(linux, /LINUXDEPLOY_EXCLUDED_LIBRARIES: libwayland-\*/);
+  assert.match(linux, /npx tauri build --ci --config src-tauri\/tauri\.prebuilt-frontend\.conf\.json/);
+
+  const packageJson = JSON.parse(
+    fs.readFileSync(path.join(repoRoot, "package.json"), "utf8"),
+  );
+  const cliVersion = packageJson.devDependencies["@tauri-apps/cli"];
+  const [major, minor] = String(cliVersion).replace(/^\^/, "").split(".").map(Number);
+  assert.ok(
+    major > 2 || (major === 2 && minor >= 12),
+    `@tauri-apps/cli ${cliVersion} is too old to honor LINUXDEPLOY_EXCLUDED_LIBRARIES`,
+  );
+});

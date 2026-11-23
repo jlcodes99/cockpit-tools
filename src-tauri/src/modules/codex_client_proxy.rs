@@ -24,6 +24,7 @@ static IO: LazyLock<Arc<tokio::sync::Semaphore>> =
 pub enum Mode {
     #[default]
     Inherit,
+    ClientDefaults,
     BoundOauth,
     Independent,
     Direct,
@@ -435,10 +436,11 @@ async fn load_proxy_route(target: &str) -> Result<CodexAccount, String> {
             Some(setting.snapshot.ok_or("CLIENT_PROXY_STALE")?)
         }
         Mode::BoundOauth => Some(bound_snapshot(target).await?),
-        Mode::Inherit | Mode::Direct => None,
+        Mode::Inherit | Mode::Direct | Mode::ClientDefaults => None,
     };
     let mut account = synthetic(&route_id(target), raw);
     account.egress_proxy_disabled = setting.mode == Mode::Direct;
+    account.egress_proxy_client_defaults = setting.mode == Mode::ClientDefaults;
     Ok(account)
 }
 pub async fn resolve(target: &str) -> Result<super::process::CodexLaunchProxy, String> {
@@ -455,6 +457,7 @@ pub async fn resolve(target: &str) -> Result<super::process::CodexLaunchProxy, S
             resolve_prepared_route(&target, &account).await
         }
         Mode::Direct => Ok(CodexLaunchProxy::Direct),
+        Mode::ClientDefaults => Ok(CodexLaunchProxy::ClientDefaults),
         Mode::BoundOauth | Mode::Independent => {
             let account = load_route(&target).await?;
             resolve_prepared_route(&target, &account).await
@@ -564,6 +567,7 @@ pub async fn target_view(raw: &str) -> Result<TargetView, String> {
     account.email.clear();
     account.auth_mode = crate::models::codex::CodexAuthMode::Apikey;
     account.egress_proxy_disabled = current.mode == Mode::Direct;
+    account.egress_proxy_client_defaults = current.mode == Mode::ClientDefaults;
     if current.mode == Mode::BoundOauth {
         account.bound_oauth_account_id = bound_account_id(&target).await.ok();
     }
