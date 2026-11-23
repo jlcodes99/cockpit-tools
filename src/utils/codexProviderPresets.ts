@@ -221,6 +221,14 @@ export const CODEX_API_PROVIDER_PRESETS: readonly CodexApiProviderPreset[] = [
     apiKeyUrl: "https://app.requesty.ai/api-keys",
   },
   {
+    id: "worldrouter",
+    name: "WorldRouter",
+    baseUrls: ["https://inference-api.worldrouter.ai/v1"],
+    modelCatalog: ["gpt-5.4", "gpt-6.2-astra"],
+    website: "https://www.worldrouter.ai/",
+    apiKeyUrl: "https://www.worldrouter.ai/dashboard/api-keys",
+  },
+  {
     id: "aicodemirror",
     name: "AICodeMirror",
     baseUrls: [

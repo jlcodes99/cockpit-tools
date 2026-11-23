@@ -748,6 +748,21 @@ export const CLAUDE_DESKTOP_GATEWAY_PROVIDER_PRESETS: readonly ClaudeDesktopGate
     ),
   },
   {
+    id: 'worldrouter',
+    name: 'WorldRouter',
+    baseUrls: ['https://inference-api.worldrouter.ai'],
+    authScheme: 'bearer',
+    connectionMode: 'local_mapping',
+    website: 'https://www.worldrouter.ai',
+    apiKeyUrl: 'https://www.worldrouter.ai/dashboard/api-keys',
+    modelMappings: roleMappedRoutes(
+      'claude-sonnet-5-5',
+      'claude-opus-5-5',
+      'claude-haiku-5-5',
+      { supports1m: true },
+    ),
+  },
+  {
     id: 'pipellm',
     name: 'PIPELLM',
     baseUrls: ['https://cc-api.pipellm.ai'],
