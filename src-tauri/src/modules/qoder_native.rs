@@ -447,6 +447,54 @@ pub fn switch(account_id: &str, client: NativeClient) -> Result<(), String> {
     Ok(())
 }
 
+/// Stable key for the account the CN client is signed into, used by the local
+/// auto-import watcher to notice a change without importing first.
+pub fn local_identity_key() -> Option<String> {
+    let channel = cn_channel().ok()?;
+    for client in [NativeClient::Desktop, NativeClient::Cli] {
+        let Ok(root) = client.root(channel) else {
+            continue;
+        };
+        let path = root.join(client.filename());
+        if !path.exists() {
+            continue;
+        }
+        let Ok(bytes) = fs::read(&path) else {
+            continue;
+        };
+        let Ok(profile) = decode(&root, client, &bytes) else {
+            continue;
+        };
+        let Ok(info) = qoder_native_profile::from_client(&profile, channel) else {
+            continue;
+        };
+        let user = info
+            .get("id")
+            .and_then(serde_json::Value::as_str)
+            .filter(|value| !value.trim().is_empty());
+        if let Some(user) = user {
+            return Some(serde_json::json!([channel.marker(), user]).to_string());
+        }
+    }
+    None
+}
+
+/// CN accounts on disk. Used by the tray and the macOS menu, which both render
+/// the platform without going through a command.
+pub fn list_accounts() -> Vec<QoderAccount> {
+    QoderCnAccountStore::default_store()
+        .and_then(|store| store.list_accounts())
+        .unwrap_or_default()
+}
+
+/// Which stored CN account is currently selected.
+pub fn resolve_current_account_id(accounts: &[QoderAccount]) -> Option<String> {
+    super::provider_current_state::resolve_existing_current_account_id(
+        "qoder_cn",
+        accounts.iter().map(|account| account.id.as_str()),
+    )
+}
+
 /// Reads the credentials the installed CN client currently holds and stores
 /// them as an account. Nothing is written back to the client.
 pub fn import(client: NativeClient) -> Result<QoderAccount, String> {

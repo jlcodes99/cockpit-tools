@@ -315,6 +315,14 @@ fn spawn_refresh(platform: PlatformId, account_id: Option<String>) {
             (PlatformId::Qoder, None) => {
                 commands::qoder::refresh_all_qoder_tokens(app.clone()).await
             }
+            (PlatformId::QoderCn, Some(account_id)) => {
+                commands::qoder_cn::refresh_qoder_cn_token(app.clone(), account_id)
+                    .await
+                    .map(|_| 0)
+            }
+            (PlatformId::QoderCn, None) => {
+                commands::qoder_cn::refresh_all_qoder_cn_tokens(app.clone()).await
+            }
             (PlatformId::Zcode, Some(account_id)) => {
                 commands::zcode::refresh_zcode_account(app.clone(), account_id)
                     .await
@@ -437,6 +445,11 @@ fn spawn_switch_account(platform: PlatformId, account_id: String) {
             PlatformId::Qoder => commands::qoder::inject_qoder_account(app, account_id)
                 .await
                 .map(|_| ()),
+            PlatformId::QoderCn => {
+                commands::qoder_cn::inject_qoder_cn_account(app, account_id)
+                    .await
+                    .map(|_| ())
+            }
             PlatformId::Zcode => commands::zcode::inject_zcode_account(app, account_id).map(|_| ()),
             PlatformId::Trae
             | PlatformId::TraeSolo

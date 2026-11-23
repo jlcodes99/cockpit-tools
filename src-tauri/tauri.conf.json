@@ -93,6 +93,7 @@
       "../src/assets/icons/zed.png": "native-menu-icons/zed.png",
       "../src/assets/icons/zcode.png": "native-menu-icons/zcode.png",
       "../resources/codex/LICENSE.CLIProxyAPI": "licenses/CLIProxyAPI.txt",
+      "../resources/licenses/WorkBuddy-Switch-Next.txt": "licenses/WorkBuddy-Switch-Next.txt",
       "../resources/licenses/dnd-kit.txt": "licenses/dnd-kit.txt"
     },
     "macOS": {

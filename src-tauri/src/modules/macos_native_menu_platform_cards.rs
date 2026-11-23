@@ -680,6 +680,7 @@
             PlatformId::Cursor => build_cursor_cards(lang),
             PlatformId::Grok => build_grok_cards(lang),
             PlatformId::Qoder => build_qoder_cards(lang),
+            PlatformId::QoderCn => build_qoder_cn_cards(lang),
             PlatformId::Zcode => build_zcode_cards(lang),
             PlatformId::Trae
             | PlatformId::TraeSolo
@@ -1666,9 +1667,23 @@
         (cards, current_id, recommended)
     }
 
+    fn build_qoder_cn_cards(lang: &str) -> (Vec<AccountCard>, Option<String>, Option<String>) {
+        let accounts = modules::qoder_native::list_accounts();
+        let current_id = modules::qoder_native::resolve_current_account_id(&accounts);
+        build_qoder_cards_for(lang, accounts, current_id)
+    }
+
     fn build_qoder_cards(lang: &str) -> (Vec<AccountCard>, Option<String>, Option<String>) {
-        let mut accounts = modules::qoder_account::list_accounts();
+        let accounts = modules::qoder_account::list_accounts();
         let current_id = modules::qoder_account::resolve_current_account_id(&accounts);
+        build_qoder_cards_for(lang, accounts, current_id)
+    }
+
+    fn build_qoder_cards_for(
+        lang: &str,
+        mut accounts: Vec<crate::models::qoder::QoderAccount>,
+        current_id: Option<String>,
+    ) -> (Vec<AccountCard>, Option<String>, Option<String>) {
         accounts
             .sort_by_key(|account| std::cmp::Reverse(account.last_used.max(account.created_at)));
         let cards = accounts

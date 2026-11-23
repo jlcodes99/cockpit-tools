@@ -705,13 +705,7 @@ fn build_report_rows() -> Vec<ReportRow> {
         super::codebuddy_cn_account::list_accounts(),
     );
     append_qoder_rows(&mut rows, "Qoder", super::qoder_account::list_accounts());
-    append_qoder_rows(
-        &mut rows,
-        "Qoder CN",
-        super::qoder_cn_account::QoderCnAccountStore::default_store()
-            .and_then(|store| store.list_accounts())
-            .unwrap_or_default(),
-    );
+    append_qoder_rows(&mut rows, "Qoder CN", super::qoder_native::list_accounts());
     append_trae_rows(&mut rows);
     append_workbuddy_rows(&mut rows);
     append_zed_rows(&mut rows);

@@ -1955,13 +1955,8 @@ fn current_qoder_account() -> Option<crate::models::qoder::QoderAccount> {
 
 #[cfg(not(target_os = "macos"))]
 fn current_qoder_cn_account() -> Option<crate::models::qoder::QoderAccount> {
-    let store = crate::modules::qoder_cn_account::QoderCnAccountStore::default_store().ok()?;
-    let accounts = store.list_accounts().ok()?;
-    let current =
-        crate::modules::provider_current_state::resolve_existing_current_account_id(
-            "qoder_cn",
-            accounts.iter().map(|account| account.id.as_str()),
-        )?;
+    let accounts = crate::modules::qoder_native::list_accounts();
+    let current = crate::modules::qoder_native::resolve_current_account_id(&accounts)?;
     accounts.into_iter().find(|account| account.id == current)
 }
 
