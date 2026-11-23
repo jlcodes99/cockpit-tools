@@ -570,8 +570,6 @@ pub fn patch_general_config(
     let mut floating_always_on_top_changed = false;
     let mut tray_visibility_changed = false;
     #[cfg(target_os = "macos")]
-    let mut hide_dock_icon_changed = false;
-    #[cfg(target_os = "macos")]
     let mut tray_icon_style_changed = false;
     #[cfg(target_os = "macos")]
     let mut menu_bar_quota_changed = false;
@@ -582,8 +580,6 @@ pub fn patch_general_config(
         let previous_auto_import_from_local_enabled = current.auto_import_from_local_enabled;
         let previous_floating_always_on_top = current.floating_card_always_on_top;
         let previous_show_tray_icon = current.show_tray_icon;
-        #[cfg(target_os = "macos")]
-        let previous_hide_dock_icon = crate::should_hide_dock_icon(current);
         #[cfg(target_os = "macos")]
         let previous_tray_icon_style = current.tray_icon_style;
         #[cfg(target_os = "macos")]
@@ -607,7 +603,6 @@ pub fn patch_general_config(
         tray_visibility_changed = previous_show_tray_icon != current.show_tray_icon;
         #[cfg(target_os = "macos")]
         {
-            hide_dock_icon_changed = previous_hide_dock_icon != crate::should_hide_dock_icon(current);
             tray_icon_style_changed = previous_tray_icon_style != current.tray_icon_style;
             menu_bar_quota_changed = previous_menu_bar_quota
                 != (
@@ -661,9 +656,7 @@ pub fn patch_general_config(
     }
 
     #[cfg(target_os = "macos")]
-    if hide_dock_icon_changed && !tray_visibility_changed {
-        crate::apply_macos_activation_policy(&app);
-    }
+    modules::app_presence::apply_configured_policy(&app);
 
     #[cfg(target_os = "macos")]
     if tray_icon_style_changed {

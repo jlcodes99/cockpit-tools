@@ -727,8 +727,7 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                     </div>
                     <div className="row-control">
                       <SettingsDropdown
-                        value={showTrayIcon && hideDockIcon ? 'true' : 'false'}
-                        disabled={!showTrayIcon}
+                        value={hideDockIcon ? 'true' : 'false'}
                         options={[
                           { value: 'false', label: t('settings.general.hideDockIconOff', '否（显示Dock图标）') },
                           { value: 'true', label: t('settings.general.hideDockIconOn', '是（隐藏Dock图标）') },

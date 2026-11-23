@@ -8,5 +8,7 @@
   <string>Cockpit Tools</string>
   <key>LSRequiresCarbon</key>
   <false/>
+  <key>LSUIElement</key>
+  <true/>
 </dict>
 </plist>

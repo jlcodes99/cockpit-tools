@@ -57,8 +57,6 @@ pub fn try_run_codex_cli_resume() -> Option<i32> {
 use modules::config::CloseWindowBehavior;
 use modules::logger;
 use std::sync::OnceLock;
-#[cfg(target_os = "macos")]
-use tauri::ActivationPolicy;
 use tauri::RunEvent;
 use tauri::WindowEvent;
 use tauri::{Emitter, Manager};
@@ -133,6 +131,16 @@ mod tests {
         config.hide_dock_icon = false;
 
         assert!(!should_hide_startup_minimized_window(&config, true));
+    }
+
+    #[test]
+    fn startup_minimized_hides_even_without_tray_when_dock_icon_is_hidden() {
+        let mut config = UserConfig::default();
+        config.startup_minimized = true;
+        config.hide_dock_icon = true;
+        config.show_tray_icon = false;
+
+        assert!(should_hide_startup_minimized_window(&config, true));
     }
 
     #[test]
@@ -272,11 +280,7 @@ fn should_hide_startup_minimized_window(
     config: &modules::config::UserConfig,
     is_macos: bool,
 ) -> bool {
-    config.startup_minimized && is_macos && should_hide_dock_icon(config)
-}
-
-fn should_hide_dock_icon(config: &modules::config::UserConfig) -> bool {
-    config.show_tray_icon && config.hide_dock_icon
+    config.startup_minimized && is_macos && config.hide_dock_icon
 }
 
 fn should_preserve_main_window_for_menu_bar_refresh(
@@ -345,50 +349,8 @@ fn apply_startup_minimized(app: &tauri::AppHandle) {
     }
 }
 
-#[cfg(target_os = "macos")]
-fn apply_macos_activation_policy(app: &tauri::AppHandle) {
-    let config = modules::config::get_user_config();
-    if let Err(err) = set_macos_dock_policy(app, should_hide_dock_icon(&config)) {
-        logger::log_warn(&format!("[Window] 应用 macOS Dock 图标策略失败: {}", err));
-    }
-}
-
-#[cfg(target_os = "macos")]
-fn set_macos_dock_policy(app: &tauri::AppHandle, hide_dock_icon: bool) -> tauri::Result<()> {
-    let (policy, dock_visible, policy_label) = if hide_dock_icon {
-        (ActivationPolicy::Accessory, false, "hidden")
-    } else {
-        (ActivationPolicy::Regular, true, "visible")
-    };
-
-    app.set_activation_policy(policy)?;
-    app.set_dock_visibility(dock_visible)?;
-
-    if dock_visible {
-        let _ = app.show();
-        if let Some(window) = app.get_webview_window("main") {
-            let _ = window.show();
-        }
-    }
-
-    info!("[Window] 已应用 macOS Dock 图标策略: {}", policy_label);
-    Ok(())
-}
-
 fn apply_tray_visibility(app: &tauri::AppHandle, visible: bool) -> Result<(), String> {
-    #[cfg(target_os = "macos")]
-    if !visible {
-        set_macos_dock_policy(app, false).map_err(|err| err.to_string())?;
-    }
-    modules::tray::set_tray_visibility(app, visible)?;
-    #[cfg(target_os = "macos")]
-    if visible {
-        let config = modules::config::get_user_config();
-        if should_hide_dock_icon(&config) {
-            set_macos_dock_policy(app, true).map_err(|err| err.to_string())?;
-        }
-    }
-    Ok(())
+    modules::tray::set_tray_visibility(app, visible)
 }
 
 fn handle_zcode_oauth_deep_links(args: &[String]) -> bool {
@@ -714,7 +676,7 @@ pub fn run() {
             }
 
             #[cfg(target_os = "macos")]
-            apply_macos_activation_policy(&app.handle());
+            modules::app_presence::apply_configured_policy(&app.handle());
 
             #[cfg(any(windows, target_os = "linux"))]
             {

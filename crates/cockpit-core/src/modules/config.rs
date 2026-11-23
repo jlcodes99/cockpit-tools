@@ -1214,18 +1214,6 @@ pub fn load_user_config() -> Result<UserConfig, String> {
             }
         }
 
-        if !obj.contains_key("hide_dock_icon") {
-            let inherited_hide_dock_icon = obj
-                .get("minimize_behavior")
-                .and_then(|v| v.as_str())
-                .map(|v| v == "tray_only")
-                .unwrap_or_else(default_hide_dock_icon);
-            obj.insert(
-                "hide_dock_icon".to_string(),
-                json!(inherited_hide_dock_icon),
-            );
-        }
-
         if !obj.contains_key("floating_card_show_on_startup") {
             obj.insert(
                 "floating_card_show_on_startup".to_string(),

@@ -330,8 +330,9 @@
             assert_eq!(restored.show_tray_icon, visible);
             assert!(restored.hide_dock_icon);
             assert!(restored.menu_bar_quota_enabled);
-            assert_eq!(crate::should_hide_dock_icon(&restored), visible);
-            assert_eq!(crate::should_hide_startup_minimized_window(&restored, true), visible);
+            assert!(crate::should_hide_startup_minimized_window(
+                &restored, true
+            ));
         }
     }
 
