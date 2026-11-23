@@ -1689,6 +1689,8 @@ pub fn run() {
             commands::qoder::delete_qoder_accounts,
             commands::qoder::import_qoder_from_json,
             commands::qoder::import_qoder_from_local,
+            commands::qoder::import_qoder_native,
+            commands::qoder::inject_qoder_native,
             commands::qoder::qoder_oauth_login_start,
             commands::qoder::qoder_oauth_login_peek,
             commands::qoder::qoder_oauth_login_complete,

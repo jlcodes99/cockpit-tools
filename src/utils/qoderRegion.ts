@@ -4,8 +4,9 @@ export type QoderRegion = 'global' | 'cn';
 export type QoderClient = 'ide' | 'desktop' | 'cli';
 
 /**
- * Only the IDE adapter exists for the global client on this branch; the desktop
- * and CLI adapters write into the CN clients' own credential stores.
+ * Both realms ship a desktop app, but its credential file can only be read and
+ * written on Windows. The `ide` target is the global IDE's own database, so it
+ * exists only there; the CLI is cross-platform on both sides.
  */
 export function isQoderClientAvailable(
   region: QoderRegion,
@@ -13,7 +14,6 @@ export function isQoderClientAvailable(
   isWindows: boolean,
 ): boolean {
   if (client === 'ide') return region === 'global';
-  if (region === 'global') return false;
   if (client === 'desktop') return isWindows;
   return true;
 }

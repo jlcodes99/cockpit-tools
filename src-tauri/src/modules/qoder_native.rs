@@ -1,8 +1,9 @@
-//! Native Qoder CN client adapters. Credential schemas and CLI encryption are
-//! adapted from workbuddy-switch-next (MIT); realm selection is always explicit.
+//! Native Qoder client adapters for the global and public CN apps. Credential
+//! schemas and CLI encryption are adapted from workbuddy-switch-next (MIT);
+//! the realm is always explicit and selects both the copy and the store.
 use crate::models::qoder::QoderAccount;
 use crate::modules::{
-    atomic_write, logger,
+    atomic_write, logger, qoder_account,
     qoder_channel::{Channel, CredentialSource},
     qoder_cn_account::QoderCnAccountStore,
     qoder_native_profile,
@@ -25,13 +26,86 @@ static SWITCH_LOCK: Mutex<()> = Mutex::new(());
 /// How many previous credential sets to keep under `qoder-switch-backups`.
 const SWITCH_BACKUP_KEEP: usize = 5;
 
+/// Per-account overlays the desktop client writes next to its credentials.
+const DESKTOP_ACCOUNT_OVERLAYS: &[&str] =
+    &["auth-profile-overlays.v1.dat", "channel-activation.v1.json"];
+
 fn io_error(error: std::io::Error) -> String {
     format!("QODER_NATIVE_STORAGE: {error}")
 }
 
-/// The public CN client, the only channel the native adapters are exposed for.
-fn cn_channel() -> Result<Channel, String> {
-    Channel::for_source(CredentialSource::PublicCn).ok_or_else(|| "QODER_REGION_INVALID".into())
+/// The realm a native adapter writes into. The two clients keep separate
+/// credential stores and separate data roots, so a realm also selects the store
+/// an imported account belongs to.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NativeRegion {
+    Global,
+    Cn,
+}
+
+impl NativeRegion {
+    pub fn parse(value: Option<&str>) -> Result<Self, String> {
+        match value.unwrap_or("global") {
+            "global" => Ok(Self::Global),
+            "cn" => Ok(Self::Cn),
+            _ => Err("QODER_REGION_INVALID".into()),
+        }
+    }
+
+    fn channel(self) -> Result<Channel, String> {
+        let source = match self {
+            Self::Global => CredentialSource::GlobalIde,
+            Self::Cn => CredentialSource::PublicCn,
+        };
+        Channel::for_source(source).ok_or_else(|| "QODER_REGION_INVALID".into())
+    }
+
+    /// Platform id of the pointer that records what the client is signed into.
+    fn platform_id(self) -> &'static str {
+        match self {
+            Self::Global => "qoder",
+            Self::Cn => "qoder_cn",
+        }
+    }
+
+    fn desktop_process_names(self) -> &'static [&'static str] {
+        match self {
+            Self::Global => GLOBAL_DESKTOP_PROCESS_NAMES,
+            Self::Cn => CN_DESKTOP_PROCESS_NAMES,
+        }
+    }
+
+    fn cli_process_names(self) -> &'static [&'static str] {
+        match self {
+            Self::Global => GLOBAL_CLI_PROCESS_NAMES,
+            Self::Cn => CN_CLI_PROCESS_NAMES,
+        }
+    }
+
+    fn load_account(self, account_id: &str) -> Result<QoderAccount, String> {
+        let account = match self {
+            Self::Global => qoder_account::load_account(account_id),
+            Self::Cn => QoderCnAccountStore::default_store()?.load_account(account_id)?,
+        };
+        account.ok_or_else(|| "QODER_SESSION_CHANGED".into())
+    }
+
+    fn upsert(self, info: Value) -> Result<QoderAccount, String> {
+        match self {
+            Self::Global => qoder_account::upsert_account_from_snapshot(info, None, None),
+            Self::Cn => {
+                QoderCnAccountStore::default_store()?.upsert_from_snapshot(info, None, None)
+            }
+        }
+    }
+
+    /// Records that the credentials were just written to the client.
+    fn mark_switched(self, account_id: &str) -> Result<(), String> {
+        match self {
+            Self::Global => qoder_account::mark_switched(account_id),
+            Self::Cn => QoderCnAccountStore::default_store()?.mark_switched(account_id),
+        }
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -190,6 +264,11 @@ fn encode(root: &Path, client: NativeClient, profile: &Value) -> Result<Vec<u8>,
     Ok(bytes)
 }
 
+/// 全局客户端独占的名字（CN 版没有 `Qoder.exe`）。
+const GLOBAL_DESKTOP_PROCESS_NAMES: &[&str] =
+    &["qoder.exe", "qoder", "qoder launcher.exe", "qoderlauncher.exe", "qoderlauncher"];
+const GLOBAL_CLI_PROCESS_NAMES: &[&str] = &["qodercli.exe", "qodercli"];
+
 /// The CN client shares its launcher process names with the global one. Matching
 /// on names alone either kills the global client (`taskkill /T /F` takes the
 /// child tree) or lets the resident global launcher block CN switching, so a
@@ -297,15 +376,27 @@ pub(crate) fn qoder_cn_desktop_executable(system: &sysinfo::System) -> Option<Pa
         .find(|path| path.is_file())
 }
 
-fn ensure_idle(client: NativeClient) -> Result<(), String> {
+/// Whether the target client is running. Only the CN desktop client needs the
+/// install-directory guard, because only it shares its launcher names with the
+/// global one; the other three combinations have distinct names.
+fn ensure_idle(region: NativeRegion, client: NativeClient) -> Result<(), String> {
     let system = sysinfo::System::new_all();
     if system.processes().is_empty() {
         return Err("QODER_NATIVE_PROCESS_PROBE_FAILED".into());
     }
-    let running = match client {
-        NativeClient::Desktop => !qoder_cn_desktop_pids(&system).is_empty(),
-        NativeClient::Cli => system.processes().values().any(|process| {
-            CN_CLI_PROCESS_NAMES.contains(
+    let running = match (region, client) {
+        (NativeRegion::Cn, NativeClient::Desktop) => !qoder_cn_desktop_pids(&system).is_empty(),
+        (region, NativeClient::Desktop) => system.processes().values().any(|process| {
+            region.desktop_process_names().contains(
+                &process
+                    .name()
+                    .to_string_lossy()
+                    .to_ascii_lowercase()
+                    .as_str(),
+            )
+        }),
+        (region, NativeClient::Cli) => system.processes().values().any(|process| {
+            region.cli_process_names().contains(
                 &process
                     .name()
                     .to_string_lossy()
@@ -351,7 +442,7 @@ fn prune_switch_backups(root: &Path, keep: usize) -> usize {
         match fs::remove_dir_all(&path) {
             Ok(()) => removed += 1,
             Err(error) => logger::log_warn(&format!(
-                "[Qoder CN Switch] 清理旧备份失败: path={}, error={error}",
+                "[Qoder Switch] 清理旧备份失败: path={}, error={error}",
                 path.display()
             )),
         }
@@ -359,25 +450,31 @@ fn prune_switch_backups(root: &Path, keep: usize) -> usize {
     removed
 }
 
-/// Writes one account's credentials into the installed CN client. The previous
+/// Writes one account's credentials into the installed client. The previous
 /// file is backed up and restored if the write cannot be read back.
-pub fn switch(account_id: &str, client: NativeClient) -> Result<(), String> {
+pub fn switch(
+    region: NativeRegion,
+    account_id: &str,
+    client: NativeClient,
+) -> Result<(), String> {
     let _guard = SWITCH_LOCK.lock().map_err(|_| "QODER_ACCOUNT_BUSY")?;
-    let channel = cn_channel()?;
-    let store = QoderCnAccountStore::default_store()?;
-    let account = store
-        .load_account(account_id)?
-        .ok_or("QODER_SESSION_CHANGED")?;
+    let channel = region.channel()?;
+    let account = region.load_account(account_id)?;
     let info = account
         .auth_user_info_raw
         .as_ref()
         .ok_or("QODER_NATIVE_TOKEN_MISSING")?;
-    ensure_idle(client)?;
+    // A credential only works in the client that issued it; writing a global
+    // account into the CN client would leave both sides inconsistent.
+    if super::qoder_channel::credential_source(&account)? != channel.source() {
+        return Err("QODER_PLATFORM_MISMATCH".into());
+    }
+    ensure_idle(region, client)?;
     let profile = qoder_native_profile::for_client(info, client == NativeClient::Desktop)?;
     let root = client.root(channel)?;
     // Require an initialized client: do not synthesize machine IDs or OS keys.
     if !root.is_dir() {
-        return Err("请先启动一次 Qoder CN 客户端，再切换账号".into());
+        return Err("请先启动一次目标 Qoder 客户端，再切换账号".into());
     }
     let lock = fs::OpenOptions::new()
         .read(true)
@@ -402,9 +499,26 @@ pub fn switch(account_id: &str, client: NativeClient) -> Result<(), String> {
     if let Some(previous) = &previous {
         atomic_write::write_bytes_atomic(&backup.join(client.filename()), previous)?;
     }
+    // The desktop client keeps per-account overlays next to its credentials. They
+    // describe the account on its way out, so they are cleared with the switch and
+    // restored on rollback.
+    let mut overlays = Vec::new();
+    if client == NativeClient::Desktop {
+        for name in DESKTOP_ACCOUNT_OVERLAYS {
+            let target = root.join(name);
+            match fs::read(&target) {
+                Ok(bytes) => {
+                    atomic_write::write_bytes_atomic(&backup.join(name), &bytes)?;
+                    overlays.push((target, bytes));
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => return Err(io_error(error)),
+            }
+        }
+    }
     let mut write_started = false;
     let result = (|| -> Result<(), String> {
-        ensure_idle(client)?;
+        ensure_idle(region, client)?;
         if fs::read(&path).ok() != previous {
             return Err("QODER_SESSION_CHANGED".into());
         }
@@ -412,6 +526,9 @@ pub fn switch(account_id: &str, client: NativeClient) -> Result<(), String> {
         // Only now can a rollback be needed: a failed atomic write leaves the
         // original file intact, and restoring it would be a second mutation.
         write_started = true;
+        for (target, _) in &overlays {
+            atomic_write::remove_file_locked(target)?;
+        }
         if decode(&root, client, &fs::read(&path).map_err(io_error)?)? != profile {
             return Err("QODER_NATIVE_READBACK_FAILED".into());
         }
@@ -425,7 +542,11 @@ pub fn switch(account_id: &str, client: NativeClient) -> Result<(), String> {
             Some(bytes) => atomic_write::write_bytes_atomic(&path, bytes),
             None => fs::remove_file(&path).map_err(io_error),
         };
-        if restore.is_err() {
+        let mut rollback_failed = restore.is_err();
+        for (target, bytes) in &overlays {
+            rollback_failed |= atomic_write::write_bytes_atomic(target, bytes).is_err();
+        }
+        if rollback_failed {
             return Err(format!(
                 "{error}; 回滚未完成; 备份目录: {}",
                 backup.display()
@@ -433,24 +554,30 @@ pub fn switch(account_id: &str, client: NativeClient) -> Result<(), String> {
         }
         return Err(error);
     }
-    store.mark_switched(account_id)?;
-    // The client stores are outside the app's control, so the recorded pointer is
-    // the only way to show which account the CN clients currently hold. A failure
-    // here must not turn a completed write into an error: the credentials are
-    // already in place, and a retry would trip the session-changed guard.
-    if let Err(error) = super::provider_current_state::set_current_account_id("qoder_cn", Some(account_id))
-    {
-        logger::log_warn(&format!(
-            "[Qoder CN Switch] 记录当前账号失败: account_id={account_id}, error={error}"
-        ));
+    region.mark_switched(account_id)?;
+    // The CN client stores are outside the app's control, so the recorded pointer
+    // is the only way to show which account they currently hold. The global
+    // platform derives its pointer from the IDE database instead, so writing it
+    // here would fight the next reconciliation. A failure must not turn a
+    // completed write into an error: the credentials are already in place, and a
+    // retry would trip the session-changed guard.
+    if region == NativeRegion::Cn {
+        if let Err(error) = super::provider_current_state::set_current_account_id(
+            region.platform_id(),
+            Some(account_id),
+        ) {
+            logger::log_warn(&format!(
+                "[Qoder CN Switch] 记录当前账号失败: account_id={account_id}, error={error}"
+            ));
+        }
     }
     Ok(())
 }
 
-/// Stable key for the account the CN client is signed into, used by the local
-/// auto-import watcher to notice a change without importing first.
-pub fn local_identity_key() -> Option<String> {
-    let channel = cn_channel().ok()?;
+/// Stable key for the account the client of `region` is signed into, used by the
+/// local auto-import watcher to notice a change without importing first.
+pub fn local_identity_key(region: NativeRegion) -> Option<String> {
+    let channel = region.channel().ok()?;
     for client in [NativeClient::Desktop, NativeClient::Cli] {
         let Ok(root) = client.root(channel) else {
             continue;
@@ -502,13 +629,13 @@ pub fn run_quota_alert_if_needed(
     super::qoder_quota_alert::run(super::qoder_quota_alert::QoderStore::Cn)
 }
 
-/// Reads the credentials the installed CN client currently holds and stores
-/// them as an account. Nothing is written back to the client.
-pub fn import(client: NativeClient) -> Result<QoderAccount, String> {
+/// Reads the credentials the installed client currently holds and stores them as
+/// an account in that region's store. Nothing is written back to the client.
+pub fn import(region: NativeRegion, client: NativeClient) -> Result<QoderAccount, String> {
     // Shares the switch lock: reading credentials mid-switch would store the
     // account that is on its way out.
     let _guard = SWITCH_LOCK.lock().map_err(|_| "QODER_ACCOUNT_BUSY")?;
-    let channel = cn_channel()?;
+    let channel = region.channel()?;
     let root = client.root(channel)?;
     let profile = decode(
         &root,
@@ -516,13 +643,13 @@ pub fn import(client: NativeClient) -> Result<QoderAccount, String> {
         &fs::read(root.join(client.filename())).map_err(io_error)?,
     )?;
     let info = qoder_native_profile::from_client(&profile, channel)?;
-    QoderCnAccountStore::default_store()?.upsert_from_snapshot(info, None, None)
+    region.upsert(info)
 }
 
-/// Imports whichever CN client profiles exist. Returns `Ok(false)` when neither
-/// client has ever signed in on this machine.
-pub fn import_from_local() -> Result<bool, String> {
-    let channel = cn_channel()?;
+/// Imports whichever client profiles of `region` exist. Returns `Ok(false)` when
+/// neither client has ever signed in on this machine.
+pub fn import_from_local(region: NativeRegion) -> Result<bool, String> {
+    let channel = region.channel()?;
     let mut found = false;
     let mut last_error = None;
     let mut imported = false;
@@ -532,11 +659,11 @@ pub fn import_from_local() -> Result<bool, String> {
             continue;
         }
         found = true;
-        match import(client) {
+        match import(region, client) {
             Ok(_) => imported = true,
             Err(error) => {
                 logger::log_warn(&format!(
-                    "[Qoder CN Native] 导入客户端凭据失败: client={}, error={error}",
+                    "[Qoder Native] 导入客户端凭据失败: client={}, error={error}",
                     client.filename()
                 ));
                 last_error = Some(error);
@@ -556,7 +683,7 @@ pub fn import_from_local() -> Result<bool, String> {
 /// Validates an import payload and stamps the CN marker before it reaches the
 /// store, so a global account can never land in the CN index.
 pub fn prepare_cn_import(value: &mut Value) -> Result<(), String> {
-    qoder_native_profile::prepare_import(value, cn_channel()?)
+    qoder_native_profile::prepare_import(value, NativeRegion::Cn.channel()?)
 }
 
 #[cfg(test)]
@@ -581,6 +708,32 @@ mod tests {
             Some(cn),
             Some(cn_dir)
         ));
+    }
+
+    /// 两个 realm 必须落到不同的数据根和不同的 CLI 进程名：混用会把账号写进
+    /// 对方客户端的凭据文件里。
+    #[test]
+    fn regions_select_their_own_channel_and_process_names() {
+        assert_eq!(NativeRegion::parse(None).unwrap(), NativeRegion::Global);
+        assert_eq!(
+            NativeRegion::parse(Some("global")).unwrap(),
+            NativeRegion::Global
+        );
+        assert_eq!(NativeRegion::parse(Some("cn")).unwrap(), NativeRegion::Cn);
+        assert!(NativeRegion::parse(Some("qodercn")).is_err());
+
+        let global = NativeRegion::Global.channel().unwrap();
+        let cn = NativeRegion::Cn.channel().unwrap();
+        assert_ne!(global.desktop_dir(), cn.desktop_dir());
+        assert_ne!(global.cli_dir(), cn.cli_dir());
+        assert_eq!(global.openapi_base_url(), "https://openapi.qoder.sh");
+        assert_eq!(cn.openapi_base_url(), "https://openapi.qoder.com.cn");
+
+        assert!(NativeRegion::Global
+            .desktop_process_names()
+            .contains(&"qoder.exe"));
+        assert!(NativeRegion::Global.cli_process_names().contains(&"qodercli"));
+        assert!(NativeRegion::Cn.cli_process_names().contains(&"qoderclicn"));
     }
 
     #[test]

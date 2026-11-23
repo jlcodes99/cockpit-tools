@@ -65,22 +65,27 @@ export async function importQoderFromLocal(): Promise<QoderAccount[]> {
 }
 
 /**
- * The native desktop/CLI adapters only exist for the CN clients, whose credential
- * stores are separate from the IDE database. `isQoderClientAvailable` therefore
- * never offers those clients for the global region.
+ * Reads the credentials the installed global client holds. The desktop and CLI
+ * clients keep their own files, separate from the IDE database the `ide` target
+ * uses, so a client has to be named explicitly.
  */
 export async function importQoderNative(
-  _region: QoderRegion,
-  _client: QoderClient,
+  region: QoderRegion,
+  client: QoderClient,
 ): Promise<QoderAccount[]> {
-  throw new Error('QODER_CLIENT_INVALID: 国际版仅支持 IDE 适配器');
+  return await invoke('import_qoder_native', { region, client });
 }
 
+/**
+ * Writes one account into the installed global client. The client has to be
+ * closed first and is reopened by the user, so the outcome never claims a
+ * relaunch.
+ */
 export async function injectQoderNative(
-  _accountId: string,
-  _client: QoderClient,
+  accountId: string,
+  client: QoderClient,
 ): Promise<QoderSwitchOutcome> {
-  throw new Error('QODER_CLIENT_INVALID: 国际版仅支持 IDE 适配器');
+  return await invoke('inject_qoder_native', { accountId, client });
 }
 
 export async function qoderOauthLoginStart(_region?: QoderRegion): Promise<QoderOAuthStartResponse> {

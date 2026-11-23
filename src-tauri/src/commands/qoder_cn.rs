@@ -34,7 +34,7 @@ pub async fn import_qoder_cn_native(
     ensure_cn_region(region.as_deref())?;
     let client = qoder_native::NativeClient::parse(&client)?;
     tauri::async_runtime::spawn_blocking(move || {
-        qoder_native::import(client).map(|item| vec![item])
+        qoder_native::import(qoder_native::NativeRegion::Cn, client).map(|item| vec![item])
     })
     .await
     .map_err(|_| "QODER_NATIVE_WORKER_FAILED".to_string())?
@@ -42,7 +42,9 @@ pub async fn import_qoder_cn_native(
 
 #[tauri::command]
 pub async fn import_qoder_cn_from_local(app: AppHandle) -> Result<Vec<QoderAccount>, String> {
-    let found = tauri::async_runtime::spawn_blocking(qoder_native::import_from_local)
+    let found = tauri::async_runtime::spawn_blocking(|| {
+        qoder_native::import_from_local(qoder_native::NativeRegion::Cn)
+    })
         .await
         .map_err(|_| "QODER_NATIVE_WORKER_FAILED".to_string())??;
     if !found {
@@ -126,7 +128,7 @@ fn switch_qoder_cn(
     target: qoder_native::NativeClient,
 ) -> Result<bool, String> {
     if target != qoder_native::NativeClient::Desktop {
-        qoder_native::switch(account_id, target)?;
+        qoder_native::switch(qoder_native::NativeRegion::Cn, account_id, target)?;
         return Ok(false);
     }
 
@@ -153,7 +155,7 @@ fn switch_qoder_cn(
             return Err(restore_after_failure(launch_path.as_deref(), close_error));
         }
     }
-    if let Err(error) = qoder_native::switch(account_id, target) {
+    if let Err(error) = qoder_native::switch(qoder_native::NativeRegion::Cn, account_id, target) {
         // Credentials were rolled back and the client is closed, so the real
         // state depends on whether it comes back, not on the original error.
         return Err(restore_after_failure(launch_path.as_deref(), error));
@@ -189,7 +191,7 @@ fn switch_qoder_cn(
     account_id: &str,
     target: qoder_native::NativeClient,
 ) -> Result<bool, String> {
-    qoder_native::switch(account_id, target)?;
+    qoder_native::switch(qoder_native::NativeRegion::Cn, account_id, target)?;
     Ok(false)
 }
 
@@ -207,7 +209,9 @@ fn default_cn_client() -> qoder_native::NativeClient {
 pub async fn inject_qoder_cn_account(app: AppHandle, account_id: String) -> Result<String, String> {
     qoder_oauth::prepare_cn_account_for_switch(&account_id).await?;
     let id = account_id.clone();
-    tauri::async_runtime::spawn_blocking(move || qoder_native::switch(&id, default_cn_client()))
+    tauri::async_runtime::spawn_blocking(move || {
+        qoder_native::switch(qoder_native::NativeRegion::Cn, &id, default_cn_client())
+    })
         .await
         .map_err(|_| "QODER_NATIVE_WORKER_FAILED".to_string())??;
     if let Err(error) = crate::modules::tray::update_tray_menu(&app) {

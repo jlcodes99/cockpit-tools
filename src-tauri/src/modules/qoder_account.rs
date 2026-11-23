@@ -1167,6 +1167,17 @@ pub(crate) fn resolve_current_account_id(accounts: &[QoderAccount]) -> Option<St
     )
 }
 
+/// 记录凭据刚被写入客户端，供列表显示"当前登录"。原生适配器的切换走这里，
+/// 与 IDE 注入路径分开：那条路径改的是 state.vscdb，这条只动客户端凭据文件。
+pub fn mark_switched(account_id: &str) -> Result<(), String> {
+    update_existing_account(account_id, |account| {
+        account.last_used = now_ts();
+        account.last_switched_at = Some(account.last_used);
+    })?
+    .ok_or_else(|| "QODER_ACCOUNT_NOT_FOUND".to_string())?;
+    Ok(())
+}
+
 /// 刷新后检查全局 Qoder 账号的剩余额度。判定见 `qoder_quota_alert`。
 pub fn run_quota_alert_if_needed(
 ) -> Result<Option<crate::modules::account::QuotaAlertPayload>, String> {

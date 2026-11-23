@@ -37,11 +37,18 @@ reuse the global IDE's machine token.
 Qoder CN supports device authorization, JSON and native import, quota refresh, and switching the
 default native desktop or CLI client.
 
-On Windows, a desktop switch resolves the launch path (configured → auto-detected → running
+On Windows, a CN desktop switch resolves the launch path (configured → auto-detected → running
 process), closes the running client, backs up the existing profile, writes atomically, verifies the
 result, restores the backup if verification fails, and relaunches the client. Set a custom launch
 path in Settings when the client is installed outside the usual locations; the detected path is
 written back so the probe runs once.
+
+The same descriptor-driven adapters serve the global client, where the named targets are the Qoder
+desktop app (`com.qoder.app.stable`) and the Qoder CLI (`.qoder`); the IDE target keeps using the
+`state.vscdb` path. A global switch never reopens the client — close it first, then start it again
+once the write is reported. Desktop writes also drop the per-account overlays
+(`auth-profile-overlays.v1.dat`, `channel-activation.v1.json`), which describe the account that was
+just replaced, and restore them if the write has to be rolled back.
 
 The CLI target writes credentials only — reopen the terminal afterwards.
 
@@ -54,8 +61,8 @@ The CLI target writes credentials only — reopen the terminal afterwards.
 
 ## Limitations
 
-- The desktop credential adapter is Windows-only; on macOS and Linux only the CLI target is
-  available.
+- The desktop credential adapter is Windows-only for both realms; on macOS and Linux only the CLI
+  target is available.
 - Multiple instances of the CN desktop client are not supported.
 
 ## Attribution

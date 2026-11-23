@@ -290,14 +290,16 @@ fn peek_qoder_identity() -> Option<String> {
 }
 
 fn peek_qoder_cn_identity() -> Option<String> {
-    qoder_native::local_identity_key()
+    qoder_native::local_identity_key(qoder_native::NativeRegion::Cn)
 }
 
 fn import_qoder_cn() -> ImportFuture {
     Box::pin(async {
-        tauri::async_runtime::spawn_blocking(qoder_native::import_from_local)
-            .await
-            .map_err(|error| error.to_string())?
+        tauri::async_runtime::spawn_blocking(|| {
+            qoder_native::import_from_local(qoder_native::NativeRegion::Cn)
+        })
+        .await
+        .map_err(|error| error.to_string())?
     })
 }
 

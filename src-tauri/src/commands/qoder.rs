@@ -2,7 +2,7 @@ use std::time::Instant;
 use tauri::{AppHandle, Emitter};
 
 use crate::models::qoder::{QoderAccount, QoderOAuthStartResponse};
-use crate::modules::{logger, qoder_account, qoder_oauth};
+use crate::modules::{logger, qoder_account, qoder_native, qoder_oauth};
 
 #[tauri::command]
 pub fn list_qoder_accounts() -> Result<Vec<QoderAccount>, String> {
@@ -42,6 +42,55 @@ pub async fn import_qoder_from_local(app: AppHandle) -> Result<Vec<QoderAccount>
         }
         None => Err("未找到本地 Qoder 登录信息".to_string()),
     }
+}
+
+/// Reads the credentials the installed global client holds. The CN platform has
+/// its own command, so a region mismatch is rejected instead of guessed.
+#[tauri::command]
+pub async fn import_qoder_native(
+    region: Option<String>,
+    client: String,
+) -> Result<Vec<QoderAccount>, String> {
+    let region = qoder_native::NativeRegion::parse(region.as_deref())?;
+    if region != qoder_native::NativeRegion::Global {
+        return Err("QODER_PLATFORM_MISMATCH".into());
+    }
+    let client = qoder_native::NativeClient::parse(&client)?;
+    let account = tauri::async_runtime::spawn_blocking(move || qoder_native::import(region, client))
+        .await
+        .map_err(|_| "QODER_NATIVE_WORKER_FAILED".to_string())??;
+    Ok(vec![account])
+}
+
+/// Result of writing into a native client. The global desktop and CLI adapters
+/// require the client to be closed first and never reopen it themselves, so
+/// `relaunched` is always false here; the field keeps the payload identical to
+/// the CN command so the UI renders one shape.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QoderNativeSwitchOutcome {
+    account_id: String,
+    relaunched: bool,
+}
+
+/// Writes one account into the installed global desktop or CLI client.
+#[tauri::command]
+pub async fn inject_qoder_native(
+    account_id: String,
+    client: String,
+) -> Result<QoderNativeSwitchOutcome, String> {
+    let target = qoder_native::NativeClient::parse(&client)?;
+    qoder_oauth::prepare_account_for_switch(&account_id).await?;
+    let id = account_id.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        qoder_native::switch(qoder_native::NativeRegion::Global, &id, target)
+    })
+    .await
+    .map_err(|_| "QODER_NATIVE_WORKER_FAILED".to_string())??;
+    Ok(QoderNativeSwitchOutcome {
+        account_id,
+        relaunched: false,
+    })
 }
 
 #[tauri::command]
