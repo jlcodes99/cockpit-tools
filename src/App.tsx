@@ -3280,7 +3280,7 @@ function MainApp() {
       console.error('设置应用路径失败:', error);
       setAppPathActionError((readMissingLaunchPathApp(error) || /^CLI_PATH_NOT_FOUND:/.test(String(error).replace(/^Error: /, '')))
         ? t('appPath.missing.invalidPath', { app: appPathMissingAppName })
-        : appPathMissing.app === 'qoder' ? formatQoderError(error) : String(error));
+        : appPathMissing.app === 'qoder' || appPathMissing.app === 'qoder_cn' ? formatQoderError(error) : String(error));
       setAppPathSetting(false);
     } finally {
       setAppPathSetting(false);
@@ -3680,6 +3680,8 @@ function MainApp() {
                                       ? t('settings.general.codebuddyPathReset', '重置默认')
                                     : appPathMissing.app === 'qoder'
                                       ? t('settings.general.qoderPathReset', '重置默认')
+                                    : appPathMissing.app === 'qoder_cn'
+                                      ? t('settings.general.qoderCnPathReset', '重置默认')
                                     : isTraePlatformApp(appPathMissing.app)
                                       ? t('settings.general.traePathReset', '重置默认')
                                     : t('settings.general.codexPathReset', '重置默认')

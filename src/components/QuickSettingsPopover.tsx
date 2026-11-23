@@ -140,6 +140,7 @@ interface GeneralConfig {
   codebuddy_cn_app_path: string;
   codebuddy_cn_share_sessions_on_switch: boolean;
   qoder_app_path: string;
+  qoder_cn_app_path: string;
   zcode_app_path: string;
   trae_app_path: string;
   trae_solo_app_path: string;
