@@ -3,6 +3,7 @@
 fn validate_projection_cursors(
     root: &Path,
     target: &Path,
+    lineage: &HashMap<String, Rollout>,
     budget: &CopyBudget<'_>,
 ) -> Result<(), String> {
     budget.check()?;
@@ -55,19 +56,23 @@ fn validate_projection_cursors(
     let mut stale_threads = Vec::new();
     for (id, offset, next_ordinal) in rows {
         budget.check()?;
-        let path: Option<String> = state
-            .query_row("SELECT rollout_path FROM threads WHERE id=?1", [&id], |r| {
-                r.get(0)
-            })
-            .optional()
-            .map_err(|e| e.to_string())?;
-        // Historical cache rows for deleted threads do not prove missing live history.
-        let Some(path) = path else {
-            continue;
+        let rollout_path = if let Some(rollout) = lineage.get(&id) {
+            rollout.path.clone()
+        } else {
+            let path: Option<String> = state
+                .query_row("SELECT rollout_path FROM threads WHERE id=?1", [&id], |r| {
+                    r.get(0)
+                })
+                .optional()
+                .map_err(|e| e.to_string())?;
+            // Historical cache rows for deleted threads do not prove missing live history.
+            let Some(path) = path else {
+                continue;
+            };
+            let relative = relative_profile_path(Path::new(&path), target)
+                .ok_or_else(|| format!("会话 {id} 的历史路径不在副本中"))?;
+            root.join(relative)
         };
-        let relative = relative_profile_path(Path::new(&path), target)
-            .ok_or_else(|| format!("会话 {id} 的历史路径不在副本中"))?;
-        let rollout_path = root.join(relative);
         if offset < 0 {
             return Err(format!("会话 {id} 的历史索引超出副本文件边界"));
         }

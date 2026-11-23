@@ -23,6 +23,10 @@ fn complete_projected_rollout(f: &Fixture) -> String {
 }
 
 fn legacy_projection_fixture(offset: i64) -> (Fixture, String) {
+    projection_fixture(offset, ROOT)
+}
+
+fn projection_fixture(offset: i64, rollout_id: &str) -> (Fixture, String) {
     let f = Fixture::new();
     let content = complete_projected_rollout(&f);
     let history = Connection::open(f.source.join("thread_history_1.sqlite")).unwrap();
@@ -32,7 +36,7 @@ fn legacy_projection_fixture(offset: i64) -> (Fixture, String) {
         CREATE TABLE thread_items (thread_id TEXT NOT NULL, turn_id TEXT NOT NULL, item_id TEXT NOT NULL, rollout_ordinal INTEGER NOT NULL, item_json TEXT NOT NULL, PRIMARY KEY(thread_id, turn_id, item_id));\
         CREATE TABLE thread_realtime_items (thread_id TEXT NOT NULL, item_id TEXT NOT NULL, rollout_ordinal INTEGER NOT NULL, item_json TEXT NOT NULL, PRIMARY KEY(thread_id, item_id));\
         CREATE TABLE unrelated_metadata (value TEXT); INSERT INTO unrelated_metadata VALUES ('keep');").unwrap();
-    for id in [ROOT, "orphan-cache"] {
+    for id in [rollout_id, "orphan-cache"] {
         history
             .execute(
                 "INSERT INTO thread_history_projection_state VALUES (?1, ?2, 32)",
@@ -64,6 +68,115 @@ fn legacy_projection_fixture(offset: i64) -> (Fixture, String) {
 
 fn source_projection_bytes(f: &Fixture) -> Vec<u8> {
     fs::read(f.source.join("thread_history_1.sqlite")).unwrap()
+}
+
+fn rotated_projection_fixture() -> (Fixture, i64, i64) {
+    let f = Fixture::new();
+    let root_meta = json!({
+        "type": "session_meta", "ordinal": 0,
+        "payload": {"id": ROOT, "history_mode": "paginated"}
+    });
+    let prefix = format!(
+        "{root_meta}\n{}\n",
+        json!({"type":"event_msg", "ordinal":1})
+    );
+    let mut root = prefix.clone();
+    for ordinal in 2..4 {
+        let record = json!({
+            "type":"event_msg", "ordinal":ordinal, "payload":{"text":"previous branch".repeat(30)}
+        });
+        root.push_str(&format!("{record}\n"));
+    }
+    let child_meta = json!({
+        "type": "session_meta",
+        "payload": {"id": ROOT, "history_mode": "paginated", "history_base": {
+            "thread_id": ROOT, "end_byte_offset": prefix.len(), "end_ordinal_exclusive": 2
+        }}
+    });
+    let child = format!(
+        "{child_meta}\n{}\n",
+        json!({"type":"event_msg", "ordinal":2})
+    );
+    assert!(root.len() > child.len());
+    fs::write(&f.root_rollout, &root).unwrap();
+    fs::write(&f.child_rollout, &child).unwrap();
+
+    let history = Connection::open(f.source.join("thread_history_1.sqlite")).unwrap();
+    history
+        .execute_batch(
+            "CREATE TABLE thread_history_projection_state (
+            thread_id TEXT PRIMARY KEY,
+            next_rollout_byte_offset INTEGER NOT NULL,
+            next_rollout_ordinal INTEGER NOT NULL
+        );",
+        )
+        .unwrap();
+    let root_offset = root.len() as i64;
+    let child_offset = child.len() as i64;
+    for (id, offset, ordinal) in [(ROOT, root_offset, 4), (CHILD, child_offset, 3)] {
+        history
+            .execute(
+                "INSERT INTO thread_history_projection_state VALUES (?1, ?2, ?3)",
+                rusqlite::params![id, offset, ordinal],
+            )
+            .unwrap();
+    }
+    (f, root_offset, child_offset)
+}
+
+#[test]
+fn projection_cursors_follow_physical_rollouts_after_rotation() {
+    let (f, root_offset, child_offset) = rotated_projection_fixture();
+    let source_history = source_projection_bytes(&f);
+
+    copy_profile(&f.source, &f.target).unwrap();
+
+    let target = Connection::open(f.target.join("thread_history_1.sqlite")).unwrap();
+    for (id, offset, ordinal) in [(ROOT, root_offset, 4), (CHILD, child_offset, 3)] {
+        let cursor = target
+            .query_row(
+                "SELECT next_rollout_byte_offset, next_rollout_ordinal
+             FROM thread_history_projection_state WHERE thread_id=?1",
+                [id],
+                |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)),
+            )
+            .unwrap();
+        assert_eq!(cursor, (offset, ordinal));
+    }
+    for rollout in [&f.root_rollout, &f.child_rollout] {
+        assert_eq!(
+            fs::read(f.target_path(rollout)).unwrap(),
+            fs::read(rollout).unwrap()
+        );
+    }
+    assert_eq!(source_projection_bytes(&f), source_history);
+}
+
+#[test]
+fn projection_cursors_reject_an_out_of_bounds_continuation_cursor() {
+    let (f, _, child_offset) = rotated_projection_fixture();
+    let history = Connection::open(f.source.join("thread_history_1.sqlite")).unwrap();
+    history
+        .execute(
+            "DELETE FROM thread_history_projection_state WHERE thread_id=?1",
+            [ROOT],
+        )
+        .unwrap();
+    history
+        .execute(
+            "UPDATE thread_history_projection_state
+         SET next_rollout_byte_offset=?1, next_rollout_ordinal=4 WHERE thread_id=?2",
+            rusqlite::params![child_offset + 1, CHILD],
+        )
+        .unwrap();
+    drop(history);
+    let source_history = source_projection_bytes(&f);
+
+    let error = copy_profile(&f.source, &f.target).unwrap_err();
+    assert!(error.contains(CHILD), "{error}");
+    assert!(error.contains("历史索引超出副本文件边界"), "{error}");
+    assert!(!f.target.exists());
+    assert_eq!(source_projection_bytes(&f), source_history);
 }
 
 #[test]
@@ -255,7 +368,7 @@ fn projection_recovery_handles_meta_without_ordinal_but_rejects_legacy_nonordina
 
 #[test]
 fn projection_recovery_respects_paginated_history_base_ordinal() {
-    let (f, _) = legacy_projection_fixture(LEGACY_PROJECTION_OFFSET);
+    let (f, _) = projection_fixture(LEGACY_PROJECTION_OFFSET, CHILD);
     let mut parent = format!(
         "{}\n",
         json!({"type":"session_meta", "ordinal":0,"payload":{"id":ROOT}})
@@ -286,7 +399,7 @@ fn projection_recovery_respects_paginated_history_base_ordinal() {
     history
         .execute(
             "UPDATE thread_history_projection_state SET next_rollout_ordinal=68 WHERE thread_id=?1",
-            [ROOT],
+            [CHILD],
         )
         .unwrap();
     drop(history);
@@ -299,6 +412,15 @@ fn projection_recovery_respects_paginated_history_base_ordinal() {
         fs::read(f.target_path(&f.root_rollout)).unwrap(),
         parent.as_bytes()
     );
+    let target = Connection::open(f.target.join("thread_history_1.sqlite")).unwrap();
+    let remaining: Vec<String> = target
+        .prepare("SELECT thread_id FROM thread_history_projection_state ORDER BY thread_id")
+        .unwrap()
+        .query_map([], |row| row.get(0))
+        .unwrap()
+        .collect::<rusqlite::Result<_>>()
+        .unwrap();
+    assert_eq!(remaining, ["orphan-cache"]);
 }
 
 #[test]
