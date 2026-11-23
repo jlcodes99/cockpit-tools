@@ -1632,7 +1632,11 @@
         "nativePredictionsDesc": "Nonaktif secara bawaan. Saran menggunakan penyedia API dan model percakapan saat ini serta menambah penggunaan API. Setelah mengubah pengaturan ini, mulai ulang instans Codex terkait dan biarkan Cockpit Tools tetap berjalan."
       },
       "timeDisplayMode": "Tampilan waktu",
-      "timeDisplayModeDesc": "Waktu pada kartu dan daftar akun. Bawaan menggunakan waktu pergantian akun"
+      "timeDisplayModeDesc": "Waktu pada kartu dan daftar akun. Bawaan menggunakan waktu pergantian akun",
+      "qoderCnAppPath": "Jalur peluncuran Qoder CN",
+      "qoderCnAppPathDesc": "Biarkan kosong untuk deteksi otomatis. Saat berganti akun, klien desktop akan ditutup dan diluncurkan ulang.",
+      "qoderCnAppPathPlaceholder": "Jalur default",
+      "qoderCnPathReset": "Atur ulang ke default"
     },
     "network": {
       "apiTitle": "API Antigravity Cockpit",
@@ -7037,7 +7041,12 @@
     "traeSoloCn": {
       "appPath": "Path TraeWork CN",
       "title": "Pengaturan TraeWork CN"
-    }
+    },
+    "validation": {
+      "refreshIntervalInvalid": "Masukkan bilangan bulat antara 1 dan 999, atau -1 untuk menonaktifkan penyegaran otomatis.",
+      "quotaAlertThresholdInvalid": "Masukkan bilangan bulat antara 0 dan 100."
+    },
+    "disableRefreshHint": "-1 menonaktifkan penyegaran otomatis."
   },
   "quotaAlert": {
     "bannerText": "Quota alert for {{email}} (threshold {{threshold}}%, lowest {{lowest}}%, models: {{models}})​",
@@ -7627,7 +7636,7 @@
       "nativeImportFailed": "Gagal mengimpor info masuk Qoder lokal. Masuk di klien terlebih dahulu, lalu coba lagi.",
       "nativeProcessProbeFailed": "Tidak dapat mendeteksi status proses Qoder. Coba lagi nanti.",
       "regionUnsupported": "Tidak dapat menentukan build wilayah akun. Otorisasi ulang.",
-      "clientRunning": "Close {{client}} before switching accounts."
+      "clientRunning": "Tutup {{client}} sebelum mengganti akun."
     },
     "title": "Akun Qoder",
     "flowNotice": {

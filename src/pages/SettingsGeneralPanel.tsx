@@ -151,6 +151,7 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
     openMenuBarQuotaModal,
     platformSettingsOrder,
     qoderAppPath,
+    qoderCnAppPath,
     qoderAutoRefresh,
     qoderAutoRefreshCustomMode,
     qoderAutoRefreshIsPreset,
@@ -256,6 +257,7 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
     setQoderQuotaAlertEnabled,
     setQoderQuotaAlertThreshold,
     setQoderQuotaAlertThresholdCustomMode,
+    setQoderCnAppPath,
     setQuotaAlertEnabled,
     setQuotaAlertThreshold,
     setQuotaAlertThresholdCustomMode,
@@ -2613,6 +2615,46 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                       </div>
                     </div>
                   )}
+                </div>
+              </PlatformSettingsSection>
+
+              <PlatformSettingsSection platformId={'qoder_cn'} order={platformSettingsOrder.qoder_cn}>
+                <div className="group-title">{t('nav.qoderCn', 'Qoder CN')}</div>
+                <div className="settings-group">
+                  <div className="settings-row">
+                    <div className="row-label">
+                      <div className="row-title">{t('settings.general.qoderCnAppPath', 'Qoder CN 启动路径')}</div>
+                      <div className="row-desc">{t('settings.general.qoderCnAppPathDesc', '留空则自动检测；切换账号时会自动关闭并重新启动桌面端')}</div>
+                    </div>
+                    <div className="row-control row-control--grow">
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flex: 1 }}>
+                        <input
+                          type="text"
+                          className="settings-input settings-input--path"
+                          value={qoderCnAppPath}
+                          placeholder={t('settings.general.qoderCnAppPathPlaceholder', '默认路径')}
+                          onChange={(e) => setQoderCnAppPath(e.target.value)}
+                        />
+                        <button
+                          className="btn btn-secondary"
+                          onClick={() => handlePickAppPath('qoder_cn')}
+                          disabled={isAppPathResetDetecting('qoder_cn')}
+                        >
+                          {t('settings.general.qoderPathSelect', '选择')}
+                        </button>
+                        <button
+                          className="btn btn-secondary"
+                          onClick={() => handleResetAppPath('qoder_cn')}
+                          disabled={isAppPathResetDetecting('qoder_cn')}
+                        >
+                          <RefreshCw size={16} className={isAppPathResetDetecting('qoder_cn') ? 'spin' : undefined} />
+                          {isAppPathResetDetecting('qoder_cn')
+                            ? t('common.loading', '加载中...')
+                            : getResetLabelByTarget('qoder_cn')}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </PlatformSettingsSection>
 

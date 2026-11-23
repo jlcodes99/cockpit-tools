@@ -130,26 +130,35 @@ fn switch_qoder_cn(
         return Ok(false);
     }
 
-    // Capture the binary before closing it. A running client is the only
-    // unambiguous source of its own path, and reusing that path keeps the
-    // relaunch from opening a different install.
+    // Resolve the binary before closing it. A running client is the most
+    // reliable source of its own path; the stored/detected path covers the case
+    // where the client is not running yet, so the switch can still bring it up.
+    // Failing to resolve is not fatal: writing credentials is useful on its own,
+    // and the UI falls back to asking the user to open the client manually.
+    let launch_path = match crate::modules::process::resolve_qoder_cn_launch_path() {
+        Ok(path) => Some(path),
+        Err(error) => {
+            logger::log_warn(&format!(
+                "[Qoder CN Switch] launch path unresolved, skipping relaunch: {error}"
+            ));
+            None
+        }
+    };
     let system = sysinfo::System::new_all();
-    let executable = qoder_native::qoder_cn_desktop_executable(&system);
     let pids = qoder_native::qoder_cn_desktop_pids(&system);
     if !pids.is_empty() {
         if let Err(close_error) = crate::modules::process::close_qoder_cn_desktop(&pids, 20) {
             // The client may already be gone: never leave the user with a bare
             // "switch failed" while nothing is running.
-            return Err(restore_after_failure(executable.as_deref(), close_error));
+            return Err(restore_after_failure(launch_path.as_deref(), close_error));
         }
     }
     if let Err(error) = qoder_native::switch(account_id, target) {
         // Credentials were rolled back and the client is closed, so the real
         // state depends on whether it comes back, not on the original error.
-        return Err(restore_after_failure(executable.as_deref(), error));
+        return Err(restore_after_failure(launch_path.as_deref(), error));
     }
-    let Some(path) = executable else {
-        // Nothing was running, so there is nothing to reopen.
+    let Some(path) = launch_path else {
         return Ok(false);
     };
     crate::modules::process::start_qoder_cn_desktop(&path)

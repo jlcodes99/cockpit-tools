@@ -8,6 +8,7 @@ export const APP_PATH_LABELS = {
   codebuddy: 'CodeBuddy',
   codebuddy_cn: 'CodeBuddy CN',
   qoder: 'Qoder',
+  qoder_cn: 'Qoder CN',
   trae: 'Trae',
   trae_solo: 'Trae Solo',
   trae_cn: 'Trae CN',

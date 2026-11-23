@@ -1585,7 +1585,11 @@
         "nativePredictionsDesc": "Standardmäßig deaktiviert. Vorschläge nutzen den API-Anbieter und das Modell des aktuellen Chats und verursachen zusätzlichen API-Verbrauch. Starte nach einer Änderung die betroffenen Codex-Instanzen neu und lasse Cockpit Tools geöffnet."
       },
       "timeDisplayMode": "Zeitanzeige",
-      "timeDisplayModeDesc": "Zeitangabe auf Kontokarten und in Listen. Standard ist der Kontowechsel"
+      "timeDisplayModeDesc": "Zeitangabe auf Kontokarten und in Listen. Standard ist der Kontowechsel",
+      "qoderCnAppPath": "Qoder CN-Startpfad",
+      "qoderCnAppPathDesc": "Leer lassen für automatische Erkennung. Beim Kontowechsel wird der Desktop-Client geschlossen und neu gestartet.",
+      "qoderCnAppPathPlaceholder": "Standardpfad",
+      "qoderCnPathReset": "Auf Standard zurücksetzen"
     },
     "network": {
       "apiTitle": "Antigravity-Cockpit-API",
@@ -6874,7 +6878,12 @@
     "traeSoloCn": {
       "appPath": "TraeWork CN Pfad",
       "title": "TraeWork CN-Einstellungen"
-    }
+    },
+    "validation": {
+      "refreshIntervalInvalid": "Geben Sie eine ganze Zahl zwischen 1 und 999 ein oder -1, um die automatische Aktualisierung zu deaktivieren.",
+      "quotaAlertThresholdInvalid": "Geben Sie eine ganze Zahl zwischen 0 und 100 ein."
+    },
+    "disableRefreshHint": "-1 deaktiviert die automatische Aktualisierung."
   },
   "quotaAlert": {
     "bannerText": "Kontingentwarnung für {{email}} (Schwelle {{threshold}} %, Minimum {{lowest}} %, Modelle: {{models}})",
@@ -7580,7 +7589,7 @@
       "nativeImportFailed": "Die lokale Qoder-Anmeldung konnte nicht importiert werden. Melden Sie sich zuerst im Client an und versuchen Sie es erneut.",
       "nativeProcessProbeFailed": "Der Qoder-Prozessstatus konnte nicht ermittelt werden. Versuchen Sie es später erneut.",
       "regionUnsupported": "Der Regions-Build des Kontos konnte nicht ermittelt werden. Autorisieren Sie es erneut.",
-      "clientRunning": "Close {{client}} before switching accounts."
+      "clientRunning": "Schließe {{client}}, bevor du Konten wechselst."
     },
     "title": "Qoder-Kontenverwaltung",
     "comingSoon": {

@@ -1632,7 +1632,11 @@
         "nativePredictionsDesc": "متوقف افتراضيًا. تستخدم الاقتراحات مزوّد API ونموذج المحادثة الحالية وتزيد استهلاك API. بعد تغيير الإعداد، أعد تشغيل مثيلات Codex المعنية وأبقِ Cockpit Tools قيد التشغيل."
       },
       "timeDisplayMode": "عرض الوقت",
-      "timeDisplayModeDesc": "الوقت المعروض في بطاقات الحسابات وقوائمها. الافتراضي هو وقت تبديل الحساب"
+      "timeDisplayModeDesc": "الوقت المعروض في بطاقات الحسابات وقوائمها. الافتراضي هو وقت تبديل الحساب",
+      "qoderCnAppPath": "مسار تشغيل Qoder CN",
+      "qoderCnAppPathDesc": "اتركه فارغًا للكشف التلقائي. عند تبديل الحساب يتم إغلاق تطبيق سطح المكتب وإعادة تشغيله.",
+      "qoderCnAppPathPlaceholder": "المسار الافتراضي",
+      "qoderCnPathReset": "إعادة التعيين إلى الافتراضي"
     },
     "network": {
       "apiTitle": "واجهة برمجة تطبيقات قمرة القيادة المضادة للجاذبية",
@@ -6921,7 +6925,12 @@
     "traeSoloCn": {
       "appPath": "مسار TraeWork CN",
       "title": "إعدادات TraeWork CN"
-    }
+    },
+    "validation": {
+      "refreshIntervalInvalid": "أدخل عددًا صحيحًا بين 1 و999، أو -1 لتعطيل التحديث التلقائي.",
+      "quotaAlertThresholdInvalid": "أدخل عددًا صحيحًا بين 0 و100."
+    },
+    "disableRefreshHint": "-1 يعطّل التحديث التلقائي."
   },
   "quotaAlert": {
     "bannerText": "تنبيه حصة للحساب {{email}} (العتبة {{threshold}}%، الأدنى {{lowest}}%، النماذج: {{models}})",
@@ -7627,7 +7636,7 @@
       "nativeImportFailed": "تعذر استيراد معلومات تسجيل الدخول المحلية لـ Qoder. سجّل الدخول في العميل أولاً ثم أعد المحاولة.",
       "nativeProcessProbeFailed": "تعذر اكتشاف حالة عملية Qoder. أعد المحاولة لاحقًا.",
       "regionUnsupported": "تعذر تحديد إصدار المنطقة الذي ينتمي إليه الحساب. أعد التفويض.",
-      "clientRunning": "Close {{client}} before switching accounts."
+      "clientRunning": "أغلق {{client}} قبل تبديل الحسابات."
     },
     "title": "إدارة حسابات Qoder",
     "comingSoon": {

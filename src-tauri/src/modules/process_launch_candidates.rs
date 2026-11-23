@@ -598,6 +598,10 @@ fn score_windows_candidate(
         if file_name == "electron.exe" && !has_keyword {
             return None;
         }
+        // Qoder CN 的 exe 名与全局版重合（Qoder.exe），只靠名字会把全局客户端算成 CN 候选。
+        if file_name == "qoder.exe" && !has_keyword {
+            return None;
+        }
         let mut score = if file_name == "electron.exe" { 60 } else { 100 };
         if has_keyword {
             score += 5;
@@ -659,6 +663,11 @@ fn parse_windows_exec_candidates(
         let Some(path) = normalize_windows_candidate_path(line) else {
             continue;
         };
+        // CLI 运行时目录下的辅助进程同样命中 "qoder-cn" 关键字，必须先排除，
+        // 否则会被当成桌面端启动路径（resolve_qoder_cn_launch_path 走的就是这条链路）。
+        if is_qoder_cn_signature(&exe_names_lower) && is_qoder_cn_cli_runtime_path(&path) {
+            continue;
+        }
         let dedupe_key = path.to_string_lossy().to_lowercase();
         if !seen.insert(dedupe_key) {
             continue;
@@ -832,6 +841,26 @@ fn windows_app_launch_signature(app: &str) -> Option<WindowsAppLaunchSignature> 
             display_keywords: &["qoder"],
             common_paths: &[r"Qoder IDE\Qoder IDE.exe", r"Qoder\Qoder.exe"],
             supports_multi_instance: true,
+        }),
+        "qoder_cn" => Some(WindowsAppLaunchSignature {
+            label: "Qoder CN",
+            exe_names: &[
+                "Qoder CN.exe",
+                "Qoder.exe",
+                "Qoder Launcher.exe",
+                "QoderLauncher.exe",
+                "Electron.exe",
+            ],
+            command_names: &["qoder-cn"],
+            protocol_names: &["qoder-cn"],
+            display_keywords: &["qoder cn", "qoder-cn", "qodercn"],
+            common_paths: &[
+                r"Qoder CN\Qoder CN.exe",
+                r"Qoder CN\Qoder.exe",
+                r"Qoder CN\Qoder Launcher.exe",
+                r"QoderCN\Qoder CN.exe",
+            ],
+            supports_multi_instance: false,
         }),
         "zcode" => Some(WindowsAppLaunchSignature {
             label: "ZCode",
@@ -1116,12 +1145,33 @@ fn windows_trae_candidate_matches_platform(
 }
 
 #[cfg(target_os = "windows")]
+fn is_qoder_cn_cli_runtime_path(path: &std::path::Path) -> bool {
+    // ~/.qoder-cn 是 Qoder CN CLI 的数据目录，其 .bin 下会有 runtime-info.exe 等辅助进程，
+    // 它们同样命中 "qoder-cn" 关键字，但绝不能作为桌面端启动路径。
+    let normalized = path
+        .to_string_lossy()
+        .replace('/', "\\")
+        .to_ascii_lowercase();
+    normalized.contains("\\.qoder-cn\\")
+}
+
+/// 只有 Qoder CN 的签名表里才有 `Qoder CN.exe`。
+/// exe 安装目录扫描（签名探测 / 设置页候选列表）拿不到 app key，用签名反推即可。
+#[cfg(target_os = "windows")]
+fn is_qoder_cn_signature(exe_names_lower: &HashSet<String>) -> bool {
+    exe_names_lower.contains("qoder cn.exe")
+}
+
+#[cfg(target_os = "windows")]
 fn running_app_candidate_matches(
     app: &str,
     path: &std::path::Path,
     signature: WindowsAppLaunchSignature,
 ) -> bool {
     if app == "codex" && is_codex_embedded_backend_executable(path) {
+        return false;
+    }
+    if app == "qoder_cn" && is_qoder_cn_cli_runtime_path(path) {
         return false;
     }
 
@@ -2208,6 +2258,7 @@ fn update_app_path_in_config(app: &str, path: &Path, expected_current: &str) {
             "codebuddy" => &mut current.codebuddy_app_path,
             "codebuddy_cn" => &mut current.codebuddy_cn_app_path,
             "qoder" => &mut current.qoder_app_path,
+            "qoder_cn" => &mut current.qoder_cn_app_path,
             "zcode" => &mut current.zcode_app_path,
             "trae" => &mut current.trae_app_path,
             "trae_solo" => &mut current.trae_solo_app_path,
@@ -2224,4 +2275,31 @@ fn update_app_path_in_config(app: &str, path: &Path, expected_current: &str) {
         }
         Ok(())
     });
+}
+
+#[cfg(all(test, target_os = "windows"))]
+mod windows_launch_candidate_tests {
+    use super::*;
+
+    fn qoder_cn_signature() -> WindowsAppLaunchSignature {
+        windows_app_launch_signature("qoder_cn").expect("qoder_cn signature")
+    }
+
+    #[test]
+    fn qoder_cn_cli_runtime_helper_is_not_a_launch_candidate() {
+        let signature = qoder_cn_signature();
+        let helper = std::path::Path::new(
+            r"C:\Users\coder\.qoder-cn\.bin\umid-win32-x64-48d1294f147c9d89\runtime-info.exe",
+        );
+        assert!(!running_app_candidate_matches("qoder_cn", helper, signature));
+    }
+
+    #[test]
+    fn qoder_cn_versioned_desktop_exe_is_a_launch_candidate() {
+        let signature = qoder_cn_signature();
+        let desktop = std::path::Path::new(
+            r"C:\Users\coder\AppData\Local\Programs\Qoder CN\.qoder-versions\0.5.12\Qoder CN.exe",
+        );
+        assert!(running_app_candidate_matches("qoder_cn", desktop, signature));
+    }
 }

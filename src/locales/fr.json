@@ -1585,7 +1585,11 @@
         "nativePredictionsDesc": "Désactivé par défaut. Les suggestions utilisent le fournisseur d’API et le modèle de la conversation en cours et entraînent une consommation supplémentaire de l’API. Après avoir modifié ce réglage, redémarrez les instances Codex concernées et laissez Cockpit Tools en cours d’exécution."
       },
       "timeDisplayMode": "Heure affichée",
-      "timeDisplayModeDesc": "Heure affichée sur les comptes. Par défaut, heure du changement de compte"
+      "timeDisplayModeDesc": "Heure affichée sur les comptes. Par défaut, heure du changement de compte",
+      "qoderCnAppPath": "Chemin de lancement Qoder CN",
+      "qoderCnAppPathDesc": "Laisser vide pour la détection automatique. Le changement de compte ferme et relance le client de bureau.",
+      "qoderCnAppPathPlaceholder": "Chemin par défaut",
+      "qoderCnPathReset": "Réinitialiser par défaut"
     },
     "network": {
       "apiTitle": "API du cockpit antigravité",
@@ -6874,7 +6878,12 @@
     "traeSoloCn": {
       "appPath": "Chemin TraeWork CN",
       "title": "Paramètres TraeWork CN"
-    }
+    },
+    "validation": {
+      "refreshIntervalInvalid": "Saisissez un nombre entier entre 1 et 999, ou -1 pour désactiver l’actualisation automatique.",
+      "quotaAlertThresholdInvalid": "Saisissez un nombre entier entre 0 et 100."
+    },
+    "disableRefreshHint": "-1 désactive l'actualisation automatique."
   },
   "quotaAlert": {
     "bannerText": "Alerte de quota pour {{email}} (seuil {{threshold}} %, minimum {{lowest}} %, modèles : {{models}})",
@@ -7580,7 +7589,7 @@
       "nativeImportFailed": "Impossible d’importer la connexion Qoder locale. Connectez-vous d’abord dans le client, puis réessayez.",
       "nativeProcessProbeFailed": "Impossible de détecter l’état du processus Qoder. Réessayez plus tard.",
       "regionUnsupported": "Impossible d’identifier la version régionale du compte. Réautorisez-le.",
-      "clientRunning": "Close {{client}} before switching accounts."
+      "clientRunning": "Fermez {{client}} avant de changer de compte."
     },
     "title": "Gestion des comptes Qoder",
     "comingSoon": {

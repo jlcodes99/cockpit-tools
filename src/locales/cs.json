@@ -1585,7 +1585,11 @@
         "nativePredictionsDesc": "Ve výchozím nastavení je vypnuto. Návrhy používají poskytovatele API a model z aktuální konverzace a zvyšují spotřebu API. Po změně nastavení restartujte dotčené instance Codexu a nechte Cockpit Tools spuštěné."
       },
       "timeDisplayMode": "Zobrazený čas",
-      "timeDisplayModeDesc": "Čas na kartách a v seznamu účtů. Výchozí je čas přepnutí účtu"
+      "timeDisplayModeDesc": "Čas na kartách a v seznamu účtů. Výchozí je čas přepnutí účtu",
+      "qoderCnAppPath": "Cesta spuštění Qoder CN",
+      "qoderCnAppPathDesc": "Ponechte prázdné pro automatické zjištění. Při přepnutí účtu se desktopový klient zavře a znovu spustí.",
+      "qoderCnAppPathPlaceholder": "Výchozí cesta",
+      "qoderCnPathReset": "Obnovit výchozí"
     },
     "network": {
       "apiTitle": "Antigravity Cockpit API​",
@@ -6874,7 +6878,12 @@
     "traeSoloCn": {
       "appPath": "Cesta TraeWork CN",
       "title": "Nastavení TraeWork CN"
-    }
+    },
+    "validation": {
+      "refreshIntervalInvalid": "Zadejte celé číslo od 1 do 999 nebo -1 pro vypnutí automatické aktualizace.",
+      "quotaAlertThresholdInvalid": "Zadejte celé číslo od 0 do 100."
+    },
+    "disableRefreshHint": "-1 vypne automatickou aktualizaci."
   },
   "quotaAlert": {
     "bannerText": "Upozornění na kvótu pro {{email}} (práh {{threshold}} %, minimum {{lowest}} %, modely: {{models}})",
@@ -7580,7 +7589,7 @@
       "nativeImportFailed": "Import místního přihlášení Qoder selhal. Nejprve se přihlaste v klientovi a zkuste to znovu.",
       "nativeProcessProbeFailed": "Nepodařilo se zjistit stav procesu Qoder. Zkuste to později.",
       "regionUnsupported": "Nepodařilo se určit regionální sestavení účtu. Znovu jej autorizujte.",
-      "clientRunning": "Close {{client}} before switching accounts."
+      "clientRunning": "Před přepnutím účtů zavřete {{client}}."
     },
     "title": "Správa účtů Qoder",
     "comingSoon": {

@@ -111,6 +111,7 @@ pub async fn set_app_path(app: String, path: String, validate: Option<bool>) -> 
                 "codebuddy" => current.codebuddy_app_path = normalized_path,
                 "codebuddy_cn" => current.codebuddy_cn_app_path = normalized_path,
                 "qoder" => current.qoder_app_path = normalized_path,
+                "qoder_cn" => current.qoder_cn_app_path = normalized_path,
                 "zcode" => current.zcode_app_path = normalized_path,
                 "trae" => current.trae_app_path = normalized_path,
                 "trae_solo" => current.trae_solo_app_path = normalized_path,
@@ -193,10 +194,10 @@ pub fn detect_app_path(app: String, force: Option<bool>) -> Result<Option<String
         "cursor" => Ok(modules::cursor_instance::detect_and_save_cursor_launch_path(force)),
         "claude" => Ok(modules::claude_instance::detect_and_save_claude_launch_path(force)),
         "antigravity" | "antigravity_ide" | "antigravity_legacy" | "codex" | "zed" | "vscode"
-        | "codebuddy" | "codebuddy_cn" | "qoder" | "zcode" | "trae" | "trae_solo" | "trae_cn"
-        | "trae_solo_cn" | "opencode" | "workbuddy" | "minimaxcode" | "minimax_code" => Ok(
-            modules::process::detect_and_save_app_path(app.as_str(), force),
-        ),
+        | "codebuddy" | "codebuddy_cn" | "qoder" | "qoder_cn" | "zcode" | "trae" | "trae_solo"
+        | "trae_cn" | "trae_solo_cn" | "opencode" | "workbuddy" | "minimaxcode" | "minimax_code" => {
+            Ok(modules::process::detect_and_save_app_path(app.as_str(), force))
+        }
         _ => Err("未知应用类型".to_string()),
     }
 }
@@ -258,8 +259,8 @@ pub async fn scan_app_launch_targets(
     match app.as_str() {
         "antigravity" | "antigravity_ide" | "antigravity_legacy" | "codex" | "claude"
         | "vscode" | "windsurf" | "kiro" | "cursor" | "codebuddy" | "codebuddy_cn" | "qoder"
-        | "zcode" | "trae" | "trae_solo" | "trae_cn" | "trae_solo_cn" | "workbuddy" | "zed"
-        | "opencode" | "minimaxcode" | "minimax_code" | "workbuddy_ai" => {}
+        | "qoder_cn" | "zcode" | "trae" | "trae_solo" | "trae_cn" | "trae_solo_cn" | "workbuddy"
+        | "zed" | "opencode" | "minimaxcode" | "minimax_code" | "workbuddy_ai" => {}
         _ => return Err("未知应用类型".to_string()),
     }
     let _ = scan_roots;

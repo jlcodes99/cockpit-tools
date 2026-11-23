@@ -160,6 +160,7 @@ function isAllowedEnglishReuse(key, value) {
     'codex.autoRefreshScope.plans.pro',
     'nav.gemini',
     'nav.qoder',
+    'nav.qoderCn',
   ]);
 
   if (allowedBrandKeys.has(key)) {
@@ -193,6 +194,12 @@ function isAllowedEnglishReuse(key, value) {
     'Trae CN',
     'TraeWork CN',
     'Codex CLI',
+    'Qoder CN',
+    'Qoder Desktop',
+    'Qoder CN Desktop',
+    'Qoder CLI',
+    'Qoder CN CLI',
+    'Qoder IDE',
     '2FA',
     'Crontab',
     '🧩 Crontab',

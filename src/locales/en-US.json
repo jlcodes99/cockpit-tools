@@ -1821,7 +1821,11 @@
         "nativePredictionsDesc": "Off by default. Suggestions use your current conversation’s API provider and model and incur additional API usage. After changing this setting, restart the affected Codex instances and keep Cockpit Tools running."
       },
       "timeDisplayMode": "Time display",
-      "timeDisplayModeDesc": "What to show in the time area of account cards/lists (default: switch time)"
+      "timeDisplayModeDesc": "What to show in the time area of account cards/lists (default: switch time)",
+      "qoderCnAppPath": "Qoder CN launch path",
+      "qoderCnAppPathDesc": "Leave empty to auto-detect. Switching accounts closes and relaunches the desktop client.",
+      "qoderCnAppPathPlaceholder": "Default path",
+      "qoderCnPathReset": "Reset to default"
     },
     "tabs": {
       "general": "General",
@@ -7232,7 +7236,12 @@
     "traeSoloCn": {
       "title": "TraeWork CN Settings",
       "appPath": "TraeWork CN Path"
-    }
+    },
+    "validation": {
+      "refreshIntervalInvalid": "Enter a whole number between 1 and 999, or -1 to disable auto refresh.",
+      "quotaAlertThresholdInvalid": "Enter a whole number between 0 and 100."
+    },
+    "disableRefreshHint": "Use -1 to disable."
   },
   "quotaAlert": {
     "bannerText": "Quota alert for {{email}} (threshold {{threshold}}%, lowest {{lowest}}%, models: {{models}})",

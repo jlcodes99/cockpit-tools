@@ -1585,7 +1585,11 @@
         "nativePredictionsDesc": "Domyślnie wyłączone. Sugestie korzystają z dostawcy API i modelu bieżącej rozmowy oraz zwiększają użycie API. Po zmianie ustawienia uruchom ponownie odpowiednie instancje Codex i pozostaw Cockpit Tools uruchomione."
       },
       "timeDisplayMode": "Wyświetlany czas",
-      "timeDisplayModeDesc": "Czas na kartach i listach kont. Domyślnie czas przełączenia konta"
+      "timeDisplayModeDesc": "Czas na kartach i listach kont. Domyślnie czas przełączenia konta",
+      "qoderCnAppPath": "Ścieżka uruchamiania Qoder CN",
+      "qoderCnAppPathDesc": "Pozostaw puste, aby wykryć automatycznie. Podczas przełączania konta klient pulpitu zostanie zamknięty i uruchomiony ponownie.",
+      "qoderCnAppPathPlaceholder": "Domyślna ścieżka",
+      "qoderCnPathReset": "Przywróć domyślne"
     },
     "network": {
       "apiTitle": "API kokpitu antygrawitacyjnego",
@@ -6874,7 +6878,12 @@
     "traeSoloCn": {
       "appPath": "Ścieżka TraeWork CN",
       "title": "Ustawienia TraeWork CN"
-    }
+    },
+    "validation": {
+      "refreshIntervalInvalid": "Wpisz liczbę całkowitą od 1 do 999 lub -1, aby wyłączyć automatyczne odświeżanie.",
+      "quotaAlertThresholdInvalid": "Wpisz liczbę całkowitą od 0 do 100."
+    },
+    "disableRefreshHint": "-1 wyłącza automatyczne odświeżanie."
   },
   "quotaAlert": {
     "bannerText": "Alert limitu dla {{email}} (próg {{threshold}}%, minimum {{lowest}}%, modele: {{models}})",
@@ -7580,7 +7589,7 @@
       "nativeImportFailed": "Import lokalnych danych logowania Qoder nie powiódł się. Najpierw zaloguj się w kliencie i spróbuj ponownie.",
       "nativeProcessProbeFailed": "Nie można wykryć stanu procesu Qoder. Spróbuj ponownie później.",
       "regionUnsupported": "Nie można ustalić kompilacji regionalnej konta. Autoryzuj je ponownie.",
-      "clientRunning": "Close {{client}} before switching accounts."
+      "clientRunning": "Zamknij {{client}} przed przełączeniem kont."
     },
     "title": "Zarządzanie kontami Qoder",
     "comingSoon": {

@@ -1585,7 +1585,11 @@
         "nativePredictionsDesc": "기본적으로 꺼져 있습니다. 제안은 현재 대화의 API 제공업체와 모델을 사용하며 API 사용량이 추가됩니다. 설정을 변경한 후 해당 Codex 인스턴스를 다시 시작하고 Cockpit Tools를 계속 실행하세요."
       },
       "timeDisplayMode": "시간 표시",
-      "timeDisplayModeDesc": "계정 카드와 목록에 표시할 시간입니다. 기본값은 전환 시간입니다"
+      "timeDisplayModeDesc": "계정 카드와 목록에 표시할 시간입니다. 기본값은 전환 시간입니다",
+      "qoderCnAppPath": "Qoder CN 실행 경로",
+      "qoderCnAppPathDesc": "비워 두면 자동으로 감지합니다. 계정을 전환하면 데스크톱 클라이언트를 닫고 다시 시작합니다",
+      "qoderCnAppPathPlaceholder": "기본 경로",
+      "qoderCnPathReset": "기본값으로 재설정"
     },
     "network": {
       "apiTitle": "반중력 조종석 API",
@@ -6874,7 +6878,12 @@
     "traeSoloCn": {
       "appPath": "TraeWork CN 경로",
       "title": "TraeWork CN 설정"
-    }
+    },
+    "validation": {
+      "refreshIntervalInvalid": "새로고침 간격은 1~999 사이의 정수를 입력하거나 -1을 입력해 자동 새로고침을 끄세요.",
+      "quotaAlertThresholdInvalid": "경고 임계값은 0~100 사이의 정수를 입력하세요."
+    },
+    "disableRefreshHint": "-1은 비활성화를 의미합니다."
   },
   "quotaAlert": {
     "bannerText": "{{email}} 할당량 경고 (임계값 {{threshold}}%, 최저 {{lowest}}%, 모델: {{models}})",
@@ -7580,7 +7589,7 @@
       "nativeImportFailed": "로컬 Qoder 로그인 정보를 가져오지 못했습니다. 먼저 클라이언트에서 로그인한 후 다시 시도하세요.",
       "nativeProcessProbeFailed": "Qoder 프로세스 상태를 감지할 수 없습니다. 나중에 다시 시도하세요.",
       "regionUnsupported": "이 계정이 속한 지역 빌드를 식별할 수 없습니다. 다시 인증하세요.",
-      "clientRunning": "Close {{client}} before switching accounts."
+      "clientRunning": "계정을 전환하기 전에 {{client}}을(를) 종료하세요."
     },
     "title": "Qoder 계정 관리",
     "comingSoon": {

@@ -416,6 +416,7 @@ interface GeneralConfig extends GeneralConfigTheme, GeneralConfigLanguage {
   codebuddy_app_path: string;
   codebuddy_cn_app_path: string;
   qoder_app_path: string;
+  qoder_cn_app_path: string;
   trae_app_path: string;
   trae_solo_app_path: string;
   trae_cn_app_path: string;

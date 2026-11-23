@@ -1585,7 +1585,11 @@
         "nativePredictionsDesc": "既定ではオフです。候補の生成には現在の会話の API プロバイダーとモデルが使用され、API 使用量が増えます。設定を変更したら、対象の Codex インスタンスを再起動し、Cockpit Tools は起動したままにしてください。"
       },
       "timeDisplayMode": "時刻表示",
-      "timeDisplayModeDesc": "アカウントカードと一覧に表示する時刻。既定は切替時刻です"
+      "timeDisplayModeDesc": "アカウントカードと一覧に表示する時刻。既定は切替時刻です",
+      "qoderCnAppPath": "Qoder CN 起動パス",
+      "qoderCnAppPathDesc": "空欄の場合は自動検出します。アカウント切り替え時にデスクトップクライアントを終了して再起動します",
+      "qoderCnAppPathPlaceholder": "デフォルトパス",
+      "qoderCnPathReset": "デフォルトに戻す"
     },
     "network": {
       "apiTitle": "反重力コックピット API",
@@ -6874,7 +6878,12 @@
     "traeSoloCn": {
       "appPath": "TraeWork CN パス",
       "title": "TraeWork CN 設定"
-    }
+    },
+    "validation": {
+      "refreshIntervalInvalid": "更新間隔は 1〜999 の整数で入力するか、-1 で自動更新を無効にしてください。",
+      "quotaAlertThresholdInvalid": "警告しきい値は 0〜100 の整数で入力してください。"
+    },
+    "disableRefreshHint": "-1 で無効化"
   },
   "quotaAlert": {
     "bannerText": "{{email}} のクォータ警告（しきい値 {{threshold}}%、最低 {{lowest}}%、モデル: {{models}}）",
@@ -7580,7 +7589,7 @@
       "nativeImportFailed": "ローカル Qoder のログイン情報をインポートできませんでした。先にクライアントでログインしてから再試行してください。",
       "nativeProcessProbeFailed": "Qoder のプロセス状態を検出できません。しばらくしてから再試行してください。",
       "regionUnsupported": "このアカウントのリージョンビルドを特定できません。再認証してください。",
-      "clientRunning": "Close {{client}} before switching accounts."
+      "clientRunning": "アカウントを切り替える前に {{client}} を終了してください。"
     },
     "title": "Qoderアカウント管理",
     "comingSoon": {

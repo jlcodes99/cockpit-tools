@@ -1821,7 +1821,11 @@
         "configFailed": "设置读取或保存失败：{{error}}",
         "nativePredictions": "原生下一步预测（Tab）",
         "nativePredictionsDesc": "默认关闭。使用当前对话的 API 供应商和模型生成下一条消息建议，会产生额外的 API 用量。修改后请重启相关 Codex 实例，并保持 Cockpit Tools 运行。"
-      }
+      },
+      "qoderCnAppPath": "Qoder CN 启动路径",
+      "qoderCnAppPathDesc": "留空则自动检测；切换账号时会自动关闭并重新启动桌面端",
+      "qoderCnAppPathPlaceholder": "默认路径",
+      "qoderCnPathReset": "重置默认"
     },
     "tabs": {
       "general": "通用",
@@ -7232,7 +7236,12 @@
     "traeSoloCn": {
       "title": "TraeWork CN 设置",
       "appPath": "TraeWork CN 路径"
-    }
+    },
+    "validation": {
+      "refreshIntervalInvalid": "刷新间隔需填写 1-999 的整数，或填 -1 关闭自动刷新。",
+      "quotaAlertThresholdInvalid": "预警阈值需填写 0-100 的整数。"
+    },
+    "disableRefreshHint": "-1 表示禁用"
   },
   "quotaAlert": {
     "bannerText": "账号 {{email}} 触发配额预警（阈值 {{threshold}}%，最低 {{lowest}}%，模型：{{models}}）",

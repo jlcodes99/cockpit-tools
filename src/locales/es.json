@@ -1585,7 +1585,11 @@
         "nativePredictionsDesc": "Desactivado de forma predeterminada. Las sugerencias usan el proveedor de API y el modelo de la conversación actual y generan consumo adicional de API. Tras cambiar este ajuste, reinicia las instancias de Codex afectadas y mantén Cockpit Tools en ejecución."
       },
       "timeDisplayMode": "Hora mostrada",
-      "timeDisplayModeDesc": "Hora en las tarjetas y listas de cuentas. Por defecto, la del cambio de cuenta"
+      "timeDisplayModeDesc": "Hora en las tarjetas y listas de cuentas. Por defecto, la del cambio de cuenta",
+      "qoderCnAppPath": "Ruta de inicio de Qoder CN",
+      "qoderCnAppPathDesc": "Déjelo vacío para detectarla automáticamente. Al cambiar de cuenta se cierra y reinicia el cliente de escritorio.",
+      "qoderCnAppPathPlaceholder": "Ruta predeterminada",
+      "qoderCnPathReset": "Restablecer por defecto"
     },
     "network": {
       "apiTitle": "API de cabina antigravedad",
@@ -6874,7 +6878,12 @@
     "traeSoloCn": {
       "appPath": "Ruta de TraeWork CN",
       "title": "Configuración de TraeWork CN"
-    }
+    },
+    "validation": {
+      "refreshIntervalInvalid": "Introduce un número entero entre 1 y 999, o -1 para desactivar la actualización automática.",
+      "quotaAlertThresholdInvalid": "Introduce un número entero entre 0 y 100."
+    },
+    "disableRefreshHint": "-1 desactiva la actualización automática."
   },
   "quotaAlert": {
     "bannerText": "Alerta de cuota para {{email}} (umbral {{threshold}}%, mínimo {{lowest}}%, modelos: {{models}})",
@@ -7580,7 +7589,7 @@
       "nativeImportFailed": "No se pudo importar el inicio de sesión local de Qoder. Inicia sesión primero en el cliente y vuelve a intentarlo.",
       "nativeProcessProbeFailed": "No se pudo detectar el estado del proceso de Qoder. Vuelve a intentarlo más tarde.",
       "regionUnsupported": "No se pudo identificar la versión regional de la cuenta. Vuelve a autorizarla.",
-      "clientRunning": "Close {{client}} before switching accounts."
+      "clientRunning": "Cierra {{client}} antes de cambiar de cuenta."
     },
     "title": "Gestión de cuentas de Qoder",
     "comingSoon": {

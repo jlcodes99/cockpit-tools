@@ -1585,7 +1585,11 @@
         "nativePredictionsDesc": "По умолчанию выключено. Подсказки используют поставщика API и модель текущего диалога, увеличивая расход API. После изменения настройки перезапустите соответствующие экземпляры Codex и оставьте Cockpit Tools запущенным."
       },
       "timeDisplayMode": "Показ времени",
-      "timeDisplayModeDesc": "Время в карточках и списках аккаунтов. По умолчанию — время переключения"
+      "timeDisplayModeDesc": "Время в карточках и списках аккаунтов. По умолчанию — время переключения",
+      "qoderCnAppPath": "Путь запуска Qoder CN",
+      "qoderCnAppPathDesc": "Оставьте пустым для автоопределения. При смене аккаунта клиент закрывается и запускается заново.",
+      "qoderCnAppPathPlaceholder": "Путь по умолчанию",
+      "qoderCnPathReset": "Сбросить по умолчанию"
     },
     "network": {
       "apiTitle": "API антигравитационной кабины",
@@ -6874,7 +6878,12 @@
     "traeSoloCn": {
       "appPath": "Путь TraeWork CN",
       "title": "Настройки TraeWork CN"
-    }
+    },
+    "validation": {
+      "refreshIntervalInvalid": "Введите целое число от 1 до 999 или -1, чтобы отключить автообновление.",
+      "quotaAlertThresholdInvalid": "Введите целое число от 0 до 100."
+    },
+    "disableRefreshHint": "-1 отключает автоматическое обновление."
   },
   "quotaAlert": {
     "bannerText": "Предупреждение о квоте для {{email}} (порог {{threshold}}%, минимум {{lowest}}%, модели: {{models}})",
@@ -7580,7 +7589,7 @@
       "nativeImportFailed": "Не удалось импортировать локальные данные входа Qoder. Сначала войдите в клиенте и повторите попытку.",
       "nativeProcessProbeFailed": "Не удалось определить состояние процесса Qoder. Повторите попытку позже.",
       "regionUnsupported": "Не удалось определить региональную сборку аккаунта. Повторно авторизуйте его.",
-      "clientRunning": "Close {{client}} before switching accounts."
+      "clientRunning": "Закройте {{client}} перед сменой аккаунта."
     },
     "title": "Управление аккаунтами Qoder",
     "comingSoon": {

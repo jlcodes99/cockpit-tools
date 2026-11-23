@@ -1585,7 +1585,11 @@
         "nativePredictionsDesc": "預設關閉。使用目前對話的 API 供應商和模型產生下一則訊息建議，會增加 API 用量。變更後請重新啟動相關 Codex 執行個體，並讓 Cockpit Tools 保持執行。"
       },
       "timeDisplayMode": "時間顯示",
-      "timeDisplayModeDesc": "選擇帳號卡片與列表的時間內容，預設為切換時間"
+      "timeDisplayModeDesc": "選擇帳號卡片與列表的時間內容，預設為切換時間",
+      "qoderCnAppPath": "Qoder CN 啟動路徑",
+      "qoderCnAppPathDesc": "留空則自動偵測；切換帳號時會自動關閉並重新啟動桌面端",
+      "qoderCnAppPathPlaceholder": "預設路徑",
+      "qoderCnPathReset": "重設預設"
     },
     "network": {
       "apiTitle": "反重力駕駛艙 API",
@@ -6874,7 +6878,12 @@
     "traeSoloCn": {
       "appPath": "TraeWork CN 路徑",
       "title": "TraeWork CN 設定"
-    }
+    },
+    "validation": {
+      "refreshIntervalInvalid": "重新整理間隔需填寫 1-999 的整數，或填 -1 關閉自動重新整理。",
+      "quotaAlertThresholdInvalid": "預警閾值需填寫 0-100 的整數。"
+    },
+    "disableRefreshHint": "-1 表示停用"
   },
   "quotaAlert": {
     "bannerText": "帳號 {{email}} 觸發配額預警（閾值 {{threshold}}%，最低 {{lowest}}%，模型：{{models}}）",

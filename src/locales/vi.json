@@ -1585,7 +1585,11 @@
         "nativePredictionsDesc": "Mặc định tắt. Gợi ý sử dụng nhà cung cấp API và mô hình của cuộc trò chuyện hiện tại, làm tăng mức sử dụng API. Sau khi thay đổi cài đặt, hãy khởi động lại các phiên bản Codex bị ảnh hưởng và giữ Cockpit Tools chạy."
       },
       "timeDisplayMode": "Hiển thị thời gian",
-      "timeDisplayModeDesc": "Thời gian trên thẻ và danh sách tài khoản. Mặc định là thời gian chuyển tài khoản"
+      "timeDisplayModeDesc": "Thời gian trên thẻ và danh sách tài khoản. Mặc định là thời gian chuyển tài khoản",
+      "qoderCnAppPath": "Đường dẫn khởi chạy Qoder CN",
+      "qoderCnAppPathDesc": "Để trống để tự động phát hiện. Khi chuyển tài khoản, ứng dụng máy tính sẽ đóng và khởi động lại.",
+      "qoderCnAppPathPlaceholder": "Đường dẫn mặc định",
+      "qoderCnPathReset": "Đặt lại mặc định"
     },
     "network": {
       "apiTitle": "API Antigravity Cockpit",
@@ -6874,7 +6878,12 @@
     "traeSoloCn": {
       "appPath": "Đường dẫn TraeWork CN",
       "title": "Cài đặt TraeWork CN"
-    }
+    },
+    "validation": {
+      "refreshIntervalInvalid": "Nhập số nguyên từ 1 đến 999, hoặc -1 để tắt tự động làm mới.",
+      "quotaAlertThresholdInvalid": "Nhập số nguyên từ 0 đến 100."
+    },
+    "disableRefreshHint": "-1 sẽ tắt tự động làm mới."
   },
   "quotaAlert": {
     "bannerText": "Cảnh báo hạn mức cho {{email}} (ngưỡng {{threshold}}%, thấp nhất {{lowest}}%, mô hình: {{models}})",
@@ -7580,7 +7589,7 @@
       "nativeImportFailed": "Nhập thông tin đăng nhập Qoder cục bộ thất bại. Hãy đăng nhập trong ứng dụng trước rồi thử lại.",
       "nativeProcessProbeFailed": "Không phát hiện được trạng thái tiến trình Qoder. Hãy thử lại sau.",
       "regionUnsupported": "Không xác định được bản dựng khu vực của tài khoản. Hãy cấp quyền lại.",
-      "clientRunning": "Close {{client}} before switching accounts."
+      "clientRunning": "Hãy đóng {{client}} trước khi chuyển tài khoản."
     },
     "title": "Quản lý tài khoản Qoder",
     "comingSoon": {
