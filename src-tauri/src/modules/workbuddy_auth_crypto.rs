@@ -193,6 +193,7 @@ fn run_key_command(command: Command, timeout: Duration) -> Result<OfficialKey, S
         .enable_all()
         .build()
         .map_err(|_| INVALID)?;
+    let program = std::path::PathBuf::from(command.get_program());
     let mut output = runtime.block_on(async {
         let mut command = tokio::process::Command::from(command);
         command.kill_on_drop(true);
@@ -208,10 +209,10 @@ fn run_key_command(command: Command, timeout: Duration) -> Result<OfficialKey, S
             };
             let (status, output) = tokio::try_join!(child.wait(), read).map_err(|_| INVALID)?;
             if !status.success() {
-                return Err(
-                    "当前 WorkBuddy 客户端未提供可用的官方密钥接口，已停止覆盖，请更新客户端后重试"
-                        .to_string(),
-                );
+                return Err(format!(
+                    "读取 WorkBuddy 官方密钥接口失败，已停止覆盖。请在设置中核对客户端路径（{}），确认无误后检查客户端更新",
+                    program.display()
+                ));
             }
             Ok(output)
         })

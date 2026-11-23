@@ -66,6 +66,17 @@ fn workbuddy_install_is_international(executable: &Path) -> bool {
     }
 }
 
+#[cfg(target_os = "windows")]
+pub(crate) fn validate_workbuddy_app_path(path: &Path) -> Result<(), String> {
+    if path.file_name().is_some_and(|name| name.eq_ignore_ascii_case("node.exe")) {
+        return Err(format!(
+            "WorkBuddy 应用路径指向 Node 运行时（{}），请在设置中选择 WorkBuddy.exe",
+            path.display()
+        ));
+    }
+    Ok(())
+}
+
 fn select_workbuddy_launch_path(
     custom: Option<&str>,
     detect: impl FnOnce() -> Option<std::path::PathBuf>,
@@ -73,6 +84,8 @@ fn select_workbuddy_launch_path(
     if let Some(custom) = custom {
         let executable = resolve_workbuddy_macos_exec_path(custom)
             .ok_or_else(|| app_path_missing_error("workbuddy"))?;
+        #[cfg(target_os = "windows")]
+        validate_workbuddy_app_path(&executable)?;
         if !workbuddy_install_is_international(&executable) {
             return Ok(executable);
         }
