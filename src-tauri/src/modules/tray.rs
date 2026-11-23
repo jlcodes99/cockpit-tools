@@ -232,6 +232,7 @@ pub(crate) enum PlatformId {
     Codebuddy,
     CodebuddyCn,
     Qoder,
+    QoderCn,
     Zcode,
     Trae,
     TraeSolo,
@@ -242,7 +243,7 @@ pub(crate) enum PlatformId {
 }
 
 impl PlatformId {
-    pub(crate) fn default_order() -> [Self; 19] {
+    pub(crate) fn default_order() -> [Self; 20] {
         [
             Self::Claude,
             Self::Codex,
@@ -256,6 +257,7 @@ impl PlatformId {
             Self::Codebuddy,
             Self::CodebuddyCn,
             Self::Qoder,
+            Self::QoderCn,
             Self::Zcode,
             Self::Trae,
             Self::TraeSolo,
@@ -280,6 +282,7 @@ impl PlatformId {
             crate::modules::tray_layout::PLATFORM_CODEBUDDY => Some(Self::Codebuddy),
             crate::modules::tray_layout::PLATFORM_CODEBUDDY_CN => Some(Self::CodebuddyCn),
             crate::modules::tray_layout::PLATFORM_QODER => Some(Self::Qoder),
+            crate::modules::tray_layout::PLATFORM_QODER_CN => Some(Self::QoderCn),
             crate::modules::tray_layout::PLATFORM_ZCODE => Some(Self::Zcode),
             crate::modules::tray_layout::PLATFORM_TRAE => Some(Self::Trae),
             crate::modules::tray_layout::PLATFORM_TRAE_SOLO => Some(Self::TraeSolo),
@@ -305,6 +308,7 @@ impl PlatformId {
             Self::Codebuddy => crate::modules::tray_layout::PLATFORM_CODEBUDDY,
             Self::CodebuddyCn => crate::modules::tray_layout::PLATFORM_CODEBUDDY_CN,
             Self::Qoder => crate::modules::tray_layout::PLATFORM_QODER,
+            Self::QoderCn => crate::modules::tray_layout::PLATFORM_QODER_CN,
             Self::Zcode => crate::modules::tray_layout::PLATFORM_ZCODE,
             Self::Trae => crate::modules::tray_layout::PLATFORM_TRAE,
             Self::TraeSolo => crate::modules::tray_layout::PLATFORM_TRAE_SOLO,
@@ -329,6 +333,7 @@ impl PlatformId {
             Self::Codebuddy => "CodeBuddy",
             Self::CodebuddyCn => "CodeBuddy CN",
             Self::Qoder => "Qoder",
+            Self::QoderCn => "Qoder CN",
             Self::Zcode => "ZCode",
             Self::Trae => "Trae",
             Self::TraeSolo => super::trae_account::TraePlatformKind::TraeSolo.display_name(),
@@ -353,6 +358,7 @@ impl PlatformId {
             Self::Codebuddy => "codebuddy",
             Self::CodebuddyCn => "codebuddy-cn",
             Self::Qoder => "qoder",
+            Self::QoderCn => "qoder-cn",
             Self::Zcode => "zcode",
             Self::Trae => "trae",
             Self::TraeSolo => "trae-solo",
@@ -969,6 +975,7 @@ fn get_account_display_info(platform: PlatformId, lang: &str) -> AccountDisplayI
         PlatformId::Grok => build_grok_display_info(lang),
         PlatformId::Codebuddy => build_codebuddy_display_info(lang),
         PlatformId::CodebuddyCn => build_codebuddy_cn_display_info(lang),
+        PlatformId::QoderCn => build_qoder_cn_display_info(lang),
         PlatformId::Qoder => build_qoder_display_info(lang),
         PlatformId::Zcode => build_zcode_display_info(lang),
         PlatformId::Trae | PlatformId::TraeSolo | PlatformId::TraeCn | PlatformId::TraeSoloCn => {
@@ -1930,9 +1937,39 @@ fn json_as_f64(value: &serde_json::Value) -> Option<f64> {
 
 #[cfg(not(target_os = "macos"))]
 fn build_qoder_display_info(lang: &str) -> AccountDisplayInfo {
+    qoder_display_info(current_qoder_account(), lang)
+}
+
+/// Qoder CN 的菜单栏卡片：取数与全球版一致，只是账号来自 CN 存储。
+#[cfg(not(target_os = "macos"))]
+fn build_qoder_cn_display_info(lang: &str) -> AccountDisplayInfo {
+    qoder_display_info(current_qoder_cn_account(), lang)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn current_qoder_account() -> Option<crate::models::qoder::QoderAccount> {
     let accounts = crate::modules::qoder_account::list_accounts();
-    let account = crate::modules::qoder_account::resolve_current_account_id(&accounts)
-        .and_then(|account_id| accounts.iter().find(|item| item.id == account_id).cloned());
+    crate::modules::qoder_account::resolve_current_account_id(&accounts)
+        .and_then(|account_id| accounts.iter().find(|item| item.id == account_id).cloned())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn current_qoder_cn_account() -> Option<crate::models::qoder::QoderAccount> {
+    let store = crate::modules::qoder_cn_account::QoderCnAccountStore::default_store().ok()?;
+    let accounts = store.list_accounts().ok()?;
+    let current =
+        crate::modules::provider_current_state::resolve_existing_current_account_id(
+            "qoder_cn",
+            accounts.iter().map(|account| account.id.as_str()),
+        )?;
+    accounts.into_iter().find(|account| account.id == current)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn qoder_display_info(
+    account: Option<crate::models::qoder::QoderAccount>,
+    lang: &str,
+) -> AccountDisplayInfo {
 
     let Some(account) = account else {
         return AccountDisplayInfo {

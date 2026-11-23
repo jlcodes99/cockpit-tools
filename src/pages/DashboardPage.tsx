@@ -349,6 +349,9 @@ export function DashboardPage({
         case 'qoder':
           await useQoderAccountStore.getState().updateAccountTags(accountId, newTags);
           break;
+        case 'qoder_cn':
+          await useQoderCnAccountStore.getState().updateAccountTags(accountId, newTags);
+          break;
         case 'zcode':
           await useZcodeAccountStore.getState().updateAccountTags(accountId, newTags);
           break;
@@ -534,7 +537,12 @@ export function DashboardPage({
     switchAccount: switchQoderAccount,
   } = useQoderAccountStore();
 
-  const { accounts: qoderCnAccounts } = useQoderCnAccountStore();
+  const {
+    accounts: qoderCnAccounts,
+    currentAccountId: qoderCnCurrentId,
+    fetchAccounts: fetchQoderCnAccounts,
+    switchAccount: switchQoderCnAccount,
+  } = useQoderCnAccountStore();
 
   const {
     accounts: zcodeAccounts,
@@ -651,6 +659,7 @@ export function DashboardPage({
       fetchCodebuddyAccounts,
       fetchCodebuddyCnAccounts,
       fetchQoderAccounts,
+      fetchQoderCnAccounts,
       fetchZcodeAccounts,
       fetchTraeAccounts,
       fetchWorkbuddyAccounts,
@@ -783,6 +792,7 @@ export function DashboardPage({
     codebuddy: boolean;
     codebuddyCn: boolean;
     qoder: boolean;
+    qoderCn: boolean;
     zcode: boolean;
     trae: boolean;
     workbuddy: boolean;
@@ -800,6 +810,7 @@ export function DashboardPage({
     codebuddy: false,
     codebuddyCn: false,
     qoder: false,
+    qoderCn: false,
     zcode: false,
     trae: false,
     workbuddy: false,
@@ -1333,6 +1344,22 @@ export function DashboardPage({
     }
   };
 
+  const handleRefreshQoderCn = async (accountId: string) => {
+    if (refreshing.has(accountId)) return;
+    setRefreshing((prev) => new Set(prev).add(accountId));
+    try {
+      await useQoderCnAccountStore.getState().refreshToken(accountId);
+    } catch (error) {
+      console.error('Refresh failed:', error);
+    } finally {
+      setRefreshing((prev) => {
+        const next = new Set(prev);
+        next.delete(accountId);
+        return next;
+      });
+    }
+  };
+
   const handleRefreshZcode = async (accountId: string) => {
     if (refreshing.has(accountId)) return;
     setRefreshing((prev) => new Set(prev).add(accountId));
@@ -1442,6 +1469,21 @@ export function DashboardPage({
     }
   };
 
+  const handleRefreshQoderCnCard = async () => {
+    if (cardRefreshing.qoderCn) return;
+    setCardRefreshing((prev) => ({ ...prev, qoderCn: true }));
+    const idsToRefresh = [qoderCnCurrent?.id, qoderCnRecommended?.id].filter(Boolean) as string[];
+    try {
+      for (const id of idsToRefresh) {
+        await useQoderCnAccountStore.getState().refreshToken(id);
+      }
+    } catch (error) {
+      console.error('Card refresh failed:', error);
+    } finally {
+      setCardRefreshing((prev) => ({ ...prev, qoderCn: false }));
+    }
+  };
+
   const handleRefreshZcodeCard = async () => {
     if (cardRefreshing.zcode) return;
     setCardRefreshing((prev) => ({ ...prev, zcode: true }));
@@ -1546,6 +1588,22 @@ export function DashboardPage({
     setSwitching((prev) => new Set(prev).add(accountId));
     try {
       await switchQoderAccount(accountId);
+    } catch (error) {
+      console.error('Switch failed:', error);
+    } finally {
+      setSwitching((prev) => {
+        const next = new Set(prev);
+        next.delete(accountId);
+        return next;
+      });
+    }
+  };
+
+  const handleSwitchQoderCn = async (accountId: string) => {
+    if (switching.has(accountId)) return;
+    setSwitching((prev) => new Set(prev).add(accountId));
+    try {
+      await switchQoderCnAccount(accountId);
     } catch (error) {
       console.error('Switch failed:', error);
     } finally {
@@ -2061,6 +2119,36 @@ export function DashboardPage({
       return candidateScore.freshness > bestScore.freshness ? candidate : best;
     });
   }, [qoderAccounts, qoderCurrent?.id]);
+
+  const qoderCnCurrent = useMemo(
+    () => resolveDashboardCurrentAccount(qoderCnAccounts, qoderCnCurrentId),
+    [qoderCnAccounts, qoderCnCurrentId],
+  );
+
+  const qoderCnRecommended = useMemo(() => {
+    if (qoderCnAccounts.length <= 1) return null;
+    const currentId = qoderCnCurrent?.id;
+    const others = qoderCnAccounts.filter((a) => a.id !== currentId);
+    if (others.length === 0) return null;
+
+    const getScore = (account: QoderAccount) => {
+      const sub = getQoderSubscriptionInfo(account);
+      const usedPercent = sub.totalUsagePercentage ?? sub.userQuota.percentage ?? 101;
+      return {
+        remaining: 100 - usedPercent,
+        freshness: account.last_used || account.created_at || 0,
+      };
+    };
+
+    return others.reduce((best, candidate) => {
+      const bestScore = getScore(best);
+      const candidateScore = getScore(candidate);
+      if (candidateScore.remaining !== bestScore.remaining) {
+        return candidateScore.remaining > bestScore.remaining ? candidate : best;
+      }
+      return candidateScore.freshness > bestScore.freshness ? candidate : best;
+    });
+  }, [qoderCnAccounts, qoderCnCurrent?.id]);
 
   const zcodeRecommended = useMemo(() => {
     if (zcodeAccounts.length <= 1) return null;
@@ -2726,6 +2814,20 @@ export function DashboardPage({
       isRefreshing: refreshing.has(account.id),
       isSwitching: switching.has(account.id),
       onEditTags: () => setTagModalState({ accountId: account.id, platform: 'qoder', tags: account.tags || [] }),
+    });
+  };
+
+  const renderQoderCnAccountContent = (account: QoderAccount | null) => {
+    if (!account) return <div className="empty-slot">{t('dashboard.noAccount', '无账号')}</div>;
+
+    const presentation = buildQoderAccountPresentation(account, t);
+    return renderUnifiedAccountCard({
+      presentation,
+      onRefresh: () => handleRefreshQoderCn(account.id),
+      onSwitch: () => handleSwitchQoderCn(account.id),
+      isRefreshing: refreshing.has(account.id),
+      isSwitching: switching.has(account.id),
+      onEditTags: () => setTagModalState({ accountId: account.id, platform: 'qoder_cn', tags: account.tags || [] }),
     });
   };
 
@@ -3465,6 +3567,53 @@ export function DashboardPage({
       );
     }
 
+    if (platformId === 'qoder_cn') {
+      return (
+        <div className="main-card windsurf-card" key={platformId}>
+          <div className="main-card-header">
+            <div className="header-title">
+              <QoderIcon style={{ width: 18, height: 18 }} />
+              <h3>{getPlatformLabel(platformId, t)}</h3>
+            </div>
+            <div className="header-action-group">
+              <button
+                className="header-action-btn"
+                onClick={handleRefreshQoderCnCard}
+                disabled={cardRefreshing.qoderCn}
+                title={t('common.refresh', '刷新')}
+              >
+                <RotateCw size={14} className={cardRefreshing.qoderCn ? 'loading-spinner' : ''} />
+                <span>{t('common.refresh', '刷新')}</span>
+              </button>
+              {renderHideCardButton(platformId)}
+            </div>
+          </div>
+
+          <div className="split-content">
+            <div className="split-half current-half">
+              <span className="half-label"><CheckCircle2 size={12} /> {t('dashboard.current', '当前账户')}</span>
+              {renderQoderCnAccountContent(qoderCnCurrent)}
+            </div>
+
+            <div className="split-divider"></div>
+
+            <div className="split-half recommend-half">
+              <span className="half-label"><Sparkles size={12} /> {t('dashboard.recommended', '推荐账号')}</span>
+              {qoderCnRecommended ? (
+                renderQoderCnAccountContent(qoderCnRecommended)
+              ) : (
+                <div className="empty-slot-text">{t('dashboard.noRecommendation', '暂无更好推荐')}</div>
+              )}
+            </div>
+          </div>
+
+          <button className="card-footer-action" onClick={() => onNavigate('qoder-cn')}>
+            {t('dashboard.viewAllAccounts', '查看所有账号')}
+          </button>
+        </div>
+      );
+    }
+
     if (platformId === 'zcode') {
       return (
         <div className="main-card windsurf-card" key={platformId}>
@@ -3731,6 +3880,7 @@ export function DashboardPage({
     ...dashboardAccountCards('codebuddy', codebuddyAccounts, renderCodebuddyAccountContent),
     ...dashboardAccountCards('codebuddy_cn', codebuddyCnAccounts, renderCodebuddyCnAccountContent),
     ...dashboardAccountCards('qoder', qoderAccounts, renderQoderAccountContent),
+    ...dashboardAccountCards('qoder_cn', qoderCnAccounts, renderQoderCnAccountContent),
     ...dashboardAccountCards('zcode', zcodeAccounts, renderZcodeAccountContent),
     ...TRAE_SUITE_DASHBOARD_PLATFORM_IDS.flatMap((platformId) =>
       dashboardAccountCards(platformId, traeAccountsByPlatform[platformId], (account) => renderTraeAccountContent(account, platformId)),
