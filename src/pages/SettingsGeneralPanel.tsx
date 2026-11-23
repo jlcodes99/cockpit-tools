@@ -159,6 +159,13 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
     qoderQuotaAlertThreshold,
     qoderQuotaAlertThresholdCustomMode,
     qoderQuotaAlertThresholdIsPreset,
+    qoderCnAutoRefresh,
+    qoderCnAutoRefreshCustomMode,
+    qoderCnAutoRefreshIsPreset,
+    qoderCnQuotaAlertEnabled,
+    qoderCnQuotaAlertThreshold,
+    qoderCnQuotaAlertThresholdCustomMode,
+    qoderCnQuotaAlertThresholdIsPreset,
     quotaAlertEnabled,
     quotaAlertThreshold,
     quotaAlertThresholdCustomMode,
@@ -258,6 +265,11 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
     setQoderQuotaAlertThreshold,
     setQoderQuotaAlertThresholdCustomMode,
     setQoderCnAppPath,
+    setQoderCnAutoRefresh,
+    setQoderCnAutoRefreshCustomMode,
+    setQoderCnQuotaAlertEnabled,
+    setQoderCnQuotaAlertThreshold,
+    setQoderCnQuotaAlertThresholdCustomMode,
     setQuotaAlertEnabled,
     setQuotaAlertThreshold,
     setQuotaAlertThresholdCustomMode,
@@ -2621,6 +2633,26 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
               <PlatformSettingsSection platformId={'qoder_cn'} order={platformSettingsOrder.qoder_cn}>
                 <div className="group-title">{t('nav.qoderCn', 'Qoder CN')}</div>
                 <div className="settings-group">
+                  {renderPlatformAutoRefreshRow({
+                    title: t('settings.general.qoderAutoRefresh', 'Qoder 自动刷新配额'),
+                    description: t('settings.general.qoderAutoRefreshDesc', '后台自动更新频率'),
+                    value: qoderCnAutoRefresh,
+                    setValue: setQoderCnAutoRefresh,
+                    customMode: qoderCnAutoRefreshCustomMode,
+                    setCustomMode: setQoderCnAutoRefreshCustomMode,
+                    isPreset: qoderCnAutoRefreshIsPreset,
+                  })}
+                  {renderCurrentAccountRefreshRow('qoder_cn')}
+                  {renderAccountLevelRefreshConfig('qoder_cn')}
+                  {renderPlatformQuotaAlertRows({
+                    enabled: qoderCnQuotaAlertEnabled,
+                    setEnabled: setQoderCnQuotaAlertEnabled,
+                    threshold: qoderCnQuotaAlertThreshold,
+                    setThreshold: setQoderCnQuotaAlertThreshold,
+                    customMode: qoderCnQuotaAlertThresholdCustomMode,
+                    setCustomMode: setQoderCnQuotaAlertThresholdCustomMode,
+                    isPreset: qoderCnQuotaAlertThresholdIsPreset,
+                  })}
                   <div className="settings-row">
                     <div className="row-label">
                       <div className="row-title">{t('settings.general.qoderCnAppPath', 'Qoder CN 启动路径')}</div>
