@@ -258,7 +258,9 @@ impl QoderCnAccountStore {
         let Some(mut account) = self.load_account(id)? else {
             return Err("QODER_ACCOUNT_NOT_FOUND".into());
         };
-        account.last_switched_at = Some(chrono::Utc::now().timestamp_millis());
+        // `last_switched_at` is epoch seconds everywhere else (see `now_ts()`), and the
+        // UI multiplies it by 1000 before formatting; millis here displayed year 58863.
+        account.last_switched_at = Some(chrono::Utc::now().timestamp());
         self.write_details(&account)
     }
 
@@ -511,6 +513,25 @@ mod tests {
         assert_eq!(envelope["kind"], "qoder_cn");
         assert!(envelope["ciphertext"].is_string());
         assert!(!envelope.to_string().contains("synthetic-access-token"));
+    }
+
+    #[test]
+    fn mark_switched_records_epoch_seconds() {
+        let root = tempfile::tempdir().unwrap();
+        let store = QoderCnAccountStore::new(root.path().to_path_buf());
+        let account = account_fixture(None, Some("qoder_cn"));
+        store.save_account(&account).unwrap();
+
+        store.mark_switched(&account.id).unwrap();
+
+        let saved = store.load_account(&account.id).unwrap().unwrap();
+        let switched = saved.last_switched_at.expect("last_switched_at");
+        // The UI renders this with `new Date(value * 1000)`; a millisecond value
+        // showed up as year 58863.
+        assert!(
+            (1_600_000_000..2_000_000_000).contains(&switched),
+            "expected epoch seconds, got {switched}"
+        );
     }
 
     #[test]
