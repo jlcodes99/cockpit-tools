@@ -86,20 +86,102 @@ pub async fn claim_qoder_cn_checkin(
     qoder_oauth::claim_qoder_checkin(&account_id).await
 }
 
+/// Result of a CN switch. `relaunched` reports whether the client that was
+/// closed before the write has been started again, so the UI never claims a
+/// relaunch that did not happen.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QoderCnSwitchOutcome {
+    account_id: String,
+    relaunched: bool,
+}
+
 #[tauri::command]
-pub async fn inject_qoder_cn_native(account_id: String, client: String) -> Result<String, String> {
+pub async fn inject_qoder_cn_native(
+    account_id: String,
+    client: String,
+) -> Result<QoderCnSwitchOutcome, String> {
     let target = qoder_native::NativeClient::parse(&client)?;
     qoder_oauth::prepare_cn_account_for_switch(&account_id).await?;
     let id = account_id.clone();
     let started_at = Instant::now();
-    tauri::async_runtime::spawn_blocking(move || qoder_native::switch(&id, target))
+    let relaunched = tauri::async_runtime::spawn_blocking(move || switch_qoder_cn(&id, target))
         .await
         .map_err(|_| "QODER_NATIVE_WORKER_FAILED".to_string())??;
     logger::log_info(&format!(
-        "[Qoder CN Switch] 写入客户端完成: account_id={account_id}, client={client}, elapsed={}ms",
+        "[Qoder CN Switch] 写入客户端完成: account_id={account_id}, client={client}, relaunched={relaunched}, elapsed={}ms",
         started_at.elapsed().as_millis()
     ));
-    Ok(account_id)
+    Ok(QoderCnSwitchOutcome {
+        account_id,
+        relaunched,
+    })
+}
+
+/// Closes the desktop client, replaces its credentials and starts it again.
+/// Returns whether the client was actually started again.
+#[cfg(target_os = "windows")]
+fn switch_qoder_cn(
+    account_id: &str,
+    target: qoder_native::NativeClient,
+) -> Result<bool, String> {
+    if target != qoder_native::NativeClient::Desktop {
+        qoder_native::switch(account_id, target)?;
+        return Ok(false);
+    }
+
+    // Capture the binary before closing it. A running client is the only
+    // unambiguous source of its own path, and reusing that path keeps the
+    // relaunch from opening a different install.
+    let system = sysinfo::System::new_all();
+    let executable = qoder_native::qoder_cn_desktop_executable(&system);
+    let pids = qoder_native::qoder_cn_desktop_pids(&system);
+    if !pids.is_empty() {
+        if let Err(close_error) = crate::modules::process::close_qoder_cn_desktop(&pids, 20) {
+            // The client may already be gone: never leave the user with a bare
+            // "switch failed" while nothing is running.
+            return Err(restore_after_failure(executable.as_deref(), close_error));
+        }
+    }
+    if let Err(error) = qoder_native::switch(account_id, target) {
+        // Credentials were rolled back and the client is closed, so the real
+        // state depends on whether it comes back, not on the original error.
+        return Err(restore_after_failure(executable.as_deref(), error));
+    }
+    let Some(path) = executable else {
+        // Nothing was running, so there is nothing to reopen.
+        return Ok(false);
+    };
+    crate::modules::process::start_qoder_cn_desktop(&path)
+        .map_err(|error| format!("QODER_CN_RELAUNCH_FAILED: {error}"))?;
+    Ok(true)
+}
+
+/// Last resort after a failed switch: put the client back. When that also fails
+/// the caller must report both facts instead of an unrelated error.
+#[cfg(target_os = "windows")]
+fn restore_after_failure(executable: Option<&std::path::Path>, cause: String) -> String {
+    let Some(path) = executable else {
+        return cause;
+    };
+    match crate::modules::process::start_qoder_cn_desktop(path) {
+        Ok(_) => cause,
+        Err(relaunch_error) => {
+            logger::log_warn(&format!(
+                "[Qoder CN Switch] restore launch failed after failure: cause={cause}, relaunch={relaunch_error}"
+            ));
+            format!("QODER_CN_RELAUNCH_FAILED: {relaunch_error} (cause: {cause})")
+        }
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn switch_qoder_cn(
+    account_id: &str,
+    target: qoder_native::NativeClient,
+) -> Result<bool, String> {
+    qoder_native::switch(account_id, target)?;
+    Ok(false)
 }
 
 /// The CN desktop client only ships for Windows, so other platforms fall back to

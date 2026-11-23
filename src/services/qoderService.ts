@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { QoderAccount } from '../types/qoder';
+import type { QoderSwitchOutcome } from '../types/qoder';
 import type { QoderRegion, QoderClient } from '../utils/qoderRegion';
 
 export interface QoderOAuthStartResponse {
@@ -78,7 +79,7 @@ export async function importQoderNative(
 export async function injectQoderNative(
   _accountId: string,
   _client: QoderClient,
-): Promise<string> {
+): Promise<QoderSwitchOutcome> {
   throw new Error('QODER_CLIENT_INVALID: 国际版仅支持 IDE 适配器');
 }
 

@@ -782,20 +782,25 @@ export function QoderAccountsPage({ region = 'global' }: { region?: QoderRegion 
     async (accountId: string) => {
       if (injecting === accountId) return;
       setInjecting(accountId);
+      // The backend closes a running client before writing, so report the
+      // restart only when it really happened.
+      let relaunched = false;
       try {
         if (clientTarget === 'ide') {
           const account = accounts.find((item) => item.id === accountId);
           if (account && getQoderRegion(account) === 'cn') throw new Error(t('qoder.cn.ideUnavailable', '国内账号请选择桌面端或 CLI；此处 IDE 适配器只用于国际版。'));
           await store.switchAccount(accountId);
         } else {
-          await service.injectQoderNative(accountId, clientTarget);
+          const outcome = await service.injectQoderNative(accountId, clientTarget);
+          relaunched = outcome.relaunched;
           await store.fetchAccounts();
         }
         setMessage({
-          // Nothing is relaunched for us: the CN clients are reopened by the user.
           text: clientTarget === 'ide'
             ? t('accounts.switchSuccess', '切换成功')
-            : t('qoder.clientTarget.switchSuccess', '账号已切换，请重新打开对应客户端。'),
+            : relaunched
+              ? t('qoder.clientTarget.desktopSwitchSuccess', '账号已切换，Qoder CN 桌面端已重新启动。')
+              : t('qoder.clientTarget.switchSuccess', '账号已切换，请重新打开对应客户端。'),
         });
       } catch (error) {
         const errorText = String(error);

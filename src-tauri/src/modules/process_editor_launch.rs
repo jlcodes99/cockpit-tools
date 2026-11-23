@@ -1322,6 +1322,41 @@ pub fn start_qoder_with_args_with_new_window(
     }
 }
 
+/// Relaunches the CN desktop client after its credentials were replaced. The
+/// path is the executable that was just closed, so nothing has to be detected.
+pub fn start_qoder_cn_desktop(launch_path: &std::path::Path) -> Result<u32, String> {
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+
+        if !launch_path.is_file() {
+            return Err(app_path_missing_error("qoder_cn"));
+        }
+        let mut cmd = Command::new(launch_path);
+        apply_managed_proxy_env_to_command(&mut cmd);
+        if let Some(parent) = launch_path.parent() {
+            cmd.current_dir(parent);
+        }
+        if should_detach_child() {
+            cmd.creation_flags(0x0800_0000 | CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS);
+            cmd.stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null());
+        } else {
+            cmd.creation_flags(0x0800_0000);
+        }
+        let child = spawn_command_with_trace(&mut cmd).map_err(|error| error.to_string())?;
+        crate::modules::logger::log_info("Qoder CN 桌面端启动命令已发送");
+        return Ok(child.id());
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = launch_path;
+        Err("QODER_CN_DESKTOP_UNSUPPORTED".to_string())
+    }
+}
+
 pub fn start_qoder_default_with_args_with_new_window(
     extra_args: &[String],
     use_new_window: bool,

@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { QoderAccount } from '../types/qoder';
+import type { QoderSwitchOutcome } from '../types/qoder';
 import type { QoderRegion, QoderClient } from '../utils/qoderRegion';
 
 export interface QoderOAuthStartResponse {
@@ -66,7 +67,10 @@ export async function qoderOauthLoginStart(region: QoderRegion = 'cn'): Promise<
 export async function importQoderNative(region: QoderRegion, client: QoderClient): Promise<QoderAccount[]> {
   return await invoke('import_qoder_cn_native', { region, client });
 }
-export async function injectQoderNative(accountId: string, client: QoderClient): Promise<string> {
+export async function injectQoderNative(
+  accountId: string,
+  client: QoderClient,
+): Promise<QoderSwitchOutcome> {
   return await invoke('inject_qoder_cn_native', { accountId, client });
 }
 

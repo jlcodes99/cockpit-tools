@@ -190,30 +190,130 @@ fn encode(root: &Path, client: NativeClient, profile: &Value) -> Result<Vec<u8>,
     Ok(bytes)
 }
 
-/// The CN desktop client shares its launcher name with the global one, and the
-/// install directory is not known here, so only unambiguous names count as a
-/// running CN client. A global client left open therefore does not block us.
-const CN_DESKTOP_PROCESS_NAMES: &[&str] = &["qoder cn.exe", "qoder cn"];
+/// The CN client shares its launcher process names with the global one. Matching
+/// on names alone either kills the global client (`taskkill /T /F` takes the
+/// child tree) or lets the resident global launcher block CN switching, so a
+/// match must also sit inside the CN install directory.
+pub(crate) const CN_DESKTOP_PROCESS_NAMES: &[&str] = &[
+    "qoder cn.exe",
+    "qoder cn",
+    "qoder launcher.exe",
+    "qoderlauncher.exe",
+    "qoderlauncher",
+];
 const CN_CLI_PROCESS_NAMES: &[&str] = &["qoderclicn.exe", "qoderclicn"];
+/// Path fragments that only the CN installer produces.
+const CN_INSTALL_MARKERS: &[&str] = &["\\qoder cn\\", "\\qodercn\\", "/qoder cn/", "/qodercn/"];
+
+fn normalize_path_key(path: &Path) -> String {
+    path.to_string_lossy()
+        .replace('/', "\\")
+        .to_ascii_lowercase()
+}
+
+fn path_is_within(path: &Path, dir: &Path) -> bool {
+    let target = normalize_path_key(path);
+    let mut root = normalize_path_key(dir);
+    if root.is_empty() || target.is_empty() {
+        return false;
+    }
+    if !root.ends_with('\\') {
+        root.push('\\');
+    }
+    target.starts_with(&root)
+}
+
+/// Names that cannot belong to the global client, usable when no install
+/// directory is known.
+fn is_unambiguous_cn_name(name_lower: &str) -> bool {
+    name_lower == "qoder cn.exe" || name_lower == "qoder cn"
+}
+
+/// Whether a process is the CN desktop client. Without a known install
+/// directory only unambiguous names count, so the global client is never taken
+/// for the CN one.
+pub(crate) fn is_qoder_cn_desktop_process(
+    name_lower: &str,
+    exe: Option<&Path>,
+    cn_install_dir: Option<&Path>,
+) -> bool {
+    if !CN_DESKTOP_PROCESS_NAMES.contains(&name_lower) {
+        return false;
+    }
+    if let (Some(exe), Some(dir)) = (exe, cn_install_dir) {
+        if exe.as_os_str().is_empty() {
+            return is_unambiguous_cn_name(name_lower);
+        }
+        return path_is_within(exe, dir);
+    }
+    is_unambiguous_cn_name(name_lower)
+}
+
+/// The CN install directory, learned from a running client. Deliberately not
+/// read from config: a stale override must not redirect a kill at the global
+/// client.
+pub(crate) fn qoder_cn_install_dir(system: &sysinfo::System) -> Option<PathBuf> {
+    system
+        .processes()
+        .values()
+        .filter_map(|process| process.exe())
+        .map(PathBuf::from)
+        .find(|path| {
+            let key = normalize_path_key(path);
+            CN_INSTALL_MARKERS.iter().any(|marker| key.contains(marker))
+        })
+        .and_then(|path| path.parent().map(Path::to_path_buf))
+}
+
+pub(crate) fn qoder_cn_desktop_pids(system: &sysinfo::System) -> Vec<u32> {
+    let dir = qoder_cn_install_dir(system);
+    let mut pids: Vec<u32> = system
+        .processes()
+        .values()
+        .filter(|process| {
+            let name = process.name().to_string_lossy().to_ascii_lowercase();
+            is_qoder_cn_desktop_process(&name, process.exe(), dir.as_deref())
+        })
+        .map(|process| process.pid().as_u32())
+        .collect();
+    pids.sort_unstable();
+    pids.dedup();
+    pids
+}
+
+/// Executable of the running CN desktop client, so a switch can reopen exactly
+/// the binary it closed instead of guessing an install path.
+pub(crate) fn qoder_cn_desktop_executable(system: &sysinfo::System) -> Option<PathBuf> {
+    let dir = qoder_cn_install_dir(system);
+    system
+        .processes()
+        .values()
+        .filter(|process| {
+            let name = process.name().to_string_lossy().to_ascii_lowercase();
+            is_qoder_cn_desktop_process(&name, process.exe(), dir.as_deref())
+        })
+        .filter_map(|process| process.exe())
+        .map(PathBuf::from)
+        .find(|path| path.is_file())
+}
 
 fn ensure_idle(client: NativeClient) -> Result<(), String> {
     let system = sysinfo::System::new_all();
     if system.processes().is_empty() {
         return Err("QODER_NATIVE_PROCESS_PROBE_FAILED".into());
     }
-    let names = match client {
-        NativeClient::Desktop => CN_DESKTOP_PROCESS_NAMES,
-        NativeClient::Cli => CN_CLI_PROCESS_NAMES,
+    let running = match client {
+        NativeClient::Desktop => !qoder_cn_desktop_pids(&system).is_empty(),
+        NativeClient::Cli => system.processes().values().any(|process| {
+            CN_CLI_PROCESS_NAMES.contains(
+                &process
+                    .name()
+                    .to_string_lossy()
+                    .to_ascii_lowercase()
+                    .as_str(),
+            )
+        }),
     };
-    let running = system.processes().values().any(|process| {
-        names.contains(
-            &process
-                .name()
-                .to_string_lossy()
-                .to_ascii_lowercase()
-                .as_str(),
-        )
-    });
     if running {
         // Switching under a live client would be undone by its own next write.
         let detail = match client {
@@ -402,4 +502,44 @@ pub fn import_from_local() -> Result<bool, String> {
 /// store, so a global account can never land in the CN index.
 pub fn prepare_cn_import(value: &mut Value) -> Result<(), String> {
     qoder_native_profile::prepare_import(value, cn_channel()?)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The global client shares the launcher name, so a shared name alone must
+    /// never make a process count as the CN client: switching would kill it.
+    #[test]
+    fn shared_launcher_names_need_the_cn_install_dir() {
+        let cn_dir = Path::new(r"C:\Users\u\AppData\Local\Programs\Qoder CN");
+        let global = Path::new(r"C:\Users\u\AppData\Local\Programs\Qoder\Qoder Launcher.exe");
+        let cn = Path::new(r"C:\Users\u\AppData\Local\Programs\Qoder CN\Qoder Launcher.exe");
+
+        assert!(!is_qoder_cn_desktop_process(
+            "qoder launcher.exe",
+            Some(global),
+            Some(cn_dir)
+        ));
+        assert!(is_qoder_cn_desktop_process(
+            "qoder launcher.exe",
+            Some(cn),
+            Some(cn_dir)
+        ));
+    }
+
+    #[test]
+    fn unambiguous_names_match_without_a_known_dir() {
+        assert!(is_qoder_cn_desktop_process("qoder cn.exe", None, None));
+        assert!(!is_qoder_cn_desktop_process("qoder launcher.exe", None, None));
+        assert!(!is_qoder_cn_desktop_process("qoder.exe", None, None));
+    }
+
+    #[test]
+    fn unknown_process_names_never_match() {
+        let cn = Path::new(r"C:\Users\u\AppData\Local\Programs\Qoder CN\Qoder CN.exe");
+        assert!(!is_qoder_cn_desktop_process("code.exe", Some(cn), Some(Path::new(
+            r"C:\Users\u\AppData\Local\Programs\Qoder CN"
+        ))));
+    }
 }

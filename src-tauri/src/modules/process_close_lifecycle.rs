@@ -206,6 +206,19 @@ pub fn close_qoder_instances(user_data_dirs: &[String], timeout_secs: u64) -> Re
     )
 }
 
+/// Closes the CN desktop client so its credential files can be replaced. The
+/// pid list comes from `qoder_native`, which scopes the match to the CN install
+/// directory instead of taking every process that shares the launcher name.
+pub fn close_qoder_cn_desktop(pids: &[u32], timeout_secs: u64) -> Result<(), String> {
+    if pids.is_empty() {
+        return Ok(());
+    }
+    crate::modules::logger::log_info(&format!(
+        "[Qoder CN Close] closing desktop pids={pids:?}"
+    ));
+    close_pids(pids, timeout_secs)
+}
+
 pub fn close_trae_instances(user_data_dirs: &[String], timeout_secs: u64) -> Result<(), String> {
     let default_dir = get_default_trae_user_data_dir_for_os()
         .map(|value| normalize_path_for_compare(&value))
