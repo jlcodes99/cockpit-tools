@@ -1167,6 +1167,12 @@ pub(crate) fn resolve_current_account_id(accounts: &[QoderAccount]) -> Option<St
     )
 }
 
+/// 刷新后检查全局 Qoder 账号的剩余额度。判定见 `qoder_quota_alert`。
+pub fn run_quota_alert_if_needed(
+) -> Result<Option<crate::modules::account::QuotaAlertPayload>, String> {
+    crate::modules::qoder_quota_alert::run(crate::modules::qoder_quota_alert::QoderStore::Global)
+}
+
 fn serialize_raw_or_fallback(raw: &Option<Value>, fallback: Value) -> Result<String, String> {
     let value = raw.clone().unwrap_or(fallback);
     serde_json::to_string(&value).map_err(|e| format!("序列化 Qoder 注入数据失败: {}", e))

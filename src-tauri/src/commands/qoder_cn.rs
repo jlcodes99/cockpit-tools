@@ -322,6 +322,9 @@ pub async fn refresh_qoder_cn_token(
             if let Some(error) = &account.quota_query_last_error {
                 return Err(error.clone());
             }
+            if let Err(error) = qoder_native::run_quota_alert_if_needed() {
+                logger::log_warn(&format!("[Qoder CN Command] 配额预警检查失败: {error}"));
+            }
             Ok(account)
         }
         Err(error) => {
@@ -340,6 +343,9 @@ pub async fn refresh_all_qoder_cn_tokens(app: AppHandle) -> Result<i32, String> 
     logger::log_info("[Qoder CN Command] 批量刷新开始");
     let refreshed = qoder_oauth::refresh_all_cn_accounts_from_openapi().await?;
     let _ = crate::modules::tray::update_tray_menu(&app);
+    if let Err(error) = qoder_native::run_quota_alert_if_needed() {
+        logger::log_warn(&format!("[Qoder CN Command] 配额预警检查失败: {error}"));
+    }
     logger::log_info(&format!(
         "[Qoder CN Command] 批量刷新完成: refreshed={refreshed}, elapsed={}ms",
         started_at.elapsed().as_millis()

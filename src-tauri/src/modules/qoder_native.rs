@@ -495,6 +495,13 @@ pub fn resolve_current_account_id(accounts: &[QoderAccount]) -> Option<String> {
     )
 }
 
+/// 刷新后检查 CN 账号的剩余额度。CN 存储在 core 里、看不到当前账号状态，
+/// 所以预警入口放在这个适配层。
+pub fn run_quota_alert_if_needed(
+) -> Result<Option<crate::modules::account::QuotaAlertPayload>, String> {
+    super::qoder_quota_alert::run(super::qoder_quota_alert::QoderStore::Cn)
+}
+
 /// Reads the credentials the installed CN client currently holds and stores
 /// them as an account. Nothing is written back to the client.
 pub fn import(client: NativeClient) -> Result<QoderAccount, String> {
