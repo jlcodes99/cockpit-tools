@@ -5,6 +5,7 @@ import vm from 'node:vm';
 import ts from 'typescript';
 import type { DownloadEvent } from '@tauri-apps/plugin-updater';
 import { createUpdaterDownloadProgress } from '../src/utils/updaterDownloadProgress';
+import { resolveUpdateApplyFailureMessage } from '../src/utils/updateApplyFailureMessage';
 import * as retry from '../src/utils/updaterRetry';
 import { deferred, settlePromises } from './helpers/reactHookHarness';
 
@@ -68,7 +69,7 @@ function harness(options: {
   };
   const exports: Record<string, any> = {};
   const context: Record<string, any> = {
-    exports, ...refs, ...retry, createUpdaterDownloadProgress,
+    exports, ...refs, ...retry, createUpdaterDownloadProgress, resolveUpdateApplyFailureMessage,
     UPDATE_DOWNLOAD_RETRY_DELAYS_MS: [0], UPDATE_CHECK_RETRY_DELAYS_MS: [],
     updateRuntimeInfoLoaded: true, isLinuxManagedUpdate: false, performance: { now: () => 0 },
     updatePromptPolicyRef: { current: { enabled: true, revision: 0 } },
@@ -153,8 +154,10 @@ test('install and relaunch failures show the error before recovering the API lis
       setUpdateAction() {}, setUpdateErrorDetails() {}, setSilentUpdateVersion() {},
       setUpdateRetryStatus() {}, writeUpdateLog() {},
       setUpdateDownloadError(value: string) { displayedError = value; },
-      sanitizeUpdaterErrorMessage: retry.sanitizeUpdaterErrorMessage,
+      resolveUpdateApplyFailureMessage,
+       sanitizeUpdaterErrorMessage: retry.sanitizeUpdaterErrorMessage,
       console: { error() {} },
+       updateRuntimeInfo: null,
       t: (key: string) => key,
     };
     const source = `
