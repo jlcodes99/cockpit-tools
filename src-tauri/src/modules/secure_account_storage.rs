@@ -18,6 +18,22 @@ fn key_path() -> Result<PathBuf, String> {
     Ok(crate::modules::account::get_data_dir()?.join(KEY_FILE))
 }
 
+/// Values at or above this bound are legacy millisecond stamps; second-based
+/// stamps stay below it until the year 5138.
+const MILLIS_TIMESTAMP_FLOOR: i64 = 100_000_000_000;
+
+/// Builds before `3ddcffd6` stored switch times in milliseconds. Comparing raw
+/// values mixes the two units, and a millisecond leftover always outranks a
+/// later second-based write, so it has to be folded back before any comparison
+/// or formatting.
+pub(super) fn epoch_seconds(value: i64) -> i64 {
+    if value >= MILLIS_TIMESTAMP_FLOOR {
+        value / 1000
+    } else {
+        value
+    }
+}
+
 fn read_or_create_key() -> Result<[u8; 32], String> {
     let path = key_path()?;
     read_or_create_key_at(&path)
@@ -125,8 +141,8 @@ pub(crate) fn write_account_preserving_switch_time<T: Serialize>(
                 envelope
             };
             if previous.get("id") == next.get("id") {
-                let timestamp = previous.get("last_switched_at").and_then(serde_json::Value::as_i64)
-                    .max(next.get("last_switched_at").and_then(serde_json::Value::as_i64));
+                let timestamp = previous.get("last_switched_at").and_then(serde_json::Value::as_i64).map(epoch_seconds)
+                    .max(next.get("last_switched_at").and_then(serde_json::Value::as_i64).map(epoch_seconds));
                 if let Some(timestamp) = timestamp {
                     next["last_switched_at"] = timestamp.into();
                 }
@@ -162,7 +178,8 @@ pub(super) fn write_at<T: Serialize>(
         }
         if let Some(timestamp) = previous["last_switched_at"]
             .as_i64()
-            .max(next["last_switched_at"].as_i64())
+            .map(epoch_seconds)
+            .max(next["last_switched_at"].as_i64().map(epoch_seconds))
         {
             next["last_switched_at"] = timestamp.into();
         }

@@ -12,7 +12,7 @@ use super::{
     logger, provider_account_index,
     qoder_channel::{credential_source, CredentialSource},
     qoder_identity::normalize_account_id,
-    secure_account_storage::{read_at, write_at},
+    secure_account_storage::{epoch_seconds, read_at, write_at},
 };
 use crate::models::qoder::{QoderAccount, QoderCnAccountIndex};
 
@@ -78,6 +78,7 @@ impl QoderCnAccountStore {
             return Err("QODER_SESSION_CHANGED".into());
         }
         upgrade_legacy_cn_marker(&mut account);
+        normalize_switched_timestamp(&mut account);
         require_public_cn(&account)?;
         Ok(Some(account))
     }
@@ -454,6 +455,15 @@ fn require_public_cn(account: &QoderAccount) -> Result<(), String> {
 /// Rewrites a session stamp left by an earlier build of this store. Only the
 /// stored copy is affected; the file keeps its bytes until the next save, so a
 /// downgrade still finds a payload it understands.
+/// Builds before `3ddcffd6` recorded the switch time in milliseconds. Those values
+/// stay on disk until the account is rewritten, and the UI multiplies by 1000
+/// before formatting, so a raw millisecond stamp renders as the year 58863.
+fn normalize_switched_timestamp(account: &mut QoderAccount) {
+    if let Some(value) = account.last_switched_at {
+        account.last_switched_at = Some(epoch_seconds(value));
+    }
+}
+
 fn upgrade_legacy_cn_marker(account: &mut QoderAccount) {
     for payload in [
         account.auth_user_info_raw.as_mut(),
@@ -513,6 +523,36 @@ mod tests {
         assert_eq!(envelope["kind"], "qoder_cn");
         assert!(envelope["ciphertext"].is_string());
         assert!(!envelope.to_string().contains("synthetic-access-token"));
+    }
+
+    #[test]
+    fn legacy_millisecond_switch_time_is_repaired_on_write() {
+        let root = tempfile::tempdir().unwrap();
+        let store = QoderCnAccountStore::new(root.path().to_path_buf());
+        let mut account = account_fixture(None, Some("qoder_cn"));
+        // Builds before the unit fix stored `timestamp_millis()`. `write_at` keeps
+        // the larger of the stored and the incoming value, so a leftover in
+        // milliseconds outranked every later seconds-based write and stayed put.
+        account.last_switched_at = Some(1_795_397_283_233);
+        store.save_account(&account).unwrap();
+
+        store.mark_switched(&account.id).unwrap();
+
+        // The raw file must hold seconds: normalization on read alone would hide a
+        // write path that keeps re-pinning the stale millisecond stamp.
+        let raw: QoderAccount = read_at(&store.root, &store.path(&account.id).unwrap()).unwrap();
+        let raw_switched = raw.last_switched_at.expect("raw last_switched_at");
+        assert!(
+            (1_600_000_000..2_000_000_000).contains(&raw_switched),
+            "expected the stored stamp in seconds, got {raw_switched}"
+        );
+
+        let loaded = store.load_account(&account.id).unwrap().unwrap();
+        let switched = loaded.last_switched_at.expect("last_switched_at");
+        assert!(
+            (1_600_000_000..2_000_000_000).contains(&switched),
+            "expected epoch seconds after load, got {switched}"
+        );
     }
 
     #[test]
