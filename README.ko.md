@@ -435,9 +435,7 @@ npm run tauri build
 
 ## 커뮤니티
 
-QQ 커뮤니티, 위챗 그룹 또는 새로 개설한 Telegram 대화 그룹 모두 참여할 수 있습니다.
-
-Telegram 대화 그룹 참여: [그룹 참여하기](https://t.me/+Y8gMv4SlZUU2MWY1)
+QQ 그룹에 참여하거나 위챗으로 연락할 수 있습니다.
 
 | QQ 그룹 | 위챗(개인) |
 | :---: | :---: |

@@ -503,9 +503,7 @@ cockpit-cli api-service remove "服务成员账号ID" --json
 
 ## 💬 交流群
 
-可以通过微信联系，或加入新建的 Telegram 畅聊群。
-
-新建 Telegram 畅聊群：[点击加入](https://t.me/+Y8gMv4SlZUU2MWY1)
+可以通过微信联系。
 
 | 微信（个人） |
 | :---: |
