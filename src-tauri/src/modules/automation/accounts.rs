@@ -162,6 +162,9 @@ pub(super) async fn list(platform: Platform) -> Result<Vec<AccountSummary>, Fail
                 .await
         }
         Qoder => return blocking(|| commands::qoder::list_qoder_accounts().map(summaries)).await,
+        QoderCn => {
+            return blocking(|| commands::qoder_cn::list_qoder_cn_accounts().map(summaries)).await
+        }
         Zcode => return blocking(|| commands::zcode::list_zcode_accounts().map(summaries)).await,
         Trae | TraeSolo | TraeCn | TraeSoloCn => {
             let kind = trae_kind(platform)?;
@@ -252,6 +255,15 @@ pub(super) async fn lookup<R: Send + 'static>(
                 modules::qoder_account::load_account(&id),
                 StoredAccount::Qoder,
             )?,
+            QoderCn => {
+                // The CN store reports real IO failures; only a missing file is
+                // "not found", so the automation reply keeps the distinction.
+                let store = modules::qoder_cn_account::QoderCnAccountStore::default_store()?;
+                let account = store
+                    .load_account(&id)?
+                    .ok_or_else(|| "account_not_found".to_string())?;
+                StoredAccount::Qoder(account)
+            }
             Zcode => project_loaded(
                 modules::zcode_account::load_account(&id),
                 StoredAccount::Zcode,

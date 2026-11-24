@@ -631,7 +631,7 @@ export function UniversalGroupAccountPickerModal({
 }: UniversalGroupAccountPickerModalProps) {
   const { t } = useTranslation();
   useEscClose(isOpen, onClose);
-  const preservePlanText = ['cursor', 'windsurf', 'qoder', 'grok'].includes(platform) || platform.startsWith('trae');
+  const preservePlanText = ['cursor', 'windsurf', 'qoder', 'qoder_cn', 'grok'].includes(platform) || platform.startsWith('trae');
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
@@ -819,7 +819,7 @@ export function UniversalGroupAccountPickerModal({
                 const badge = platform === 'antigravity' ? getAntigravityTierBadge(account.quota)
                   : presentation ? { label: presentation.planLabel, className: presentation.planClass }
                   : { label: rawPlan ?? t('common.unknown'), className: rawPlan ? 'plan-badge-default' : 'unknown' };
-                if (platform === 'qoder') {
+                if (platform === 'qoder' || platform === 'qoder_cn') {
                   badge.label = getQoderPlanBadge(account as QoderAccount);
                   badge.className = resolveQoderPlanBadgeClass(badge.label);
                 } else if (platform === 'grok') {

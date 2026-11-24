@@ -362,6 +362,9 @@ pub(super) async fn refresh(app: AppHandle, platform: Platform, id: String) -> R
         Qoder => commands::qoder::refresh_qoder_token(app, id)
             .await
             .map(|_| ()),
+        QoderCn => commands::qoder_cn::refresh_qoder_cn_token(app, id)
+            .await
+            .map(|_| ()),
         Zcode => commands::zcode::refresh_zcode_account(app, id)
             .await
             .map(|_| ()),

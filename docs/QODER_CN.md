@@ -52,6 +52,10 @@ just replaced, and restore them if the write has to be rolled back.
 
 The CLI target writes credentials only — reopen the terminal afterwards.
 
+The automation protocol exposes the CN realm as the platform id `qoder_cn`, alongside the global
+`qoder`, so scripts can list, look up, refresh and switch CN accounts through the same operations
+the desktop host uses.
+
 ## Settings
 
 - Launch path for the Qoder CN desktop client (empty means auto-detect).
