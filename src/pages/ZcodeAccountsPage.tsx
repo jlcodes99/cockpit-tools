@@ -93,7 +93,7 @@ export function ZcodeAccountsPage() {
   );
 
   const handleExposeToCodex = async (account: ZcodeAccount) => {
-    if (account.auth_mode !== 'api_key' || codexBindingId) return;
+    if ((account.auth_mode !== 'api_key' && account.auth_mode !== 'oauth') || codexBindingId) return;
     setCodexBindingId(account.id);
     try {
       await codexService.addCodexAccountFromZcode(account.id);
@@ -168,13 +168,13 @@ export function ZcodeAccountsPage() {
     getUsage: getZcodeUsage,
     getQuotaGroups: getZcodeQuotaGroups,
     hasQuotaData: (account) => hasZcodeQuotaData(account),
-    renderCardActionExtra: (account) => account.auth_mode === 'api_key' ? (
+    renderCardActionExtra: (account) => account.auth_mode === 'api_key' || account.auth_mode === 'oauth' ? (
       <button
         type="button"
         className="btn btn-secondary"
         disabled={codexBindingId !== null}
         aria-busy={codexBindingId === account.id}
-        title="仅在 Native Rust 网关中接入，不会复制 API Key 到 Codex 配置"
+        title="仅在 Native Rust 网关中接入，不会复制 ZCode API Key 或 OAuth Token 到 Codex 配置"
         onClick={() => { void handleExposeToCodex(account); }}
       >
         {codexBindingId === account.id ? '接入中…' : '接入 Codex 网关'}

@@ -756,10 +756,11 @@ async fn native_account_credentials(
                     account.api_credential_ref.as_deref().unwrap_or(""),
                 )
                 .ok_or_else(|| "ZCode account is unavailable".to_string())?;
-                if source.auth_mode != crate::models::zcode::ZcodeAuthMode::ApiKey {
-                    return Err("ZCode source must be an API Key account".to_string());
+                if codex_account::is_zcode_oauth_upstream_provider(&account) {
+                    headers = native_zcode::oauth_credential_headers(&source)?;
+                } else {
+                    headers = native_zcode::credential_headers(&source)?;
                 }
-                headers = native_zcode::credential_headers(&source)?;
                 native_zcode::bind_owner(&mut account, &source);
                 native_zcode::base_url(&source).to_string()
             } else if account.is_api_key_auth() {
@@ -811,6 +812,12 @@ async fn native_account_credentials(
 
 fn native_credential_error(error: &str) -> native_contract::ServiceError {
     match error {
+        "ZCODE_OAUTH_REAUTH_REQUIRED" => native_error(
+            401,
+            "zcode_oauth_reauthorization_required",
+            "ZCode OAuth credentials are unavailable; sign in again in ZCode",
+        )
+        .with_credential_scope(true),
         "CHATGPT_PLAN_REAUTH_REQUIRED" | "CHATGPT_PLAN_DISCONNECTED" | "CHATGPT_PLAN_NOT_FOUND" => {
             native_error(
                 401,
