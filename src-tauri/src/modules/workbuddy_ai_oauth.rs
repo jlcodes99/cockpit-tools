@@ -121,10 +121,6 @@ async fn request_json(request: RequestBuilder) -> Result<(StatusCode, Value), Re
     }
 }
 
-async fn response(request: RequestBuilder) -> Result<(StatusCode, Value), String> {
-    request_json(request).await.map_err(|error| error.detail())
-}
-
 async fn oauth_get(
     request: impl Fn() -> RequestBuilder,
     stage: &str,
@@ -450,25 +446,80 @@ pub async fn session_from_access_token(access_token: &str) -> Result<Value, Stri
     session(auth, selected, snapshot)
 }
 
-pub async fn renew_auth(session_value: &Value) -> Result<Value, String> {
-    let client = client()?;
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RenewAuthError {
+    Permanent(String),
+    Transient(String),
+}
+
+impl RenewAuthError {
+    pub fn into_message(self) -> String {
+        match self {
+            Self::Permanent(msg) => format!("WORKBUDDY_AI_REFRESH_REJECTED: {msg}"),
+            Self::Transient(msg) => msg,
+        }
+    }
+}
+
+fn classify_refresh_rejection(status: StatusCode, body: &Value, detail: String) -> RenewAuthError {
+    let is_permanent_http = status.is_client_error() && !matches!(status.as_u16(), 408 | 429);
+    let body_code = body.get("code").and_then(Value::as_i64);
+    let is_permanent_code = matches!(body_code, Some(400 | 401 | 403 | 10401 | 11401));
+    let body_msg_lower = body
+        .get("message")
+        .or_else(|| body.get("msg"))
+        .or_else(|| body.get("error"))
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    let is_permanent_text = body_msg_lower.contains("invalid_grant")
+        || body_msg_lower.contains("invalid refresh")
+        || body_msg_lower.contains("refresh token expired")
+        || body_msg_lower.contains("token expired");
+
+    if is_permanent_http || is_permanent_code || is_permanent_text {
+        RenewAuthError::Permanent(detail)
+    } else {
+        RenewAuthError::Transient(detail)
+    }
+}
+
+pub async fn renew_auth_classified(session_value: &Value) -> Result<Value, RenewAuthError> {
+    let client = client().map_err(RenewAuthError::Transient)?;
+    renew_auth_with_client_and_origin(&client, ORIGIN, session_value).await
+}
+
+async fn renew_auth_with_client_and_origin(
+    client: &Client,
+    origin: &str,
+    session_value: &Value,
+) -> Result<Value, RenewAuthError> {
     let mut auth = session_value["auth"].clone();
     if let Some(refresh_token) = auth["refreshToken"]
         .as_str()
         .filter(|value| !value.is_empty())
     {
-        let (status, body) = response(
+        let access_token = token(&auth).map_err(|e| RenewAuthError::Permanent(e.to_string()))?;
+        let (status, body) = request_json(
             client
-                .post(format!("{ORIGIN}/v2/plugin/auth/token/refresh"))
-                .bearer_auth(token(&auth)?)
+                .post(format!("{origin}/v2/plugin/auth/token/refresh"))
+                .bearer_auth(access_token)
                 .header("X-Domain", domain(&auth))
                 .header("X-Refresh-Token", refresh_token)
                 .header("X-Auth-Refresh-Source", "plugin")
                 .json(&json!({})),
         )
-        .await?;
-        let mut renewed = normalize_auth(data(status, &body)?.clone());
-        token(&renewed)?;
+        .await
+        .map_err(|error| match &error {
+            RequestError::Http(st) if st.is_client_error() && !matches!(st.as_u16(), 408 | 429) => {
+                RenewAuthError::Permanent(error.detail())
+            }
+            _ => RenewAuthError::Transient(error.detail()),
+        })?;
+        let payload = data(status, &body)
+            .map_err(|detail| classify_refresh_rejection(status, &body, detail))?;
+        let mut renewed = normalize_auth(payload.clone());
+        token(&renewed).map_err(RenewAuthError::Transient)?;
         if renewed["refreshToken"].is_null() {
             renewed["refreshToken"] = auth["refreshToken"].clone();
         }
@@ -524,7 +575,11 @@ pub async fn credit_usage(session: &Value) -> Result<Value, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::{response::IntoResponse, routing::get, Json, Router};
+    use axum::{
+        response::IntoResponse,
+        routing::{get, post},
+        Json, Router,
+    };
     use std::sync::{
         atomic::{AtomicUsize, Ordering},
         Arc,
@@ -590,5 +645,182 @@ mod tests {
         assert!(failure.contains("12005"));
         assert_eq!(calls.load(Ordering::SeqCst), 1);
         server.abort();
+    }
+
+    #[tokio::test]
+    async fn renew_auth_classifies_http_400_as_permanent_and_502_as_transient() {
+        let session_value = json!({
+            "auth": {
+                "accessToken": "old-tok",
+                "refreshToken": "refresh-tok",
+                "domain": HOST,
+            }
+        });
+
+        let app_400 = Router::new().route(
+            "/v2/plugin/auth/token/refresh",
+            post(|| async { (StatusCode::BAD_REQUEST, Json(json!({ "code": 400 }))) }),
+        );
+        let listener_400 = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let origin_400 = format!("http://{}", listener_400.local_addr().unwrap());
+        let server_400 =
+            tokio::spawn(async move { axum::serve(listener_400, app_400).await.unwrap() });
+        let client = Client::builder().no_proxy().build().unwrap();
+
+        let err_400 = renew_auth_with_client_and_origin(&client, &origin_400, &session_value)
+            .await
+            .unwrap_err();
+        assert!(matches!(err_400, RenewAuthError::Permanent(_)));
+        assert!(err_400
+            .into_message()
+            .starts_with("WORKBUDDY_AI_REFRESH_REJECTED:"));
+        server_400.abort();
+
+        let app_502 = Router::new().route(
+            "/v2/plugin/auth/token/refresh",
+            post(|| async { (StatusCode::BAD_GATEWAY, "gateway timeout") }),
+        );
+        let listener_502 = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let origin_502 = format!("http://{}", listener_502.local_addr().unwrap());
+        let server_502 =
+            tokio::spawn(async move { axum::serve(listener_502, app_502).await.unwrap() });
+
+        let err_502 = renew_auth_with_client_and_origin(&client, &origin_502, &session_value)
+            .await
+            .unwrap_err();
+        assert!(matches!(err_502, RenewAuthError::Transient(_)));
+        server_502.abort();
+    }
+
+    async fn run_refresh_response(
+        status: StatusCode,
+        json_body: Option<Value>,
+        text_body: &'static str,
+    ) -> Result<Value, RenewAuthError> {
+        let session_value = json!({
+            "auth": {
+                "accessToken": "old-tok",
+                "refreshToken": "refresh-tok",
+                "domain": HOST,
+            }
+        });
+        let app = Router::new().route(
+            "/v2/plugin/auth/token/refresh",
+            post(move || {
+                let json_body = json_body.clone();
+                async move {
+                    match json_body {
+                        Some(body) => (status, Json(body)).into_response(),
+                        None => (status, text_body).into_response(),
+                    }
+                }
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let origin = format!("http://{}", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let client = Client::builder().no_proxy().build().unwrap();
+        let result = renew_auth_with_client_and_origin(&client, &origin, &session_value).await;
+        server.abort();
+        result
+    }
+
+    #[tokio::test]
+    async fn renew_auth_classifies_http_408_and_429_as_transient() {
+        let err_408 = run_refresh_response(StatusCode::REQUEST_TIMEOUT, None, "request timeout")
+            .await
+            .unwrap_err();
+        assert!(matches!(err_408, RenewAuthError::Transient(_)));
+
+        let err_429_text =
+            run_refresh_response(StatusCode::TOO_MANY_REQUESTS, None, "rate limited")
+                .await
+                .unwrap_err();
+        assert!(matches!(err_429_text, RenewAuthError::Transient(_)));
+
+        let err_429_json = run_refresh_response(
+            StatusCode::TOO_MANY_REQUESTS,
+            Some(json!({ "code": 429, "message": "too many requests" })),
+            "",
+        )
+        .await
+        .unwrap_err();
+        assert!(matches!(err_429_json, RenewAuthError::Transient(_)));
+    }
+
+    #[tokio::test]
+    async fn renew_auth_classifies_http_401_and_403_json_and_non_json_as_permanent() {
+        let cases = [
+            (
+                StatusCode::UNAUTHORIZED,
+                Some(json!({ "code": 401, "message": "unauthorized" })),
+                "",
+            ),
+            (StatusCode::UNAUTHORIZED, None, "unauthorized"),
+            (
+                StatusCode::FORBIDDEN,
+                Some(json!({ "code": 403, "message": "forbidden" })),
+                "",
+            ),
+            (StatusCode::FORBIDDEN, None, "forbidden"),
+        ];
+
+        for (status, json_body, text_body) in cases {
+            let err = run_refresh_response(status, json_body, text_body)
+                .await
+                .unwrap_err();
+            assert!(
+                matches!(err, RenewAuthError::Permanent(_)),
+                "expected Permanent for HTTP {status}"
+            );
+            assert!(err
+                .into_message()
+                .starts_with("WORKBUDDY_AI_REFRESH_REJECTED:"));
+        }
+    }
+
+    #[tokio::test]
+    async fn renew_auth_classifies_http_200_code_10401_and_invalid_grant_as_permanent() {
+        let err_10401 = run_refresh_response(
+            StatusCode::OK,
+            Some(json!({ "code": 10401, "message": "auth error" })),
+            "",
+        )
+        .await
+        .unwrap_err();
+        assert!(matches!(err_10401, RenewAuthError::Permanent(_)));
+        assert!(err_10401
+            .into_message()
+            .starts_with("WORKBUDDY_AI_REFRESH_REJECTED:"));
+
+        let err_invalid_grant_with_code = run_refresh_response(
+            StatusCode::OK,
+            Some(json!({ "code": 50000, "error": "invalid_grant" })),
+            "",
+        )
+        .await
+        .unwrap_err();
+        assert!(matches!(
+            err_invalid_grant_with_code,
+            RenewAuthError::Permanent(_)
+        ));
+        assert!(err_invalid_grant_with_code
+            .into_message()
+            .starts_with("WORKBUDDY_AI_REFRESH_REJECTED:"));
+
+        let err_invalid_grant_no_code = run_refresh_response(
+            StatusCode::OK,
+            Some(json!({ "error": "invalid_grant" })),
+            "",
+        )
+        .await
+        .unwrap_err();
+        assert!(matches!(
+            err_invalid_grant_no_code,
+            RenewAuthError::Permanent(_)
+        ));
+        assert!(err_invalid_grant_no_code
+            .into_message()
+            .starts_with("WORKBUDDY_AI_REFRESH_REJECTED:"));
     }
 }

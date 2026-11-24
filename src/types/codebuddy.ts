@@ -115,11 +115,14 @@ export interface CheckinStatusResponse {
   checkin_dates?: string[] | null;
   streak_bonus_days?: number | null;
   streak_bonus_credit?: number | null;
+  pending_confirmation?: boolean | null;
 }
 
 export interface CheckinResponse {
   success: boolean;
   already_claimed?: boolean;
+  inactive?: boolean;
+  pending_confirmation?: boolean;
   warning?: string | null;
   message?: string | null;
   reward?: Record<string, unknown> | null;

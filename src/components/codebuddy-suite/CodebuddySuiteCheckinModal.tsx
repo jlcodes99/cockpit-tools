@@ -9,7 +9,7 @@
  * - loading / error：查询中或查询失败
  */
 
-import { useState, useCallback, useEffect, useMemo, type ComponentType } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef, type ComponentType } from 'react';
 import { useTranslation } from 'react-i18next';
 import { listen } from '@tauri-apps/api/event';
 import {
@@ -30,7 +30,7 @@ import {
 } from 'lucide-react';
 import type { CodebuddySuiteAccountBase, WorkbuddyAccount } from '../../types/codebuddy-suite';
 import type { CheckinStatusResponse, CheckinResponse } from '../../types/codebuddy';
-import { useEscClose } from '../../hooks/useEscClose';
+import { useEscCloseTopmost } from '../../hooks/useEscClose';
 import { WorkbuddyAutoCheckinConfigModal } from './WorkbuddyAutoCheckinConfigModal';
 import {
   getWorkbuddyAutoCheckinConfig,
@@ -79,10 +79,12 @@ interface CodebuddySuiteCheckinModalProps<TAccount extends CodebuddySuiteAccount
    * 因此它注入按用户名优先的解析器。
    */
   displayEmailResolver?: (account: TAccount) => string;
+  /** 可选顶部说明提示（如 WorkBuddy AI 国际版说明 0 消耗活跃打卡与次日结算规则） */
+  bannerNote?: string;
 }
 
-/** 与官方 WorkBuddy uiState 对齐 */
-type CheckinUiState = 'loading' | 'available' | 'claimed' | 'inactive' | 'error';
+/** 与官方 WorkBuddy uiState 对齐（新增 pending 表示已提交对话待热力图同步确认） */
+type CheckinUiState = 'loading' | 'available' | 'claimed' | 'pending' | 'inactive' | 'error';
 
 /** 默认自动签到绑定：WorkBuddy（未注入 autoCheckin 时保持既有行为） */
 const WORKBUDDY_AUTO_CHECKIN_BINDING: CheckinAutoCheckinBinding = {
@@ -110,6 +112,10 @@ function resolveUiState(status: CheckinStatusResponse | null): CheckinUiState {
   // 注意：管理多账号时，即使 active 字段缺省/异常，只要 today_checked_in 为真就应显示已领
   if (status.today_checked_in) {
     return 'claimed';
+  }
+  // 已提交活跃对话待同步确认时锁定为只读待确认状态，禁止再次触发对话
+  if (status.pending_confirmation) {
+    return 'pending';
   }
   // 官方：!data.active → inactive（活动未开启）
   if (status.active !== true) {
@@ -139,11 +145,23 @@ export function CodebuddySuiteCheckinModal<TAccount extends CodebuddySuiteAccoun
   i18nPrefix = 'workbuddy',
   autoCheckin,
   displayEmailResolver,
+  bannerNote,
 }: CodebuddySuiteCheckinModalProps<TAccount>) {
   const resolveDisplayEmail = displayEmailResolver ?? getDisplayEmail ?? getAccountDisplayEmail;
   const { t } = useTranslation();
-  useEscClose(true, onClose);
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  useEscCloseTopmost(true, onClose, dialogRef);
+  const fetchGenerationRef = useRef(0);
+  // 全局单调递增请求令牌，移除再重新添加同账号 ID 时绝不复用旧代次
+  const nextRequestTokenRef = useRef(0);
+  const latestAccountTokenRef = useRef<Record<string, number>>({});
+  const activeAccountIdsRef = useRef<Set<string>>(new Set(accounts.map((a) => a.id)));
+  activeAccountIdsRef.current = new Set(accounts.map((a) => a.id));
+  const checkingInTokenRef = useRef<Map<string, number>>(new Map());
+  const refreshingTokenRef = useRef<Map<string, number>>(new Map());
+  const queriedIdsRef = useRef<Set<string>>(new Set());
   const [accountStates, setAccountStates] = useState<Record<string, AccountCheckinState>>({});
+  const [refreshingAccountIds, setRefreshingAccountIds] = useState<Record<string, boolean>>({});
   const [checkAllLoading, setCheckAllLoading] = useState(false);
   const [refreshLoading, setRefreshLoading] = useState(false);
   const [showConfigModal, setShowConfigModal] = useState(false);
@@ -183,12 +201,6 @@ export function CodebuddySuiteCheckinModal<TAccount extends CodebuddySuiteAccoun
     };
   }, [autoCheckinBinding]);
 
-  useEffect(() => {
-    if (accounts.length > 0) {
-      void fetchAllStatus();
-    }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
   const updateAccountState = useCallback(
     (accountId: string, patch: Partial<AccountCheckinState>) => {
       setAccountStates((prev) => {
@@ -210,57 +222,173 @@ export function CodebuddySuiteCheckinModal<TAccount extends CodebuddySuiteAccoun
     [],
   );
 
-  const fetchAllStatus = useCallback(async () => {
-    setRefreshLoading(true);
-    const newStates: Record<string, AccountCheckinState> = {};
+  const nextAccountToken = useCallback((accountId: string) => {
+    const next = ++nextRequestTokenRef.current;
+    latestAccountTokenRef.current[accountId] = next;
+    return next;
+  }, []);
 
-    // 先进入 loading，避免旧状态闪烁
-    for (const account of accounts) {
-      newStates[account.id] = emptyAccountState('loading');
-    }
-    setAccountStates(newStates);
+  const isCurrentToken = useCallback(
+    (accountId: string, token: number) =>
+      activeAccountIdsRef.current.has(accountId) &&
+      latestAccountTokenRef.current[accountId] === token,
+    [],
+  );
 
-    await Promise.allSettled(
-      accounts.map(async (account) => {
-        try {
-          const status = await getCheckinStatus(account.id);
-          newStates[account.id] = {
-            status,
-            uiState: resolveUiState(status),
-            checkingIn: false,
-            error: null,
-            checkinResult: null,
-          };
-        } catch (err: unknown) {
-          const message = err instanceof Error ? err.message : String(err);
-          newStates[account.id] = {
-            status: null,
-            uiState: 'error',
-            checkingIn: false,
-            error: message,
-            checkinResult: null,
-          };
+  const fetchAccountStatusList = useCallback(
+    async (targetAccounts: TAccount[], isFullRefresh: boolean) => {
+      if (targetAccounts.length === 0) {
+        return;
+      }
+      const generation = isFullRefresh
+        ? ++fetchGenerationRef.current
+        : fetchGenerationRef.current;
+      if (isFullRefresh) {
+        setRefreshLoading(true);
+      }
+
+      // 跳过正在执行打卡/兑换的账号，不发多余查询也不重置行状态
+      const eligible = targetAccounts.filter(
+        (account) => !checkingInTokenRef.current.has(account.id),
+      );
+      const tokenByAccount = new Map<string, number>();
+      for (const account of eligible) {
+        tokenByAccount.set(account.id, nextAccountToken(account.id));
+        queriedIdsRef.current.add(account.id);
+      }
+
+      setAccountStates((prev) => {
+        const next = { ...prev };
+        for (const account of eligible) {
+          if (next[account.id]?.checkingIn) {
+            continue;
+          }
+          next[account.id] = emptyAccountState('loading');
         }
-      }),
-    );
+        return next;
+      });
 
-    setAccountStates({ ...newStates });
-    setRefreshLoading(false);
-  }, [accounts, getCheckinStatus]);
+      await Promise.allSettled(
+        eligible.map(async (account) => {
+          const token = tokenByAccount.get(account.id)!;
+          try {
+            const status = await getCheckinStatus(account.id);
+            if (!isCurrentToken(account.id, token) || checkingInTokenRef.current.has(account.id)) {
+              return;
+            }
+            setAccountStates((prev) => ({
+              ...prev,
+              [account.id]: {
+                status,
+                uiState: resolveUiState(status),
+                checkingIn: false,
+                error: null,
+                checkinResult: null,
+              },
+            }));
+          } catch (err: unknown) {
+            if (!isCurrentToken(account.id, token) || checkingInTokenRef.current.has(account.id)) {
+              return;
+            }
+            const message = err instanceof Error ? err.message : String(err);
+            setAccountStates((prev) => ({
+              ...prev,
+              [account.id]: {
+                status: null,
+                uiState: 'error',
+                checkingIn: false,
+                error: message,
+                checkinResult: null,
+              },
+            }));
+          }
+        }),
+      );
+
+      if (isFullRefresh && fetchGenerationRef.current === generation) {
+        setRefreshLoading(false);
+      }
+    },
+    [getCheckinStatus, isCurrentToken, nextAccountToken],
+  );
+
+  const fetchAllStatus = useCallback(async () => {
+    await fetchAccountStatusList(accounts, true);
+  }, [accounts, fetchAccountStatusList]);
+
+  useEffect(() => {
+    const activeIds = new Set(accounts.map((a) => a.id));
+    activeAccountIdsRef.current = activeIds;
+    for (const id of Array.from(queriedIdsRef.current)) {
+      if (!activeIds.has(id)) {
+        queriedIdsRef.current.delete(id);
+        delete latestAccountTokenRef.current[id];
+        checkingInTokenRef.current.delete(id);
+        refreshingTokenRef.current.delete(id);
+      }
+    }
+    setRefreshingAccountIds((prev) => {
+      let changed = false;
+      const next: Record<string, boolean> = {};
+      for (const [id, active] of Object.entries(prev)) {
+        if (activeIds.has(id) && active) {
+          next[id] = active;
+        } else {
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+    setAccountStates((prev) => {
+      let changed = false;
+      const next: Record<string, AccountCheckinState> = {};
+      for (const [id, st] of Object.entries(prev)) {
+        if (activeIds.has(id)) {
+          next[id] = st;
+        } else {
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+
+    const newAccounts = accounts.filter((account) => !queriedIdsRef.current.has(account.id));
+    if (newAccounts.length > 0) {
+      const isInitial = queriedIdsRef.current.size === 0;
+      void fetchAccountStatusList(newAccounts, isInitial);
+    }
+  }, [accounts, fetchAccountStatusList]);
 
   const refreshOneStatus = useCallback(
     async (accountId: string, keepResult?: CheckinResponse | null) => {
+      if (refreshingTokenRef.current.has(accountId)) {
+        return null;
+      }
+      const token = nextAccountToken(accountId);
+      refreshingTokenRef.current.set(accountId, token);
+      setRefreshingAccountIds((prev) => ({ ...prev, [accountId]: true }));
       try {
         const status = await getCheckinStatus(accountId);
+        if (!isCurrentToken(accountId, token)) {
+          return null;
+        }
+        const nextUiState = resolveUiState(status);
+        const nextCheckinResult =
+          keepResult?.pending_confirmation && nextUiState !== 'pending'
+            ? null
+            : (keepResult ?? null);
         updateAccountState(accountId, {
           status,
-          uiState: resolveUiState(status),
+          uiState: nextUiState,
           error: null,
-          checkinResult: keepResult ?? null,
+          checkinResult: nextCheckinResult,
           checkingIn: false,
         });
         return status;
       } catch (err: unknown) {
+        if (!isCurrentToken(accountId, token)) {
+          return null;
+        }
         const message = err instanceof Error ? err.message : String(err);
         updateAccountState(accountId, {
           checkingIn: false,
@@ -270,13 +398,30 @@ export function CodebuddySuiteCheckinModal<TAccount extends CodebuddySuiteAccoun
           checkinResult: keepResult ?? null,
         });
         return null;
+      } finally {
+        if (refreshingTokenRef.current.get(accountId) === token) {
+          refreshingTokenRef.current.delete(accountId);
+          setRefreshingAccountIds((prev) => {
+            if (!prev[accountId]) {
+              return prev;
+            }
+            const next = { ...prev };
+            delete next[accountId];
+            return next;
+          });
+        }
       }
     },
-    [getCheckinStatus, updateAccountState],
+    [getCheckinStatus, isCurrentToken, nextAccountToken, updateAccountState],
   );
 
   const handleSingleCheckin = useCallback(
     async (accountId: string) => {
+      if (checkingInTokenRef.current.has(accountId)) {
+        return;
+      }
+      const token = nextAccountToken(accountId);
+      checkingInTokenRef.current.set(accountId, token);
       updateAccountState(accountId, {
         checkingIn: true,
         error: null,
@@ -284,49 +429,88 @@ export function CodebuddySuiteCheckinModal<TAccount extends CodebuddySuiteAccoun
       });
       try {
         const result = await performCheckin(accountId);
+        if (!isCurrentToken(accountId, token)) {
+          return;
+        }
 
         if (result.success) {
-        // 官方 handleClaim：先本地 claimed + today_checked_in=true，再 background refresh
-        updateAccountState(accountId, {
-          checkingIn: false,
-          error: null,
-          checkinResult: result,
-          uiState: 'claimed',
-          status: {
-            today_checked_in: true,
-            active: true,
-            streak_days: result.streak_days ?? 0,
-            daily_credit: result.credit ?? 0,
-            today_credit: result.credit ?? null,
-            next_streak_day: null,
-            is_streak_day: result.is_streak_day ?? null,
-            checkin_dates: null,
-            streak_bonus_days: null,
-            streak_bonus_credit: null,
-          },
-        });
-        // 后台刷新；失败则保留本地 claimed（与官方 refreshStatus().catch(ignored) 一致）
-        try {
-          const remote = await getCheckinStatus(accountId);
-          const merged: CheckinStatusResponse = {
-            ...remote,
-            // 服务端短暂未更新时仍视为今日已领
-            today_checked_in: remote.today_checked_in || true,
-            active: remote.active !== false,
-          };
+          // 官方 handleClaim：先本地 claimed + today_checked_in=true，再 background refresh
           updateAccountState(accountId, {
-            status: merged,
-            uiState: resolveUiState(merged),
-            checkinResult: result,
-            error: null,
             checkingIn: false,
+            error: null,
+            checkinResult: result,
+            uiState: 'claimed',
+            status: {
+              today_checked_in: true,
+              active: true,
+              streak_days: result.streak_days ?? 0,
+              daily_credit: result.credit ?? 0,
+              today_credit: result.credit ?? null,
+              next_streak_day: null,
+              is_streak_day: result.is_streak_day ?? null,
+              checkin_dates: null,
+              streak_bonus_days: null,
+              streak_bonus_credit: null,
+            },
           });
-        } catch {
-          updateAccountState(accountId, { checkingIn: false, uiState: 'claimed' });
+          // 后台刷新；失败则保留本地 claimed（与官方 refreshStatus().catch(ignored) 一致）
+          try {
+            const remote = await getCheckinStatus(accountId);
+            if (isCurrentToken(accountId, token)) {
+              const merged: CheckinStatusResponse = {
+                ...remote,
+                today_checked_in: remote.today_checked_in || true,
+                active: remote.active !== false,
+                pending_confirmation: false,
+              };
+              updateAccountState(accountId, {
+                status: merged,
+                uiState: resolveUiState(merged),
+                checkinResult: result,
+                error: null,
+                checkingIn: false,
+              });
+            }
+          } catch {
+            if (isCurrentToken(accountId, token)) {
+              updateAccountState(accountId, { checkingIn: false, uiState: 'claimed' });
+            }
+          }
+          onCheckinComplete?.();
+          return;
         }
-        onCheckinComplete?.();
-        return;
-      }
+
+        if (result.pending_confirmation) {
+          // 对话已提交但热力墙尚未同步：锁定为 pending 只读刷新态，禁止重复触发对话，同时保留既有连续天数与历史日期
+          setAccountStates((prev) => {
+            const previous = prev[accountId] ?? emptyAccountState();
+            const prevStatus = previous.status;
+            return {
+              ...prev,
+              [accountId]: {
+                ...previous,
+                checkingIn: false,
+                checkinResult: result,
+                error: null,
+                uiState: 'pending',
+                status: {
+                  today_checked_in: false,
+                  active: true,
+                  streak_days: result.streak_days ?? prevStatus?.streak_days ?? 0,
+                  daily_credit: prevStatus?.daily_credit ?? 0,
+                  today_credit: prevStatus?.today_credit ?? null,
+                  next_streak_day: prevStatus?.next_streak_day ?? null,
+                  is_streak_day: prevStatus?.is_streak_day ?? null,
+                  checkin_dates: prevStatus?.checkin_dates ?? null,
+                  streak_bonus_days: prevStatus?.streak_bonus_days ?? null,
+                  streak_bonus_credit: prevStatus?.streak_bonus_credit ?? null,
+                  pending_confirmation: true,
+                },
+              },
+            };
+          });
+          return;
+        }
 
         // 业务失败（如已签到）：刷新状态对齐官方
         const alreadyChecked = /已签到|already\s*check|already\s*claim/i.test(
@@ -356,22 +540,37 @@ export function CodebuddySuiteCheckinModal<TAccount extends CodebuddySuiteAccoun
         });
         await refreshOneStatus(accountId, result);
       } catch (err: unknown) {
+        if (!isCurrentToken(accountId, token)) {
+          return;
+        }
         const message = err instanceof Error ? err.message : String(err);
         updateAccountState(accountId, {
           checkingIn: false,
           error: message,
         });
+      } finally {
+        if (checkingInTokenRef.current.get(accountId) === token) {
+          checkingInTokenRef.current.delete(accountId);
+        }
       }
     },
-    [updateAccountState, performCheckin, refreshOneStatus, onCheckinComplete],
+    [
+      getCheckinStatus,
+      isCurrentToken,
+      nextAccountToken,
+      onCheckinComplete,
+      performCheckin,
+      refreshOneStatus,
+      updateAccountState,
+    ],
   );
 
   const handleCheckAll = useCallback(async () => {
     setCheckAllLoading(true);
-    // 官方：仅 available 可领取
+    // 官方：仅 available 且未在执行中的账号可触发
     const available = accounts.filter((a) => {
       const state = accountStates[a.id];
-      return state?.uiState === 'available';
+      return state?.uiState === 'available' && !state.checkingIn;
     });
 
     await Promise.allSettled(available.map((a) => handleSingleCheckin(a.id)));
@@ -385,13 +584,20 @@ export function CodebuddySuiteCheckinModal<TAccount extends CodebuddySuiteAccoun
   const availableCount = Object.values(accountStates).filter(
     (s) => s.uiState === 'available',
   ).length;
+  const pendingCount = Object.values(accountStates).filter(
+    (s) => s.uiState === 'pending',
+  ).length;
   const inactiveCount = Object.values(accountStates).filter(
     (s) => s.uiState === 'inactive',
   ).length;
 
   return (
     <div className="modal-overlay">
-      <div className="modal-content checkin-modal" onClick={(e) => e.stopPropagation()}>
+      <div
+        ref={dialogRef}
+        className="modal-content checkin-modal"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="modal-header">
           <button
             className="btn btn-secondary icon-only"
@@ -420,6 +626,12 @@ export function CodebuddySuiteCheckinModal<TAccount extends CodebuddySuiteAccoun
               <XCircle size={14} /> {availableCount}{' '}
               {t(`${i18nPrefix}.checkin.notCheckedIn`, '未签到')}
             </span>
+            {pendingCount > 0 && (
+              <span className="checkin-stat pending">
+                <Clock size={14} /> {pendingCount}{' '}
+                {t(`${i18nPrefix}.checkin.pendingStatus`, '待确认')}
+              </span>
+            )}
             {inactiveCount > 0 && (
               <span className="checkin-stat inactive">
                 <Ban size={14} /> {inactiveCount}{' '}
@@ -489,6 +701,11 @@ export function CodebuddySuiteCheckinModal<TAccount extends CodebuddySuiteAccoun
         </div>
 
         <div className="modal-body checkin-modal-body">
+          {bannerNote && (
+            <div className="checkin-modal-banner-note" role="note">
+              <AlertCircle size={14} /> <span>{bannerNote}</span>
+            </div>
+          )}
           {accounts.length === 0 ? (
             <div className="checkin-empty">
               {t(`${i18nPrefix}.checkin.noAccounts`, '暂无账号')}
@@ -500,11 +717,21 @@ export function CodebuddySuiteCheckinModal<TAccount extends CodebuddySuiteAccoun
                 const displayEmail = resolveDisplayEmail(account);
                 const uiState: CheckinUiState = state?.uiState ?? 'loading';
                 const isCheckingIn = state?.checkingIn ?? false;
+                const isRefreshingOne = !!refreshingAccountIds[account.id];
                 const isClaimed = uiState === 'claimed';
+                const isPending = uiState === 'pending';
                 const isAvailable = uiState === 'available';
                 const isInactive = uiState === 'inactive';
                 const isError = uiState === 'error';
                 const isLoading = uiState === 'loading' || state === undefined;
+                const warningMessage =
+                  state?.checkinResult?.warning ||
+                  (isPending
+                    ? t(
+                        `${i18nPrefix}.checkin.pendingConfirmation`,
+                        '已提交活跃对话与事件，热力墙尚未同步，请稍后刷新状态确认（不会重复发送对话）。',
+                      )
+                    : null);
 
                 const streakDays = state?.status?.streak_days ?? 0;
                 const dailyCredit = state?.status?.daily_credit ?? 0;
@@ -544,6 +771,11 @@ export function CodebuddySuiteCheckinModal<TAccount extends CodebuddySuiteAccoun
                           <CheckCircle size={16} />
                           {t(`${i18nPrefix}.checkin.checkedIn`, '已签到')}
                         </span>
+                      ) : isPending ? (
+                        <span className="checkin-status-unknown">
+                          <Clock size={16} />
+                          {t(`${i18nPrefix}.checkin.pendingStatus`, '待确认')}
+                        </span>
                       ) : isAvailable ? (
                         <span className="checkin-status-no">
                           <XCircle size={16} />
@@ -571,7 +803,7 @@ export function CodebuddySuiteCheckinModal<TAccount extends CodebuddySuiteAccoun
                         </span>
                       )}
 
-                      {showMeta && nextStreakDay != null && nextStreakDay > 0 && (
+                      {showMeta && (isStreakDay || (nextStreakDay != null && nextStreakDay > 0)) && (
                         <span
                           className={`checkin-streak-reward ${
                             isStreakDay ? 'streak-today' : ''
@@ -603,6 +835,19 @@ export function CodebuddySuiteCheckinModal<TAccount extends CodebuddySuiteAccoun
                           <CheckCircle size={14} />
                           {t(`${i18nPrefix}.checkin.claimed`, '已领取')}
                         </button>
+                      ) : isPending ? (
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => void refreshOneStatus(account.id, state?.checkinResult)}
+                          disabled={isRefreshingOne}
+                        >
+                          {isRefreshingOne ? (
+                            <Loader2 size={14} className="animate-spin" />
+                          ) : (
+                            <RefreshCw size={14} />
+                          )}
+                          {t(`${i18nPrefix}.checkin.refreshStatus`, '刷新状态')}
+                        </button>
                       ) : isAvailable ? (
                         <button
                           className="btn btn-primary btn-sm"
@@ -615,8 +860,13 @@ export function CodebuddySuiteCheckinModal<TAccount extends CodebuddySuiteAccoun
                         <button
                           className="btn btn-secondary btn-sm"
                           onClick={() => void refreshOneStatus(account.id)}
+                          disabled={isRefreshingOne}
                         >
-                          <RefreshCw size={14} />
+                          {isRefreshingOne ? (
+                            <Loader2 size={14} className="animate-spin" />
+                          ) : (
+                            <RefreshCw size={14} />
+                          )}
                           {t(`${i18nPrefix}.checkin.retry`, '重试')}
                         </button>
                       ) : (
@@ -636,16 +886,18 @@ export function CodebuddySuiteCheckinModal<TAccount extends CodebuddySuiteAccoun
                       </div>
                     )}
 
-                    {state?.checkinResult && state.checkinResult.success && (
-                      <div className="checkin-account-success">
-                        <CheckCircle size={14} />
-                        {state.checkinResult.already_claimed
-                          ? t(`${i18nPrefix}.checkin.claimed`, '已领取')
-                          : t(`${i18nPrefix}.checkin.success`, '签到成功！连续签到 {{days}} 天', {
-                            days: state.status?.streak_days ?? 0,
-                          })}
-                      </div>
-                    )}
+                    {state?.checkinResult &&
+                      state.checkinResult.success &&
+                      (state.checkinResult.already_claimed || state.status?.today_checked_in) && (
+                        <div className="checkin-account-success">
+                          <CheckCircle size={14} />
+                          {state.checkinResult.already_claimed
+                            ? t(`${i18nPrefix}.checkin.claimed`, '已领取')
+                            : t(`${i18nPrefix}.checkin.success`, '签到成功！连续签到 {{days}} 天', {
+                              days: state.status?.streak_days ?? 0,
+                            })}
+                        </div>
+                      )}
 
                     {state?.checkinResult &&
                       !state.checkinResult.success &&
@@ -655,9 +907,11 @@ export function CodebuddySuiteCheckinModal<TAccount extends CodebuddySuiteAccoun
                         </div>
                       )}
 
-                    {state?.checkinResult?.warning && <div className="checkin-account-info-msg" role="status">
-                      <AlertCircle size={12} /> {state.checkinResult.warning}
-                    </div>}
+                    {warningMessage && (
+                      <div className="checkin-account-info-msg" role="status">
+                        <AlertCircle size={12} /> {warningMessage}
+                      </div>
+                    )}
                     {!state?.checkinResult?.already_claimed && (state?.checkinResult?.credit != null ||
                       state?.checkinResult?.reward) && (
                       <div className="checkin-reward-badge">
@@ -734,10 +988,13 @@ export function CodebuddySuiteCheckinModal<TAccount extends CodebuddySuiteAccoun
 
 // 便捷导出：WorkBuddy 签到弹窗
 import * as workbuddyService from '../../services/workbuddyService';
+import * as workbuddyAiService from '../../services/workbuddyAiService';
+import * as workbuddyAiAutoCheckinService from '../../services/workbuddyAiAutoCheckinService';
 import * as minimaxCodeService from '../../services/minimaxCodeService';
 import * as minimaxCodeAutoCheckinService from '../../services/minimaxCodeAutoCheckinService';
 import type { MinimaxCodeAccount } from '../../types/minimaxCode';
 import { MinimaxCodeAutoCheckinConfigModal } from './MinimaxCodeAutoCheckinConfigModal';
+import { WorkbuddyAiAutoCheckinConfigModal } from './WorkbuddyAiAutoCheckinConfigModal';
 import { getAccountDisplayEmail } from '../../utils/codebuddy-suite';
 import { getMinimaxCodeAccountDisplayEmail } from '../../types/minimaxCode';
 export function WorkbuddyCheckinModal({
@@ -816,6 +1073,115 @@ export function MinimaxCodeCheckinModal({
       platformLabel="MiniMax Code"
       i18nPrefix="minimaxCode"
       autoCheckin={autoCheckin}
+    />
+  );
+}
+
+// 便捷导出：WorkBuddy AI（国际版）每日活跃打卡弹窗
+export function WorkbuddyAiCheckinModal({
+  accounts,
+  onClose,
+  onCheckinComplete,
+}: {
+  accounts: WorkbuddyAccount[];
+  onClose: () => void;
+  onCheckinComplete?: () => void;
+}) {
+  const { t } = useTranslation();
+  const autoCheckin = useMemo<CheckinAutoCheckinBinding>(
+    () => ({
+      getConfig: workbuddyAiAutoCheckinService.getWorkbuddyAiAutoCheckinConfig,
+      getConfigAsync: workbuddyAiAutoCheckinService.getWorkbuddyAiAutoCheckinConfigAsync,
+      saveConfigAsync: (config) =>
+        workbuddyAiAutoCheckinService.saveWorkbuddyAiAutoCheckinConfigAsync(
+          config as workbuddyAiAutoCheckinService.WorkbuddyAiAutoCheckinConfig,
+        ),
+      changedEvent:
+        workbuddyAiAutoCheckinService.WORKBUDDY_AI_AUTO_CHECKIN_CONFIG_CHANGED_EVENT,
+      ConfigModal: WorkbuddyAiAutoCheckinConfigModal,
+    }),
+    [],
+  );
+
+  const localizeError = useCallback(
+    (raw: unknown) =>
+      workbuddyAiService.localizeWorkbuddyAiCheckinError(raw, (key, defaultValue) =>
+        t(key, defaultValue),
+      ),
+    [t],
+  );
+
+  const getCheckinStatus = useCallback(
+    async (accountId: string): Promise<CheckinStatusResponse> => {
+      try {
+        const status = await workbuddyAiService.getCheckinStatusWorkbuddyAi(accountId);
+        return {
+          today_checked_in: status.todayCheckedIn,
+          active: status.active,
+          streak_days: status.streakDays,
+          daily_credit: status.dailyCredit,
+          today_credit: status.todayCredit ?? null,
+          next_streak_day: null,
+          is_streak_day: null,
+          checkin_dates: status.checkinDates ?? null,
+          streak_bonus_days: null,
+          streak_bonus_credit: null,
+          pending_confirmation: status.pendingConfirmation ?? false,
+        };
+      } catch (err: unknown) {
+        throw new Error(localizeError(err));
+      }
+    },
+    [localizeError],
+  );
+
+  const performCheckin = useCallback(
+    async (accountId: string): Promise<CheckinResponse> => {
+      try {
+        const result = await workbuddyAiService.checkinWorkbuddyAi(accountId);
+        return {
+          success: result.success,
+          already_claimed: result.alreadyClaimed,
+          inactive: result.inactive ?? false,
+          pending_confirmation: result.pendingConfirmation ?? false,
+          warning: result.pendingConfirmation
+            ? t(
+                'workbuddyAi.checkin.pendingConfirmation',
+                '已提交活跃对话与事件，热力墙尚未同步，请稍后刷新状态确认（不会重复发送对话）。',
+              )
+            : result.warning
+              ? localizeError(result.warning)
+              : null,
+          message:
+            result.inactive && result.message === 'WORKBUDDY_AI_ENTERPRISE_INACTIVE'
+              ? null
+              : result.message
+                ? localizeError(result.message)
+                : null,
+          credit: result.credit ?? null,
+          streak_days: result.streakDays ?? null,
+        };
+      } catch (err: unknown) {
+        throw new Error(localizeError(err));
+      }
+    },
+    [localizeError, t],
+  );
+
+  return (
+    <CodebuddySuiteCheckinModal
+      accounts={accounts}
+      getCheckinStatus={getCheckinStatus}
+      performCheckin={performCheckin}
+      onClose={onClose}
+      onCheckinComplete={onCheckinComplete}
+      platformLabel="WorkBuddy AI"
+      i18nPrefix="workbuddyAi"
+      autoCheckin={autoCheckin}
+      bannerNote={t(
+        'workbuddyAi.checkin.bannerNote',
+        '实验性功能：触发前实时校验 /v3/config 中费率为 x0.00 的免费模型（无合法模型则中止），发送 1 轮极简对话与桌面事件（包含账号 UID、派生设备/会话标识及本机 OS/CPU/内存/时区）以点亮今日成长热力墙；次日积分结算以符合官方活动资格与方案条款为前提。',
+      )}
     />
   );
 }

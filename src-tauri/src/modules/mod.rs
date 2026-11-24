@@ -239,6 +239,8 @@ pub mod windsurf_instance;
 pub mod windsurf_oauth;
 pub mod workbuddy_account;
 pub(crate) mod workbuddy_ai_account;
+pub mod workbuddy_ai_auto_checkin;
+pub(crate) mod workbuddy_ai_checkin;
 pub(crate) mod workbuddy_ai_oauth;
 pub(crate) mod workbuddy_auth_crypto;
 pub mod workbuddy_auto_checkin;

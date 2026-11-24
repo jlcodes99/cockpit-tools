@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { ACCOUNTS_CHANGED_EVENT, type AccountSyncEventPayload } from '../utils/accountSyncEvents';
 import { CodebuddySuiteAccountsSharedView, type CodebuddySuiteAccountsPlatformConfig } from '../components/codebuddy-suite/CodebuddySuiteAccountsSharedView';
+import { WorkbuddyAiCheckinModal } from '../components/codebuddy-suite/CodebuddySuiteCheckinModal';
 import { WorkbuddyCreditsSummary } from '../components/codebuddy-suite/WorkbuddyCredits';
 import { PlatformOverviewTabsHeader } from '../components/platform/PlatformOverviewTabsHeader';
 import { useProviderAccountsPage } from '../hooks/useProviderAccountsPage';
@@ -73,6 +74,9 @@ const config: CodebuddySuiteAccountsPlatformConfig<WorkbuddyAccount> = {
   usagePrefix: 'workbuddy',
   quotaPrefix: 'workbuddy',
   tableUsageClassName: 'workbuddy-table-usage',
+  checkinModalTitleKey: 'workbuddyAi.checkin.modalTitle',
+  checkinModalTitleDefault: '',
+  CheckinModal: WorkbuddyAiCheckinModal,
 };
 
 export function WorkbuddyAiAccountsPage() {

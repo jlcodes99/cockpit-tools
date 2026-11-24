@@ -490,6 +490,7 @@ pub fn run() {
             std::thread::spawn(|| {
                 modules::webkit_cache_maintenance::checkpoint_webkit_localstorage();
                 modules::workbuddy_auto_checkin::schedule_log_migration();
+                modules::workbuddy_ai_auto_checkin::schedule_log_migration();
                 modules::trae_auto_checkin::schedule_log_migration();
                 modules::minimax_code_auto_checkin::schedule_log_migration();
                 for result in [
@@ -813,6 +814,7 @@ pub fn run() {
 
             apply_startup_minimized(&app.handle());
             modules::workbuddy_auto_checkin::start_auto_checkin_scheduler(app.handle().clone());
+            modules::workbuddy_ai_auto_checkin::start_auto_checkin_scheduler(app.handle().clone());
             modules::trae_auto_checkin::start_trae_auto_checkin_scheduler(app.handle().clone());
             modules::minimax_code_auto_checkin::start_auto_checkin_scheduler(app.handle().clone());
 
@@ -1571,6 +1573,13 @@ pub fn run() {
             commands::workbuddy_ai::update_workbuddy_ai_account_tags,
             commands::workbuddy_ai::switch_workbuddy_ai_account,
             commands::workbuddy_ai::workbuddy_ai_launch_current,
+            commands::workbuddy_ai::get_checkin_status_workbuddy_ai,
+            commands::workbuddy_ai::checkin_workbuddy_ai,
+            commands::workbuddy_ai::get_workbuddy_ai_auto_checkin_config,
+            commands::workbuddy_ai::save_workbuddy_ai_auto_checkin_config,
+            commands::workbuddy_ai::get_workbuddy_ai_auto_checkin_logs,
+            commands::workbuddy_ai::clear_workbuddy_ai_auto_checkin_logs,
+            commands::workbuddy_ai::run_workbuddy_ai_auto_checkin_now,
             commands::workbuddy::list_workbuddy_accounts,
             commands::workbuddy::get_workbuddy_credit_packages,
             commands::workbuddy::get_workbuddy_recent_credit_usage,

@@ -7,6 +7,7 @@ use std::{
     sync::{LazyLock, Mutex},
 };
 
+use chrono::{NaiveDate, Utc};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
@@ -15,6 +16,8 @@ use crate::models::workbuddy::WorkbuddyAccount;
 use super::{atomic_write, secure_account_storage, workbuddy_account, workbuddy_auth_crypto};
 
 const PLATFORM: &str = "workbuddy_ai";
+const PENDING_ROLLOVER_AMBIGUITY_SECS: i64 = 30 * 60;
+const PENDING_ROLLOVER_MAX_CLOCK_SKEW_SECS: i64 = 60;
 static SWITCH: Mutex<()> = Mutex::new(());
 static WRITE: Mutex<()> = Mutex::new(());
 
@@ -187,6 +190,9 @@ fn store_session_inner(
         account.quota_query_last_error = previous.quota_query_last_error;
         account.quota_query_last_error_at = previous.quota_query_last_error_at;
         account.usage_updated_at = previous.usage_updated_at;
+        account.last_checkin_time = previous.last_checkin_time;
+        account.checkin_streak = previous.checkin_streak;
+        account.checkin_rewards = previous.checkin_rewards;
     }
     write(&account)?;
     Ok(account)
@@ -222,6 +228,268 @@ pub fn update_tags(id: &str, tags: Vec<String>) -> Result<WorkbuddyAccount, Stri
     let _guard = WRITE.lock().map_err(|error| error.to_string())?;
     let mut account = load(id)?;
     account.tags = Some(tags);
+    write(&account)?;
+    Ok(account)
+}
+
+pub(crate) fn is_adjacent_next_day(prev_date: &str, next_date: &str) -> bool {
+    let Ok(prev) = NaiveDate::parse_from_str(prev_date, "%Y-%m-%d") else {
+        return false;
+    };
+    let Ok(next) = NaiveDate::parse_from_str(next_date, "%Y-%m-%d") else {
+        return false;
+    };
+    prev.succ_opt() == Some(next)
+}
+
+pub fn has_pending_checkin_turn(account: &WorkbuddyAccount, activity_date: &str) -> bool {
+    account
+        .checkin_rewards
+        .as_ref()
+        .and_then(|v| v.get("pendingActivityDate"))
+        .and_then(Value::as_str)
+        .is_some_and(|date| date == activity_date)
+}
+
+/// Checks whether the account has an unresolved pending chat turn that either matches `today_date`
+/// directly OR was reserved for the immediately preceding server activity date (`today_date - 1d`)
+/// within the rollover ambiguity window while that preceding date is still absent from
+/// `active_dates` (meaning an in-flight chat POST may have crossed midnight into `today_date`).
+pub fn has_pending_checkin_turn_for_heatmap(
+    account: &WorkbuddyAccount,
+    today_date: &str,
+    active_dates: &[String],
+) -> bool {
+    if has_pending_checkin_turn(account, today_date) {
+        return true;
+    }
+    let Some(rewards) = account.checkin_rewards.as_ref().and_then(Value::as_object) else {
+        return false;
+    };
+    let Some(pending_date) = rewards.get("pendingActivityDate").and_then(Value::as_str) else {
+        return false;
+    };
+    if !is_adjacent_next_day(pending_date, today_date) {
+        return false;
+    }
+    if active_dates.iter().any(|d| d == pending_date) {
+        return false;
+    }
+    rewards
+        .get("pendingCreatedAt")
+        .and_then(Value::as_i64)
+        .is_some_and(|created_at| {
+            let now = Utc::now().timestamp();
+            created_at <= now.saturating_add(PENDING_ROLLOVER_MAX_CLOCK_SKEW_SECS)
+                && now.saturating_sub(created_at) <= PENDING_ROLLOVER_AMBIGUITY_SECS
+        })
+}
+
+pub fn has_confirmed_checkin_date(account: &WorkbuddyAccount, activity_date: &str) -> bool {
+    account
+        .checkin_rewards
+        .as_ref()
+        .and_then(|v| v.get("activityDate"))
+        .and_then(Value::as_str)
+        .is_some_and(|date| date == activity_date)
+}
+
+pub fn has_recorded_checkin_for_heatmap(
+    account: &WorkbuddyAccount,
+    today_date: &str,
+    active_dates: &[String],
+) -> bool {
+    has_confirmed_checkin_date(account, today_date)
+        || has_pending_checkin_turn_for_heatmap(account, today_date, active_dates)
+}
+
+pub(crate) fn apply_pending_checkin_marker(
+    account: &mut WorkbuddyAccount,
+    activity_date: &str,
+    model_id: &str,
+) {
+    let mut rewards = account
+        .checkin_rewards
+        .take()
+        .and_then(|v| v.as_object().cloned())
+        .unwrap_or_default();
+    rewards.insert(
+        "pendingActivityDate".to_string(),
+        Value::String(activity_date.to_string()),
+    );
+    rewards.insert(
+        "pendingModelId".to_string(),
+        Value::String(model_id.to_string()),
+    );
+    rewards.insert(
+        "pendingCreatedAt".to_string(),
+        Value::Number(Utc::now().timestamp().into()),
+    );
+    account.checkin_rewards = Some(Value::Object(rewards));
+}
+
+pub(crate) fn clear_pending_checkin_marker(account: &mut WorkbuddyAccount, activity_date: &str) {
+    let Some(rewards) = account
+        .checkin_rewards
+        .as_mut()
+        .and_then(Value::as_object_mut)
+    else {
+        return;
+    };
+    let matches_date = rewards
+        .get("pendingActivityDate")
+        .and_then(Value::as_str)
+        .is_some_and(|d| d == activity_date);
+    if matches_date {
+        rewards.remove("pendingActivityDate");
+        rewards.remove("pendingModelId");
+        rewards.remove("pendingCreatedAt");
+    }
+}
+
+pub fn mark_pending_checkin_turn(
+    id: &str,
+    activity_date: &str,
+    model_id: &str,
+) -> Result<WorkbuddyAccount, String> {
+    let _guard = WRITE.lock().map_err(|error| error.to_string())?;
+    let mut account = load(id)?;
+    apply_pending_checkin_marker(&mut account, activity_date, model_id);
+    write(&account)?;
+    Ok(account)
+}
+
+pub fn clear_pending_checkin_turn(
+    id: &str,
+    activity_date: &str,
+) -> Result<WorkbuddyAccount, String> {
+    let _guard = WRITE.lock().map_err(|error| error.to_string())?;
+    let mut account = load(id)?;
+    clear_pending_checkin_marker(&mut account, activity_date);
+    write(&account)?;
+    Ok(account)
+}
+
+#[cfg(test)]
+pub(crate) fn write_snapshot_to_path(
+    path: &Path,
+    account: &WorkbuddyAccount,
+) -> Result<(), String> {
+    let content = serde_json::to_string(account).map_err(|error| error.to_string())?;
+    atomic_write::write_secret_string_atomic_if_changed(path, &content).map(|_| ())
+}
+
+#[cfg(test)]
+pub(crate) fn load_snapshot_from_path(path: &Path) -> Result<WorkbuddyAccount, String> {
+    let content = read_optional(path)?.ok_or("WORKBUDDY_AI_ACCOUNT_NOT_FOUND")?;
+    serde_json::from_str(&content).map_err(|error| error.to_string())
+}
+
+pub(crate) fn apply_checkin_info_update(
+    account: &mut WorkbuddyAccount,
+    last_checkin_time: Option<i64>,
+    checkin_streak: Option<i32>,
+    checkin_rewards: Option<Value>,
+) {
+    if let Some(ts) = last_checkin_time {
+        account.last_checkin_time = Some(ts);
+    }
+    if let Some(streak) = checkin_streak {
+        account.checkin_streak = Some(streak);
+    }
+    if let Some(mut incoming) = checkin_rewards {
+        if let (Some(prev), Some(next)) = (
+            account.checkin_rewards.as_ref().and_then(Value::as_object),
+            incoming.as_object_mut(),
+        ) {
+            let incoming_date = next
+                .get("activityDate")
+                .and_then(Value::as_str)
+                .map(str::to_owned);
+            let same_confirmed_day = prev
+                .get("activityDate")
+                .and_then(Value::as_str)
+                .is_some_and(|d| incoming_date.as_deref() == Some(d));
+            let matching_pending_day = prev
+                .get("pendingActivityDate")
+                .and_then(Value::as_str)
+                .zip(incoming_date.as_deref())
+                .is_some_and(|(pending_date, inc)| {
+                    pending_date == inc || is_adjacent_next_day(pending_date, inc)
+                });
+
+            let incoming_model_missing = next
+                .get("modelId")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .is_none_or(str::is_empty);
+
+            if incoming_model_missing {
+                let fallback_model = if same_confirmed_day {
+                    prev.get("modelId")
+                        .filter(|v| v.as_str().map(str::trim).is_some_and(|s| !s.is_empty()))
+                        .or_else(|| {
+                            if matching_pending_day {
+                                prev.get("pendingModelId").filter(|v| {
+                                    v.as_str().map(str::trim).is_some_and(|s| !s.is_empty())
+                                })
+                            } else {
+                                None
+                            }
+                        })
+                } else if matching_pending_day {
+                    // Pending confirmation for a new day (including midnight rollover D -> D+1)
+                    // only inherits the matching pendingModelId; never copy yesterday's confirmed modelId.
+                    prev.get("pendingModelId")
+                        .filter(|v| v.as_str().map(str::trim).is_some_and(|s| !s.is_empty()))
+                } else {
+                    None
+                };
+                if let Some(prev_model) = fallback_model {
+                    next.insert("modelId".to_string(), prev_model.clone());
+                }
+            }
+
+            // Clear pending marker once confirmed; preserve only if a newer date is pending.
+            let preserve_newer_pending = prev
+                .get("pendingActivityDate")
+                .and_then(Value::as_str)
+                .zip(incoming_date.as_deref())
+                .is_some_and(|(pending, confirmed)| pending > confirmed);
+            if preserve_newer_pending {
+                if let Some(p_date) = prev.get("pendingActivityDate") {
+                    next.insert("pendingActivityDate".to_string(), p_date.clone());
+                }
+                if let Some(p_model) = prev.get("pendingModelId") {
+                    next.insert("pendingModelId".to_string(), p_model.clone());
+                }
+                if let Some(p_created) = prev.get("pendingCreatedAt") {
+                    next.insert("pendingCreatedAt".to_string(), p_created.clone());
+                }
+            } else {
+                next.remove("pendingActivityDate");
+                next.remove("pendingModelId");
+                next.remove("pendingCreatedAt");
+            }
+        }
+        account.checkin_rewards = Some(incoming);
+    }
+}
+
+pub fn update_checkin_info(
+    id: &str,
+    last_checkin_time: Option<i64>,
+    checkin_streak: Option<i32>,
+    checkin_rewards: Option<Value>,
+) -> Result<WorkbuddyAccount, String> {
+    let _guard = WRITE.lock().map_err(|error| error.to_string())?;
+    let mut account = load(id)?;
+    apply_checkin_info_update(
+        &mut account,
+        last_checkin_time,
+        checkin_streak,
+        checkin_rewards,
+    );
     write(&account)?;
     Ok(account)
 }
@@ -332,9 +600,17 @@ pub(crate) fn executable_at(path: &Path) -> Option<PathBuf> {
     }
     #[cfg(target_os = "windows")]
     {
-        let executable = if path.is_dir() { path.join("WorkBuddyAI.exe") } else { path.to_owned() };
-        return (executable.is_file() && executable.file_name()?.to_str()?.eq_ignore_ascii_case("WorkBuddyAI.exe"))
-            .then_some(executable);
+        let executable = if path.is_dir() {
+            path.join("WorkBuddyAI.exe")
+        } else {
+            path.to_owned()
+        };
+        return (executable.is_file()
+            && executable
+                .file_name()?
+                .to_str()?
+                .eq_ignore_ascii_case("WorkBuddyAI.exe"))
+        .then_some(executable);
     }
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
@@ -348,13 +624,20 @@ pub(crate) fn detect_executable() -> Option<PathBuf> {
     {
         let system = PathBuf::from("/Applications/WorkBuddy AI.app");
         let user = dirs::home_dir().map(|home| home.join("Applications/WorkBuddy AI.app"));
-        return std::iter::once(system).chain(user).find_map(|path| executable_at(&path));
+        return std::iter::once(system)
+            .chain(user)
+            .find_map(|path| executable_at(&path));
     }
     #[cfg(target_os = "windows")]
     {
-        let local = std::env::var_os("LOCALAPPDATA").map(|path| PathBuf::from(path).join("Programs"));
-        let system = ["ProgramFiles", "ProgramFiles(x86)"].into_iter().filter_map(std::env::var_os);
-        return local.into_iter().chain(system.map(PathBuf::from))
+        let local =
+            std::env::var_os("LOCALAPPDATA").map(|path| PathBuf::from(path).join("Programs"));
+        let system = ["ProgramFiles", "ProgramFiles(x86)"]
+            .into_iter()
+            .filter_map(std::env::var_os);
+        return local
+            .into_iter()
+            .chain(system.map(PathBuf::from))
             .flat_map(|root| ["WorkBuddy AI", "workbuddy-ai"].map(|name| root.join(name)))
             .find_map(|path| executable_at(&path));
     }
@@ -372,7 +655,9 @@ pub(super) fn resolve_executable() -> Result<PathBuf, String> {
 }
 
 pub fn launch_current() -> Result<(), String> {
-    let _switch = SWITCH.try_lock().map_err(|_| "WORKBUDDY_AI_SWITCH_IN_PROGRESS")?;
+    let _switch = SWITCH
+        .try_lock()
+        .map_err(|_| "WORKBUDDY_AI_SWITCH_IN_PROGRESS")?;
     launch(&resolve_executable()?)
 }
 
@@ -651,5 +936,170 @@ mod tests {
         fs::write(&path, "broken fixture").unwrap();
         assert!(write_client_session(&path, &session("alice", None, "token")).is_err());
         assert_eq!(fs::read_to_string(path).unwrap(), "broken fixture");
+    }
+
+    #[test]
+    fn checkin_info_update_preserves_streak_and_same_day_model() {
+        let mut account: WorkbuddyAccount = serde_json::from_value(json!({
+            "id": "workbuddy_ai_0000000000000000000000000000000000000000000000000000000000000001",
+            "email": "tester@example.com",
+            "access_token": "tok",
+            "created_at": 1,
+            "last_used": 1,
+            "checkin_streak": 12,
+            "checkin_rewards": {
+                "activityDate": "2026-11-24",
+                "modelId": "hy4flash-free"
+            }
+        }))
+        .unwrap();
+
+        apply_checkin_info_update(
+            &mut account,
+            Some(1_700_000_123),
+            None,
+            Some(json!({
+                "activityDate": "2026-11-24",
+                "modelId": null
+            })),
+        );
+
+        assert_eq!(account.checkin_streak, Some(12));
+        let rewards = account.checkin_rewards.unwrap();
+        assert_eq!(rewards["modelId"], "hy4flash-free");
+    }
+
+    #[test]
+    fn pending_same_day_confirmation_does_not_inherit_yesterday_model() {
+        let mut account: WorkbuddyAccount = serde_json::from_value(json!({
+            "id": "workbuddy_ai_0000000000000000000000000000000000000000000000000000000000000001",
+            "email": "tester@example.com",
+            "access_token": "tok",
+            "created_at": 1,
+            "last_used": 1,
+            "checkin_streak": 7,
+            "checkin_rewards": {
+                "activityDate": "2026-11-23",
+                "modelId": "yesterday-model"
+            }
+        }))
+        .unwrap();
+
+        apply_pending_checkin_marker(&mut account, "2026-11-24", "today-free-model");
+        assert!(has_pending_checkin_turn(&account, "2026-11-24"));
+        assert!(has_recorded_checkin_for_heatmap(
+            &account,
+            "2026-11-24",
+            &[]
+        ));
+
+        // Confirm today with modelId=None:
+        // must inherit today's pendingModelId, NOT yesterday's modelId.
+        apply_checkin_info_update(
+            &mut account,
+            Some(1_700_000_200),
+            Some(8),
+            Some(json!({
+                "activityDate": "2026-11-24",
+                "modelId": null
+            })),
+        );
+
+        let rewards = account.checkin_rewards.as_ref().unwrap();
+        assert_eq!(rewards["activityDate"], "2026-11-24");
+        assert_eq!(rewards["modelId"], "today-free-model");
+        assert!(rewards.get("pendingActivityDate").is_none());
+        assert!(rewards.get("pendingModelId").is_none());
+        assert!(rewards.get("pendingCreatedAt").is_none());
+        assert!(has_confirmed_checkin_date(&account, "2026-11-24"));
+        assert!(has_recorded_checkin_for_heatmap(
+            &account,
+            "2026-11-24",
+            &[]
+        ));
+    }
+
+    #[test]
+    fn rollover_confirmation_promotes_adjacent_pending_model_and_ignores_stale_gap() {
+        let mut account: WorkbuddyAccount = serde_json::from_value(json!({
+            "id": "workbuddy_ai_0000000000000000000000000000000000000000000000000000000000000001",
+            "email": "tester@example.com",
+            "access_token": "tok",
+            "created_at": 1,
+            "last_used": 1,
+            "checkin_streak": 4,
+            "checkin_rewards": {
+                "activityDate": "2026-11-23",
+                "modelId": "prior-confirmed-model"
+            }
+        }))
+        .unwrap();
+
+        apply_pending_checkin_marker(&mut account, "2026-11-24", "hy4flash-free");
+        apply_checkin_info_update(
+            &mut account,
+            Some(1_700_000_900),
+            Some(5),
+            Some(json!({
+                "activityDate": "2026-11-25",
+                "modelId": null
+            })),
+        );
+
+        let rewards = account.checkin_rewards.as_ref().unwrap();
+        assert_eq!(rewards["activityDate"], "2026-11-25");
+        assert_eq!(rewards["modelId"], "hy4flash-free");
+        assert!(rewards.get("pendingActivityDate").is_none());
+        assert!(rewards.get("pendingModelId").is_none());
+        assert!(rewards.get("pendingCreatedAt").is_none());
+
+        // Non-adjacent confirmation (2 days later) must not inherit an unrelated pendingModelId.
+        apply_pending_checkin_marker(&mut account, "2026-11-25", "day25-model");
+        apply_checkin_info_update(
+            &mut account,
+            Some(1_700_100_000),
+            Some(6),
+            Some(json!({
+                "activityDate": "2026-11-27",
+                "modelId": null
+            })),
+        );
+        let rewards = account.checkin_rewards.as_ref().unwrap();
+        assert_eq!(rewards["activityDate"], "2026-11-27");
+        assert!(rewards["modelId"].is_null());
+        assert!(rewards.get("pendingActivityDate").is_none());
+    }
+
+    #[test]
+    fn pending_rollover_window_handles_extreme_timestamps_without_overflow() {
+        let mut account: WorkbuddyAccount = serde_json::from_value(json!({
+            "id": "workbuddy_ai_0000000000000000000000000000000000000000000000000000000000000001",
+            "email": "tester@example.com",
+            "access_token": "tok",
+            "created_at": 1,
+            "last_used": 1,
+        }))
+        .unwrap();
+        let now = Utc::now().timestamp();
+
+        for (ts, expected) in [
+            (i64::MIN, false),
+            (i64::MAX, false),
+            (now + 120, false),
+            (now + 30, true),
+            (now - 60, true),
+            (now - PENDING_ROLLOVER_AMBIGUITY_SECS - 1, false),
+        ] {
+            account.checkin_rewards = Some(json!({
+                "pendingActivityDate": "2026-11-24",
+                "pendingModelId": "hy4flash-free",
+                "pendingCreatedAt": ts,
+            }));
+            assert_eq!(
+                has_pending_checkin_turn_for_heatmap(&account, "2026-11-25", &[]),
+                expected,
+                "unexpected result for pendingCreatedAt={ts}"
+            );
+        }
     }
 }

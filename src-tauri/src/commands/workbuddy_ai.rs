@@ -1,7 +1,10 @@
 use tauri::Emitter;
 
 use crate::models::workbuddy::{WorkbuddyAccount, WorkbuddyOAuthStartResponse};
-use crate::modules::{workbuddy_ai_account as account, workbuddy_ai_oauth as oauth};
+use crate::modules::{
+    workbuddy_ai_account as account, workbuddy_ai_auto_checkin, workbuddy_ai_checkin,
+    workbuddy_ai_oauth as oauth,
+};
 
 async fn blocking<T: Send + 'static>(
     work: impl FnOnce() -> Result<T, String> + Send + 'static,
@@ -25,7 +28,11 @@ pub async fn delete_workbuddy_ai_accounts(account_ids: Vec<String>) -> Result<()
 pub async fn import_workbuddy_ai_from_json(
     json_content: String,
 ) -> Result<Vec<WorkbuddyAccount>, String> {
-    blocking(move || account::import_json(&json_content)).await
+    let imported = blocking(move || account::import_json(&json_content)).await?;
+    for acc in &imported {
+        workbuddy_ai_auto_checkin::clear_account_retry_state(&acc.id);
+    }
+    Ok(imported)
 }
 
 #[tauri::command]
@@ -33,6 +40,7 @@ pub async fn import_workbuddy_ai_from_local(
     app: tauri::AppHandle,
 ) -> Result<Vec<WorkbuddyAccount>, String> {
     let saved = blocking(account::import_local).await?;
+    workbuddy_ai_auto_checkin::clear_account_retry_state(&saved.id);
     queue_credit_refresh(app, &saved);
     Ok(vec![saved])
 }
@@ -61,6 +69,7 @@ pub async fn workbuddy_ai_oauth_login_complete(
 ) -> Result<WorkbuddyAccount, String> {
     let session = oauth::complete(&login_id).await?;
     let saved = blocking(move || account::store_session(session)).await?;
+    workbuddy_ai_auto_checkin::clear_account_retry_state(&saved.id);
     queue_credit_refresh(app, &saved);
     Ok(saved)
 }
@@ -77,6 +86,7 @@ pub async fn add_workbuddy_ai_account_with_token(
 ) -> Result<WorkbuddyAccount, String> {
     let session = oauth::session_from_access_token(access_token.trim()).await?;
     let saved = blocking(move || account::store_session(session)).await?;
+    workbuddy_ai_auto_checkin::clear_account_retry_state(&saved.id);
     queue_credit_refresh(app, &saved);
     Ok(saved)
 }
@@ -119,15 +129,15 @@ async fn refresh_quota(
                     .as_str()
                     .is_some_and(|token| !token.is_empty()) =>
         {
-            match oauth::renew_auth(&session).await {
-                Ok(renewed) => {
-                    let saved = blocking({
-                        let renewed = renewed.clone();
-                        move || account::store_refreshed_session(&saved, renewed)
-                    })
-                    .await?;
-                    let quota = oauth::credit_usage(&renewed).await;
-                    (saved, quota)
+            match workbuddy_ai_checkin::renew_account_session_shared(&saved.id, &saved.access_token)
+                .await
+            {
+                Ok(updated) => {
+                    let quota = match updated.auth_raw.as_ref() {
+                        Some(renewed) => oauth::credit_usage(renewed).await,
+                        None => Err("WORKBUDDY_AI_MISSING_SESSION".to_string()),
+                    };
+                    (updated, quota)
                 }
                 Err(error) => (saved, Err(error)),
             }
@@ -198,7 +208,10 @@ pub async fn update_workbuddy_ai_account_tags(
 }
 
 #[tauri::command]
-pub async fn switch_workbuddy_ai_account(app: tauri::AppHandle, account_id: String) -> Result<(), String> {
+pub async fn switch_workbuddy_ai_account(
+    app: tauri::AppHandle,
+    account_id: String,
+) -> Result<(), String> {
     let id = account_id.clone();
     let result = blocking(move || account::switch(&id)).await;
     if let Err(error) = &result {
@@ -210,9 +223,12 @@ pub async fn switch_workbuddy_ai_account(app: tauri::AppHandle, account_id: Stri
             _ => None,
         };
         if let Some(retry) = retry {
-            let _ = app.emit("app:path_missing", serde_json::json!({
-                "app": "workbuddy_ai", "retry": retry
-            }));
+            let _ = app.emit(
+                "app:path_missing",
+                serde_json::json!({
+                    "app": "workbuddy_ai", "retry": retry
+                }),
+            );
         }
     }
     result
@@ -221,4 +237,104 @@ pub async fn switch_workbuddy_ai_account(app: tauri::AppHandle, account_id: Stri
 #[tauri::command]
 pub async fn workbuddy_ai_launch_current() -> Result<(), String> {
     blocking(account::launch_current).await
+}
+
+#[tauri::command]
+pub async fn get_checkin_status_workbuddy_ai(
+    app: tauri::AppHandle,
+    account_id: String,
+) -> Result<workbuddy_ai_checkin::WorkbuddyAiCheckinStatus, String> {
+    let (status, reconciled) =
+        workbuddy_ai_checkin::get_account_checkin_status_with_reconcile(&account_id).await?;
+    if reconciled {
+        let _ = app.emit("workbuddy-ai-auto-checkin-logs-changed", ());
+        let _ = app.emit("workbuddy-ai-auto-checkin-config-changed", ());
+    }
+    Ok(status)
+}
+
+#[tauri::command]
+pub async fn checkin_workbuddy_ai(
+    app: tauri::AppHandle,
+    account_id: String,
+) -> Result<workbuddy_ai_checkin::WorkbuddyAiCheckinResult, String> {
+    let started = std::time::Instant::now();
+    let result = workbuddy_ai_checkin::checkin_account(&account_id).await;
+    let log_account = account_id.clone();
+    let log_result = result.clone();
+    let duration_ms = started.elapsed().as_millis() as u64;
+    let record_err = blocking(move || {
+        workbuddy_ai_auto_checkin::record_manual_result(&log_account, &log_result, duration_ms)
+    })
+    .await
+    .err();
+    let _ = app.emit("workbuddy-ai-auto-checkin-logs-changed", ());
+    let _ = app.emit("workbuddy-ai-auto-checkin-config-changed", ());
+    let mut response = result?;
+    if let Some(err) = record_err {
+        crate::modules::logger::log_warn(&format!(
+            "[WorkBuddy AI Checkin] Remote check-in completed but local log write failed: {err}"
+        ));
+        match &mut response.warning {
+            Some(existing) if !existing.is_empty() => {
+                existing.push_str(&format!("; local_history: {err}"));
+            }
+            _ => response.warning = Some(format!("local_history: {err}")),
+        }
+    }
+    if response.success {
+        let _ = crate::modules::tray::update_tray_menu(&app);
+        let _ = app.emit(
+            "workbuddy_ai:checkin_completed",
+            serde_json::json!({
+                "accountId": account_id,
+                "success": true,
+                "credit": response.credit,
+                "streakDays": response.streak_days,
+            }),
+        );
+    }
+    Ok(response)
+}
+
+#[tauri::command]
+pub async fn get_workbuddy_ai_auto_checkin_config(
+) -> Result<workbuddy_ai_auto_checkin::WorkbuddyAiAutoCheckinConfig, String> {
+    blocking(workbuddy_ai_auto_checkin::get_config_checked).await
+}
+
+#[tauri::command]
+pub async fn save_workbuddy_ai_auto_checkin_config(
+    config: workbuddy_ai_auto_checkin::WorkbuddyAiAutoCheckinConfig,
+) -> Result<(), String> {
+    blocking(move || workbuddy_ai_auto_checkin::save_config(&config)).await
+}
+
+#[tauri::command]
+pub async fn get_workbuddy_ai_auto_checkin_logs(
+    retry: Option<bool>,
+) -> Result<
+    crate::modules::wakeup_history_store::HistoryRead<
+        crate::modules::workbuddy_ai_auto_checkin::WorkbuddyAiAutoCheckinLogRecord,
+    >,
+    String,
+> {
+    blocking(move || workbuddy_ai_auto_checkin::get_logs_checked(retry.unwrap_or(false))).await
+}
+
+#[tauri::command]
+pub async fn clear_workbuddy_ai_auto_checkin_logs() -> Result<(), String> {
+    blocking(workbuddy_ai_auto_checkin::clear_logs).await
+}
+
+#[tauri::command]
+pub async fn run_workbuddy_ai_auto_checkin_now(
+    app: tauri::AppHandle,
+    force: Option<bool>,
+) -> Result<String, String> {
+    workbuddy_ai_auto_checkin::run_workbuddy_ai_auto_checkin_cycle_if_needed(
+        &app,
+        force.unwrap_or(false),
+    )
+    .await
 }
