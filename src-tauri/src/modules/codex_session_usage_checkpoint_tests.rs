@@ -157,6 +157,7 @@ fn session_rollup_matches_report_before_and_after_backfill_and_append() {
         from_timestamp: Some(1_780_000_002),
         to_timestamp: Some(1_780_000_004),
         instance_id: Some("i".into()),
+        ..Default::default()
     };
     let before = store.query(&query).unwrap();
     while !SESSION_USAGE_ROLLUP.batch(&conn).unwrap() {}

@@ -67,7 +67,7 @@ export function CodexSshSyncSettingsControl({
       })
     : t(
         'codex.ssh.syncSwitchDesc',
-        '开启后配置 SSH 主机；Codex 切号时把当前账号同步到远端。',
+        '切换 Codex 账号或 API 服务时，自动同步到选中的 SSH 主机。',
       );
 
   if (variant === 'quick') {

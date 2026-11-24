@@ -1,5 +1,5 @@
 #[tokio::test]
-async fn parallel_same_provider_key_imports_and_pool_appends_keep_every_account() {
+async fn automation_parallel_provider_imports_and_member_changes_keep_every_account() {
     let shared = crate::modules::codex_unified_proxy::TestCacheGuard::new();
     shared.prepare_disabled();
     let _env = LocalAccessTestDataGuard::new("parallel-same-provider-key-imports");
@@ -46,6 +46,26 @@ async fn parallel_same_provider_key_imports_and_pool_appends_keep_every_account(
         saved.account_ids.clone(), true, None, None, None, None, None, None, None,
     ).await.unwrap().collection.unwrap();
     assert_eq!(after_save.account_ids, saved.account_ids);
+
+    let removed_ids = [accounts[0].id.clone(), accounts[1].id.clone()];
+    let (_, removed) = super::remove_local_access_members(&removed_ids).await.unwrap();
+    assert_eq!(removed.into_iter().collect::<HashSet<_>>(), HashSet::from(removed_ids));
+
+    let remove_ids = [accounts[2].id.clone(), "unknown-id".to_owned()];
+    let (add, remove) = tokio::join!(
+        Box::pin(super::append_local_access_accounts(vec![accounts[0].id.clone()])),
+        Box::pin(super::remove_local_access_members(&remove_ids)),
+    );
+    assert_eq!(add.unwrap().added_account_ids, vec![accounts[0].id.clone()]);
+    assert_eq!(remove.unwrap().1, vec![accounts[2].id.clone()]);
+    let members = super::configured_service_members().await.unwrap();
+    assert_eq!(
+        members.into_iter().map(|member| member.account_id).collect::<HashSet<_>>(),
+        HashSet::from([accounts[0].id.clone(), accounts[3].id.clone()]),
+    );
+    assert!(codex_account::load_account(&accounts[2].id).is_some());
+    assert!(!super::gateway_runtime().lock().await.running);
+
     let mut runtime = super::gateway_runtime().lock().await;
     *runtime = super::GatewayRuntime::default();
 }

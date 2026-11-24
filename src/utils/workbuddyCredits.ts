@@ -93,13 +93,48 @@ export function getWorkbuddyAiPlan(account: WorkbuddyAccount) {
   return { label: style === 'free' ? 'FREE' : name || label || 'UNKNOWN', style };
 }
 
+/** 是否存在即将到期的积分（与积分明细里「包含即将到期的积分」提示一致）。 */
+export function hasWorkbuddyExpiringCredits(account: WorkbuddyAccount, now = Date.now()): boolean {
+  return getWorkbuddyCredits(account, now).groups.some((group) => group.expiring);
+}
+
 export function workbuddyCreditPercent(total: number, amount: number, round: (value: number) => number) {
   return total > 0 ? Math.max(0, Math.min(100, round(amount / total * 100))) : 0;
 }
 
-export function getWorkbuddyCredits(account: WorkbuddyAccount, now = Date.now(), international = false) {
-  const summary = getWorkbuddyResourceSummary(account);
-  const resources = extractResourceAccounts(account).filter(isActiveResource).map((raw) => {
+/** 积分包到期提示的默认统计窗口：24 小时 */
+export const EXPIRING_CREDITS_HORIZON_MS = 86_400_000;
+
+export interface ExpiringCreditPackage {
+  packageCode: string;
+  group: WorkbuddyCreditGroup;
+  /** 官方发放原因或套餐名，缺失时为空字符串 */
+  name: string;
+  left: number;
+  expireAt: number;
+}
+
+export interface ExpiringCredits {
+  total: number;
+  packages: ExpiringCreditPackage[];
+  /**
+   * 最近的未来到期时间（可能落在统计窗口之外）。卡片用它安排一次唤醒，
+   * 到积分包进入窗口的那一刻再刷新，避免每张卡片都常驻定时器。
+   */
+  nextExpiryAt: number | null;
+}
+
+/** 官方发放原因优先于套餐名，与积分明细里的展示保持一致 */
+function resourceGrantName(raw: Record<string, unknown>): string {
+  const attributes = Array.isArray(raw.AccountAttributes) ? raw.AccountAttributes : [];
+  const reason = asRecord(attributes.find((attribute) => asRecord(attribute)?.Key === 'grantReason'))?.Value;
+  const trimmed = typeof reason === 'string' ? reason.trim() : '';
+  if (trimmed) return trimmed;
+  return typeof raw.PackageName === 'string' ? raw.PackageName.trim() : '';
+}
+
+function workbuddyCreditResources(account: WorkbuddyAccount, international: boolean) {
+  return extractResourceAccounts(account).filter(isActiveResource).map((raw) => {
     const cycleEnd = billingTime(raw.CycleEndTime);
     return {
       packageCode: typeof raw.PackageCode === 'string' ? raw.PackageCode : '',
@@ -107,8 +142,14 @@ export function getWorkbuddyCredits(account: WorkbuddyAccount, now = Date.now(),
       left: Math.max(0, parseCycleRemain(raw)),
       expireAt: international ? billingTime(raw.DeductionEndTime) : resourceExpiry(raw),
       refreshAt: (!international ? billingTime(raw.CycleResetTime) : null) ?? (cycleEnd == null ? null : cycleEnd + 1000),
+      name: resourceGrantName(raw),
     };
   });
+}
+
+export function getWorkbuddyCredits(account: WorkbuddyAccount, now = Date.now(), international = false) {
+  const summary = getWorkbuddyResourceSummary(account);
+  const resources = workbuddyCreditResources(account, international);
   const groups = groupOrder.flatMap((kind) => {
     const codes: readonly string[] = international && kind === 'planBase'
       ? WORKBUDDY_CREDIT_GROUPS.planBase.filter((value) => value !== code.freeMon)
@@ -166,6 +207,36 @@ export function getWorkbuddyCredits(account: WorkbuddyAccount, now = Date.now(),
       ? groups.reduce((sum, group) => sum + group.left, 0)
       : summary ? 0 : null;
   return { left, groups };
+}
+
+/**
+ * 收集「即将到期」的积分包：只有奖励积分（benefit）和购买积分（addon）会真正
+ * 到期，套餐基础积分到期只是刷新周期，因此不参与统计。
+ */
+export function getWorkbuddyExpiringCredits(
+  account: WorkbuddyAccount,
+  now = Date.now(),
+  horizonMs = EXPIRING_CREDITS_HORIZON_MS,
+  international = false,
+): ExpiringCredits {
+  const benefitCodes: readonly string[] = international
+    ? [...WORKBUDDY_CREDIT_GROUPS.benefit, code.freeMon, code.gift]
+    : WORKBUDDY_CREDIT_GROUPS.benefit;
+  const addonCodes: readonly string[] = WORKBUDDY_CREDIT_GROUPS.addon;
+  const packages: ExpiringCreditPackage[] = [];
+  let nextExpiryAt: number | null = null;
+  for (const item of workbuddyCreditResources(account, international)) {
+    const group: WorkbuddyCreditGroup | null = benefitCodes.includes(item.packageCode) ? 'benefit'
+      : addonCodes.includes(item.packageCode) ? 'addon' : null;
+    if (group == null || item.left <= 0 || item.expireAt == null) continue;
+    const remaining = item.expireAt - now;
+    if (remaining <= 0) continue;
+    nextExpiryAt = nextExpiryAt == null ? item.expireAt : Math.min(nextExpiryAt, item.expireAt);
+    if (remaining > horizonMs) continue;
+    packages.push({ packageCode: item.packageCode, group, name: item.name, left: item.left, expireAt: item.expireAt });
+  }
+  packages.sort((a, b) => a.expireAt - b.expireAt || b.left - a.left);
+  return { total: packages.reduce((sum, item) => sum + item.left, 0), packages, nextExpiryAt };
 }
 
 export function getWorkbuddyAiCredits(account: WorkbuddyAccount, now = Date.now()) {

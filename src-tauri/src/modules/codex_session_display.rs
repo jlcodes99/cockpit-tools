@@ -303,7 +303,7 @@ fn sqlite_text_expr(columns: &HashSet<String>, column: &str) -> String {
     }
 }
 
-fn normalize_path_for_compare(value: &str) -> Option<String> {
+pub(super) fn normalize_path_for_compare(value: &str) -> Option<String> {
     let trimmed = value.trim();
     if trimmed.is_empty() {
         return None;

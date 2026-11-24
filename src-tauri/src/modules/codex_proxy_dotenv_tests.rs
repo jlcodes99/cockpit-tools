@@ -1,213 +1,296 @@
-use std::collections::HashMap;
-use std::io::{BufRead, BufReader, Write};
-use std::net::TcpListener;
-use std::sync::mpsc::{self, Receiver};
-use std::time::Duration;
-
 use super::*;
-
-fn effective_env(profile: &Path) -> HashMap<String, String> {
-    // Codex applies each successfully parsed entry in order. Windows treats
-    // environment variable names as case-insensitive.
-    dotenvy::from_path_iter(profile.join(".env"))
-        .unwrap()
-        .flatten()
-        .map(|(key, value)| (key.to_ascii_uppercase(), value))
-        .collect()
+fn route(port: u16) -> CodexLaunchProxy {
+    CodexLaunchProxy::Managed(port)
 }
-
-fn mock_connect_proxy() -> (u16, Receiver<String>) {
-    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-    let port = listener.local_addr().unwrap().port();
-    listener.set_nonblocking(true).unwrap();
-    let (send, receive) = mpsc::channel();
-    std::thread::spawn(move || {
-        let until = std::time::Instant::now() + Duration::from_secs(5);
-        while std::time::Instant::now() < until {
-            match listener.accept() {
-                Ok((mut stream, _)) => {
-                    stream
-                        .set_read_timeout(Some(Duration::from_secs(2)))
-                        .unwrap();
-                    let mut request = String::new();
-                    BufReader::new(&stream).read_line(&mut request).unwrap();
-                    let _ = send.send(request);
-                    let _ =
-                        stream.write_all(b"HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\n\r\n");
-                    break;
-                }
-                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
-                    std::thread::sleep(Duration::from_millis(10));
-                }
-                Err(error) => panic!("{error}"),
-            }
+fn step(
+    state: State,
+    document: Option<String>,
+    account: &str,
+    proxy: CodexLaunchProxy,
+) -> (State, Option<String>) {
+    let (mut state, next) = transition(state, document, account, &proxy).unwrap();
+    state.pending = None;
+    (state, next)
+}
+#[test]
+fn absent_empty_and_original_dotenv_roundtrip_across_accounts() {
+    for original in [
+        None,
+        Some(String::new()),
+        Some("# client\r\nHTTPS_PROXY=http://127.0.0.1:7890\r\nSECRET=fixture".into()),
+    ] {
+        let (a, projected) = step(
+            State::default(),
+            original.clone(),
+            "account-a",
+            route(41001),
+        );
+        assert!(projected
+            .as_deref()
+            .unwrap()
+            .contains("HTTPS_PROXY='http://127.0.0.1:41001'"));
+        let (b, restored) = step(a, projected, "account-b", CodexLaunchProxy::ClientDefaults);
+        assert_eq!(restored, original);
+        let (a, projected) = step(b, restored, "account-a", route(41002));
+        let (_, restored) = step(a, projected, "account-b", CodexLaunchProxy::Inherit);
+        assert_eq!(restored, original);
+    }
+}
+#[test]
+fn account_defaults_and_unrelated_user_edits_survive_switching() {
+    let original = Some("HTTPS_PROXY=http://first.invalid:8080\nUSER=original\n".into());
+    let (a, projected) = step(State::default(), original, "a", route(41001));
+    let edited = projected.map(|s| s.replace("USER=original", "USER=edited"));
+    let (b, restored) = step(a, edited, "b", CodexLaunchProxy::ClientDefaults);
+    assert!(restored.as_deref().unwrap().contains("USER=edited"));
+    let b_settings = Some(restored.unwrap().replace("first.invalid", "second.invalid"));
+    let (a, projected) = step(b, b_settings, "a", route(41002));
+    assert!(a
+        .active
+        .as_ref()
+        .unwrap()
+        .original
+        .as_deref()
+        .unwrap()
+        .contains("first.invalid"));
+    let (_, restored) = step(a, projected, "b", CodexLaunchProxy::ClientDefaults);
+    assert!(restored.as_deref().unwrap().contains("second.invalid"));
+    assert!(restored.as_deref().unwrap().contains("USER=edited"));
+}
+#[test]
+fn direct_overrides_dotenv_but_client_defaults_does_not() {
+    let original = Some("HTTP_PROXY=http://client.invalid:7890\n".into());
+    let (state, projected) = step(
+        State::default(),
+        original.clone(),
+        "direct",
+        CodexLaunchProxy::Direct,
+    );
+    assert!(projected.as_deref().unwrap().contains("HTTP_PROXY=''"));
+    assert!(projected.as_deref().unwrap().contains("NO_PROXY='*'"));
+    let (_, restored) = step(
+        state,
+        projected,
+        "original",
+        CodexLaunchProxy::ClientDefaults,
+    );
+    assert_eq!(restored, original);
+}
+#[test]
+fn manual_changes_to_managed_keys_are_never_silently_overwritten() {
+    let (state, projected) = step(State::default(), None, "a", route(41001));
+    let edited = projected.map(|s| s.replace(":41001", ":41002"));
+    assert_eq!(
+        transition(state, edited, "b", &route(41003)).err().unwrap(),
+        CONFLICT
+    );
+    assert_eq!(
+        transition(
+            State::default(),
+            Some(format!("{BEGIN}\n")),
+            "a",
+            &route(41001)
+        )
+        .err()
+        .unwrap(),
+        CONFLICT
+    );
+}
+#[test]
+fn dotenv_grouping_preserves_quoted_multiline_values() {
+    let text = "TOKEN='first\nHTTPS_PROXY=inside-token\nlast'\nexport https_proxy=old\n";
+    let merged = merge_defaults(Some(text), Some("HTTP_PROXY=new\n"))
+        .unwrap()
+        .unwrap();
+    assert!(merged.contains("HTTPS_PROXY=inside-token"));
+    assert!(!merged.contains("https_proxy=old"));
+    assert!(merged.ends_with("HTTP_PROXY=new\n"));
+    assert!(parts("TOKEN='unterminated\n").is_err());
+}
+#[test]
+fn generated_dotenv_never_contains_upstream_credentials_or_remote_endpoints() {
+    assert!(CodexLaunchProxy::Managed(0).dotenv_overrides().is_err());
+    for (_, value) in CodexLaunchProxy::Managed(41001).dotenv_overrides().unwrap() {
+        if value.contains("://") {
+            let url = url::Url::parse(&value).unwrap();
+            assert_eq!(url.host_str(), Some("127.0.0.1"));
+            assert_eq!(url.port(), Some(41001));
+            assert!(url.username().is_empty() && url.password().is_none());
         }
-    });
-    (port, receive)
+    }
 }
-
-fn request_through_profile(profile: &Path) {
-    let env = effective_env(profile);
-    let proxy = reqwest::Proxy::all(&env["HTTPS_PROXY"])
-        .unwrap()
-        .no_proxy(reqwest::NoProxy::from_string(&env["NO_PROXY"]));
-    let result = reqwest::blocking::Client::builder()
-        .proxy(proxy)
-        .timeout(Duration::from_secs(2))
-        .build()
-        .unwrap()
-        .get("https://codex-proxy-test.invalid/")
-        .send();
-    assert!(result.is_err()); // The fake proxy records CONNECT and returns 502.
+#[test]
+fn recoverable_dotenv_journal_completes_both_crash_windows_and_retains_conflicts() {
+    let _lock = super::super::test_support::env_lock()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let root = std::env::temp_dir().join(format!("proxy-dotenv-{}", uuid::Uuid::new_v4()));
+    fs::create_dir_all(root.join("home")).unwrap();
+    let previous = std::env::var_os("COCKPIT_TOOLS_TEST_DATA_DIR");
+    struct Cleanup(PathBuf, Option<std::ffi::OsString>);
+    impl Drop for Cleanup {
+        fn drop(&mut self) {
+            match &self.1 {
+                Some(v) => std::env::set_var("COCKPIT_TOOLS_TEST_DATA_DIR", v),
+                None => std::env::remove_var("COCKPIT_TOOLS_TEST_DATA_DIR"),
+            }
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+    let _cleanup = Cleanup(root.clone(), previous);
+    std::env::set_var("COCKPIT_TOOLS_TEST_DATA_DIR", root.join("app"));
+    let home = root.join("home");
+    let path = state_path(&home).unwrap();
+    let (pending, after) = transition(State::default(), None, "a", &route(41001)).unwrap();
+    write_state(&path, &pending).unwrap();
+    fs::write(home.join(".env.bak"), "user-owned backup").unwrap();
+    let preview = preview_proxy_variables(&home, "a", &route(41001)).unwrap();
+    assert_eq!(
+        preview.get("https_proxy").map(String::as_str),
+        Some("http://127.0.0.1:41001")
+    );
+    assert!(
+        !home.join(".env").exists(),
+        "country preflight must not change a profile"
+    );
+    assert_eq!(
+        read_state(&path).unwrap().pending.as_ref().unwrap().after,
+        after
+    );
+    apply_inner(&home, "a", &route(41001)).unwrap();
+    assert_eq!(read_document(&home.join(".env")).unwrap(), after);
+    assert_eq!(
+        fs::read_to_string(home.join(".env.bak")).unwrap(),
+        "user-owned backup"
+    );
+    write_state(&path, &pending).unwrap();
+    apply_inner(&home, "b", &CodexLaunchProxy::ClientDefaults).unwrap();
+    assert!(!home.join(".env").exists());
+    write_state(&path, &pending).unwrap();
+    fs::write(home.join(".env"), "USER=newer").unwrap();
+    assert_eq!(
+        apply_inner(&home, "a", &route(41001)).unwrap_err(),
+        CONFLICT
+    );
+    assert_eq!(fs::read_to_string(home.join(".env")).unwrap(), "USER=newer");
+    assert!(!fs::read_to_string(path).unwrap().contains("USER="));
 }
 
 #[test]
-fn managed_launch_uses_account_proxy_and_inherit_restores_original_proxy() {
-    let home = tempfile::tempdir().unwrap();
-    let path = home.path().join(".env");
-    let (original_port, original_proxy) = mock_connect_proxy();
-    let (account_port, account_proxy) = mock_connect_proxy();
-    let original = format!(
-        "export HtTpS_pRoXy=http://127.0.0.1:{original_port}\r\nNO_PROXY=original.test\r\nKEEP='setting'"
-    );
-    std::fs::write(&path, &original).unwrap();
-
-    launch(
-        home.path(),
-        &CodexLaunchProxy::Managed(account_port),
-        || {
-            request_through_profile(home.path());
-            assert_eq!(effective_env(home.path())["KEEP"], "setting");
-            Ok(42)
-        },
+fn editable_client_proxy_values_restore_originals_and_do_not_cross_accounts() {
+    let original = Some("HTTPS_PROXY=http://original.invalid:7890\nKEEP=untouched\n".to_string());
+    let (mut a, projected) = transition_with_env(
+        State::default(),
+        original.clone(),
+        "a",
+        &CodexLaunchProxy::ClientDefaults,
+        Some("HTTPS_PROXY=http://account-a.invalid:8080\n"),
+    )
+    .unwrap();
+    a.pending = None;
+    assert!(projected
+        .as_deref()
+        .unwrap()
+        .contains("HTTPS_PROXY='http://account-a.invalid:8080'"));
+    assert!(projected
+        .as_deref()
+        .unwrap()
+        .contains("https_proxy='http://account-a.invalid:8080'"));
+    let variables = parse_proxy_variables(projected.as_deref().unwrap()).unwrap();
+    assert_eq!(variables["https_proxy"], "http://account-a.invalid:8080");
+    assert!(projected.as_deref().unwrap().contains("KEEP=untouched"));
+    let edited = projected.map(|v| v.replace("KEEP=untouched", "KEEP=edited"));
+    let (_, b) = transition_with_env(
+        a.clone(),
+        edited.clone(),
+        "b",
+        &CodexLaunchProxy::ClientDefaults,
+        None,
     )
     .unwrap();
     assert_eq!(
-        account_proxy.recv_timeout(Duration::from_secs(1)).unwrap(),
-        "CONNECT codex-proxy-test.invalid:443 HTTP/1.1\r\n"
+        parse_proxy_variables(b.as_deref().unwrap()).unwrap()["https_proxy"],
+        "http://original.invalid:7890"
     );
-    assert!(original_proxy.try_recv().is_err());
-
-    launch(home.path(), &CodexLaunchProxy::Inherit, || {
-        assert_eq!(std::fs::read_to_string(&path).unwrap(), original);
-        request_through_profile(home.path());
-        Ok(42)
-    })
+    assert!(b.unwrap().contains("KEEP=edited"));
+    let (_, independent) = transition_with_env(
+        a.clone(),
+        edited.clone(),
+        "a",
+        &route(41002),
+        Some("HTTPS_PROXY=http://ignored.invalid:8080\n"),
+    )
     .unwrap();
-    assert!(original_proxy
-        .recv_timeout(Duration::from_secs(1))
-        .unwrap()
-        .starts_with("CONNECT codex-proxy-test.invalid:443 "));
-}
-
-#[test]
-fn direct_launch_overrides_every_proxy_variable_and_removes_its_new_file_on_inherit() {
-    let home = tempfile::tempdir().unwrap();
-    let path = home.path().join(".env");
-    launch(home.path(), &CodexLaunchProxy::Direct, || {
-        let env = effective_env(home.path());
-        for key in ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"] {
-            assert_eq!(env[key], "");
-        }
-        assert_eq!(env["NO_PROXY"], "*");
-        Ok(42)
-    })
-    .unwrap();
-    launch(home.path(), &CodexLaunchProxy::Inherit, || {
-        assert!(!path.exists());
-        Ok(42)
-    })
-    .unwrap();
-}
-
-#[test]
-fn managed_relaunch_takes_precedence_over_subsequent_edits_and_retains_them_on_inherit() {
-    let home = tempfile::tempdir().unwrap();
-    let path = home.path().join(".env");
-    std::fs::write(&path, "KEEP=before\n").unwrap();
-    launch(home.path(), &CodexLaunchProxy::Managed(12001), || Ok(42)).unwrap();
-    let mut file = std::fs::OpenOptions::new()
-        .append(true)
-        .open(&path)
-        .unwrap();
-    writeln!(file, "Https_Proxy=http://127.0.0.1:12003\nLOCAL=value").unwrap();
-    drop(file);
-
-    launch(home.path(), &CodexLaunchProxy::Managed(12002), || {
-        let env = effective_env(home.path());
-        assert_eq!(env["HTTPS_PROXY"], "http://127.0.0.1:12002");
-        assert_eq!(env["LOCAL"], "value");
-        Ok(42)
-    })
-    .unwrap();
-    launch(home.path(), &CodexLaunchProxy::Inherit, || {
-        assert_eq!(
-            std::fs::read_to_string(&path).unwrap(),
-            "KEEP=before\nHttps_Proxy=http://127.0.0.1:12003\nLOCAL=value\n"
-        );
-        Ok(42)
-    })
-    .unwrap();
-}
-
-#[test]
-fn unterminated_dotenv_value_does_not_silently_hide_managed_settings() {
-    let home = tempfile::tempdir().unwrap();
-    let path = home.path().join(".env");
-    let original = "KEEP='unterminated\n";
-    std::fs::write(&path, original).unwrap();
-
-    assert!(launch(home.path(), &CodexLaunchProxy::Managed(12001), || {
-        panic!("must not start without the selected proxy")
-    })
-    .is_err());
-    assert_eq!(std::fs::read_to_string(&path).unwrap(), original);
     assert_eq!(
-        launch(home.path(), &CodexLaunchProxy::Inherit, || Ok(42)),
-        Ok(42)
+        parse_proxy_variables(independent.as_deref().unwrap()).unwrap()["https_proxy"],
+        "http://127.0.0.1:41002"
+    );
+    let (_, direct) = transition_with_env(
+        a,
+        edited,
+        "a",
+        &CodexLaunchProxy::Direct,
+        Some("HTTPS_PROXY=http://ignored.invalid:8080\n"),
+    )
+    .unwrap();
+    assert_eq!(
+        parse_proxy_variables(direct.as_deref().unwrap()).unwrap()["https_proxy"],
+        ""
+    );
+}
+#[test]
+fn empty_manual_proxy_document_is_reversible_and_managed_edits_are_detected() {
+    let original = Some("HTTPS_PROXY=http://original.invalid:7890\nKEEP=value\n".to_string());
+    let (mut state, projected) = transition_with_env(
+        State::default(),
+        original.clone(),
+        "a",
+        &CodexLaunchProxy::ClientDefaults,
+        Some(""),
+    )
+    .unwrap();
+    state.pending = None;
+    assert!(parse_proxy_variables(projected.as_deref().unwrap())
+        .unwrap()
+        .is_empty());
+    let (_, restored) = transition(
+        state.clone(),
+        projected.clone(),
+        "b",
+        &CodexLaunchProxy::ClientDefaults,
+    )
+    .unwrap();
+    assert_eq!(restored, original);
+    let edited = projected.map(|v| v.replace(END, "# missing managed marker"));
+    assert_eq!(
+        transition(state, edited, "b", &CodexLaunchProxy::ClientDefaults)
+            .err()
+            .unwrap(),
+        CONFLICT
     );
 }
 
 #[test]
-fn concurrent_edit_before_write_can_be_retried_without_losing_client_settings() {
-    let home = tempfile::tempdir().unwrap();
-    let path = home.path().join(".env");
-    let proxy = CodexLaunchProxy::Managed(12001);
-    std::fs::write(&path, "KEEP=before\n").unwrap();
-    let projection = Projection::prepare(home.path(), &proxy).unwrap().unwrap();
-    std::fs::write(&path, "KEEP=after\n").unwrap();
-
-    assert_eq!(projection.write(), Err(CHANGED.into()));
-    assert_eq!(std::fs::read_to_string(&path).unwrap(), "KEEP=after\n");
-    launch(home.path(), &proxy, || Ok(42)).unwrap();
-    launch(home.path(), &CodexLaunchProxy::Inherit, || Ok(42)).unwrap();
-    assert_eq!(std::fs::read_to_string(&path).unwrap(), "KEEP=after\n");
-}
-
-#[test]
-fn edit_during_launch_stops_the_reported_pid_preserves_the_edit_and_allows_retry() {
-    let home = tempfile::tempdir().unwrap();
-    let path = home.path().join(".env");
-    let proxy = CodexLaunchProxy::Managed(12001);
-    let edited = "HTTPS_PROXY=http://127.0.0.1:12002\n";
-    let mut stopped = None;
-    let result = launch_with_stop(
-        home.path(),
-        &proxy,
-        || {
-            std::fs::write(&path, edited).unwrap();
-            Ok(42)
-        },
-        |pid| {
-            stopped = Some(pid);
-            Ok(())
-        },
-    );
-    assert_eq!(result, Err(CHANGED.into()));
-    assert_eq!(stopped, Some(42));
-    assert_eq!(std::fs::read_to_string(&path).unwrap(), edited);
-
-    launch(home.path(), &proxy, || Ok(42)).unwrap();
-    launch(home.path(), &CodexLaunchProxy::Inherit, || Ok(42)).unwrap();
-    assert_eq!(std::fs::read_to_string(&path).unwrap(), edited);
+fn managed_and_direct_routes_remove_conflicting_dotenv_assignments_and_restore_originals() {
+    let original = "HTTP_PROXY=http://previous.invalid:7890\nhttps_proxy=http://previous.invalid:7890\nALL_PROXY=socks5://previous.invalid:1080\nNO_PROXY=*\nKEEP=untouched\n";
+    for proxy in [route(41001), CodexLaunchProxy::Direct] {
+        let (state, projected) = step(
+            State::default(),
+            Some(original.to_owned()),
+            "managed",
+            proxy.clone(),
+        );
+        let document = projected.as_deref().unwrap();
+        assert!(!document.contains("previous.invalid"));
+        assert!(document.contains("KEEP=untouched"));
+        let expected: BTreeMap<String, String> = proxy
+            .dotenv_overrides()
+            .unwrap()
+            .into_iter()
+            .map(|(key, value)| (key.to_ascii_lowercase(), value))
+            .collect();
+        assert_eq!(parse_proxy_variables(document).unwrap(), expected);
+        let (_, restored) = step(state, projected, "client", CodexLaunchProxy::ClientDefaults);
+        assert_eq!(restored.as_deref(), Some(original));
+    }
 }

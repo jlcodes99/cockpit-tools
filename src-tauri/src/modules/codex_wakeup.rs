@@ -135,6 +135,8 @@ pub struct CodexCliResolvedRuntime {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub node_path: Option<String>,
     pub source: String,
+    #[serde(skip_serializing)]
+    pub(crate) version: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -1906,6 +1908,7 @@ pub fn resolve_cli_runtime() -> Result<CodexCliResolvedRuntime, String> {
         binary_path: binary.path.display().to_string(),
         node_path: binary.node_path.map(|path| path.display().to_string()),
         source: binary.source,
+        version: binary.version,
     })
 }
 

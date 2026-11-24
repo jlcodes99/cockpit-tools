@@ -1822,6 +1822,15 @@
   height: 14px;
 }
 
+.ghcp-accounts-page .toolbar > .toolbar-left {
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.ghcp-accounts-page .toolbar > .toolbar-right {
+  max-width: 100%;
+}
+
 .ghcp-accounts-page .tag-filter {
   position: relative;
   flex-shrink: 0;

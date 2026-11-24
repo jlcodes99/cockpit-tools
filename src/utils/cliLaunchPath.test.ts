@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { loadHookModule, settlePromises } from '../../tests/helpers/reactHookHarness';
-import { INSTANCE_START_COMMANDS, LAUNCH_ONLY_COMMANDS, readMissingLaunchPathApp } from './appLaunchPath';
+import { INSTANCE_START_COMMANDS, LAUNCH_ONLY_COMMANDS, readInvalidWorkbuddyPath, readMissingLaunchPathApp } from './appLaunchPath';
 
 interface RecoveryEvent {
   app: string;
@@ -77,4 +77,10 @@ test('desktop recovery recognizes real missing paths and has distinct launch-onl
   assert.equal(readMissingLaunchPathApp('APP_PATH_NOT_FOUND:zed unrelated failure'), undefined);
   assert.equal(INSTANCE_START_COMMANDS.zcode, 'zcode_start_instance');
   assert.equal(LAUNCH_ONLY_COMMANDS.zcode, 'zcode_launch_current');
+});
+
+test('WorkBuddy desktop recovery preserves the Windows path and ignores unrelated failures', () => {
+  const path = String.raw`C:\Program Files\WorkBuddy\resources\node.exe`;
+  assert.equal(readInvalidWorkbuddyPath(new Error(`WORKBUDDY_NODE_APP_PATH:${path}`)), path);
+  assert.equal(readInvalidWorkbuddyPath('APP_PATH_NOT_FOUND:workbuddy'), undefined);
 });

@@ -692,6 +692,10 @@ async fn codex_local_access_activate_internal(
 
     logger::log_info("API 服务启动模式下跳过 OpenCode / OpenClaw OAuth 同步");
 
+    if launch_target.is_default {
+        crate::modules::ssh_server::api_service_activated(launch_after_switch);
+    }
+
     if launch_after_switch {
         let launch_started = Instant::now();
         #[cfg(target_os = "macos")]

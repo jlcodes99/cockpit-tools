@@ -462,8 +462,8 @@ fn resolve_configured_antigravity_root(path_str: &str) -> Option<std::path::Path
 #[cfg(test)]
 mod configured_antigravity_root_tests {
     use super::{
-        antigravity_extension_bin_dir, resolve_configured_antigravity_root,
-        resolve_official_ls_runtime, standalone_ls_binary,
+        antigravity_extension_bin_dir, configure_official_ls_auth, resolve_configured_antigravity_root,
+        resolve_official_ls_runtime, standalone_ls_binary, Command,
     };
     use std::path::{Path, PathBuf};
 
@@ -561,6 +561,25 @@ mod configured_antigravity_root_tests {
             let runtime = resolve_official_ls_runtime(ide_root, || Some(desktop.0.clone())).unwrap();
             assert_eq!(runtime.binary, binary);
             assert!(runtime.standalone);
+        }
+    }
+
+    #[test]
+    fn wakeup_only_passes_the_account_token_to_standalone_auth() {
+        for (standalone, expected_flag) in [(false, "--enable_lsp"), (true, "--standalone")] {
+            let mut command = Command::new("language_server");
+            let token = "fixture-access-token";
+            configure_official_ls_auth(&mut command, standalone, token);
+            assert_eq!(
+                command.as_std().get_args().collect::<Vec<_>>(),
+                [std::ffi::OsStr::new(expected_flag)]
+            );
+            let child_token = command
+                .as_std()
+                .get_envs()
+                .find(|(key, _)| *key == "JETSKI_OAUTH_TOKEN")
+                .and_then(|(_, value)| value);
+            assert_eq!(child_token, standalone.then(|| std::ffi::OsStr::new(token)));
         }
     }
 }
@@ -910,7 +929,7 @@ pub(crate) fn official_antigravity_app_version() -> String {
     String::new()
 }
 
-fn build_official_ls_metadata_bytes(runtime: &OfficialLsRuntime) -> Vec<u8> {
+fn build_official_ls_metadata_bytes() -> Vec<u8> {
     use crate::utils::protobuf::{encode_len_delim_field, encode_varint};
 
     let mut out = Vec::new();
@@ -923,25 +942,9 @@ fn build_official_ls_metadata_bytes(runtime: &OfficialLsRuntime) -> Vec<u8> {
 
     // exa.codeium_common_pb.Metadata
     // 1=ide_name, 7=ide_version, 12=extension_name, 17=extension_path, 4=locale, 24=device_fingerprint
-    if runtime.standalone {
-        push_str(&mut out, 1, "Antigravity");
-        #[cfg(target_os = "macos")]
-        if let Some(version) = runtime
-            .binary
-            .ancestors()
-            .nth(3)
-            .and_then(|contents| plist::Value::from_file(contents.join("Info.plist")).ok())
-            .and_then(|value| value.into_dictionary())
-            .and_then(|mut info| info.remove("CFBundleShortVersionString"))
-            .and_then(|value| value.into_string())
-        {
-            push_str(&mut out, 7, &version);
-        }
-    } else {
-        push_str(&mut out, 1, "Antigravity IDE");
-        push_str(&mut out, 7, &official_antigravity_app_version());
-        push_str(&mut out, 17, &official_antigravity_extension_path());
-    }
+    push_str(&mut out, 1, "Antigravity IDE");
+    push_str(&mut out, 7, &official_antigravity_app_version());
+    push_str(&mut out, 17, &official_antigravity_extension_path());
     push_str(&mut out, 12, "antigravity");
     push_str(
         &mut out,
@@ -1580,13 +1583,25 @@ impl OfficialLsProcessHandle {
     }
 }
 
+fn configure_official_ls_auth(cmd: &mut Command, standalone: bool, access_token: &str) {
+    if standalone {
+        // The App's server selects its standalone auth provider only in this
+        // mode. Give it this wakeup account's access token in the child env.
+        cmd.arg("--standalone")
+            .env("JETSKI_OAUTH_TOKEN", access_token)
+            .stdin(Stdio::null());
+    } else {
+        cmd.arg("--enable_lsp").stdin(Stdio::piped());
+    }
+}
+
 async fn start_official_ls_process(
     account_id: &str,
     token: &crate::models::token::TokenData,
 ) -> Result<OfficialLsProcessHandle, String> {
     let (runtime, metadata) = tokio::task::spawn_blocking(|| {
         let runtime = official_ls_runtime()?;
-        let metadata = build_official_ls_metadata_bytes(&runtime);
+        let metadata = (!runtime.standalone).then(build_official_ls_metadata_bytes);
         Ok::<_, String>((runtime, metadata))
     })
     .await
@@ -1594,11 +1609,10 @@ async fn start_official_ls_process(
     let mut extension_server = start_official_ls_extension_server(token).await?;
     let ls_csrf = uuid::Uuid::new_v4().to_string();
     let cloud_code_endpoint = official_ls_cloud_code_endpoint(token);
-    // 独立版唤醒使用 Cockpit 的数据目录，目标账号仍由扩展桥接提供。
     let app_data_dir = official_ls_app_data_dir_name(runtime.standalone);
 
     let mut cmd = Command::new(&runtime.binary);
-    cmd.arg("--enable_lsp");
+    configure_official_ls_auth(&mut cmd, runtime.standalone, &token.access_token);
     cmd.arg("--csrf_token")
         .arg(&ls_csrf)
         .arg("--extension_server_port")
@@ -1609,7 +1623,6 @@ async fn start_official_ls_process(
         .arg(cloud_code_endpoint)
         .arg("--app_data_dir")
         .arg(&app_data_dir)
-        .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .kill_on_drop(true);
@@ -1633,7 +1646,7 @@ async fn start_official_ls_process(
             .take()
             .map(|stderr| spawn_ls_log_task(stderr, "stderr"));
 
-        if let Some(mut stdin) = child.stdin.take() {
+        if let (Some(metadata), Some(mut stdin)) = (metadata, child.stdin.take()) {
             stdin
                 .write_all(&metadata)
                 .await

@@ -1,4 +1,5 @@
 pub mod account;
+pub mod automation_protocol;
 mod account_file_crypto;
 mod secure_account_storage;
 pub mod account_index_repair;

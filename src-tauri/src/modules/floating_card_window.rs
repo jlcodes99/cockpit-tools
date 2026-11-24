@@ -467,6 +467,9 @@ pub fn show_floating_card_window<R: Runtime>(
         window.set_focus().map_err(|err| err.to_string())?;
     }
 
+    #[cfg(target_os = "macos")]
+    reassert_presence_policy(app);
+
     Ok(())
 }
 
@@ -491,6 +494,9 @@ pub fn show_instance_floating_card_window<R: Runtime>(
     if focus {
         window.set_focus().map_err(|err| err.to_string())?;
     }
+
+    #[cfg(target_os = "macos")]
+    reassert_presence_policy(app);
 
     Ok(())
 }
@@ -537,7 +543,7 @@ fn clone_main_window_config(
     config.create = false;
     config.visible = false;
     // Restore last size/position when recreating after tray destroy (#948 / #1132).
-    main_window_state::apply_state_to_window_config(&mut config);
+    main_window_state::apply_state_to_recreated_window_config(&mut config);
     Ok(config)
 }
 
@@ -712,7 +718,8 @@ fn show_macos_application<R: Runtime>(app: &AppHandle<R>) {
 
 #[cfg(target_os = "macos")]
 fn activate_macos_application<R: Runtime>(app: &AppHandle<R>) {
-    if let Err(err) = app.run_on_main_thread(|| {
+    let app_for_presence = app.clone();
+    if let Err(err) = app.run_on_main_thread(move || {
         use objc2_app_kit::NSApplication;
         use objc2_foundation::MainThreadMarker;
 
@@ -722,9 +729,15 @@ fn activate_macos_application<R: Runtime>(app: &AppHandle<R>) {
         ns_app.unhide(None);
         #[allow(deprecated)]
         ns_app.activateIgnoringOtherApps(true);
+        reassert_presence_policy(&app_for_presence);
     }) {
         logger::log_warn(&format!("[Window] macOS 应用激活失败: {}", err));
     }
+}
+
+#[cfg(target_os = "macos")]
+fn reassert_presence_policy<R: Runtime>(app: &AppHandle<R>) {
+    crate::modules::app_presence::apply_configured_policy(app);
 }
 
 #[cfg(not(target_os = "macos"))]

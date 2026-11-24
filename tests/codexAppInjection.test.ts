@@ -34,10 +34,10 @@ const values: Record<string, unknown> = {
   usage_state: {}, refresh_error: null, provider_quotas: [],
   usage_labels: {
     ...usageLabels,
-    requestTier:translations.codex.apiService.logs.requestedTier,responseTier:translations.codex.apiService.logs.responseTier,
-    legacyTier:translations.codex.apiService.logs.legacyTier,tierHint:translations.codex.apiService.logs.serviceTierHint,
+    speedAdjusted:translations.codex.apiService.logs.speedAdjusted,
+    officialDefaultSpeed:translations.codex.apiService.logs.officialDefaultSpeed,
     tierFast:translations.codex.speed.fast,tierUltrafast:translations.codex.speed.ultrafast,tierStandard:translations.codex.speed.standard,
-    tierAuto:translations.codex.contextOverride.automatic,tierUnknown:translations.common.requestProxy.unknown,
+    tierAuto:translations.codex.contextOverride.automatic,
     title: 'Quota and usage', session: 'Current session', speed: 'Output speed', cache: 'Cache hits', cacheShort: 'Cache',
     speedHint: 'Current chat output tokens divided by post-first-response generation time', cacheHint: 'Cached input divided by input tokens',
     aggregateHint: 'Sum of account percentages without plan capacity weighting', waiting: 'Waiting for session tokens',
@@ -966,18 +966,19 @@ test('overview collapses identical model names, separates metric units and prese
   assert.equal(h.details().querySelector('.cell-upstream')!.textContent,'↳ gpt-6-sol');
 });
 
-test('request account names match API service labels and never fall back to internal identifiers', () => {
+test('request accounts prefer API service names and use opaque references for missing names', () => {
   const h = harness('injection_script',[composer('gpt-6-sol')]);
   h.evaluate();
   openRequests(h);
   dialogResponse(h,{requests:{rows:[
     requestRecord('provider',{accountId:'codex_0c881bdd4e810dcfd5edfae96bb470bc',accountEmail:null,accountDisplayName:'DeepSeek'}),
     requestRecord('oauth',{accountId:'codex_internal',accountDisplayName:'724550799@qq.com'}),
-    requestRecord('deleted',{accountId:'codex_deleted',accountEmail:null,accountDisplayName:null}),
-    requestRecord('generated',{accountId:'codex_gone',accountEmail:'api-key-1234abcd'}),
+    requestRecord('deleted',{accountId:'codex_deleted',accountEmail:null,accountDisplayName:null,accountReference:'a113bcf5'}),
+    requestRecord('generated',{accountId:'codex_gone',accountEmail:'api-key-1234abcd',accountReference:'d209f55c'}),
+    requestRecord('unknown',{accountId:null,accountEmail:null,accountDisplayName:null}),
   ],nextCursor:null}});
   const names = h.details().querySelectorAll('.cell-email').map(node => node.textContent);
-  assert.deepEqual(names,['DeepSeek','724550799@qq.com','—','—']);
+  assert.deepEqual(names,['DeepSeek','724550799@qq.com','Account · a113bcf5','Account · d209f55c','—']);
   assert.doesNotMatch(h.details().textContent,/codex_|api-key-1234abcd/);
 });
 
@@ -2139,21 +2140,31 @@ test('same-conversation composer replacement preserves cached rows and open stat
   assert.match(h.details().textContent, /kept@example.com/);
 });
 
-test('request tier rendering follows API service evidence and keeps returned raw tier separate', () => {
-  const h = harness('injection_script', [composer('gpt-6-sol')]);
-  h.evaluate();
-  openRequests(h);
-  dialogResponse(h, { requests: { rows: [
-    requestRecord('fast', { requestedServiceTier: 'FAST', responseServiceTier: 'default' }),
-    requestRecord('legacy', { serviceTier: 'priority' }),
-    requestRecord('adjusted', { requestedServiceTier: 'auto', serviceTierAdaptation:
-      { requestedTier: 'priority', sentTier: 'default', reason: 'official_default_only' } }),
-  ], nextCursor: null } });
-  const rows = h.details().querySelectorAll('.request-row');
-  assert.match(rows[0].textContent, /highRequest: FastReported: default/);
-  assert.doesNotMatch(rows[0].textContent, /Adjusted to Standard/);
-  assert.match(rows[1].textContent, /Request: Not recordedReported: Not recordedLegacy: priority/);
-  assert.match(rows[2].textContent, /Request: FastReported: Not recordedAdjusted to Standard/);
+test('request records show short speed labels using requested tiers and verified adjustments', () => {
+  for (const remote of [false, true]) {
+    const h = harness('injection_script', [composer('gpt-6-sol')]);
+    h.evaluate();
+    openRequests(h);
+    dialogResponse(h, { remote, requests: { rows: [
+      requestRecord('ultrafast', { requestedServiceTier: ' ULTRAFAST ', responseServiceTier: 'default' }),
+      requestRecord('fast', { requestedServiceTier: 'FAST', responseServiceTier: 'default' }),
+      requestRecord('standard', { requestedServiceTier: 'default' }),
+      requestRecord('legacy', { serviceTier: 'priority' }),
+      requestRecord('response-only', { responseServiceTier: 'priority' }),
+      requestRecord('auto', { requestedServiceTier: 'auto' }),
+      requestRecord('adjusted', { requestedServiceTier: 'auto', serviceTierAdaptation:
+        { requestedTier: 'priority', sentTier: 'default', reason: 'official_default_only' } }),
+    ], nextCursor: null } });
+    const rows = h.details().querySelectorAll('.request-row');
+    assert.deepEqual(rows.map(row => row.querySelector('.cell-tier')?.textContent ?? null), [
+      translations.codex.speed.ultrafast,
+      translations.codex.speed.fast,
+      translations.codex.speed.standard,
+      null, null, null,
+      translations.codex.apiService.logs.speedAdjusted.replace('{{tier}}', translations.codex.speed.fast),
+    ]);
+    for (const row of rows) assert.doesNotMatch(row.textContent, /Request:|Reported:|Legacy:/);
+  }
 });
 
 test('a different API service binding cannot reuse latest or mean measurements from the former binding', () => {

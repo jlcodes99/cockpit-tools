@@ -40,6 +40,7 @@ pub async fn view(raw: &str) -> Result<desktop::TargetView, String> {
             account.plan_type = source.plan_type;
             account.egress_proxy_url = source.egress_proxy_url;
             account.egress_proxy_disabled = source.egress_proxy_disabled;
+            account.egress_proxy_client_defaults = source.egress_proxy_client_defaults;
             account.created_at = source.created_at;
             account.last_used = source.last_used;
             Ok(desktop::TargetView {
@@ -104,7 +105,7 @@ pub async fn account_totals() -> Result<(Vec<String>, Vec<String>, Vec<String>),
             special.push(account.id);
             continue;
         }
-        if !super::codex_account_proxy::eligible(&account) {
+        if !super::codex_account_proxy::eligible(&account) || account.egress_proxy_client_defaults {
             continue;
         }
         if account.egress_proxy_disabled {
@@ -123,6 +124,7 @@ pub async fn account_totals() -> Result<(Vec<String>, Vec<String>, Vec<String>),
         match modes.get(&id).copied().unwrap_or_default() {
             desktop::Mode::Direct => disabled.push(id.clone()),
             desktop::Mode::Independent | desktop::Mode::BoundOauth => independent.push(id.clone()),
+            desktop::Mode::ClientDefaults => continue,
             desktop::Mode::Inherit => (),
         }
         eligible.push(id);

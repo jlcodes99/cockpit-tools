@@ -2,6 +2,11 @@ use crate::modules;
 use tauri::AppHandle;
 
 #[tauri::command]
+pub fn wakeup_get_default_transport_mode() -> modules::wakeup::WakeupTransportMode {
+    modules::wakeup::resolve_wakeup_transport_mode(None)
+}
+
+#[tauri::command]
 pub async fn wakeup_ensure_runtime_ready(
     transport_mode: Option<modules::wakeup::WakeupTransportMode>,
 ) -> Result<Option<String>, String> {

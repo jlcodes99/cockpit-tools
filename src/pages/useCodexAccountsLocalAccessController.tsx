@@ -64,10 +64,8 @@ export function useCodexAccountsLocalAccessController(context: Pick<ReturnType<t
   | "ensureLocalAccessEntryVisible"
   | "fetchAccounts"
   | "fetchCurrentAccount"
-  | "filterTypes"
   | "formatCodexAuthFailureMessage"
   | "groupDeleteConfirm"
-  | "groupFilter"
   | "groupQuickAddGroupId"
   | "launchPreviewInstanceId"
   | "localAccessAddressKind"
@@ -88,7 +86,6 @@ export function useCodexAccountsLocalAccessController(context: Pick<ReturnType<t
   | "quotaErrorDetail"
   | "reloadCodexGroups"
   | "reloadLocalAccessState"
-  | "searchQuery"
   | "selected"
   | "setActiveGroupId"
   | "setAddingLocalAccessAccountId"
@@ -120,7 +117,6 @@ export function useCodexAccountsLocalAccessController(context: Pick<ReturnType<t
   | "sortBy"
   | "sortDirection"
   | "t"
-  | "tagFilter"
 >) {
   const {
     accounts,
@@ -139,10 +135,8 @@ export function useCodexAccountsLocalAccessController(context: Pick<ReturnType<t
     ensureLocalAccessEntryVisible,
     fetchAccounts,
     fetchCurrentAccount,
-    filterTypes,
     formatCodexAuthFailureMessage,
     groupDeleteConfirm,
-    groupFilter,
     groupQuickAddGroupId,
     launchPreviewInstanceId,
     localAccessAddressKind,
@@ -163,7 +157,6 @@ export function useCodexAccountsLocalAccessController(context: Pick<ReturnType<t
     quotaErrorDetail,
     reloadCodexGroups,
     reloadLocalAccessState,
-    searchQuery,
     selected,
     setActiveGroupId,
     setAddingLocalAccessAccountId,
@@ -195,7 +188,6 @@ export function useCodexAccountsLocalAccessController(context: Pick<ReturnType<t
     sortBy,
     sortDirection,
     t,
-    tagFilter,
   } = context;
   const [instanceGateways, setInstanceGateways] = useState<
     CodexInstanceGatewayView[]
@@ -1297,32 +1289,40 @@ export function useCodexAccountsLocalAccessController(context: Pick<ReturnType<t
       return Array.from(tagSet).sort((a, b) => a.localeCompare(b));
     }, [normalizeTag, oauthAccounts]);
   
+    const [oauthBindingFilters, setOauthBindingFilters] = useState<{
+      searchQuery: string;
+      filterTypes: string[];
+      tagFilter: string[];
+    }>({
+      searchQuery: "",
+      filterTypes: [],
+      tagFilter: [],
+    });
+    useEffect(() => {
+      if (!oauthBindingTargetActive) {
+        setOauthBindingFilters({ searchQuery: "", filterTypes: [], tagFilter: [] });
+      }
+    }, [oauthBindingTargetActive]);
+
     const oauthBindingFilteredAccounts = useMemo(
       () =>
         filterAndSortCodexOverviewAccounts({
           accounts: oauthAccounts,
-          groups: codexGroups,
-          searchQuery,
-          filterTypes,
-          tagFilter,
-          groupFilter,
-          activeGroupId,
+          ...oauthBindingFilters,
+          groups: [],
+          groupFilter: [],
+          activeGroupId: null,
           resolveDisplayName: (account) =>
             resolvePresentation(account).displayName,
           compareAccounts: oauthBindingCompareAccountsBySort,
           isAbnormalAccount,
         }),
       [
-        activeGroupId,
-        codexGroups,
-        filterTypes,
-        groupFilter,
         isAbnormalAccount,
         oauthAccounts,
         oauthBindingCompareAccountsBySort,
+        oauthBindingFilters,
         resolvePresentation,
-        searchQuery,
-        tagFilter,
       ],
     );
   
@@ -1337,16 +1337,12 @@ export function useCodexAccountsLocalAccessController(context: Pick<ReturnType<t
       if (!oauthBindingTargetActive) return;
       oauthBindingPagination.setCurrentPage(1);
     }, [
-      activeGroupId,
-      filterTypes,
-      groupFilter,
       oauthBindingAccountId,
+      oauthBindingFilters,
       oauthBindingPagination.setCurrentPage,
       oauthBindingTargetActive,
-      searchQuery,
       sortBy,
       sortDirection,
-      tagFilter,
     ]);
   
     const activeGroup = useMemo(() => {
@@ -2004,9 +2000,11 @@ export function useCodexAccountsLocalAccessController(context: Pick<ReturnType<t
     localAccessScopeLabel,
     oauthBindingAvailableTags,
     oauthBindingFilteredAccounts,
+    oauthBindingFilters,
     oauthBindingPagination,
     oauthBindingTierCounts,
     oauthBindingTierFilterOptions,
+    setOauthBindingFilters,
     openCodexApiServicePage,
     openLocalAccessMemberPicker,
     openLocalAccessPanel,

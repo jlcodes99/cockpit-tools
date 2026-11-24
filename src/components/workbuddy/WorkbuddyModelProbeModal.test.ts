@@ -10,6 +10,7 @@ function nodes(value: any): any[] {
 test('batch probe submits once and keeps cleanup failures visible in the cell detail', async () => {
   const probe = deferred<any>();
   let calls = 0;
+  const probedModels: string[] = [];
   let closed = 0;
   const h = loadHookModule(new URL('./WorkbuddyModelProbeModal.tsx', import.meta.url), {
     'react-i18next': { useTranslation: () => ({ t: (key: string) => key }) },
@@ -21,7 +22,11 @@ test('batch probe submits once and keeps cleanup failures visible in the cell de
         { id: 'chosen', name: 'Chosen', credits: null, description: null, supportsImages: false, isDefault: false },
       ],
       fetchCodebuddyCnCloudModels: async () => [],
-      probeWorkbuddyModel: () => { calls++; return probe.promise; },
+      probeWorkbuddyModel: (_accountId: string, model: string) => {
+        calls++;
+        probedModels.push(model);
+        return probe.promise;
+      },
       probeCodebuddyCnModel: () => { throw new Error('unused'); },
     },
     '../../utils/workbuddyProbeStatus': {
@@ -31,14 +36,20 @@ test('batch probe submits once and keeps cleanup failures visible in the cell de
       dismissWorkbuddyProbeRecord() {},
       subscribeWorkbuddyProbeStatus: () => () => {},
     },
-  });
+  }, { localStorage: { getItem: () => '["retired"]', setItem() {} } });
+
+  const submitButton = () => nodes(h.flush()).find(
+    (node) => node.type === 'button' && node.props.className === 'btn btn-primary',
+  );
 
   h.render(() => h.exports.WorkbuddyModelProbeModal({
     accounts: [{ id: 'a', email: 'a@example.invalid' }],
     currentAccountId: 'a',
     onClose: () => { closed++; },
   }));
+  assert.equal(submitButton().props.disabled, true);
   await settlePromises();
+  assert.equal(submitButton().props.disabled, true);
 
   // 勾选模型目录里的第一个模型
   const modelLabel = nodes(h.flush()).find((node) => node.props?.className === 'wb-probe-model-item');
@@ -46,13 +57,12 @@ test('batch probe submits once and keeps cleanup failures visible in the cell de
   const modelCheckbox = modelLabel.props.children.find((child: any) => child?.type === 'input');
   modelCheckbox.props.onChange({ target: { checked: true } });
 
-  const submit = nodes(h.flush()).find(
-    (node) => node.type === 'button' && node.props.className === 'btn btn-primary',
-  );
+  const submit = submitButton();
   assert.equal(submit.props.disabled, false);
   submit.props.onClick();
   submit.props.onClick();
   assert.equal(calls, 1);
+  assert.deepEqual(probedModels, ['chosen']);
 
   // 弹层点击背景不关闭（仅显式关闭）
   assert.equal(nodes(h.flush()).find((node) => node.props.className === 'modal-overlay wb-probe-overlay').props.onClick, undefined);

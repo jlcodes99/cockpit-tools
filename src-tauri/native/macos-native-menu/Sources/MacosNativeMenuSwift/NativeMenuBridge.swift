@@ -124,6 +124,7 @@ public func macos_native_menu_update_status_item(
     valueTextPointer: UnsafePointer<CChar>?,
     remainingPercent: Int32,
     enabled: Int32,
+    stacked: Int32,
     statusItemPointer: UnsafeMutableRawPointer?
 ) {
     guard let statusItemPointer else { return }
@@ -138,51 +139,43 @@ public func macos_native_menu_update_status_item(
 
         statusItem.length = NSStatusItem.variableLength
         guard enabled != 0 else {
+            button.subviews.filter { $0 is NativeMenuQuotaTitleView }.forEach { $0.removeFromSuperview() }
             button.attributedTitle = NSAttributedString(string: "")
             button.title = ""
             button.imagePosition = .imageOnly
+            button.cell?.wraps = false
+            button.cell?.usesSingleLineMode = true
+            button.setAccessibilityValue(nil)
             button.needsDisplay = true
             syncTrayClickTargetFrameSoon(for: button)
             return
         }
 
-        let valueText = valueTextRaw.isEmpty ? "--" : valueTextRaw
-        let prefixText = accountPrefix.isEmpty ? "" : "\(accountPrefix) "
-        let fullText = prefixText + valueText
-        let font = NSFont.monospacedDigitSystemFont(
-            ofSize: NSFont.systemFontSize,
-            weight: .medium
+        let attributedTitle = menuBarQuotaTitle(
+            accountPrefix: accountPrefix,
+            valueText: valueTextRaw,
+            remainingPercent: remainingPercent,
+            stacked: stacked != 0,
+            availableHeight: button.bounds.height
         )
-        let attributedTitle = NSMutableAttributedString(
-            string: fullText,
-            attributes: [
-                .font: font,
-                .foregroundColor: NSColor.labelColor,
-            ]
-        )
-
-        // remainingPercent 仅用于着色：>=0 按剩余额度色阶；池合计可能 >100，按 0–100 夹紧配色。
-        let valueColor: NSColor
-        if remainingPercent >= 0 {
-            let tone = min(max(Int(remainingPercent), 0), 100)
-            if tone <= 30 {
-                valueColor = .systemRed
-            } else if tone <= 60 {
-                valueColor = .systemOrange
-            } else {
-                valueColor = .systemGreen
-            }
-        } else {
-            valueColor = .secondaryLabelColor
-        }
-        attributedTitle.addAttribute(
-            .foregroundColor,
-            value: valueColor,
-            range: NSRange(location: prefixText.utf16.count, length: valueText.utf16.count)
-        )
-
+        let twoLines = attributedTitle.string.contains("\n")
+        button.cell?.wraps = twoLines
+        button.cell?.usesSingleLineMode = !twoLines
         button.imagePosition = .imageLeading
         button.attributedTitle = attributedTitle
+        if twoLines {
+            let titleView = button.subviews.compactMap { $0 as? NativeMenuQuotaTitleView }.first
+                ?? NativeMenuQuotaTitleView(button: button)
+            if titleView.superview == nil { button.addSubview(titleView) }
+            titleView.frame = button.bounds
+            titleView.configure(accountPrefix: accountPrefix, valueText: valueTextRaw,
+                remainingPercent: remainingPercent)
+        } else {
+            button.subviews.filter { $0 is NativeMenuQuotaTitleView }.forEach { $0.removeFromSuperview() }
+        }
+        button.setAccessibilityValue(attributedTitle.string
+            .replacingOccurrences(of: "\n", with: ", ")
+            .replacingOccurrences(of: "\t", with: " "))
         button.needsDisplay = true
         // 标题变宽后必须立刻同步点击层，否则左右键全部失效。
         syncTrayClickTargetFrameSoon(for: button)

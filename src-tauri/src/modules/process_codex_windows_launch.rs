@@ -525,10 +525,33 @@ fn resolve_codex_package_activation_reply(
 }
 
 #[cfg(target_os = "windows")]
-fn verify_codex_process_package(pid: u32, expected_family: &str) -> Result<(), String> {
+fn read_windows_process_package_family(
+    handle: windows::Win32::Foundation::HANDLE,
+    pid: u32,
+) -> Result<String, String> {
     use windows::core::PWSTR;
-    use windows::Win32::Foundation::{CloseHandle, ERROR_INSUFFICIENT_BUFFER, ERROR_SUCCESS};
+    use windows::Win32::Foundation::{ERROR_INSUFFICIENT_BUFFER, ERROR_SUCCESS};
     use windows::Win32::Storage::Packaging::Appx::GetPackageFamilyName;
+    unsafe {
+        let mut size = 0;
+        let status = GetPackageFamilyName(handle, &mut size, PWSTR::null());
+        if status != ERROR_INSUFFICIENT_BUFFER || size == 0 || size > 32768 {
+            return Err(format!("GetPackageFamilyName pid={pid}: win32={}", status.0));
+        }
+        let mut buffer = vec![0u16; size as usize];
+        let status = GetPackageFamilyName(handle, &mut size, PWSTR(buffer.as_mut_ptr()));
+        if status != ERROR_SUCCESS {
+            return Err(format!("GetPackageFamilyName pid={pid}: win32={}", status.0));
+        }
+        Ok(String::from_utf16_lossy(
+            &buffer[..buffer.iter().position(|c| *c == 0).unwrap_or(buffer.len())],
+        ))
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn verify_codex_process_package(pid: u32, expected_family: &str) -> Result<(), String> {
+    use windows::Win32::Foundation::CloseHandle;
     use windows::Win32::System::Threading::{
         GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
     };
@@ -536,25 +559,7 @@ fn verify_codex_process_package(pid: u32, expected_family: &str) -> Result<(), S
         let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid)
             .map_err(|error| format!("OpenProcess pid={pid}: {error}"))?;
         let result = (|| {
-            let mut size = 0;
-            let status = GetPackageFamilyName(handle, &mut size, PWSTR::null());
-            if status != ERROR_INSUFFICIENT_BUFFER || size == 0 || size > 32768 {
-                return Err(format!(
-                    "GetPackageFamilyName pid={pid}: win32={}",
-                    status.0
-                ));
-            }
-            let mut buffer = vec![0u16; size as usize];
-            let status = GetPackageFamilyName(handle, &mut size, PWSTR(buffer.as_mut_ptr()));
-            if status != ERROR_SUCCESS {
-                return Err(format!(
-                    "GetPackageFamilyName pid={pid}: win32={}",
-                    status.0
-                ));
-            }
-            let actual = String::from_utf16_lossy(
-                &buffer[..buffer.iter().position(|c| *c == 0).unwrap_or(buffer.len())],
-            );
+            let actual = read_windows_process_package_family(handle, pid)?;
             if !actual.eq_ignore_ascii_case(expected_family) {
                 return Err(format!(
                     "Package mismatch pid={pid}: expected={expected_family}, actual={actual}"

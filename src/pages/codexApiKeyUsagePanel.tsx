@@ -9,6 +9,7 @@ import { isCodexChatCompletionsApiKeyAccount, type CodexAccount } from "../types
 import { getClaudeQuotaClass } from "../types/claude";
 import { isCodexApiKeyUsageQueryEligible, isDeepSeekAccount } from "../utils/codexDeepSeekAccess";
 import { ModelProviderUsagePanel } from "../components/model-provider/ModelProviderUsagePanel";
+import { CodexQuotaMiniRows } from "../components/codex/CodexQuotaMiniRows";
 import {
   formatCockpitApiInteger,
   formatCockpitApiTokenCount,
@@ -191,6 +192,33 @@ export function renderCodexApiKeyUsagePanel({
     );
   }
   if (variant === "card" && summary && isTokenPlanUsage) {
+    const windows = summary.quotaUnlimited ? [] : [
+      { key: "interval", label: t("codex.localAccess.quotaPool.hourlyShort") },
+      { key: "weekly", label: t("codex.localAccess.quotaPool.weeklyShort") },
+      { key: "monthly", label: t("codex.localAccess.statsRange.monthly") },
+    ].flatMap(({ key, label }) => {
+      const value = findApiKeyUsageDetail(summary, `${key}RemainingPercent`)?.value.trim();
+      const remaining = value ? Number(value) : NaN;
+      if (!Number.isFinite(remaining)) return [];
+      const percentage = Math.max(0, Math.min(100, Math.round(remaining)));
+      const reset = findApiKeyUsageDetail(summary, `${key}ExpiresAt`);
+      const resetText = reset ? formatApiKeyUsageDetailValue(reset, summary.unit) : undefined;
+      return [{
+        key,
+        label,
+        percentage,
+        quotaClass: getClaudeQuotaClass(100 - percentage),
+        valueText: formatApiKeyUsageMoney(percentage, "%"),
+        resetText: resetText !== "-" ? resetText : undefined,
+      }];
+    });
+    if (windows.length > 1) {
+      return (
+        <div className="codex-api-key-quota-item token-plan" title={summary.planName ?? undefined}>
+          <CodexQuotaMiniRows items={windows} t={t} />
+        </div>
+      );
+    }
     const remainingQuota = summary.quotaRemaining ?? summary.remaining;
     const quotaLimit = summary.quotaLimit;
     let remainingPercent: number | null = null;

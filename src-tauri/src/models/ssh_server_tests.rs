@@ -19,3 +19,23 @@ fn legacy_selection_migrates_and_explicit_empty_multiple_selection_wins() {
         json!([])
     );
 }
+
+#[test]
+fn uploaded_credentials_with_a_failed_refresh_require_another_sync() {
+    let mut result = SshCodexSyncResult {
+        server_id: "fixture".into(),
+        server_name: "Fixture".into(),
+        account_id: "codex_local_access_runtime".into(),
+        account_email: "API Service".into(),
+        token_generation: 0,
+        bundle_hash: "fixture".into(),
+        verified: true,
+        error: Some("ssh_connection_refresh_failed: desktop_startup_timeout".into()),
+        synced_at: 0,
+    };
+    assert!(!result.succeeded());
+    result.error = None;
+    assert!(result.succeeded());
+    result.verified = false;
+    assert!(!result.succeeded());
+}

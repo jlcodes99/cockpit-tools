@@ -422,6 +422,34 @@ fn final_attempt_account_route_fallback_and_tier_evidence_match_api_service() {
 }
 
 #[test]
+fn failed_summary_uses_the_final_matching_attempts_category_and_account() {
+    let conn = database();
+    log(&conn, "failed", 100);
+    conn.execute(
+        "UPDATE request_logs SET success=0,http_status=503,error_category='',account_id='',email=''",
+        [],
+    )
+    .unwrap();
+    let mut earlier = attempt("earlier", 1, "local_gateway");
+    earlier["status"] = json!(503);
+    earlier["errorCategory"] = json!("upstream_unavailable");
+    let mut final_attempt = attempt("final", 2, "local_gateway");
+    final_attempt["status"] = json!(503);
+    final_attempt["errorCategory"] = json!("server_is_overloaded");
+    detail(&conn, "failed", THREAD, json!([earlier, final_attempt]));
+    refresh_request(&conn, "failed").unwrap();
+    let displayed = summary(&conn, "failed");
+    assert_eq!(displayed["accountId"], "final");
+    assert_eq!(displayed["accountEmail"], "final@example.test");
+    assert_eq!(displayed["errorCategory"], "server_is_overloaded");
+    assert!(displayed["errorMessage"].is_null());
+
+    conn.execute("UPDATE request_logs SET http_status=499", []).unwrap();
+    refresh_request(&conn, "failed").unwrap();
+    assert!(summary(&conn, "failed")["errorCategory"].is_null());
+}
+
+#[test]
 fn tier_adaptation_rejects_unproven_or_invalid_final_route_metadata() {
     let mut official = attempt("account", 1, "official");
     official["serviceTierAdaptation"] = json!({

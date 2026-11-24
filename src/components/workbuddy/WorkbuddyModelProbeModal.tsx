@@ -220,6 +220,11 @@ export function WorkbuddyModelProbeModal({
   }, [scope, accounts, selectedAccountIds, currentAccountId, lockedAccountId]);
 
   const selectedSet = useMemo(() => new Set(models), [models]);
+  const runnableModels = useMemo(() => {
+    if (catalog.length === 0) return models;
+    const catalogIds = new Set(catalog.map((model) => model.id));
+    return models.filter((id) => catalogIds.has(id));
+  }, [catalog, models]);
 
   const toggleModel = (modelId: string) => {
     setModels((previous) => {
@@ -231,8 +236,8 @@ export function WorkbuddyModelProbeModal({
     });
   };
 
-  const totalPairs = scopedAccounts.length * models.length;
-  const canRun = !running && scopedAccounts.length > 0 && models.length > 0;
+  const totalPairs = scopedAccounts.length * runnableModels.length;
+  const canRun = !running && catalogState !== 'loading' && totalPairs > 0;
 
   const summary = useMemo(() => {
     const counts = { available: 0, rate_limited: 0, error: 0, unknown: 0 };
@@ -259,11 +264,11 @@ export function WorkbuddyModelProbeModal({
     const token = runTokenRef.current + 1;
     runTokenRef.current = token;
     const pairs = scopedAccounts.flatMap((account) =>
-      models.map((model) => ({ account, model })),
+      runnableModels.map((model) => ({ account, model })),
     );
     const initial: Record<string, CellState> = {};
     for (const pair of pairs) initial[cellKey(pair.account.id, pair.model)] = { status: 'pending' };
-    setBatch({ accounts: scopedAccounts, models });
+    setBatch({ accounts: scopedAccounts, models: runnableModels });
     setActiveCell(null);
     setShowResults(true);
     setCells(initial);
@@ -378,8 +383,10 @@ export function WorkbuddyModelProbeModal({
                 <section className="wb-probe-detail" aria-labelledby="workbuddy-probe-result-model">
                   <div className="wb-probe-detail-head">
                     <div className="wb-probe-detail-identity">
-                      <h3 id="workbuddy-probe-result-model">{activePair.model}</h3>
-                      <span>{activePair.account ? displayEmail(activePair.account) : activePair.accountId}</span>
+                      <h3 id="workbuddy-probe-result-model" title={activePair.model}>{activePair.model}</h3>
+                      <span title={activePair.account ? displayEmail(activePair.account) : activePair.accountId}>
+                        {activePair.account ? displayEmail(activePair.account) : activePair.accountId}
+                      </span>
                     </div>
                     <span className={`wb-probe-status ${activeStatus.className}`}>
                       <ActiveIcon size={15} aria-hidden="true" />
@@ -554,7 +561,7 @@ export function WorkbuddyModelProbeModal({
                 <div className="wb-probe-models-head">
                   <h3 className="wb-probe-pane-heading wb-probe-model-heading">
                     {t('workbuddy.modelProbe.model')}
-                    <span className="wb-probe-selection-count">{models.length}</span>
+                    <span className="wb-probe-selection-count">{runnableModels.length}</span>
                   </h3>
                   <div className="wb-probe-models-actions">
                     <span className="wb-probe-search">

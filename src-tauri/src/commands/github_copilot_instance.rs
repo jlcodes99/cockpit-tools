@@ -16,7 +16,7 @@ fn is_profile_initialized(user_data_dir: &str) -> bool {
     }
 }
 
-fn inject_bound_account_for_instance_start(
+pub(super) fn inject_bound_account_for_instance_start(
     user_data_dir: &str,
     bind_account_id: Option<&str>,
 ) -> Result<(), String> {

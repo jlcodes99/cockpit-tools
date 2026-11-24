@@ -76,7 +76,7 @@ fn resolve_checked<'a>(
     account: &'a CodexAccount,
     unified: impl FnOnce() -> Result<Option<String>, String>,
 ) -> Result<Option<Cow<'a, str>>, String> {
-    if !eligible(account) || account.egress_proxy_disabled { return Ok(None); }
+    if !eligible(account) || (account.egress_proxy_disabled || account.egress_proxy_client_defaults) { return Ok(None); }
     if let Some(own) = resolve_effective(account, None) { return Ok(Some(own)); }
     Ok(resolve_effective(account, unified()?))
 }
@@ -86,7 +86,7 @@ pub(crate) fn resolve_effective<'a>(
     account: &'a CodexAccount,
     unified: Option<String>,
 ) -> Option<Cow<'a, str>> {
-    if account.egress_proxy_disabled { return None; }
+    if (account.egress_proxy_disabled || account.egress_proxy_client_defaults) { return None; }
     let own = account
         .egress_proxy_url
         .as_deref()
@@ -100,6 +100,7 @@ pub(crate) fn resolve_effective<'a>(
 pub fn has_effective_proxy(account: &CodexAccount, unified_active: bool) -> bool {
     eligible(account)
         && !account.egress_proxy_disabled
+        && !account.egress_proxy_client_defaults
         && (unified_active
             || account
                 .egress_proxy_url
@@ -151,6 +152,21 @@ mod tests {
                 id_token: "id".into(),
             },
         )
+    }
+
+    #[test]
+    fn client_defaults_is_distinct_from_direct_and_ignores_unified_settings() {
+        let mut account = account();
+        account.egress_proxy_client_defaults = true;
+        account.egress_proxy_url = Some("http://old.invalid:8080".into());
+        assert!(resolve_checked(&account, || panic!("must not read unified configuration")).unwrap().is_none());
+        assert!(!has_effective_proxy(&account, true));
+        let restored: CodexAccount = serde_json::from_value(storage_value(&account).unwrap()).unwrap();
+        assert!(restored.egress_proxy_client_defaults);
+        assert!(!restored.egress_proxy_disabled);
+        let mut legacy = storage_value(&account).unwrap();
+        legacy.as_object_mut().unwrap().remove("egress_proxy_client_defaults");
+        assert!(!serde_json::from_value::<CodexAccount>(legacy).unwrap().egress_proxy_client_defaults);
     }
 
     #[test]

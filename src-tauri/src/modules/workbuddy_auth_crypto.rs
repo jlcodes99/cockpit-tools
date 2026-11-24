@@ -167,7 +167,12 @@ fn load_official_key(international: bool) -> Result<OfficialKey, String> {
     let executable = if international {
         super::workbuddy_ai_account::resolve_executable()?
     } else {
-        super::process::resolve_workbuddy_launch_path()?
+        super::process::resolve_workbuddy_launch_path().map_err(|error| {
+            super::process::format_workbuddy_app_path_error(
+                error,
+                &super::config::get_user_config().language,
+            )
+        })?
     };
     let mut command = Command::new(executable);
     command
@@ -193,6 +198,7 @@ fn run_key_command(command: Command, timeout: Duration) -> Result<OfficialKey, S
         .enable_all()
         .build()
         .map_err(|_| INVALID)?;
+    let program = std::path::PathBuf::from(command.get_program());
     let mut output = runtime.block_on(async {
         let mut command = tokio::process::Command::from(command);
         command.kill_on_drop(true);
@@ -208,10 +214,11 @@ fn run_key_command(command: Command, timeout: Duration) -> Result<OfficialKey, S
             };
             let (status, output) = tokio::try_join!(child.wait(), read).map_err(|_| INVALID)?;
             if !status.success() {
-                return Err(
-                    "当前 WorkBuddy 客户端未提供可用的官方密钥接口，已停止覆盖，请更新客户端后重试"
-                        .to_string(),
-                );
+                return Err(super::i18n::translate(
+                    &super::config::get_user_config().language,
+                    "workbuddy.errors.keyProcessFailed",
+                    &[("path", &program.to_string_lossy())],
+                ));
             }
             Ok(output)
         })

@@ -138,6 +138,7 @@ export interface CodexAccount {
   egress_proxy_url?: string | null;
   /** Explicit direct mode; absent on older accounts means follow existing defaults. */
   egress_proxy_disabled?: boolean;
+  egress_proxy_client_defaults?: boolean;
   /** Backend-provided safe proxy metadata; never contains credentials. */
   egress_proxy?: { protocol: string; server?: string; port?: number; name?: string; sourceName?: string; sourceId?: string; itemId?: string; groupId?: string | null; selectedName?: string | null; selections?: Record<string, string> } | null;
   /** Legacy import/export metadata; no longer changes outgoing requests. */
@@ -547,12 +548,43 @@ export interface CodexSessionUsageQuery {
   fromTimestamp?: number | null;
   toTimestamp?: number | null;
   instanceId?: string | null;
+  model?: string;
+  projectKey?: string;
+  sessionId?: string;
+  includeProjects?: boolean;
+}
+
+export interface CodexSessionUsageCursor {
+  timestamp: number;
+  requestId: string;
+}
+
+export interface CodexSessionUsageRequest extends CodexSessionUsageCursor {
+  instanceId: string;
+  instanceName: string;
+  sessionId: string;
+  sessionTitle: string;
+  projectPath: string;
+  model: string;
+  inputTokens: number;
+  cachedInputTokens: number;
+  outputTokens: number;
+  estimatedCostUsd: number | null;
+}
+
+export interface CodexSessionUsagePage {
+  rows: CodexSessionUsageRequest[];
+  nextCursor: CodexSessionUsageCursor | null;
 }
 
 export interface CodexSessionUsageReport {
   totals: CodexSessionUsageTotals;
   byModel: CodexSessionUsageBreakdownRow[];
   byInstance: CodexSessionUsageBreakdownRow[];
+  byProject: CodexSessionUsageBreakdownRow[];
+  projectsPending: boolean;
+  modelOptions: CodexSessionUsageInstanceOption[];
+  projectOptions: CodexSessionUsageInstanceOption[];
   byDay: CodexSessionUsageBreakdownRow[];
   instances: CodexSessionUsageInstanceOption[];
   fromTimestamp?: number | null;
@@ -1485,7 +1517,15 @@ export function getCodexSubscriptionPresentationForAccount(
   t: Translate,
 ): CodexSubscriptionPresentation {
   const base = getCodexSubscriptionPresentation(account.subscription_active_until, t);
-  if (base.bucket !== "missing") return base;
+  if (base.bucket !== "missing") {
+    if (!account.subscription_query_last_error) return base;
+    return {
+      ...base,
+      tone: "missing",
+      valueText: t("codex.subscription.expiryUnconfirmed"),
+      titleText: t("codex.subscription.titleWithUnconfirmedDate", { date: base.detailText }),
+    };
+  }
 
   if (!isCodexAccessTokenOnlySubscriptionLimited(account)) return base;
 

@@ -178,3 +178,37 @@
 .codex-proxy-rules-table tbody tr:last-child td { border-bottom: 0; }
 .codex-proxy-rules-table td.is-following { color: var(--primary); font-weight: 600; }
 .codex-proxy-rules-open { appearance: none; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: inherit; font-size: 12px; }
+
+/* Proxy launch settings follow the existing vertical account form. */
+.codex-proxy-country-guard {
+  margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border);
+}
+.codex-proxy-country-guard > .codex-resource-network-row { margin-bottom: 6px; }
+.codex-proxy-country-guard > .codex-resource-network-row strong { font-size: 13px; font-weight: 600; }
+.codex-proxy-country-guard .codex-proxy-page-note,
+.codex-proxy-env-editor .codex-proxy-page-note { margin: 6px 0; font-size: 12px; line-height: 1.6; color: var(--text-secondary); }
+.codex-proxy-country-guard > .codex-proxy-field { margin: 12px 0; }
+.codex-proxy-env-editor {
+  margin: 12px 0 0; padding: 14px; border: 1px solid var(--border);
+  border-radius: 12px; background: var(--bg-card);
+}
+.codex-proxy-env-editor h3 { margin: 0 0 6px; font-size: 13px; font-weight: 600; }
+.codex-proxy-env-input {
+  width: 100%; min-height: 108px; resize: vertical; box-sizing: border-box;
+  font: 12px/1.6 ui-monospace, Consolas, monospace; color: var(--text-primary);
+  background: var(--bg-secondary); border: 1px solid var(--border);
+  border-radius: 8px; padding: 10px 12px;
+}
+.codex-proxy-env-input:focus-visible { outline: 0; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-light); }
+.codex-proxy-env-input:disabled { opacity: .6; cursor: not-allowed; }
+.codex-proxy-country-evidence { margin-top: 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-card); }
+.codex-proxy-country-evidence > summary { padding: 12px 14px; cursor: pointer; color: var(--text-primary); font-size: 13px; font-weight: 600; }
+.codex-proxy-country-evidence > summary:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 12px; }
+.codex-proxy-country-status { display: block; margin-top: 4px; font-size: 12px; font-weight: 400; color: var(--text-secondary); }
+.codex-proxy-country-status[data-status="blocked"] { color: var(--danger); }
+.codex-proxy-country-status[data-status="passed"] { color: var(--primary); }
+.codex-proxy-country-evidence-body { border-top: 1px solid var(--border); padding: 10px 14px 14px; }
+.codex-proxy-country-result { margin: 8px 0 12px; font-size: 12px; line-height: 1.6; }
+.codex-proxy-country-result dt { color: var(--text-secondary); margin-top: 6px; }
+.codex-proxy-country-result dd { margin: 0; overflow-wrap: anywhere; }
+.codex-proxy-country-history-item { padding: 10px 0; border-top: 1px solid var(--border); }

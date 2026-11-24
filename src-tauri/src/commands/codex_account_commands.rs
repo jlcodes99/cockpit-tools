@@ -1257,11 +1257,6 @@ async fn switch_codex_account_internal(
     let is_oauth_account = !initial_account.is_api_key_auth()
         && !initial_account.is_agent_identity_auth()
         && !initial_account.is_web_session_auth();
-    if !is_oauth_account && automatic.is_none() {
-        // 默认实例切到普通 API Key / 其他非 OAuth 账号时，混合模型路由必须自动关闭：
-        // 路由的底座账号已经不存在，继续保留会拦住启动，并让后台监控反复尝试恢复网关。
-        disable_default_model_routing_for_non_oauth_switch().await;
-    }
     let access_token_present = !initial_account.tokens.access_token.trim().is_empty();
     let refresh_token_present = codex_account::account_has_refresh_token(&initial_account);
     let access_token_expires_at =
@@ -1274,20 +1269,39 @@ async fn switch_codex_account_internal(
     let initial_token_generation = initial_account.token_generation;
     let user_config = config::get_user_config();
     let launch_after_switch = launch_after_switch.unwrap_or(user_config.codex_launch_on_switch);
-    // 真实 Token Authority 失败仍由 prepare/switch 流程返回结构化授权错误。
-    if launch_after_switch {
-        let default_settings = crate::modules::codex_instance::load_default_settings()?;
-        if default_settings.launch_mode != crate::models::InstanceLaunchMode::Cli {
-            if let Err(error) = crate::modules::codex_instance::preflight_egress_proxy_for_bind_account(Some(&account_id)).await {
-                let _ = app.emit("codex:switch-progress", serde_json::json!({
-                    "accountId": account_id, "type": "error", "error": error, "canRetry": true,
-                }));
-                progress_guard.completed = true;
-                return Err(error);
-            }
+    // Country policy gates the desktop switch itself, including switches that
+    // do not auto-launch. Do not mutate routing or refresh credentials first.
+    let default_settings = crate::modules::codex_instance::load_default_settings()?;
+    if default_settings.launch_mode != crate::models::InstanceLaunchMode::Cli {
+        if let Err(error) = async {
+            let target = crate::commands::codex_instance::resolve_codex_instance_start_target(
+                crate::commands::codex_instance::DEFAULT_INSTANCE_ID,
+            )?;
+            crate::modules::codex_proxy_launch_guard::check_launch(
+                &app, Some(&account_id), &target.user_data_dir, None,
+            ).await?;
             ensure_codex_switch_not_cancelled(&account_id)?;
-            process::ensure_codex_launch_path_configured()?;
+            if launch_after_switch {
+                crate::modules::codex_instance::preflight_egress_proxy_for_bind_account(
+                    Some(&account_id),
+                ).await?;
+                process::ensure_codex_launch_path_configured()?;
+            }
+            Ok::<(), String>(())
+        }.await {
+            let _ = app.emit("codex:switch-progress", serde_json::json!({
+                "accountId": account_id, "type": "error", "error": error, "canRetry": true,
+            }));
+            progress_guard.completed = true;
+            return Err(error);
         }
+        ensure_codex_switch_not_cancelled(&account_id)?;
+    }
+
+    if !is_oauth_account && automatic.is_none() {
+        // 默认实例切到普通 API Key / 其他非 OAuth 账号时，混合模型路由必须自动关闭：
+        // 路由的底座账号已经不存在，继续保留会拦住启动，并让后台监控反复尝试恢复网关。
+        disable_default_model_routing_for_non_oauth_switch().await;
     }
 
     emit_codex_switch_step(
@@ -1596,7 +1610,7 @@ async fn switch_codex_account_internal(
     tauri::async_runtime::spawn(async move {
         let started = Instant::now();
         crate::modules::ssh_server::sync_selected_servers_after_codex_switch(&ssh_sync_account, launch_after_switch, |ssh_sync| {
-            if ssh_sync.verified && ssh_sync.error.is_none() {
+            if ssh_sync.succeeded() {
                 logger::log_info(&format!(
                     "[Codex SSH] 切号后同步成功: server_id={}, verified={}, elapsed_ms={}",
                     ssh_sync.server_id, ssh_sync.verified, started.elapsed().as_millis()
@@ -2554,6 +2568,25 @@ pub fn update_codex_account_name(account_id: String, name: String) -> Result<Cod
 }
 
 #[tauri::command]
+pub async fn use_codex_client_proxy_defaults(account_id: String) -> Result<CodexAccount, String> {
+    if let Some(target) = crate::modules::codex_proxy_targets::desktop_target(&account_id).await? {
+        crate::modules::codex_client_proxy::save(target.clone(), crate::modules::codex_client_proxy::Mode::ClientDefaults, None, None, None, std::collections::BTreeMap::new(), None).await?;
+        return Ok(crate::modules::codex_client_proxy::target_view(&target).await?.account);
+    }
+    let account = crate::modules::codex_proxy_runtime::save_client_defaults(account_id).await?;
+    let result = account.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        if crate::modules::codex_local_access::sync_sidecar_auth_file_for_account(&account).is_err() {
+            logger::log_warn("[CodexProxy] client-default setting saved; sidecar synchronization deferred");
+        }
+        if crate::modules::codex_local_access::collection_contains_account(&account.id) {
+            crate::modules::codex_local_access::trigger_gateway_reload_in_background("更新账号出口代理");
+        }
+    }).await.map_err(|_| "PROXY_SAVE_FAILED")?;
+    Ok(result)
+}
+
+#[tauri::command]
 pub async fn update_codex_account_egress_proxy(
     account_id: String,
     egress_proxy_url: Option<String>,
@@ -2633,6 +2666,19 @@ pub fn add_codex_account_from_grok(
         account_name,
     )?;
     codex_account::load_account(&account.id).ok_or_else(|| "账号保存后无法读取".to_string())
+}
+
+#[tauri::command]
+pub fn add_codex_account_from_zcode(
+    zcode_account_id: String,
+    account_name: Option<String>,
+) -> Result<CodexAccount, String> {
+    let account = codex_account::upsert_zcode_provider_account(
+        &zcode_account_id,
+        account_name,
+    )?;
+    codex_account::load_account(&account.id)
+        .ok_or_else(|| "账号保存后无法读取".to_string())
 }
 
 #[tauri::command]

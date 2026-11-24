@@ -1124,69 +1124,84 @@ fn build_bundle_hash(files: &[CodexProjectionFile]) -> String {
     format!("{:x}", hasher.finalize())
 }
 
-/// Build a remote projection bundle without writing host keychain secrets.
+fn prepare_remote_projection_config(
+    config_path: &Path,
+    account: &CodexAccount,
+    existing_config_toml: Option<&str>,
+) -> Result<(), String> {
+    if crate::modules::codex_local_access::is_local_access_runtime_account_id(&account.id) {
+        let mut config = crate::modules::codex_config_format::read_codex_config_doc_from_str(
+            existing_config_toml.unwrap_or_default(),
+        ).map_err(|_| "无法解析远端 Codex 配置")?;
+        // The remote app-server must read the uploaded auth.json even if it has a keyring.
+        config[CODEX_CONFIG_CLI_AUTH_CREDENTIALS_STORE_KEY] = value("file");
+        if let Some(providers) = config.get_mut(CODEX_CONFIG_MODEL_PROVIDERS_KEY)
+            .and_then(|entry| entry.as_table_like_mut())
+        {
+            providers.remove(CODEX_RUNTIME_MODEL_PROVIDER_ID);
+        }
+        let config = crate::modules::codex_config_format::codex_config_doc_to_string(&mut config);
+        return crate::modules::atomic_write::write_string_atomic(config_path, &config);
+    } else if let Some(existing_config) = existing_config_toml {
+        return crate::modules::atomic_write::write_string_atomic(config_path, existing_config);
+    }
+    Ok(())
+}
+
+fn project_remote_api_service_catalog(profile: &Path, config_path: &Path, catalog: &str) -> Result<(), String> {
+    crate::modules::atomic_write::write_string_atomic(
+        &profile.join(CODEX_MANAGED_MODEL_CATALOG_FILE), catalog,
+    )?;
+    let mut config = crate::modules::codex_config_format::load_codex_config_doc(config_path)?;
+    config[CODEX_CONFIG_MODEL_CATALOG_JSON_KEY] = value(CODEX_MANAGED_MODEL_CATALOG_FILE);
+    let config = crate::modules::codex_config_format::codex_config_doc_to_string(&mut config);
+    crate::modules::codex_config_format::write_codex_config_toml_atomic(config_path, &config)
+}
+
+fn read_remote_projection_file(profile: &Path, relative_path: &str) -> Result<CodexProjectionFile, String> {
+    let content = match fs::read_to_string(profile.join(relative_path)) {
+        Ok(content) => content,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound
+            && relative_path == CODEX_CONFIG_FILE_NAME => String::new(),
+        Err(error) => return Err(format!("读取 Codex 投影文件失败: {relative_path}: {error}")),
+    };
+    Ok(CodexProjectionFile {
+        relative_path: relative_path.to_string(),
+        sha256: sha256_hex_bytes(content.as_bytes()),
+        content,
+        mode: 0o600,
+    })
+}
+
+/// Build an SSH projection in an isolated profile before sending it to the host.
 pub(crate) fn build_projection_bundle_for_remote(
     account: &CodexAccount,
     existing_config_toml: Option<&str>,
+    api_service_catalog: Option<&str>,
 ) -> Result<CodexAccountProjectionBundle, String> {
-    let temp_dir = std::env::temp_dir().join(format!(
-        "cockpit-codex-remote-bundle-{}-{}",
-        std::process::id(),
-        chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
-    ));
-    fs::create_dir_all(&temp_dir).map_err(|e| format!("创建远程投影临时目录失败: {}", e))?;
-
-    let build_result = (|| {
-        if let Some(existing_config) = existing_config_toml {
-            let config_path = temp_dir.join(CODEX_CONFIG_FILE_NAME);
-            crate::modules::atomic_write::write_string_atomic(&config_path, existing_config)?;
-        }
-
-        write_account_bundle_to_dir(&temp_dir, account)?;
-
-        let mut files = Vec::new();
-        for (relative_path, mode) in [
-            ("auth.json", 0o600_u32),
-            (CODEX_CONFIG_FILE_NAME, 0o600),
-            (CODEX_AUTH_PROJECTION_FILE_NAME, 0o600),
-        ] {
-            let path = temp_dir.join(relative_path);
-            let content = if path.exists() {
-                fs::read_to_string(&path)
-                    .map_err(|e| format!("读取 Codex 投影文件失败: {}: {}", relative_path, e))?
-            } else if relative_path == CODEX_CONFIG_FILE_NAME {
-                String::new()
-            } else {
-                return Err(format!("Codex 投影缺少必要文件: {}", relative_path));
-            };
-            let sha256 = sha256_hex_bytes(content.as_bytes());
-            files.push(CodexProjectionFile {
-                relative_path: relative_path.to_string(),
-                content,
-                mode,
-                sha256,
-            });
-        }
-
-        let bundle_hash = build_bundle_hash(&files);
-        Ok(CodexAccountProjectionBundle {
-            account_id: account.id.clone(),
-            account_email: account.email.clone(),
-            token_generation: account.token_generation,
-            files,
-            bundle_hash,
-        })
-    })();
-
-    if let Err(err) = fs::remove_dir_all(&temp_dir) {
-        logger::log_warn(&format!(
-            "[Codex SSH] 清理远程投影临时目录失败: path={}, error={}",
-            temp_dir.display(),
-            err
-        ));
+    let temp_dir = tempfile::Builder::new()
+        .prefix("cockpit-codex-remote-bundle-")
+        .tempdir()
+        .map_err(|e| format!("创建远程投影临时目录失败: {}", e))?;
+    let profile = temp_dir.path();
+    let config_path = profile.join(CODEX_CONFIG_FILE_NAME);
+    prepare_remote_projection_config(&config_path, account, existing_config_toml)?;
+    write_account_bundle_to_dir(profile, account)?;
+    let mut paths = vec!["auth.json", CODEX_CONFIG_FILE_NAME, CODEX_AUTH_PROJECTION_FILE_NAME];
+    if let Some(catalog) = api_service_catalog {
+        project_remote_api_service_catalog(profile, &config_path, catalog)?;
+        paths.push(CODEX_MANAGED_MODEL_CATALOG_FILE);
     }
-
-    build_result
+    let files = paths.into_iter()
+        .map(|path| read_remote_projection_file(profile, path))
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(CodexAccountProjectionBundle {
+        account_id: account.id.clone(),
+        account_email: account.email.clone(),
+        token_generation: account.token_generation,
+        bundle_hash: build_bundle_hash(&files),
+        files,
+    })
 }
 
 fn configured_codex_wsl_config_dir() -> Option<PathBuf> {

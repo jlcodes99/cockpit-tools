@@ -67,6 +67,33 @@
         assert_eq!(config.antigravity_app_path, "/Applications/Antigravity IDE.app");
     }
 
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn workbuddy_general_settings_reject_new_node_paths_without_blocking_other_changes() {
+        let previous = r"C:\WorkBuddy\resources\node.exe";
+        let mut config = UserConfig {
+            workbuddy_app_path: previous.into(),
+            ..UserConfig::default()
+        };
+        let unrelated = serde_json::json!({"workbuddy_auto_refresh_minutes": 30});
+        apply_general_config_updates(&mut config, unrelated.as_object().unwrap()).unwrap();
+        assert_eq!(config.workbuddy_auto_refresh_minutes, 30);
+        assert_eq!(config.workbuddy_app_path, previous);
+
+        let other_node = r"D:\WorkBuddy\resources\NODE.EXE";
+        let invalid = serde_json::json!({"workbuddy_app_path": other_node});
+        let error = apply_general_config_updates(&mut config, invalid.as_object().unwrap())
+            .unwrap_err();
+        assert!(error.contains(other_node));
+        assert_eq!(config.workbuddy_app_path, previous);
+
+        for path in [r"C:\WorkBuddy\WorkBuddy.exe", ""] {
+            let update = serde_json::json!({"workbuddy_app_path": path});
+            apply_general_config_updates(&mut config, update.as_object().unwrap()).unwrap();
+            assert_eq!(config.workbuddy_app_path, path);
+        }
+    }
+
     struct MetadataTestDir(PathBuf);
 
     impl MetadataTestDir {
@@ -330,8 +357,9 @@
             assert_eq!(restored.show_tray_icon, visible);
             assert!(restored.hide_dock_icon);
             assert!(restored.menu_bar_quota_enabled);
-            assert_eq!(crate::should_hide_dock_icon(&restored), visible);
-            assert_eq!(crate::should_hide_startup_minimized_window(&restored, true), visible);
+            assert!(crate::should_hide_startup_minimized_window(
+                &restored, true
+            ));
         }
     }
 
@@ -352,6 +380,30 @@
             let reloaded: UserConfig =
                 serde_json::from_value(serde_json::to_value(&config).unwrap()).unwrap();
             assert_eq!(reloaded.menu_bar_left_click_opens_main_window, opens_main_window);
+        }
+    }
+
+    #[test]
+    fn menu_bar_quota_layout_defaults_and_survives_unrelated_updates() {
+        let mut legacy = serde_json::to_value(UserConfig::default()).unwrap();
+        legacy
+            .as_object_mut()
+            .unwrap()
+            .remove("menu_bar_quota_layout");
+        let mut config: UserConfig = serde_json::from_value(legacy).unwrap();
+        assert_eq!(config.menu_bar_quota_layout, "horizontal");
+        for (input, expected) in [
+            (" stacked ", "stacked"),
+            ("horizontal", "horizontal"),
+            ("invalid", "horizontal"),
+        ] {
+            let patch = serde_json::json!({ "menu_bar_quota_layout": input });
+            apply_general_config_updates(&mut config, patch.as_object().unwrap()).unwrap();
+            let unrelated = serde_json::json!({ "show_tray_icon": false });
+            apply_general_config_updates(&mut config, unrelated.as_object().unwrap()).unwrap();
+            let restored: UserConfig =
+                serde_json::from_value(serde_json::to_value(&config).unwrap()).unwrap();
+            assert_eq!(restored.menu_bar_quota_layout, expected);
         }
     }
 

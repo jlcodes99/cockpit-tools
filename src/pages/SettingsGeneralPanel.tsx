@@ -741,8 +741,7 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                     </div>
                     <div className="row-control">
                       <SettingsDropdown
-                        value={showTrayIcon && hideDockIcon ? 'true' : 'false'}
-                        disabled={!showTrayIcon}
+                        value={hideDockIcon ? 'true' : 'false'}
                         options={[
                           { value: 'false', label: t('settings.general.hideDockIconOff', '否（显示Dock图标）') },
                           { value: 'true', label: t('settings.general.hideDockIconOn', '是（隐藏Dock图标）') },
@@ -796,7 +795,7 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                         {showTrayIcon && menuBarQuotaEnabled
                           ? t(
                               'settings.general.menuBarQuotaEnabledDesc',
-                              '已启用 · {{platform}} · 显示该平台当前账号剩余额度（多条取最低）',
+                              '已启用 · {{platform}} · 显示该平台当前账号的可用额度',
                               {
                                 platform:
                                   menuBarQuotaPlatformOptions.find(

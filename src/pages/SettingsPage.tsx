@@ -171,6 +171,7 @@ interface GeneralConfig {
   tray_icon_style?: 'template' | 'color';
   menu_bar_left_click_opens_main_window?: boolean;
   menu_bar_quota_enabled?: boolean;
+  menu_bar_quota_layout?: 'horizontal' | 'stacked';
   menu_bar_show_account_prefix?: boolean;
   menu_bar_quota_platform?: MenuBarQuotaPlatform;
   menu_bar_antigravity_metric?: string;
@@ -590,6 +591,8 @@ export function useSettingsPageController() {
   const [showTrayIcon, setShowTrayIcon] = useState(true);
   const [trayIconStyle, setTrayIconStyle] = useState<'template' | 'color'>('template');
   const [menuBarQuotaEnabled, setMenuBarQuotaEnabled] = useState(false);
+  const [menuBarQuotaLayout, setMenuBarQuotaLayout] = useState<'horizontal' | 'stacked'>('horizontal');
+  const [menuBarQuotaDraftLayout, setMenuBarQuotaDraftLayout] = useState<'horizontal' | 'stacked'>('horizontal');
   const [menuBarLeftClickOpensMainWindow, setMenuBarLeftClickOpensMainWindow] = useState(false);
   const [menuBarShowAccountPrefix, setMenuBarShowAccountPrefix] = useState(true);
   const [menuBarQuotaPlatform, setMenuBarQuotaPlatform] = useState<MenuBarQuotaPlatform>('codex');
@@ -1183,6 +1186,7 @@ export function useSettingsPageController() {
       tray_icon_style: isMacOS ? trayIconStyle : undefined,
       menu_bar_left_click_opens_main_window: isMacOS ? menuBarLeftClickOpensMainWindow : undefined,
       menu_bar_quota_enabled: isMacOS ? menuBarQuotaEnabled : undefined,
+      menu_bar_quota_layout: isMacOS ? menuBarQuotaLayout : undefined,
       menu_bar_show_account_prefix: isMacOS ? menuBarShowAccountPrefix : undefined,
       menu_bar_quota_platform: isMacOS ? menuBarQuotaPlatform : undefined,
       menu_bar_antigravity_metric: isMacOS ? menuBarAntigravityMetric : undefined,
@@ -1433,6 +1437,7 @@ export function useSettingsPageController() {
     showTrayIcon,
     trayIconStyle,
     menuBarQuotaEnabled,
+    menuBarQuotaLayout,
     menuBarLeftClickOpensMainWindow,
     menuBarShowAccountPrefix,
     menuBarQuotaPlatform,
@@ -1770,6 +1775,7 @@ export function useSettingsPageController() {
       setMenuBarLeftClickOpensMainWindow(config.menu_bar_left_click_opens_main_window ?? false);
       setTrayIconStyle(config.tray_icon_style === 'color' ? 'color' : 'template');
       setMenuBarQuotaEnabled(config.menu_bar_quota_enabled ?? false);
+      setMenuBarQuotaLayout(config.menu_bar_quota_layout === 'stacked' ? 'stacked' : 'horizontal');
       setMenuBarShowAccountPrefix(config.menu_bar_show_account_prefix ?? true);
       setMenuBarQuotaPlatform(config.menu_bar_quota_platform ?? 'codex');
       setMenuBarAntigravityMetric(config.menu_bar_antigravity_metric ?? '');
@@ -3233,6 +3239,7 @@ export function useSettingsPageController() {
   useEscClose(releaseHistoryOpen, handleCloseReleaseHistory);
 
   const openMenuBarQuotaModal = (mode: 'enable' | 'edit') => {
+    setMenuBarQuotaDraftLayout(menuBarQuotaLayout);
     setMenuBarQuotaDraftPlatform(menuBarQuotaPlatform);
     setMenuBarAntigravityMetricDraft(menuBarAntigravityMetric);
     setMenuBarQuotaDraftShowPrefix(menuBarShowAccountPrefix);
@@ -3245,6 +3252,7 @@ export function useSettingsPageController() {
   };
 
   const handleConfirmMenuBarQuotaModal = () => {
+    setMenuBarQuotaLayout(menuBarQuotaDraftLayout);
     setMenuBarQuotaPlatform(menuBarQuotaDraftPlatform);
     setMenuBarAntigravityMetric(menuBarAntigravityMetricDraft);
     setMenuBarShowAccountPrefix(menuBarQuotaDraftShowPrefix);
@@ -3472,6 +3480,7 @@ export function useSettingsPageController() {
     languageOptions,
     loadGeneralConfig,
     loadUpdateSettings,
+    menuBarQuotaDraftLayout,
     menuBarQuotaDraftPlatform,
     menuBarAntigravityAccounts: antigravityAccounts,
     menuBarAntigravityMetricDraft,
@@ -3654,6 +3663,7 @@ export function useSettingsPageController() {
     setMinimaxCodeQuotaAlertThreshold,
     setMinimaxCodeQuotaAlertThresholdCustomMode,
     setLanguage,
+    setMenuBarQuotaDraftLayout,
     setMenuBarQuotaDraftPlatform,
     setMenuBarAntigravityMetricDraft,
     setMenuBarQuotaDraftShowPrefix,

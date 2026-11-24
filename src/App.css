@@ -614,6 +614,7 @@
   color: var(--text-primary);
   font-size: 13px;
   line-height: 1.7;
+  overflow-wrap: anywhere;
 }
 
 .app-path-missing-error {

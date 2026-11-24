@@ -472,6 +472,27 @@ cargo run --locked --package cockpit-cli -- switch codex "你的账号ID" --json
 cargo run --locked --package cockpit-cli -- switch cursor "你的账号ID" --json
 ```
 
+#### 全平台账号自动化
+
+启动与 CLI 协议版本匹配的 Cockpit Tools 桌面端后，在同一台机器、同一用户下运行以下命令。使用开发版或自定义数据目录时，CLI 也要使用对应的配置。桌面端的 Codex API 服务可以保持关闭。
+
+```bash
+cockpit-cli account platforms --json
+cockpit-cli account list codex --json
+cockpit-cli account quota codex "账号ID" --json
+cockpit-cli account quota codex "账号ID" --refresh --json
+cockpit-cli account switch cursor "账号ID" --json
+cockpit-cli api-service members --json
+cockpit-cli api-service add "Codex账号ID" --json
+cockpit-cli api-service remove "服务成员账号ID" --json
+```
+
+- `account platforms` 列出全部平台 ID。`account list` 返回账号 ID、显示信息、原始套餐和标签。额度与切号使用所选平台的精确账号 ID。
+- `account quota` 读取已保存的额度。支持实时刷新的账号可加 `--refresh`。结果的 `quota.status` 为 `available`、`stale`、`failed` 或 `unavailable`，`quota.data` 随平台变化。上游未提供额度时保留未知状态。
+- `account switch` 复用各平台的默认客户端切号流程，部分平台会启动或重启客户端。Codex 和 Antigravity 桌面版的外部切号只应用凭据。Grok 使用独立目录时返回 `account_profile_prepared`。客户端凭据已写入但后续操作出现问题时，可检查返回的 `warnings` 或错误码。
+- `api-service members` 列出全局 API 服务成员，包含成员账号 ID、来源账号 ID、接入方式和暂停状态。`add` 通过现有本地接入规则加入已保存的 Codex 账号，返回新增 ID 和跳过原因。`remove` 使用成员列表中的 `accountId`，返回实际移出的成员 ID，保留原账号。
+- 新命令在标准输出返回 JSON，`--json` 时使用单行格式。失败通过非零退出码和标准错误返回。旧的顶层 `list` 和 `switch` 仍可用于其原有平台的无桌面操作。
+
 ---
 
 ## Star History

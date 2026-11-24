@@ -15,6 +15,7 @@ use std::path::Path;
 pub(super) struct Endpoint {
     pub base: String,
     pub key: String,
+    service_id: String,
     pub binding: String,
     pub scope: super::recent_account::RequestScope,
     pub version: u32,
@@ -41,11 +42,59 @@ pub(super) fn endpoint(profile: &Path) -> Result<Option<Endpoint>, String> {
     Ok(Some(Endpoint {
         base,
         key,
+        service_id: connection.service_id,
         binding: format!("{:x}", hash.finalize()),
         scope,
         version: connection.key_views_version,
     }))
 }
+
+pub(super) fn dialog_endpoint(profile: &Path) -> Result<Option<Endpoint>, String> {
+    let Some(endpoint) = endpoint(profile)? else {
+        return Ok(None);
+    };
+    let local = super::recent_account::read_only_data_dir()
+        .and_then(|dir| super::recent_account::read_small_file(&dir.join("codex_local_access.json")))
+        .ok()
+        .flatten()
+        .and_then(|raw| serde_json::from_str::<Value>(&raw).ok())
+        .is_some_and(|config| {
+            owns_local_service(&endpoint.base, &endpoint.key, &endpoint.service_id, &config)
+        });
+    // If ownership cannot be established, keep the restricted remote Key view.
+    Ok((!local).then_some(endpoint))
+}
+
+fn owns_local_service(base: &str, key: &str, service_id: &str, config: &Value) -> bool {
+    let Ok(url) = reqwest::Url::parse(base) else {
+        return false;
+    };
+    let loopback = url.host_str().is_some_and(|host| {
+        host == "localhost"
+            || host.trim_matches(['[', ']']).parse::<std::net::IpAddr>()
+                .is_ok_and(|address| address.is_loopback())
+    });
+    if !loopback
+        || !matches!(url.scheme(), "http" | "https")
+        || url.path().trim_end_matches('/') != "/v1"
+        || url.port_or_known_default().map(u64::from) != config["port"].as_u64()
+        || config["enabled"] == false
+        || !config["createdAt"].as_i64().is_some_and(|created_at| {
+            service_id == remote::local_service_id(created_at)
+        })
+    {
+        return false;
+    }
+    // An SSH forward can also use loopback. Verify the local service identity
+    // as well as the enabled client key before exposing local request records.
+    match config["apiKeys"].as_array().filter(|keys| !keys.is_empty()) {
+        Some(keys) => keys.iter().any(|entry| {
+            entry["enabled"].as_bool() != Some(false) && entry["key"].as_str() == Some(key)
+        }),
+        None => config["apiKey"].as_str() == Some(key),
+    }
+}
+
 fn query(endpoint: &Endpoint, thread: Option<&str>) -> KeyQuery {
     KeyQuery {
         thread_id: thread.map(str::to_owned),

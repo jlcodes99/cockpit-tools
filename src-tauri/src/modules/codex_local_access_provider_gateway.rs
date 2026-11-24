@@ -1288,6 +1288,9 @@ fn is_provider_gateway_eligible_account(account: &CodexAccount) -> bool {
         // Grok 供应商账号没有上游 API Key：凭据由绑定的 Grok 平台账号在 sidecar 里提供。
         return true;
     }
+    if codex_account::is_zcode_upstream_provider(account) {
+        return true;
+    }
     account.is_api_key_auth()
         && account
             .openai_api_key
@@ -1322,6 +1325,9 @@ fn native_provider_for_provider_account(account: &CodexAccount) -> Option<String
     if codex_account::is_grok_upstream_provider(account) {
         return Some("xai".to_string());
     }
+    if codex_account::is_zcode_upstream_provider(account) {
+        return Some(codex_account::ZCODE_NATIVE_PROVIDER.to_string());
+    }
     None
 }
 
@@ -1344,8 +1350,50 @@ fn provider_gateway_for_account(
             model_capabilities,vision_routing_model:None,
         });
     }
+    if codex_account::is_zcode_upstream_provider(account) {
+        let source = codex_account::zcode_upstream_account(account)
+            .ok_or_else(|| "ZCode 账号还不存在或已删除".to_string())?;
+        if source.auth_mode != crate::models::zcode::ZcodeAuthMode::ApiKey
+            || source.api_key.as_deref().map(str::trim).filter(|value| !value.is_empty()).is_none()
+        {
+            return Err("ZCode 供应商账号需要可用的 API Key 来源".to_string());
+        }
+        let upstream_models = provider_gateway_models_for_account(account);
+        if upstream_models.is_empty() {
+            return Err("ZCode 账号还没有可用模型，请先在「模型与能力」中添加".to_string());
+        }
+        let model_capabilities = upstream_models
+            .iter()
+            .map(|model| {
+                (
+                    model.trim().to_lowercase(),
+                    CodexLocalAccessProviderGatewayModelCapability {
+                        supports_vision: account
+                            .api_model_vision_support
+                            .get(model)
+                            .copied()
+                            .unwrap_or(false),
+                    },
+                )
+            })
+            .collect::<std::collections::HashMap<_, _>>();
+        return Ok(CodexLocalAccessProviderGateway {
+            auth_scheme: Some("x-api-key".to_string()),
+            base_url: if source.provider.eq_ignore_ascii_case("bigmodel") {
+                crate::modules::zcode_account::BIGMODEL_API_BASE_URL.to_string()
+            } else {
+                crate::modules::zcode_account::ZAI_API_BASE_URL.to_string()
+            },
+            api_key: String::new(),
+            upstream_model: upstream_models.first().cloned().unwrap_or_default(),
+            upstream_models,
+            wire_api: Some("anthropic".to_string()),
+            supports_vision: account.api_supports_vision,
+            model_capabilities,
+            vision_routing_model: None,
+        });
+    }
     if codex_account::is_grok_upstream_provider(account) {
-        // Grok 供应商账号走实例内的 xai 原生账号：这里只提供基址与模型目录，
         // 真正的上游凭据由 sidecar 的 xai auth 文件（绑定的 Grok 平台账号）提供。
         let upstream_models = provider_gateway_models_for_account(account);
         if upstream_models.is_empty() {

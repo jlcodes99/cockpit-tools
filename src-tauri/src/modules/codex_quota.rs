@@ -876,16 +876,28 @@ async fn fetch_subscriptions_snapshot(
 async fn fetch_subscription_status_snapshot(
     account: &CodexAccount,
 ) -> Result<SubscriptionStatusSnapshot, String> {
-    let mut snapshot = fetch_subscription_account_check(account).await?;
+    let snapshot = fetch_subscription_account_check(account).await?;
+    resolve_subscription_status_snapshot(account, snapshot, async |account_id| {
+        fetch_subscriptions_snapshot(account, account_id).await
+    })
+    .await
+}
 
+async fn resolve_subscription_status_snapshot(
+    account: &CodexAccount,
+    mut snapshot: SubscriptionStatusSnapshot,
+    fetch_subscriptions: impl AsyncFnOnce(&str) -> Result<SubscriptionStatusSnapshot, String>,
+) -> Result<SubscriptionStatusSnapshot, String> {
     // The account check can confirm a downgrade to Free while the paid
     // subscriptions endpoint no longer accepts the same access token.
-    if snapshot.is_free_without_active_subscription()
-        || !subscription_missing_or_expired(snapshot.subscription_active_until.as_deref())
-    {
+    if snapshot.is_free_without_active_subscription() {
         return Ok(snapshot);
     }
 
+    // A future entitlement date can differ from the end of the paid
+    // subscription. Prefer the workspace's subscription record when available.
+    let has_active_entitlement =
+        !subscription_missing_or_expired(snapshot.subscription_active_until.as_deref());
     let account_id = snapshot
         .account_id
         .clone()
@@ -894,17 +906,30 @@ async fn fetch_subscription_status_snapshot(
             codex_account::extract_chatgpt_account_id_from_access_token(
                 &account.tokens.access_token,
             )
-        })
-        .ok_or_else(|| "未获取到 account_id，无法请求 subscriptions".to_string())?;
+        });
+    let Some(account_id) = account_id else {
+        return if has_active_entitlement {
+            Ok(snapshot)
+        } else {
+            Err("未获取到 account_id，无法请求 subscriptions".to_string())
+        };
+    };
 
-    let subscriptions = fetch_subscriptions_snapshot(account, &account_id).await?;
+    let subscriptions = match fetch_subscriptions(&account_id).await {
+        Ok(subscriptions) => subscriptions,
+        Err(_) if has_active_entitlement => {
+            logger::log_warn("Codex 订阅明细查询失败，使用本次账号检查的有效期");
+            return Ok(snapshot);
+        }
+        Err(error) => return Err(error),
+    };
     snapshot.account_id = Some(account_id);
-    if subscriptions.plan_type.is_some() {
-        snapshot.plan_type = subscriptions.plan_type;
+    if !has_active_entitlement {
+        snapshot.plan_type = subscriptions.plan_type.or(snapshot.plan_type);
     }
-    if subscriptions.subscription_active_until.is_some() {
-        snapshot.subscription_active_until = subscriptions.subscription_active_until;
-    }
+    snapshot.subscription_active_until = subscriptions
+        .subscription_active_until
+        .or(snapshot.subscription_active_until);
     Ok(snapshot)
 }
 
@@ -964,6 +989,14 @@ async fn refresh_account_tokens(account: &mut CodexAccount, reason: &str) -> Res
 
 /// 查询单个账号的配额
 pub async fn fetch_quota(account: &CodexAccount) -> Result<FetchQuotaResult, String> {
+    fetch_quota_at(account, USAGE_URL, false).await
+}
+
+async fn fetch_quota_at(
+    account: &CodexAccount,
+    usage_url: &str,
+    import_preview: bool,
+) -> Result<FetchQuotaResult, String> {
     use crate::modules::codex_device_restrictions as restrictions;
     let observation_started = restrictions::now();
     let account_id = account.account_id.clone().or_else(|| {
@@ -972,7 +1005,7 @@ pub async fn fetch_quota(account: &CodexAccount) -> Result<FetchQuotaResult, Str
 
     logger::log_info(&format!(
         "Codex 配额请求: {} (account_id: {:?})",
-        USAGE_URL, account_id
+        usage_url, account_id
     ));
     crate::modules::codex_auth_diagnostic::log_event(
         "quota_request_start",
@@ -985,7 +1018,15 @@ pub async fn fetch_quota(account: &CodexAccount) -> Result<FetchQuotaResult, Str
         }),
     );
 
-    let response = send_codex_api_request(account, Method::GET, USAGE_URL, None).await?;
+    let response = send_codex_api_request_with_agent_auth_base_url(
+        account,
+        Method::GET,
+        usage_url,
+        None,
+        codex_agent_identity::AGENT_IDENTITY_AUTH_API_BASE_URL,
+        import_preview,
+    )
+    .await?;
     let status = response.status;
     let headers = response.headers;
     let body = response.body;
@@ -997,7 +1038,7 @@ pub async fn fetch_quota(account: &CodexAccount) -> Result<FetchQuotaResult, Str
 
     logger::log_info(&format!(
         "Codex 配额响应元信息: url={}, status={}, request-id={}, x-request-id={}, cf-ray={}, body_len={}",
-        USAGE_URL, status, request_id, x_request_id, cf_ray, body_len
+        usage_url, status, request_id, x_request_id, cf_ray, body_len
     ));
 
     if !status.is_success() {
@@ -1025,7 +1066,7 @@ pub async fn fetch_quota(account: &CodexAccount) -> Result<FetchQuotaResult, Str
 
         logger::log_error(&format!(
             "Codex 配额接口返回非成功状态: url={}, status={}, request-id={}, x-request-id={}, cf-ray={}, detail_code={:?}, body_len={}, body={}",
-            USAGE_URL,
+            usage_url,
             status,
             request_id,
             x_request_id,
@@ -1442,6 +1483,7 @@ async fn send_codex_api_request(
         url,
         json_body,
         codex_agent_identity::AGENT_IDENTITY_AUTH_API_BASE_URL,
+        false,
     )
     .await
 }
@@ -1452,12 +1494,19 @@ async fn send_codex_api_request_with_agent_auth_base_url(
     url: &str,
     json_body: Option<&serde_json::Value>,
     agent_auth_base_url: &str,
+    import_preview: bool,
 ) -> Result<CodexApiResponse, String> {
     let account_id = account.account_id.clone().or_else(|| {
         codex_account::extract_chatgpt_account_id_from_access_token(&account.tokens.access_token)
     });
-    let client = crate::modules::codex_proxy_runtime::client_builder(account, reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(20))).await?
+    use crate::modules::codex_proxy_runtime;
+    let builder = reqwest::Client::builder().timeout(std::time::Duration::from_secs(20));
+    let builder = if import_preview {
+        codex_proxy_runtime::import_preview_client_builder(account, builder).await?
+    } else {
+        codex_proxy_runtime::client_builder(account, builder).await?
+    };
+    let client = builder
         .build()
         .map_err(|error| format!("创建 Codex 上游客户端失败: {}", error))?;
     let mut current = account.clone();
@@ -2074,8 +2123,12 @@ pub async fn refresh_freshly_authorized_account_quota(
 }
 
 pub async fn probe_import_account_quota(account: &CodexAccount) -> Result<CodexQuota, String> {
+    probe_import_account_quota_at(account, USAGE_URL).await
+}
+
+async fn probe_import_account_quota_at(account: &CodexAccount, usage_url: &str) -> Result<CodexQuota, String> {
     if account.is_agent_identity_auth() {
-        return fetch_quota(account).await.map(|result| result.quota);
+        return fetch_quota_at(account, usage_url, true).await.map(|result| result.quota);
     }
     if account.is_api_key_auth() {
         if is_new_api_account(account) {
@@ -2093,7 +2146,7 @@ pub async fn probe_import_account_quota(account: &CodexAccount) -> Result<CodexQ
         return Err("access_token 已过期，无法在导入前查询额度".to_string());
     }
 
-    fetch_quota(account).await.map(|result| result.quota)
+    fetch_quota_at(account, usage_url, true).await.map(|result| result.quota)
 }
 
 pub async fn refresh_account_subscription_info(
@@ -2893,8 +2946,71 @@ mod tests {
         );
     }
 
-    #[test]
-    fn confirmed_free_subscription_needs_no_paid_lookup_and_keeps_oauth() {
+    #[tokio::test]
+    async fn subscription_details_override_a_later_entitlement_expiry() {
+        let mut account = subscription_test_account();
+        account.account_id = Some("target".into());
+        let now = chrono::Utc::now();
+        let paid_expiry = (now - chrono::Duration::hours(2)).to_rfc3339();
+        let entitlement_expiry = (now + chrono::Duration::hours(6)).to_rfc3339();
+        let snapshot = parse_account_check_snapshot(
+            &json!({"accounts": {"target": {
+                "account": {"account_id":"target", "plan_type":"plus"},
+                "entitlement": {"subscription_plan":"plus", "expires_at": entitlement_expiry}
+            }}}),
+            &account,
+        )
+        .unwrap();
+        let snapshot =
+            super::resolve_subscription_status_snapshot(&account, snapshot, async |id| {
+                assert_eq!(id, "target");
+                Ok(super::parse_subscription_snapshot(
+                    &json!({"subscription_plan":"plus", "active_until": paid_expiry}),
+                    id,
+                ))
+            })
+            .await
+            .unwrap();
+
+        super::apply_subscription_snapshot(&mut account, snapshot);
+        assert_eq!(
+            account.subscription_active_until.as_deref(),
+            Some(paid_expiry.as_str())
+        );
+        assert!(super::subscription_missing_or_expired(
+            account.subscription_active_until.as_deref()
+        ));
+        assert!(account.subscription_query_last_success_at.is_some());
+    }
+
+    #[tokio::test]
+    async fn unavailable_subscription_details_keep_a_usable_account_check_expiry() {
+        let mut account = subscription_test_account();
+        account.account_id = Some("target".into());
+        let snapshot = parse_account_check_snapshot(
+            &json!({"accounts": {"target": {
+                "account": {"account_id":"target", "plan_type":"team"},
+                "entitlement": {"subscription_plan":"team", "expires_at":"2099-01-01T00:00:00Z"}
+            }}}),
+            &account,
+        )
+        .unwrap();
+        let snapshot =
+            super::resolve_subscription_status_snapshot(&account, snapshot, async |_| {
+                Err("subscription endpoint forbidden".into())
+            })
+            .await
+            .unwrap();
+
+        super::apply_subscription_snapshot(&mut account, snapshot);
+        assert_eq!(
+            account.subscription_active_until.as_deref(),
+            Some("2099-01-01T00:00:00Z")
+        );
+    }
+
+    #[tokio::test]
+    async fn confirmed_free_subscription_needs_no_paid_lookup_and_keeps_oauth() {
         for entitlement in [
             serde_json::Value::Null,
             json!({"subscription_plan":"plus","expires_at":"2000-01-01T00:00:00Z"}),
@@ -2915,6 +3031,12 @@ mod tests {
             )
             .unwrap();
             assert!(snapshot.is_free_without_active_subscription());
+            let snapshot =
+                super::resolve_subscription_status_snapshot(&account, snapshot, async |_| {
+                    panic!("a confirmed Free account does not need the subscription endpoint");
+                })
+                .await
+                .unwrap();
             super::apply_subscription_snapshot(&mut account, snapshot);
             assert_eq!(account.plan_type.as_deref(), Some("free"));
             assert!(account.subscription_active_until.is_none());
@@ -2980,6 +3102,47 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn import_quota_probes_an_unsaved_oauth_account() {
+        let account = CodexAccount::new(
+            format!("quota-import-{}", uuid::Uuid::new_v4()),
+            "import@example.com".into(),
+            CodexTokens {
+                id_token: String::new(),
+                access_token: "at-synthetic-import-test".into(),
+                refresh_token: None,
+            },
+        );
+        assert!(crate::modules::codex_account_proxy::eligible(&account));
+        assert!(crate::modules::codex_account::load_account(&account.id).is_none());
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let usage_url = format!("http://{}/usage", listener.local_addr().unwrap());
+        assert!(matches!(
+            super::fetch_quota_at(&account, &usage_url, false).await,
+            Err(error) if error == "PROXY_ACCOUNT_UNSUPPORTED"
+        ));
+
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let request = read_test_http_request(&mut stream).await;
+            assert!(request.starts_with("GET /usage HTTP/1.1"));
+            assert!(request.contains("Bearer at-synthetic-import-test"));
+            let body = r#"{"rate_limit":{"primary_window":{"used_percent":23}}}"#;
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            );
+            stream.write_all(response.as_bytes()).await.unwrap();
+        });
+        let quota = super::probe_import_account_quota_at(&account, &usage_url)
+            .await
+            .expect("probe quota before saving the account");
+        assert_eq!(quota.hourly_percentage, 77);
+        server.await.unwrap();
+        assert!(crate::modules::codex_account::load_account(&account.id).is_none());
+    }
+
+    #[tokio::test]
     async fn agent_identity_quota_request_uses_common_headers_and_recovers_task_once() {
         let account = agent_identity_test_account();
         let headers = build_codex_api_headers(&account, account.account_id.as_deref())
@@ -3042,6 +3205,7 @@ mod tests {
             &format!("{base_url}/usage"),
             None,
             &base_url,
+            false,
         )
         .await
         .expect("recover task and retry quota request");

@@ -735,7 +735,7 @@ fn rejects_projection_captured_ahead_of_rollout_snapshot() {
     let bytes = fs::metadata(&f.child_rollout).unwrap().len() as i64;
     db.execute(
         "INSERT INTO thread_history_projection_state VALUES (?1, ?2, 4)",
-        rusqlite::params![ROOT, bytes + 10],
+        rusqlite::params![CHILD, bytes + 10],
     )
     .unwrap();
     assert!(copy_profile(&f.source, &f.target)

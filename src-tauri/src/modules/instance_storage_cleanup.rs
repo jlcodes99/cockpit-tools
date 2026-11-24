@@ -111,7 +111,9 @@ fn process_paths(values: &[String]) -> Vec<PathBuf> {
 }
 
 fn is_registry(name: &str) -> bool {
-    name == "instances.json" || name.ends_with("_instances.json")
+    // CodeBuddy CLI stores launch presets. Its profiles live outside the managed roots.
+    name != modules::codebuddy_cli::INSTANCES_FILE
+        && (name == "instances.json" || name.ends_with("_instances.json"))
 }
 
 fn registered_references(
@@ -1391,6 +1393,41 @@ mod tests {
         assert_eq!(rows[0].1, removed);
         assert!(has_matching_registered_owner(&live, &fixture.0, "live").unwrap());
         assert!(!has_matching_registered_owner(&removed, &fixture.0, "removed").unwrap());
+    }
+
+    #[test]
+    fn codebuddy_cli_metadata_does_not_block_codex_instance_directory_checks() {
+        let fixture = Fixture::new();
+        let root = fixture.root();
+        let live = root.root.join("live");
+        fs::create_dir_all(&live).unwrap();
+        fs::write(
+            fixture.0.join("codex_instances.json"),
+            serde_json::json!({"instances": [{"id": "live", "userDataDir": live}]}).to_string(),
+        )
+        .unwrap();
+        let cli_registry = fixture.0.join(modules::codebuddy_cli::INSTANCES_FILE);
+        let cli_instance = modules::codebuddy_cli::Instance {
+            id: uuid::Uuid::new_v4(),
+            name: "CodeBuddy CLI".into(),
+            account: modules::codebuddy_cli::AccountRef {
+                region: modules::codebuddy_cli::Region::International,
+                account_id: "fixture".into(),
+            },
+            working_dir: fixture.0.clone(),
+        };
+        fs::write(
+            &cli_registry,
+            serde_json::to_string_pretty(&[cli_instance]).unwrap(),
+        )
+        .unwrap();
+
+        assert!(has_matching_registered_owner(&live, &fixture.0, "live").unwrap());
+        assert!(has_only_one_registered_owner(&live, &fixture.0, &[fixture.root()], &[]).unwrap());
+
+        fs::rename(&cli_registry, cli_registry.with_extension("json.bak")).unwrap();
+        let protection = collect_protection(&fixture.0, &[root], vec![], vec![]).unwrap();
+        assert!(protection.paths.contains(&path_key(&live)));
     }
 
     #[test]

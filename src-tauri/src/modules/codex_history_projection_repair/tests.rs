@@ -15,6 +15,20 @@ CREATE TABLE thread_history_projection_state(thread_id TEXT PRIMARY KEY,next_rol
 CREATE TRIGGER thread_realtime_items_projection_cleanup AFTER DELETE ON thread_history_projection_state BEGIN DELETE FROM thread_realtime_items WHERE thread_id=OLD.thread_id; END;
 ";
 
+const MIGRATION_9_SCHEMA: &str = "
+CREATE TABLE _sqlx_migrations(version BIGINT PRIMARY KEY, success BOOLEAN NOT NULL);
+INSERT INTO _sqlx_migrations VALUES (1,1),(2,1),(3,1),(4,1),(5,1),(6,1),(7,1),(8,1),(9,1);
+CREATE INDEX idx_thread_realtime_observed
+    ON thread_realtime_items(thread_id, json_extract(item_json, '$.observed_at_ms'), rollout_ordinal, item_id)
+    WHERE json_extract(item_json, '$.observed_at_ms') IS NOT NULL;
+CREATE INDEX idx_thread_realtime_session_observed
+    ON thread_realtime_items(thread_id, json_extract(item_json, '$.realtime_session_id'), json_extract(item_json, '$.observed_at_ms'), rollout_ordinal, item_id)
+    WHERE json_extract(item_json, '$.observed_at_ms') IS NOT NULL;
+CREATE INDEX idx_thread_realtime_session_position
+    ON thread_realtime_items(thread_id, json_extract(item_json, '$.realtime_session_id'), rollout_ordinal, item_id)
+    WHERE json_extract(item_json, '$.observed_at_ms') IS NOT NULL;
+";
+
 struct Fixture {
     _temp: tempfile::TempDir,
     root: PathBuf,
@@ -303,6 +317,30 @@ fn history_projection_repair_streams_oversized_compressed_rollout() {
     assert_eq!(apply(&f.root, &plan, &f.root.join("large-backup")).unwrap(), 1);
     assert_eq!(f.count(ROOT), 0);
     assert_eq!(f.count(CHILD), 1);
+}
+
+#[test]
+fn history_projection_repair_accepts_official_realtime_observation_indexes() {
+    let f = Fixture::new();
+    f.db().execute_batch(MIGRATION_9_SCHEMA).unwrap();
+    assert_eq!(apply(&f.root, &f.plan(), &f.root.join("backup")).unwrap(), 1);
+    assert_eq!(f.count(ROOT), 0);
+    assert_eq!(f.count(CHILD), 1);
+    assert_eq!(f.plan().candidate_count(), 0);
+}
+
+#[test]
+fn history_projection_repair_rejects_changed_or_missing_realtime_observation_indexes() {
+    for schema in [
+        MIGRATION_9_SCHEMA.replace("$.observed_at_ms", "$.created_at_ms"),
+        format!("{MIGRATION_9_SCHEMA} DROP INDEX idx_thread_realtime_session_position;"),
+        format!("{MIGRATION_9_SCHEMA} INSERT INTO _sqlx_migrations VALUES (10,1);"),
+    ] {
+        let f = Fixture::new();
+        f.db().execute_batch(&schema).unwrap();
+        assert!(scan(&f.root, None, &|_, _| {}).unwrap_err().contains("SCHEMA"));
+        assert_eq!(f.count(ROOT), 1);
+    }
 }
 
 #[test]

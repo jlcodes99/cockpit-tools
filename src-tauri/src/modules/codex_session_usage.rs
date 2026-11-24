@@ -13,7 +13,9 @@ use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use chrono::{DateTime, Datelike, Local, TimeZone, Utc};
+use chrono::{DateTime, Utc};
+#[cfg(test)]
+use chrono::{Datelike, Local, TimeZone};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
@@ -82,6 +84,10 @@ pub struct CodexSessionUsageReport {
     pub totals: CodexSessionUsageTotals,
     pub by_model: Vec<CodexSessionUsageBreakdownRow>,
     pub by_instance: Vec<CodexSessionUsageBreakdownRow>,
+    pub by_project: Vec<CodexSessionUsageBreakdownRow>,
+    pub projects_pending: bool,
+    pub model_options: Vec<CodexSessionUsageInstanceOption>,
+    pub project_options: Vec<CodexSessionUsageInstanceOption>,
     pub by_day: Vec<CodexSessionUsageBreakdownRow>,
     pub instances: Vec<CodexSessionUsageInstanceOption>,
     pub from_timestamp: Option<i64>,
@@ -112,6 +118,11 @@ pub struct CodexSessionUsageQuery {
     pub from_timestamp: Option<i64>,
     pub to_timestamp: Option<i64>,
     pub instance_id: Option<String>,
+    pub model: Option<String>,
+    pub project_key: Option<String>,
+    pub session_id: Option<String>,
+    #[serde(default)]
+    pub include_projects: bool,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -213,6 +224,8 @@ include!("codex_session_usage_checkpoint.rs");
 include!("codex_session_usage_rollup.rs");
 include!("codex_session_usage_parent.rs");
 include!("codex_session_usage_rewrite.rs");
+include!("codex_session_usage_projects.rs");
+include!("codex_session_usage_details.rs");
 
 pub fn query_session_usage(
     query: CodexSessionUsageQuery,
@@ -308,6 +321,11 @@ impl SessionUsageStore {
             .ensure(&conn)
             .map_err(|e| e.to_string())?;
         ensure_rewrite_schema(&conn)?;
+        ensure_usage_projects(&conn)?;
+        #[cfg(not(test))]
+        if !usage_projects_complete(&conn) {
+            schedule_usage_projects(self.db_path.clone());
+        }
         #[cfg(not(test))]
         schedule_session_rollup_backfill(self.db_path.clone());
         Ok(conn)
@@ -420,50 +438,67 @@ impl SessionUsageStore {
     fn query(&self, query: &CodexSessionUsageQuery) -> Result<CodexSessionUsageReport, String> {
         let conn = self.open_conn()?;
         conn.execute_batch("BEGIN").map_err(|e| e.to_string())?;
-        let source = session_report_source(
-            &conn,
+        let (from, to) = (
             query.from_timestamp.unwrap_or(0),
             query.to_timestamp.unwrap_or(i64::MAX / 2),
         );
-        conn.execute_batch(&format!(
-            "CREATE TEMP VIEW session_usage_report AS {source}"
-        ))
-        .map_err(|e| e.to_string())?;
+        let rollup_source = session_report_source(&conn, from, to);
+        let source = if query.session_id.is_some() {
+            format!("SELECT *, 1 AS request_count FROM ({})", usage_detail_source())
+        } else {
+            rollup_source.clone()
+        };
+        let source = if query.include_projects || query.project_key.is_some() {
+            format!(
+                "SELECT u.*, p.project_key, COALESCE(p.project_path,'') AS project_path
+                 FROM ({source}) u LEFT JOIN session_usage_projects p USING(file_path)"
+            )
+        } else {
+            source
+        };
+        conn.execute_batch(&format!("CREATE TEMP VIEW session_usage_report AS {source}"))
+            .map_err(|e| e.to_string())?;
+
+        let projects_complete = usage_projects_complete(&conn);
+        let (where_sql, params) = usage_filters(query, projects_complete);
         let instance_names = current_instance_names();
-        let instance_filter = query
-            .instance_id
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty());
-
-        let mut where_sql = String::from("WHERE 1 = 1");
-        let mut params: Vec<rusqlite::types::Value> = Vec::new();
-        if let Some(from) = query.from_timestamp {
-            where_sql.push_str(" AND timestamp >= ?");
-            params.push(rusqlite::types::Value::Integer(from));
-        }
-        if let Some(to) = query.to_timestamp {
-            where_sql.push_str(" AND timestamp <= ?");
-            params.push(rusqlite::types::Value::Integer(to));
-        }
-        if let Some(instance_id) = instance_filter {
-            where_sql.push_str(" AND instance_id = ?");
-            params.push(rusqlite::types::Value::Text(instance_id.to_string()));
-        }
-
         let totals = query_totals(&conn, &where_sql, &params)?;
-        let by_model = query_breakdown(&conn, &where_sql, &params, "model", None, &instance_names)?;
+        let mut by_model =
+            query_breakdown(&conn, &where_sql, &params, "model", None, &instance_names)?;
+        for row in &mut by_model {
+            row.estimated_cost_usd = known_usage_cost(&row.key, row);
+        }
         let by_instance = query_breakdown(
-            &conn,
-            &where_sql,
-            &params,
-            "instance_id",
-            Some("instance_name"),
-            &instance_names,
+            &conn, &where_sql, &params, "instance_id", Some("instance_name"), &instance_names,
         )?;
+        let (by_instance, by_project) = if query.include_projects {
+            let by_project = query_breakdown(
+                &conn, &where_sql, &params, USAGE_PROJECT_GROUP, Some("project_path"), &instance_names,
+            )?;
+            (
+                price_usage_groups(&conn, &where_sql, &params, "instance_id", by_instance)?,
+                price_usage_groups(&conn, &where_sql, &params, USAGE_PROJECT_GROUP, by_project)?,
+            )
+        } else {
+            (by_instance, Vec::new())
+        };
+        // Keep every model/project choice available within the selected time and instance.
+        let has_dimension_filter =
+            query.model.is_some() || query.project_key.is_some() || query.session_id.is_some();
+        let (model_options, project_options) = if query.include_projects && has_dimension_filter {
+            let scope = CodexSessionUsageQuery {
+                model: None,
+                project_key: None,
+                session_id: None,
+                ..query.clone()
+            };
+            usage_filter_options(&conn, &scope, &rollup_source)?
+        } else {
+            (usage_options(&by_model), usage_options(&by_project))
+        };
         let mut by_day = query_day_breakdown(&conn, &where_sql, &params)?;
         by_day.sort_by(|left, right| right.key.cmp(&left.key));
-        let estimated_cost_usd = estimate_usage_cost_usd(&by_model);
+        let estimated_cost_usd = by_model.iter().filter_map(|row| row.estimated_cost_usd).sum();
         let totals = CodexSessionUsageTotals {
             estimated_cost_usd,
             ..totals
@@ -491,6 +526,10 @@ impl SessionUsageStore {
             totals,
             by_model,
             by_instance,
+            by_project,
+            projects_pending: query.include_projects && !projects_complete,
+            model_options,
+            project_options,
             by_day,
             instances: collect_usage_instances()
                 .unwrap_or_default()
@@ -838,6 +877,15 @@ fn sync_single_file(
     } else {
         0
     };
+    let project = if parsed.checkpoint.complete || (!rewrite && prior_offset == 0) {
+        rollout_usage_project(file_path)
+            .map_err(|error| {
+                tracing::warn!("[CODEX-SESSION-USAGE] 项目元数据读取失败 {}: {error}", file_path.display());
+            })
+            .ok()
+    } else {
+        None
+    };
     if !parsed.has_billable_tokens {
         let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
         upsert_cursor_on_conn(
@@ -849,6 +897,14 @@ fn sync_single_file(
             parsed.line_offset,
         )?;
         save_parser_checkpoint(&tx, &logical_path, &parsed.checkpoint)?;
+        if let Some(project) = &project {
+            save_usage_project(
+                &tx,
+                &file_path_str,
+                parsed.root_thread_id.as_deref().unwrap_or(""),
+                Some(project),
+            )?;
+        }
         publish_rewrite(&tx, &file_path_str, parsed.checkpoint.complete)?;
         tx.commit().map_err(|e| e.to_string())?;
         cursors.insert(
@@ -1050,6 +1106,7 @@ fn sync_single_file(
             parsed.line_offset,
         )?;
         save_parser_checkpoint(&tx, &logical_path, &parsed.checkpoint)?;
+        save_usage_project(&tx, &file_path_str, &root_thread_id, project.as_ref())?;
         publish_rewrite(&tx, &file_path_str, parsed.checkpoint.complete)?;
         tx.commit()
             .map_err(|error| format!("提交会话用量写入失败: {error}"))?;
@@ -1605,17 +1662,6 @@ fn get_meta_i64(conn: &Connection, key: &str) -> Option<i64> {
     .and_then(|value| value.parse().ok())
 }
 
-fn estimate_usage_cost_usd(by_model: &[CodexSessionUsageBreakdownRow]) -> f64 {
-    by_model.iter().fold(0.0, |sum, row| {
-        sum + crate::modules::codex_local_access::estimate_model_token_cost_usd(
-            &row.key,
-            row.input_tokens,
-            row.cached_input_tokens,
-            row.output_tokens,
-        )
-    })
-}
-
 fn query_totals(
     conn: &Connection,
     where_sql: &str,
@@ -1709,8 +1755,9 @@ fn query_day_breakdown(
     params: &[rusqlite::types::Value],
 ) -> Result<Vec<CodexSessionUsageBreakdownRow>, String> {
     let sql = format!(
-        "SELECT timestamp, model, input_tokens, cached_input_tokens, output_tokens, request_count
-        FROM session_usage_report {where_sql}"
+        "SELECT CASE WHEN timestamp<=0 THEN '' ELSE COALESCE(date(timestamp,'unixepoch','localtime'),'') END AS day,
+                model,SUM(input_tokens),SUM(cached_input_tokens),SUM(output_tokens),SUM(request_count)
+         FROM session_usage_report {where_sql} GROUP BY day,model"
     );
     let mut statement = conn
         .prepare(&sql)
@@ -1718,7 +1765,7 @@ fn query_day_breakdown(
     let rows = statement
         .query_map(rusqlite::params_from_iter(params.iter()), |row| {
             Ok((
-                row.get::<_, i64>(0)?,
+                row.get::<_, String>(0)?,
                 row.get::<_, String>(1)?,
                 row.get::<_, i64>(2)?.max(0) as u64,
                 row.get::<_, i64>(3)?.max(0) as u64,
@@ -1729,10 +1776,10 @@ fn query_day_breakdown(
         .map_err(|error| format!("遍历会话用量日期失败: {error}"))?;
     let mut days: HashMap<String, HashMap<String, CodexSessionUsageTotals>> = HashMap::new();
     for row in rows {
-        let (timestamp, model, input, cached, output, requests) =
+        let (day, model, input, cached, output, requests) =
             row.map_err(|error| format!("解析会话用量日期失败: {error}"))?;
         let totals = days
-            .entry(local_day_key(timestamp))
+            .entry(day)
             .or_default()
             .entry(model)
             .or_default();
@@ -1780,6 +1827,7 @@ fn query_day_breakdown(
         .collect())
 }
 
+#[cfg(test)]
 fn local_day_key(timestamp: i64) -> String {
     if timestamp <= 0 {
         return String::new();
@@ -1803,6 +1851,7 @@ mod tests {
     use super::*;
     use serde_json::json;
     include!("codex_session_usage_checkpoint_tests.rs");
+    include!("codex_session_usage_details_tests.rs");
 
     fn daily_cost_test_connection() -> Connection {
         let connection = Connection::open_in_memory().unwrap();

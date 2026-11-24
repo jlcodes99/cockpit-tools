@@ -79,6 +79,16 @@ async fn run_codex_path_validation(
 pub async fn set_app_path(app: String, path: String, validate: Option<bool>) -> Result<(), String> {
     let normalized_path = modules::process::normalize_windows_user_facing_path(path.trim());
     tauri::async_runtime::spawn_blocking(move || {
+        #[cfg(target_os = "windows")]
+        if app == "workbuddy" {
+            modules::process::validate_workbuddy_app_path(std::path::Path::new(&normalized_path))
+                .map_err(|error| {
+                    modules::process::format_workbuddy_app_path_error(
+                        error,
+                        &config::get_user_config().language,
+                    )
+                })?;
+        }
         if app == "workbuddy_ai" && !normalized_path.is_empty()
             && modules::workbuddy_ai_account::executable_at(std::path::Path::new(&normalized_path)).is_none()
         {
