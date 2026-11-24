@@ -1354,7 +1354,10 @@ export function QoderAccountsPage({ region = 'global' }: { region?: QoderRegion 
 
   const resolveUpdatedText = useCallback(
     (account: QoderAccount) => {
-      const updatedAt = account.last_used || account.created_at || 0;
+      // `usage_updated_at` is stamped when the quota fetch succeeds. Falling back
+      // to `last_used` made a freshly refreshed account still read "updated 3 days
+      // ago" — `last_used` only moves on import/tag/switch.
+      const updatedAt = account.usage_updated_at || account.last_used || account.created_at || 0;
       const secondsAgo = Math.max(0, Math.floor(Date.now() / 1000) - updatedAt);
       return t('common.shared.updated.label', '更新于 {{relative}}前', {
         relative: formatRelativeDuration(secondsAgo),

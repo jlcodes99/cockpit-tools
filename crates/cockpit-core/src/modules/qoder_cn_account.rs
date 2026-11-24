@@ -9,10 +9,11 @@ use super::{
     account_index_repair::{
         collect_account_file_ids, load_accounts_from_details, sort_accounts_by_recency,
     },
+    epoch_time::epoch_seconds,
     logger, provider_account_index,
     qoder_channel::{credential_source, CredentialSource},
     qoder_identity::normalize_account_id,
-    secure_account_storage::{epoch_seconds, read_at, write_at},
+    secure_account_storage::{read_at, write_at},
 };
 use crate::models::qoder::{QoderAccount, QoderCnAccountIndex};
 
@@ -229,6 +230,12 @@ impl QoderCnAccountStore {
             .quota_query_last_error
             .as_ref()
             .map(|_| chrono::Utc::now().timestamp_millis());
+        // The account card labels quota freshness with `usage_updated_at`; without
+        // it the list falls back to `last_used` and keeps claiming "updated 3 days
+        // ago" right after a successful refresh.
+        if updated.quota_query_last_error.is_none() {
+            updated.usage_updated_at = Some(chrono::Utc::now().timestamp());
+        }
         self.write_details(&updated)?;
         Ok(updated)
     }

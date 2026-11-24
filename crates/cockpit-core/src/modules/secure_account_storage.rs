@@ -45,21 +45,6 @@ fn backup_path(path: &Path) -> PathBuf {
     backup.into()
 }
 
-/// Values at or above this bound are legacy millisecond stamps; second-based
-/// stamps stay below it until the year 5138.
-const MILLIS_TIMESTAMP_FLOOR: i64 = 100_000_000_000;
-
-/// Legacy builds stored switch times in milliseconds. Anything that compares or
-/// displays those values has to bring them back to seconds first, otherwise a
-/// single mixed-unit record poisons every later write.
-pub(super) fn epoch_seconds(value: i64) -> i64 {
-    if value >= MILLIS_TIMESTAMP_FLOOR {
-        value / 1000
-    } else {
-        value
-    }
-}
-
 pub(super) fn read_at<T: DeserializeOwned>(root: &Path, path: &Path) -> Result<T, String> {
     let content = fs::read_to_string(path).map_err(|error| format!("读取账号详情失败: {error}"))?;
     decode(root, &content).or_else(|error| {
@@ -105,8 +90,8 @@ pub(super) fn write_at<T: Serialize>(
         // forever. Normalize both sides before taking the maximum.
         if let Some(timestamp) = previous["last_switched_at"]
             .as_i64()
-            .map(epoch_seconds)
-            .max(next["last_switched_at"].as_i64().map(epoch_seconds))
+            .map(super::epoch_time::epoch_seconds)
+            .max(next["last_switched_at"].as_i64().map(super::epoch_time::epoch_seconds))
         {
             next["last_switched_at"] = timestamp.into();
         }

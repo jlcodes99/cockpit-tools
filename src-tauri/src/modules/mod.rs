@@ -195,6 +195,8 @@ pub mod quota;
 pub mod quota_cache;
 pub(crate) mod platform_quota_history;
 pub mod remote_config;
+#[path = "../../../crates/cockpit-core/src/modules/epoch_time.rs"]
+pub(crate) mod epoch_time;
 pub mod secure_account_storage;
 #[path = "../../../crates/cockpit-core/src/modules/account_file_crypto.rs"]
 mod account_file_crypto;

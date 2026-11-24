@@ -981,6 +981,10 @@ pub(crate) fn save_refresh(
         .quota_query_last_error
         .as_ref()
         .map(|_| chrono::Utc::now().timestamp_millis());
+    // The account card labels quota freshness with `usage_updated_at`.
+    if updated.quota_query_last_error.is_none() {
+        updated.usage_updated_at = Some(now_ts());
+    }
     save_account_file(&updated)?;
     refresh_summary(&mut index, &updated);
     save_account_index(&index)?;

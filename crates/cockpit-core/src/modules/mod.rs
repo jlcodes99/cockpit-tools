@@ -1,6 +1,7 @@
 pub mod account;
 pub mod automation_protocol;
 mod account_file_crypto;
+pub(crate) mod epoch_time;
 mod secure_account_storage;
 pub mod account_index_repair;
 pub mod announcement;
