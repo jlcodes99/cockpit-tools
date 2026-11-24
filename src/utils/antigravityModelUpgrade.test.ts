@@ -15,11 +15,12 @@ test('new and old model versions remain separate selectable upstream IDs', () =>
   assert.match(getAntigravityModelDisplayName('Unknown (Custom)'), /\(Custom\)/);
 });
 
-test('new grouping defaults add Argon and retain legacy groups', () => {
+test('new grouping defaults remove Argon and retain other default and legacy groups', () => {
   const groups = getDefaultGroups();
   assert.ok(groups.some((group) => group.id === 'g3_pro'));
   assert.ok(groups.find((group) => group.id === 'g4_carbon')?.desktopModels.includes('gemini-4-carbon-high'));
-  assert.ok(groups.find((group) => group.id === 'g4_argon')?.desktopModels.includes('gemini-4-argon-high'));
+  assert.ok(!groups.some((group) => group.id === 'g4_argon'));
+  assert.equal(resolveDefaultGroupId('gemini-4-argon-high'), null);
   assert.ok(groups.find((group) => group.id === 'claude_45')?.desktopModels.includes('claude-sonnet-5-5-high'));
   assert.ok(groups.find((group) => group.id === 'g3_flash')?.desktopModels.includes('gemini-3.8-flash-high'));
   assert.ok(groups.find((group) => group.id === 'g3_flash')?.desktopModels.includes('gemini-4-hydrogen-xhigh'));
@@ -49,7 +50,11 @@ test('all official model effort tiers have matching IDs, constants, names and qu
     assert.equal(getModelDisplayName(meta.model), meta.displayName);
     assert.equal(getModelDisplayName(option.id), meta.displayName);
     const group = getDefaultGroups().find((item) => item.desktopModels.includes(option.id));
-    assert.ok(group?.pluginModels.includes(meta.model), option.id);
+    if (option.id.startsWith('gemini-4-argon')) {
+      assert.equal(group, undefined, option.id);
+    } else {
+      assert.ok(group?.pluginModels.includes(meta.model), option.id);
+    }
   }
 });
 

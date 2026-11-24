@@ -132,8 +132,6 @@ type GroupPrefixMatcher = (normalizedModelId: string, normalizedModelName: strin
 const DEFAULT_GROUP_PREFIX_MATCHERS: Record<string, GroupPrefixMatcher> = {
   g4_carbon: (id, name) => id.startsWith('gemini-4-carbon') || id === 'carbon:weekly'
     || id === 'gemini-carbon-wtu-weekly' || name.startsWith('gemini 4 carbon'),
-  g4_argon: (id, name) => id.startsWith('gemini-4-argon') || id === 'argon:weekly'
-    || id === 'gemini-argon-wtu-weekly' || name.startsWith('gemini 4 argon'),
   claude_45: (normalizedModelId, normalizedModelName) =>
     normalizedModelId.startsWith('claude-') ||
     normalizedModelId.startsWith('model_claude') ||
@@ -225,7 +223,6 @@ function matchesDefaultGroupPrefixRule(
 export function getDefaultGroups(): DefaultGroup[] {
   return [
     { id: 'g4_carbon', name: 'Gemini 4 Carbon', desktopModels: ['gemini-4-carbon', 'gemini-4-carbon-medium', 'gemini-4-carbon-high', 'gemini-4-carbon-low'], pluginModels: [] },
-    { id: 'g4_argon', name: 'Gemini 4 Argon', desktopModels: ['gemini-4-argon', 'gemini-4-argon-medium', 'gemini-4-argon-high', 'gemini-4-argon-low'], pluginModels: ['MODEL_PLACEHOLDER_M417', 'MODEL_PLACEHOLDER_M418', 'MODEL_PLACEHOLDER_M419'] },
     {
       id: 'claude_45',
       name: 'Claude 4.5',

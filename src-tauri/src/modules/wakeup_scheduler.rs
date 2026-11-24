@@ -1793,7 +1793,11 @@ mod weekly_reset_tests {
         ];
         let mut reset = ResetState::default();
         assert!(observe_weekly_resets(&accounts, &rule, &mut reset, START).is_empty());
-        assert_eq!(reset.weekly_reset_boundaries.len(), 5);
+        assert_eq!(reset.weekly_reset_boundaries.len(), 4);
+        assert!(!reset
+            .weekly_reset_boundaries
+            .keys()
+            .any(|key| key.contains("gemini-4-argon-medium")));
 
         let mut buckets = a_buckets;
         buckets[4].2 = Some(deadline + HOUR);

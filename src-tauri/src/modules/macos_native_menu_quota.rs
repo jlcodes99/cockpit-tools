@@ -1497,7 +1497,7 @@
         if normalized.starts_with("gemini-4-carbon") || matches!(normalized.as_str(), "carbon:weekly" | "gemini-carbon-wtu-weekly") {
             return "gemini-4-carbon".into();
         }
-        if normalized.starts_with("gemini-4-argon") || matches!(normalized.as_str(), "argon:weekly" | "gemini-argon-wtu-weekly") {
+        if normalized.starts_with("gemini-4-argon") {
             return "gemini-4-argon".into();
         }
         if normalized.starts_with("gemini-3.8-flash") { return "gemini-3.8-flash".into(); }
