@@ -497,6 +497,17 @@ const CC_SWITCH_DIRECT_CLAUDE_PROVIDER_PRESETS: readonly ClaudeApiProviderPreset
     }),
   }),
   createClaudeApiProviderPreset({
+    id: 'teamorouter',
+    name: 'TeamoRouter',
+    baseUrl: 'https://api.teamorouter.com',
+    website: 'https://teamorouter.com',
+    apiKeyUrl: 'https://teamorouter.com/dashboard?tab=api-keys',
+    extraEnv: modelEnv('claude-sonnet-5-5', {
+      ANTHROPIC_DEFAULT_HAIKU_MODEL: 'claude-haiku-5-5',
+      ANTHROPIC_DEFAULT_OPUS_MODEL: 'claude-opus-5-5',
+    }),
+  }),
+  createClaudeApiProviderPreset({
     id: 'pipellm',
     name: 'PIPELLM',
     baseUrl: 'https://cc-api.pipellm.ai',
