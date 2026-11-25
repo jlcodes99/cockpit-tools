@@ -1,3 +1,5 @@
+#[path = "network_recovery_http_tests.rs"]
+mod network_recovery_http_tests;
 use super::super::{contract::*, start, Options};
 use super::*;
 use axum::{

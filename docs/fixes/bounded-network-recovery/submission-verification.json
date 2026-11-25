@@ -1,0 +1,342 @@
+{
+  "schemaVersion": 1,
+  "verifiedOn": "2026-11-25",
+  "scope": "Submission source equality and newly run portable frontend checks; historical business results are not a fresh full PR test run.",
+  "officialBase": "586d409df963610a51a48da24256ffd30b924493",
+  "officialBaseTree": "06d628afd55d71823c2a4d09f392d6edecd41d66",
+  "sourceComparison": {
+    "count": 24,
+    "byteIdenticalToAcceptedLocalSource": true,
+    "files": [
+      {
+        "path": "Cargo.lock",
+        "sha256": "C86DC898F6AE2752E8BE8626250A57F6A5B84B788FF1EF3D31876357C3B415FE"
+      },
+      {
+        "path": "src-tauri/Cargo.toml",
+        "sha256": "5908999116F56112434A63CA122D95433134B3E4551FE000DF5AF45DDFF5BB2C"
+      },
+      {
+        "path": "src-tauri/build.rs",
+        "sha256": "7C18035BCA11E1ADF8F45CCD4404270C57F7CE1F2AD5400C62B44C52DD4D3284"
+      },
+      {
+        "path": "src-tauri/src/lib.rs",
+        "sha256": "25313E922EC9F6A3D529748A8CF84C469E3954B69CE87D646D21B7376DB8189F"
+      },
+      {
+        "path": "src-tauri/src/modules/codex_local_access_native.rs",
+        "sha256": "E94370309F7C83A31A9EBBA36EA31CE3D8CCBE09DBBBE0B280EA10E5E121C9C4"
+      },
+      {
+        "path": "src-tauri/src/modules/codex_local_access_native_scheduler.rs",
+        "sha256": "00AA316114A9B44E9FF3DEE797F15BB3F6287CFA3372E55EB03FB36713E9818A"
+      },
+      {
+        "path": "src-tauri/src/modules/codex_local_access_profile_takeover.rs",
+        "sha256": "BE2ADADFEAF0371ABB544F2FE31B9825A9418F9EAA292DF7E708B48E57279E35"
+      },
+      {
+        "path": "src-tauri/src/modules/codex_local_access_sidecar_runtime.rs",
+        "sha256": "AF392BF7C28321D0F93A6D7C735A936DC288F4FD693FBCDD7C6E43004AFE4E92"
+      },
+      {
+        "path": "src-tauri/src/modules/codex_local_access_takeover_maintenance.rs",
+        "sha256": "B4A581ADB6EDFD0DD92AB7CC205EF90F6145A93B9A28708A8094B8ECD8A22D07"
+      },
+      {
+        "path": "src-tauri/src/modules/codex_local_access_tests_takeover.rs",
+        "sha256": "9DA0980D6EDFF552104FD4A29C0653CA3171A651A7F047B9EB75F367C9337FFB"
+      },
+      {
+        "path": "src-tauri/src/modules/codex_native_api/bootstrap_tests.rs",
+        "sha256": "9100BD0E56FE7BBE10BF80C93B0CED98E7E70EE028EF49BFFFCB4F5E71F9908E"
+      },
+      {
+        "path": "src-tauri/src/modules/codex_native_api/contract.rs",
+        "sha256": "F4261FED563C8F440B89D52F505E1E32BB1157B69291DC6A38B99AE6BFD88E61"
+      },
+      {
+        "path": "src-tauri/src/modules/codex_native_api/diagnostic_error.rs",
+        "sha256": "713E46A86BEF03128E8207FA9EA4BBBB0A6F1CE3243E08D262938087FBAF3AB3"
+      },
+      {
+        "path": "src-tauri/src/modules/codex_native_api/lifecycle.rs",
+        "sha256": "3DFAD6602E0F02AC01DB5E9451391B59CF9904964354D834182076BEA0DE91A0"
+      },
+      {
+        "path": "src-tauri/src/modules/codex_native_api/mod.rs",
+        "sha256": "D930126461BC77DE0790B7FC697C89277965E465F3272666147F491ABF81B08B"
+      },
+      {
+        "path": "src-tauri/src/modules/codex_native_api/network_recovery.rs",
+        "sha256": "7120D4F9CAD6A9DB67663643AF970D899ABCBA365708C5303F577B31F0BF93E0"
+      },
+      {
+        "path": "src-tauri/src/modules/codex_native_api/network_recovery_http_tests.rs",
+        "sha256": "96B8C1B267D10032C2A3CB1BCB36980DA837461E7E263E7C60014849B46776E2"
+      },
+      {
+        "path": "src-tauri/src/modules/codex_native_api/retry.rs",
+        "sha256": "141F746FFA656E5ECBFBA7C0CB944BC4D0B15679DA3603D461004D1606CED60C"
+      },
+      {
+        "path": "src-tauri/src/modules/codex_native_api/server.rs",
+        "sha256": "EB2BCD4F43DBF216A3B533C920F742E1B2AA956C3B176629E76A5E2FBFBE172B"
+      },
+      {
+        "path": "src-tauri/src/modules/native_soft_affinity_regression_tests.rs",
+        "sha256": "7D3DC6402173DEE7D0C612E7CB46F9632ED127AF1791D33E295408D05AA0A88C"
+      },
+      {
+        "path": "src/locales/en.json",
+        "sha256": "7AA923990897EC7A87F314B951B330D577205E26F53F4F9EF27D33A485AB6290"
+      },
+      {
+        "path": "src/locales/zh-CN.json",
+        "sha256": "08A026CEED541E91969BDE5B1244781DF48CCC0068F6836FE106CE435D813CAB"
+      },
+      {
+        "path": "src-tauri/build_frontend.rs",
+        "sha256": "9C8B213FF6CAB9D2F1302144E5E0A9413051DA85B7D9BA00AC0A2DA5F7B461C6"
+      },
+      {
+        "path": "src-tauri/src/frontend_smoke.rs",
+        "sha256": "CDA49DAEA08593552AD3105DC7B3B0B2C730639FF5A8EB6D5C772B04CA44FB83"
+      }
+    ]
+  },
+  "historicalBusinessTests": {
+    "testedOn": "2026-11-24",
+    "type": "selected synthetic unit and local HTTP suites",
+    "passed": 190.0,
+    "failed": 0.0,
+    "ignored": 0.0,
+    "sourceFingerprint": "E49ECD9015950A63C0564D6DEB9F22C8BB018B3064E7B49CF227DAD5642DD4AB",
+    "testExecutableSha256": "30345641EB338808B956CB50EBDE889959083AB7106A1AC8AD45D0FC899F05C4",
+    "rerunAfterFrontendRework": false,
+    "suites": [
+      {
+        "filter": "modules::codex_native_api::network_recovery::",
+        "passed": 7,
+        "failed": 0,
+        "ignored": 0,
+        "exitCode": 0
+      },
+      {
+        "filter": "modules::codex_native_api::bootstrap::tests::",
+        "passed": 39,
+        "failed": 0,
+        "ignored": 0,
+        "exitCode": 0
+      },
+      {
+        "filter": "modules::codex_native_api::retry::cooldown_tests::",
+        "passed": 7,
+        "failed": 0,
+        "ignored": 0,
+        "exitCode": 0
+      },
+      {
+        "filter": "modules::codex_native_api::lifecycle::tests::",
+        "passed": 26,
+        "failed": 0,
+        "ignored": 0,
+        "exitCode": 0
+      },
+      {
+        "filter": "modules::codex_native_api::identity::continuity::",
+        "passed": 17,
+        "failed": 0,
+        "ignored": 0,
+        "exitCode": 0
+      },
+      {
+        "filter": "modules::codex_native_api::images::tests::",
+        "passed": 14,
+        "failed": 0,
+        "ignored": 0,
+        "exitCode": 0
+      },
+      {
+        "filter": "modules::codex_native_api::images::http_tests::",
+        "passed": 49,
+        "failed": 0,
+        "ignored": 0,
+        "exitCode": 0
+      },
+      {
+        "filter": "modules::codex_native_api::tests::shutdown_cancels_stalled_sse_and_releases_account_permit",
+        "passed": 1,
+        "failed": 0,
+        "ignored": 0,
+        "exitCode": 0
+      },
+      {
+        "filter": "modules::codex_local_access::tests::bounded_network_client_policy_",
+        "passed": 3,
+        "failed": 0,
+        "ignored": 0,
+        "exitCode": 0
+      },
+      {
+        "filter": "modules::codex_local_access::tests::passive_takeover_",
+        "passed": 13,
+        "failed": 0,
+        "ignored": 0,
+        "exitCode": 0
+      },
+      {
+        "filter": "modules::codex_local_access::tests::explicit_websocket_sync_updates_only_the_owned_oauth_profile_transport",
+        "passed": 1,
+        "failed": 0,
+        "ignored": 0,
+        "exitCode": 0
+      },
+      {
+        "filter": "modules::codex_local_access::tests::explicit_routing_sync_repairs_owned_oauth_default_without_claiming_other_profiles",
+        "passed": 1,
+        "failed": 0,
+        "ignored": 0,
+        "exitCode": 0
+      },
+      {
+        "filter": "modules::codex_local_access::tests::takeover_cleanup_",
+        "passed": 3,
+        "failed": 0,
+        "ignored": 0,
+        "exitCode": 0
+      },
+      {
+        "filter": "modules::codex_local_access::native_soft_affinity_regression_tests::",
+        "passed": 9,
+        "failed": 0,
+        "ignored": 0,
+        "exitCode": 0
+      }
+    ]
+  },
+  "submissionGuardTests": {
+    "command": "cargo test --locked --offline --manifest-path scripts/release/frontend-guard-tests/Cargo.toml",
+    "passed": 6,
+    "failed": 0,
+    "ignored": 0,
+    "actualSourceImported": true,
+    "logSha256": "27179CCE5F117588495555CB0C84B638D85788B89580850FFF92A31A6E6ED3A7"
+  },
+  "newPortableRunner": {
+    "powershellSyntax": "Passed",
+    "wrongHashRefusalBeforeLaunch": "Passed",
+    "binaryAssetMarker": "Passed",
+    "exactExecutableWebView": "Passed",
+    "artifactSha256": "2E50122655E30479401BF5679575E63C249049540EF33EBE0273A433D88557F0",
+    "bytes": 164302848,
+    "mebibytes": 156.69,
+    "exitCode": 0,
+    "frontendReady": true,
+    "stages": [
+      "script_loaded",
+      "react_mount_start"
+    ],
+    "pageFinished": true,
+    "consecutiveValidSnapshots": 4,
+    "stableForMs": 2990,
+    "rootChildren": 1,
+    "appVisible": true,
+    "mainVisible": true,
+    "entryScriptLoaded": true,
+    "styleSheets": 10,
+    "resourceErrorCount": 0,
+    "fatalErrorCount": 0,
+    "eventLoopExited": true,
+    "testProcessExited": true,
+    "productionHandlersRegistered": false,
+    "productionPluginsRegistered": false,
+    "receiptSha256": "8D5CD6AD1F955EB20235EA50ACF4113396CB77EF116462F0A2D4538550F53D6D",
+    "evidenceSha256": "AD5A2734E01DECA95375AAB2A9B291AAA1BF7C9C7B210C3D7579557F3518764D"
+  },
+  "notClaimed": [
+    "Fresh full repository test run",
+    "Fresh release rebuild from submission commit",
+    "Post-merge release verification",
+    "macOS/Linux GUI verification",
+    "Live upstream fault injection or real account exhaustion",
+    "Desktop per-request runtime retry readback"
+  ],
+  "localeCompletion": {
+    "scope": "Follow-up locale parity correction; original 24 source files unchanged",
+    "additionalFiles": [
+      {
+        "path": "src/locales/ar.json",
+        "sha256": "8B4124FF6D1CAB5957C41733C4CB030ED8D0749420A48DA25EC6C7C53A709A16"
+      },
+      {
+        "path": "src/locales/cs.json",
+        "sha256": "A8822C27FFF4CE35EE168C91DE3CCD7A5520A0AC981F63EEA1D3830037FCF6AF"
+      },
+      {
+        "path": "src/locales/de.json",
+        "sha256": "DEB9EC4E7AC6F46BB7D8CF102382BB417FB976F193BB4363D7AC46DCC041380F"
+      },
+      {
+        "path": "src/locales/en-US.json",
+        "sha256": "624FC88BEDF46F67587A188310E330FA18FAE9EB772A4533591C6E0BB3736227"
+      },
+      {
+        "path": "src/locales/es.json",
+        "sha256": "DA27BD2D9FB00532D030B03C4548584CE1E0DB375451FA96921F08ECCD6D4E72"
+      },
+      {
+        "path": "src/locales/fr.json",
+        "sha256": "91465151C8D9553418B2CECB82309A8411002399E808CF32275E4BC440435B5B"
+      },
+      {
+        "path": "src/locales/id.json",
+        "sha256": "4EA43D07BBA140CE92F434238CF583831A79041B720A7585BF95C08241CDAA26"
+      },
+      {
+        "path": "src/locales/it.json",
+        "sha256": "2104F505B862A13F122A04A563108FB9588F93ABE0EA85666AE24F44AA1B4991"
+      },
+      {
+        "path": "src/locales/ja.json",
+        "sha256": "52090F89CCADB4B116D6A5ABE3D003C5FBCCF75DF33FAE5EB5A84F6CA0EF3B6C"
+      },
+      {
+        "path": "src/locales/ko.json",
+        "sha256": "A917B687D756B3FB544102FAA02B501E3075619B3F9EDBFDD40B906001D3C60F"
+      },
+      {
+        "path": "src/locales/pl.json",
+        "sha256": "7C26A136CCBFA065CC5127F14D0D119BB51E489B36993093A4A9B5D3E0824965"
+      },
+      {
+        "path": "src/locales/pt-br.json",
+        "sha256": "66BBFA02093C7BC3FEC2E02B4C1C417FE110ECF0A8749AC5940B101F590D3AC2"
+      },
+      {
+        "path": "src/locales/ru.json",
+        "sha256": "2F837C99617E608038283A2E80463E25B7C30F095772F964878B5D94350954CA"
+      },
+      {
+        "path": "src/locales/tr.json",
+        "sha256": "1BCB9BD905086C71AAC8574A791127E4D739FB234527ACD748362242341B69F1"
+      },
+      {
+        "path": "src/locales/vi.json",
+        "sha256": "BC35551B5E87AB9D22270EC02B4D401E19AB84CD8EA127E60EDED77DFD6B69A5"
+      },
+      {
+        "path": "src/locales/zh-tw.json",
+        "sha256": "60EABACEACEE7DC41FB3A5B8B880F3836DC757B87E12390F331F3E6ED0F0278F"
+      }
+    ],
+    "command": "node scripts/check_locales.cjs",
+    "exitCode": 0,
+    "languageFiles": 18,
+    "keysPerLanguage": 8819,
+    "installedArtifactRebuilt": false,
+    "logSha256": "FE475CA094AFC9B47AE461B6B06B18C8A010F06A9D2D0DAD0E5DE36E8DF4D704"
+  },
+  "totalSubmittedFiles": 49
+}

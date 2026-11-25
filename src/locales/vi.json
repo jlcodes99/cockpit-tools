@@ -276,6 +276,7 @@
       "offline": "Ngoại tuyến · dữ liệu đã lưu"
     },
     "networkErrors": {
+      "recoveryExhausted": "Các lỗi liên lạc lặp lại với dịch vụ thượng nguồn đã vượt quá giới hạn khôi phục của yêu cầu này. Việc tự động thử lại đã dừng. Hãy kiểm tra proxy hoặc mạng trước khi thử lại; lỗi này không có nghĩa là hạn mức tài khoản đã cạn.",
       "upstream": "dịch vụ thượng nguồn",
       "proxyConnection": "Không thể kết nối đến {{target}} qua proxy “{{proxy}}”. Có thể do proxy hoặc mạng. Hãy kiểm tra proxy hoặc thử nút khác.",
       "proxyTimeout": "Kết nối đến {{target}} qua proxy “{{proxy}}” đã hết thời gian chờ. Có thể do proxy hoặc mạng. Hãy kiểm tra proxy hoặc thử nút khác.",

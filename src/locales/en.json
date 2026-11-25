@@ -276,6 +276,7 @@
       "offline": "Offline · cached data"
     },
     "networkErrors": {
+      "recoveryExhausted": "Repeated upstream transport failures exceeded this request's recovery budget. Automatic retries have stopped. Check the proxy or network before retrying; this error does not indicate exhausted account quota.",
       "upstream": "the upstream service",
       "proxyConnection": "Failed to connect to {{target}} through proxy “{{proxy}}”. The proxy or network may be unavailable. Check the proxy or try another node.",
       "proxyTimeout": "Connection to {{target}} through proxy “{{proxy}}” timed out. The proxy or network may be unavailable. Check the proxy or try another node.",

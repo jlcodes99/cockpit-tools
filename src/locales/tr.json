@@ -276,6 +276,7 @@
       "offline": "Çevrimdışı · önbellek"
     },
     "networkErrors": {
+      "recoveryExhausted": "Üst hizmetle iletişimde tekrarlanan hatalar bu isteğin kurtarma sınırını aştı. Otomatik yeniden denemeler durduruldu. Yeniden denemeden önce proxy veya ağı kontrol edin; bu hata hesap kotasının tükendiği anlamına gelmez.",
       "upstream": "üst hizmet",
       "proxyConnection": "“{{proxy}}” proxy’si üzerinden {{target}} bağlantısı başarısız oldu. Proxy veya ağ sorunu olabilir. Proxy’yi denetleyin ya da başka bir düğüm deneyin.",
       "proxyTimeout": "“{{proxy}}” proxy’si üzerinden {{target}} bağlantısı zaman aşımına uğradı. Proxy veya ağ sorunu olabilir. Proxy’yi denetleyin ya da başka bir düğüm deneyin.",

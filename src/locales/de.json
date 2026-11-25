@@ -276,6 +276,7 @@
       "offline": "Offline · zwischengespeichert"
     },
     "networkErrors": {
+      "recoveryExhausted": "Wiederholte Übertragungsfehler zum vorgeschalteten Dienst haben das Wiederherstellungslimit dieser Anfrage überschritten. Automatische Wiederholungen wurden gestoppt. Prüfen Sie vor einem erneuten Versuch den Proxy oder das Netzwerk; dieser Fehler bedeutet nicht, dass das Kontingent des Kontos aufgebraucht ist.",
       "upstream": "dem vorgeschalteten Dienst",
       "proxyConnection": "Verbindung zu {{target}} über Proxy „{{proxy}}“ fehlgeschlagen. Mögliche Proxy- oder Netzwerkstörung. Proxy prüfen oder einen anderen Knoten versuchen.",
       "proxyTimeout": "Zeitüberschreitung bei der Verbindung zu {{target}} über Proxy „{{proxy}}“. Mögliche Proxy- oder Netzwerkstörung. Proxy prüfen oder einen anderen Knoten versuchen.",

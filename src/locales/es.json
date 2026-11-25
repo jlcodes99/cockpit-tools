@@ -276,6 +276,7 @@
       "offline": "Sin conexión · caché"
     },
     "networkErrors": {
+      "recoveryExhausted": "Los fallos repetidos de comunicación con el servicio de destino superaron el límite de recuperación de esta solicitud. Se han detenido los reintentos automáticos. Revise el proxy o la red antes de volver a intentarlo; este error no indica que se haya agotado la cuota de la cuenta.",
       "upstream": "el servicio de destino",
       "proxyConnection": "No se pudo conectar con {{target}} mediante el proxy «{{proxy}}». Puede ser un problema del proxy o de la red. Revise el proxy o pruebe otro nodo.",
       "proxyTimeout": "Se agotó el tiempo de conexión con {{target}} mediante el proxy «{{proxy}}». Puede ser un problema del proxy o de la red. Revise el proxy o pruebe otro nodo.",

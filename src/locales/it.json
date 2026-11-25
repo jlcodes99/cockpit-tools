@@ -276,6 +276,7 @@
       "offline": "Offline · dati in cache"
     },
     "networkErrors": {
+      "recoveryExhausted": "Ripetuti errori di comunicazione con il servizio a monte hanno superato il limite di recupero di questa richiesta. I tentativi automatici sono stati interrotti. Controlla il proxy o la rete prima di riprovare; questo errore non indica che la quota dell’account sia esaurita.",
       "upstream": "questo servizio a monte",
       "proxyConnection": "Connessione a {{target}} tramite il proxy «{{proxy}}» non riuscita. Potrebbe esserci un problema del proxy o della rete. Controlla il proxy o prova un altro nodo.",
       "proxyTimeout": "Tempo scaduto per la connessione a {{target}} tramite il proxy «{{proxy}}». Potrebbe esserci un problema del proxy o della rete. Controlla il proxy o prova un altro nodo.",

@@ -307,6 +307,7 @@ fn native_recorded_failure_cools_account(report: &native_contract::RequestReport
                 | "upstream_websocket_lost"
                 | "incomplete_upstream_stream"
                 | "upstream_connect_timeout"
+                | "network_recovery_exhausted"
                 | "upstream_idle_timeout"
                 | "upstream_total_timeout"
                 | "upstream_timeout"
@@ -1142,6 +1143,8 @@ impl native_contract::Host for NativeHostBridge {
                 ),
                 // Go ordinary requests have no total deadline, including active streams.
                 total_timeout: Duration::ZERO,
+                network_recovery_timeout: Duration::from_secs(120),
+                network_recovery_max_failures: 4,
                 image_open_timeout: Duration::from_millis(
                     limits.sidecar_image_stream_open_timeout_ms.max(1000),
                 ),

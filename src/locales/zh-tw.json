@@ -276,6 +276,7 @@
       "offline": "離線 · 顯示快取"
     },
     "networkErrors": {
+      "recoveryExhausted": "連線至上游時多次失敗或逾時，已超過本次請求的復原限制，自動重試已停止。請檢查代理伺服器或網路後再試；此錯誤不代表帳號額度已耗盡。",
       "upstream": "上游服務",
       "proxyConnection": "透過代理「{{proxy}}」連線至 {{target}} 失敗，可能與代理或網路有關，請檢查代理或更換節點後重試。",
       "proxyTimeout": "透過代理「{{proxy}}」連線至 {{target}} 逾時，可能與代理或網路有關，請檢查代理或更換節點後重試。",

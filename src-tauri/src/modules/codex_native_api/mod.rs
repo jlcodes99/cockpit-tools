@@ -59,6 +59,7 @@ mod multi_agent_lifecycle_http_tests;
 #[cfg(test)]
 mod tls_recovery_http_tests;
 mod native_chat;
+mod network_recovery;
 mod opencode_go;
 #[cfg(test)]
 mod opencode_go_http_tests;

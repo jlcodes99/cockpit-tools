@@ -7,6 +7,7 @@ pub mod error;
 mod models;
 mod modules;
 mod utils;
+mod frontend_smoke;
 
 #[cfg(test)]
 mod dependency_tls_tests;
@@ -392,6 +393,9 @@ fn configure_main_window_decorations(config: &mut tauri::Config, is_linux: bool)
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    if frontend_smoke::try_run() {
+        return;
+    }
     if let Some(code) = modules::codex_continuity_worker::try_run() {
         std::process::exit(code);
     }

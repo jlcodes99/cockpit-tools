@@ -511,3 +511,75 @@ async fn confirmed_quota_excludes_the_affinity_account_even_with_cooling_disable
     assert_eq!((unavailable.status, unavailable.code), (429, "usage_limit_reached"));
     assert!(unavailable.retry_after.is_some());
 }
+
+#[tokio::test]
+async fn network_recovery_terminal_preserves_cooldowns_bindings_and_pool_eligibility() {
+    let _env = crate::modules::test_support::env_lock()
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let host = host();
+    let original_members = host.collection_override.as_ref().unwrap().account_ids.clone();
+    let request = request("network-session", "network-thread", None);
+    assert_eq!(selected(&host, "caller-a", request.clone()).await, "a");
+    let original_bindings = host.bindings.lock().await.clone();
+    assert!(host.cooldowns.lock().unwrap().is_empty());
+
+    // Exercise the real host callbacks used by record(), without its unrelated
+    // production statistics persistence. Accounts and credentials are fixtures.
+    for stale_credential_scope in [false, true] {
+        let mut failure = report(
+            &request,
+            "a",
+            504,
+            Some("network_recovery_exhausted"),
+            Some("Synthetic continuous transport recovery window exhausted"),
+        );
+        failure.credential_scope = stale_credential_scope;
+        failure.diagnostics.as_mut().unwrap().attempts = vec![
+            native_api::diagnostics::DiagnosticAttempt {
+                account_id: "a".into(),
+                model_id: "gpt-fixture".into(),
+                sequence: 1,
+                status: Some(502),
+                success: false,
+                error_category: Some("upstream_unavailable".into()),
+                transport_error: Some("network".into()),
+                failure_phase: Some("upstream".into()),
+                ..Default::default()
+            },
+        ];
+        assert!(!native_recorded_failure_cools_account(&failure));
+        assert!(!native_soft_failure_unbinds(&failure));
+        host.record_failure_cooldown(&failure);
+        host.record_soft_binding_result(&failure).await;
+        assert!(host.cooldowns.lock().unwrap().is_empty());
+        assert_eq!(*host.bindings.lock().await, original_bindings);
+        assert_eq!(host.collection_override.as_ref().unwrap().account_ids, original_members);
+    }
+
+    // Both members still pass the actual route selector, including the failed
+    // account's hard-owner route and its existing soft-affinity continuation.
+    for account in &original_members {
+        let mut pinned = request.clone();
+        pinned.session_id = None;
+        pinned.thread_id = None;
+        pinned.preferred_account_id = Some(account.clone());
+        assert_eq!(selected(&host, "caller-a", pinned).await, *account);
+    }
+    assert_eq!(selected(&host, "caller-a", request.clone()).await, "a");
+
+    // Keep the established quota policy as a positive control: this exemption
+    // does not make an actual 429 eligible or retain its failed soft binding.
+    let quota = report(
+        &request, "a", 429, Some("usage_limit_reached"), Some("Synthetic quota exhausted"),
+    );
+    assert!(native_recorded_failure_cools_account(&quota));
+    assert!(native_soft_failure_unbinds(&quota));
+    host.record_failure_cooldown(&quota);
+    host.record_soft_binding_result(&quota).await;
+    assert!(!host.cooldowns.lock().unwrap().is_empty());
+    assert!(binding(&host, "caller-a", "gpt-fixture", "network-session").await.is_none());
+    assert!(binding(&host, "caller-a", "gpt-fixture", "network-thread").await.is_none());
+    assert_eq!(selected(&host, "caller-a", request).await, "b");
+    assert_eq!(host.collection_override.as_ref().unwrap().account_ids, original_members);
+}
