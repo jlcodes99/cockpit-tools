@@ -11,6 +11,7 @@
     "pathLabel": "Đường dẫn khởi chạy",
     "switchAndCopy": "Chuyển và sao chép",
     "sharedInstanceStart": "Đổi tài khoản dùng chung và khởi chạy",
+    "ideSharedAccountHint": "Từ Antigravity IDE 2.6, mọi phiên bản đang chạy đều dùng chung một phiên đăng nhập Google. Việc đổi tài khoản tại đây cũng ảnh hưởng đến các phiên bản khác đang mở.",
     "sharedInstanceHint": "Các phiên bản Antigravity khác vẫn mở và có thể chuyển sang tài khoản mới.",
     "sharedInstanceRestart": "Chỉ phiên bản đã chọn được khởi động lại.",
     "lastSharedAccount": "Tài khoản dùng chung được chọn gần nhất",
@@ -716,6 +717,12 @@
         "singleToken": "Ví dụ đơn lẻ (Token)",
         "singleJson": "Ví dụ đơn lẻ (JSON)",
         "batchJson": "Ví dụ hàng loạt (JSON)"
+      },
+      "exposeToCodex": {
+        "action": "Kết nối với Codex",
+        "inProgress": "Đang kết nối…",
+        "success": "Đã kết nối với Codex",
+        "failed": "Không thể kết nối với Codex: {{error}}"
       }
     },
     "sessionSharing": {
@@ -8217,6 +8224,9 @@
       "until": "{{model}} bị giới hạn ở lần thử trước, đặt lại {{time}}",
       "unavailable": "{{model}} bị giới hạn ở lần thử trước",
       "failed": "Lần thử trước của {{model}} thất bại"
+    },
+    "exposeToCodex": {
+      "title": "Kết nối qua cổng Native Rust mà không sao chép token WorkBuddy"
     }
   },
   "minimaxCode": {
@@ -8428,6 +8438,12 @@
     },
     "instances": {
       "unsupported": "Nhiều phiên bản ZCode chỉ hỗ trợ macOS, Windows và Linux."
+    },
+    "exposeToCodex": {
+      "startPlan": "Làm mới hạn mức ZCode để xác nhận gói Z.ai Start Plan cá nhân đang hoạt động.",
+      "projectKey": "Kết nối tài khoản BigModel API Key bằng khóa dự án.",
+      "signIn": "Đăng nhập lại vào ZCode rồi thử lại.",
+      "title": "Kết nối qua cổng Native Rust mà không sao chép khóa API hoặc token OAuth của ZCode vào cấu hình Codex"
     }
   },
   "zed": {
@@ -8850,7 +8866,10 @@
       "deploySuccess": "Đã triển khai tới Codex: {{count}} mô hình",
       "deployFailed": "Triển khai thất bại: {{error}}",
       "useKey": "Dùng khóa",
-      "deleteConfirm": "Xóa khóa đã lưu \"{{name}}\"? Hành động này không thể hoàn tác."
+      "deleteConfirm": "Xóa khóa đã lưu \"{{name}}\"? Hành động này không thể hoàn tác.",
+      "addToGeminiCli": "Thêm vào Gemini CLI",
+      "geminiCliAdded": "Đã thêm Gemini CLI",
+      "addToGeminiCliFailed": "Thêm vào Gemini CLI lỗi: {{error}}"
     },
     "prefill": {
       "codexReady": "Đã điền cấu hình APIKEY.FUN. Hãy kiểm tra trước khi thêm vào Codex.",

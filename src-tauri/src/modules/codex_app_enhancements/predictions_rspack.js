@@ -7,6 +7,7 @@
   const chunks = { initial: 559161, composer: 563813, host: 24191, settings: 572868 };
   const currentChunks = { initial: 16389, composer: 39017, host: 182735, settings: 553834 };
   const desktop261111Chunks = { initial: 538993, composer: 899469, host: 907538, settings: 184348 };
+  const desktop261120Chunks = { initial: 173367, composer: 779071, host: 49792, settings: 25051 };
   const N = "[A-Za-z_$][\\w$]*";
   const esc = value => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -30,7 +31,7 @@
           });
       } else if (kind === "composer") {
         // This dependency and component uniquely own the catch-up query.
-        const declaration = id === desktop261111Chunks.composer ? "\\)\\{let " : `=${N},`;
+        const declaration = [desktop261111Chunks.composer, desktop261120Chunks.composer].includes(id) ? "\\)\\{let " : `=${N},`;
         const pattern = new RegExp(`hostId:(${N}),pluginHostId:${N},roots:${N}\\}${declaration}(${N})=\\(0,${N}\\.${N}\\)\\(${N}\\.${N}\\),${N}=\\(0,${N}\\.${N}\\)\\(${N}\\.${N}\\),${N}=\\(0,${N}\\.${N}\\)\\(${N}\\.${N}\\),(${N})=(${N})\\.appServices\\.cumberbatch`, "g");
         const [match, duplicate] = source.matchAll(pattern);
         if (!match || duplicate || !source.includes('generationTrigger:"catch_up"')) throw Error("composer-contract");
@@ -38,7 +39,7 @@
         replace(new RegExp(esc(`${service}=${services}.appServices.cumberbatch`), "g"),
           () => `${service}=${P}.runtime.serviceFor(${scope},${host},${services}.appServices.cumberbatch)`);
       } else if (kind === "host") {
-        const modernHost = id === currentChunks.host || id === desktop261111Chunks.host;
+        const modernHost = [currentChunks.host, desktop261111Chunks.host, desktop261120Chunks.host].includes(id);
         const name = modernHost ? `(?: ${N})?` : ` ${N}`;
         const match = new RegExp(`async function${name}\\((${N}),${N},(${N}),${N}\\)\\{let (${N})=(${N})\\.appServices\\?\\.cumberbatch;`).exec(source);
         if (!match || !source.includes("Cumberbatch background prediction did not finish")) throw Error("host-contract");
@@ -50,7 +51,8 @@
         // Dgwo exports the scope-bound RPC accessor; the native preference reader
         // and factory remain authoritative, including cancellation on disable.
         if (modernHost) {
-          replace(new RegExp(`Dgwo\\((${N}),(${N}),(${N})\\)\\{(?=[^}]{1,430}\\.d\\(\\2,\\{\\},\\{V:function\\()`, "g"),
+          const factory = id === desktop261120Chunks.host ? "Dgwo:\\(function" : "Dgwo";
+          replace(new RegExp(`${factory}\\((${N}),(${N}),(${N})\\)\\{(?=[^}]{1,430}\\.d\\(\\2,\\{\\},\\{V:function\\()`, "g"),
             (signature, _module, exports, require) => signature
               + `${P}.runtime.register({managerForHost:(...args)=>${exports}.V(...args),nativeEnabled:scope=>${require}("RxZZ").CN(scope.get.bind(scope),${require}("eEqo").W().enabled)===true});`);
         } else {
@@ -111,7 +113,7 @@
   }
 
   function selectLayout(readChunk) {
-    return [desktop261111Chunks, currentChunks, chunks]
+    return [desktop261120Chunks, desktop261111Chunks, currentChunks, chunks]
       .find(layout => readChunk.has(layout.initial)) ?? chunks;
   }
 

@@ -94,53 +94,21 @@ async fn seed(fixture: &Fixture, streaming: bool) {
 }
 
 fn checkpoint(fixture: &Fixture, caller: &str, response: &str) -> Vec<Value> {
-    use sha2::{Digest, Sha256};
     let db = Connection::open(fixture.path()).unwrap();
-    let raw: Option<String> = db
+    let raw: String = db
         .query_row(
             "SELECT transcript FROM native_rebuild_checkpoints_v1 WHERE caller=?1 AND response=?2",
             [caller, response],
             |row| row.get(0),
         )
-        .optional()
         .unwrap();
-    if let Some(raw) = raw {
-        return serde_json::from_str(&raw).unwrap();
-    }
-    // Match the production legacy/hot-first lookup, then independently verify
-    // every ordered archived item instead of assuming a hot-cache row exists.
-    let manifest: String = db
-        .query_row(
-            "SELECT manifest FROM native_rebuild_history_v1 WHERE caller=?1 AND response=?2",
-            [caller, response],
-            |row| row.get(0),
-        )
-        .unwrap();
-    let digests: Vec<String> = serde_json::from_str(&manifest).unwrap();
-    digests
-        .into_iter()
-        .map(|digest| {
-            let compressed: Vec<u8> = db
-                .query_row(
-                    "SELECT body FROM native_rebuild_items_v1 WHERE caller=?1 AND digest=?2",
-                    [caller, digest.as_str()],
-                    |row| row.get(0),
-                )
-                .unwrap();
-            let bytes = zstd::stream::decode_all(compressed.as_slice()).unwrap();
-            assert_eq!(
-                format!("{:x}", Sha256::digest(&bytes)),
-                digest,
-                "synthetic checkpoint item integrity"
-            );
-            serde_json::from_slice(&bytes).unwrap()
-        })
-        .collect()
+    crate::modules::codex_native_api::identity::rebuild::checkpoint_store::decode_transcript(&raw)
+        .unwrap()
 }
 
 fn assert_no_backup_checkpoint(fixture: &Fixture) {
     let db = Connection::open(fixture.path()).unwrap();
-    for table in ["native_rebuild_checkpoints_v1", "native_rebuild_history_v1"] {
+    for table in ["native_rebuild_checkpoints_v1"] {
         let count: i64 = db
             .query_row(
                 &format!("SELECT COUNT(*) FROM {table} WHERE account='b'"),
@@ -413,7 +381,6 @@ async fn notify_results_wrong_caller_cannot_borrow_history_or_publish_owner() {
     let db = Connection::open(fixture.path()).unwrap();
     for table in [
         "native_rebuild_checkpoints_v1",
-        "native_rebuild_history_v1",
         "native_rebuild_active_v1",
     ] {
         let count: i64 = db

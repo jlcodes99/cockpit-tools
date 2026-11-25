@@ -122,7 +122,10 @@ export function T3codeAccountLinkPage({ onNavigate }: T3codeAccountLinkPageProps
         onTogglePrivacyMode={controller.togglePrivacyMode}
         maskAccountText={controller.maskAccountText}
         renderPlanBadge={controller.renderPlanBadge}
-        onAdd={(driver) => setModal({ kind: 'add', driver })}
+        onAdd={(driver) => {
+          setModal({ kind: 'add', driver });
+          if (driver === 'codex') void controller.loadApiServiceQuota();
+        }}
         onSetDefault={(instance) => void controller.promoteProviderAccount(instance)}
         onRemove={(instance) => setModal({ kind: 'remove', instance })}
         onConfigureRuntime={(instance) => setModal({ kind: 'runtime', instance })}

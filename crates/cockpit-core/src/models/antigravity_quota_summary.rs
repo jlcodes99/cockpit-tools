@@ -27,6 +27,11 @@ impl QuotaSummaryGroup {
                 if id.is_empty() {
                     return None;
                 }
+                // Argon retired into the shared Gemini pool; its legacy buckets
+                // must not resurrect an independent auto-switch group.
+                if QuotaSummaryWindow::is_retired_argon(id) {
+                    continue;
+                }
                 windows.push(QuotaSummaryWindow {
                     id: id.to_owned(),
                     period: bucket
@@ -69,6 +74,24 @@ impl QuotaSummaryGroup {
         }
         Some(groups)
     }
+
+    /// Drop retired Argon pool groups and windows from previously persisted
+    /// summaries so legacy data matches fresh snapshots (filtering only, no
+    /// full migration). Other official groups and custom groupings are kept.
+    pub fn without_retired_argon(groups: Vec<Self>) -> Vec<Self> {
+        groups
+            .into_iter()
+            .filter(|group| {
+                !matches!(group.id.as_str(), "argon" | "gemini-argon" | "gemini-argon-wtu")
+            })
+            .filter_map(|mut group| {
+                group
+                    .windows
+                    .retain(|window| !QuotaSummaryWindow::is_retired_argon(&window.id));
+                (!group.windows.is_empty()).then_some(group)
+            })
+            .collect()
+    }
 }
 
 impl QuotaSummaryWindow {
@@ -82,9 +105,14 @@ impl QuotaSummaryWindow {
             .unwrap_or(&self.id);
         match key {
             "3p" => "claude",
-            "gemini-argon-wtu" | "gemini-argon" => "argon",
             "gemini-carbon-wtu" | "gemini-carbon" => "carbon",
             _ => key,
         }
+    }
+
+    fn is_retired_argon(id: &str) -> bool {
+        let id = id.trim().to_ascii_lowercase();
+        matches!(id.as_str(), "argon:weekly" | "argon:5h")
+            || (id.starts_with("gemini-argon-") && (id.ends_with("-weekly") || id.ends_with("-5h")))
     }
 }

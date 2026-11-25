@@ -11,6 +11,7 @@
     "pathLabel": "Startpfad",
     "switchAndCopy": "Wechseln und kopieren",
     "sharedInstanceStart": "Gemeinsames Konto wechseln und starten",
+    "ideSharedAccountHint": "Ab Antigravity IDE 2.6 verwenden alle Instanzen dieselbe Google-Anmeldung. Ein Kontowechsel hier betrifft auch andere geöffnete Instanzen.",
     "sharedInstanceHint": "Andere Antigravity-Instanzen bleiben offen und können das neue Konto übernehmen.",
     "sharedInstanceRestart": "Nur die ausgewählte Instanz wird neu gestartet.",
     "lastSharedAccount": "Zuletzt gewechseltes gemeinsames Konto",
@@ -721,6 +722,12 @@
         "singleToken": "Einzelbeispiel (Token)",
         "singleJson": "Einzelbeispiel (JSON)",
         "batchJson": "Stapelbeispiel (JSON)"
+      },
+      "exposeToCodex": {
+        "action": "Mit Codex verbinden",
+        "inProgress": "Wird verbunden…",
+        "success": "Mit Codex verbunden",
+        "failed": "Verbindung mit Codex fehlgeschlagen: {{error}}"
       }
     },
     "topRightAd": {
@@ -8217,6 +8224,9 @@
       "until": "{{model}} beim letzten Test begrenzt, Freigabe {{time}}",
       "unavailable": "{{model}} beim letzten Test begrenzt",
       "failed": "Letzter Test von {{model}} fehlgeschlagen"
+    },
+    "exposeToCodex": {
+      "title": "Verbindet über das Native-Rust-Gateway, ohne das WorkBuddy-Token zu kopieren"
     }
   },
   "minimaxCode": {
@@ -8428,6 +8438,12 @@
     },
     "instances": {
       "unsupported": "ZCode-Mehrinstanzen sind nur unter macOS, Windows und Linux verfügbar."
+    },
+    "exposeToCodex": {
+      "startPlan": "Aktualisieren Sie das ZCode-Kontingent, um Ihren aktiven persönlichen Z.ai Start Plan zu bestätigen.",
+      "projectKey": "Verbinden Sie ein BigModel-API-Key-Konto mit Ihrem Projektschlüssel.",
+      "signIn": "Melden Sie sich erneut bei ZCode an und versuchen Sie es noch einmal.",
+      "title": "Verbindet über das Native-Rust-Gateway, ohne den ZCode-API-Schlüssel oder das OAuth-Token in die Codex-Konfiguration zu kopieren"
     }
   },
   "zed": {
@@ -8850,7 +8866,10 @@
       "deploySuccess": "In Codex bereitgestellt: {{count}} Modelle",
       "deployFailed": "Bereitstellung fehlgeschlagen: {{error}}",
       "useKey": "Schlüssel verwenden",
-      "deleteConfirm": "Gespeicherten Schlüssel \"{{name}}\" löschen? Dieser Vorgang kann nicht rückgängig gemacht werden."
+      "deleteConfirm": "Gespeicherten Schlüssel \"{{name}}\" löschen? Dieser Vorgang kann nicht rückgängig gemacht werden.",
+      "addToGeminiCli": "Zu Gemini CLI",
+      "geminiCliAdded": "Gemini CLI hinzugefügt",
+      "addToGeminiCliFailed": "Gemini-CLI-Import fehlgeschlagen: {{error}}"
     },
     "prefill": {
       "codexReady": "Die APIKEY.FUN-Einstellungen sind vorausgefüllt. Prüfen Sie sie vor dem Hinzufügen zu Codex.",

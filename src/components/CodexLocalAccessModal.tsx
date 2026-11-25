@@ -100,7 +100,7 @@ import { CodexRequestPayloadSetting } from "./codex/CodexRequestPayloadSetting";
 import { CodexOverloadRetrySetting } from "./codex/CodexOverloadRetrySetting";
 import { CodexMemberImagePolicy } from "./codex/CodexMemberImagePolicy";
 import { CodexImageForwardConfig } from "./CodexImageForwardConfig";
-import { buildGrokMemberRowAccounts, CodexGrokBuildQuotaChip, selectCodexLocalAccessMemberRows } from "./codex/codexGrokMemberRows";
+import { buildGrokMemberRowAccounts, selectCodexLocalAccessMemberRows } from "./codex/codexGrokMemberRows";
 import { PaginationControls } from "./PaginationControls";
 import { CodexStatsRangePicker } from "./CodexStatsRangePicker";
 import { queryCodexLocalAccessStats } from "../services/codexLocalAccessService";
@@ -3158,9 +3158,8 @@ export function CodexLocalAccessModal({
                       const accountStats = allStatsByAccountId.get(
                         rowAccountId,
                       )?.usage;
-                      const grokQuotaChip = grokRowAccount ? (
-                        <CodexGrokBuildQuotaChip t={t} account={grokRowAccount} />
-                      ) : null;
+                      const isChatGptAccount =
+                        !grokRowAccount && canChooseCodexServiceAuthorization(account);
 
                       return (
                         <div
@@ -3213,7 +3212,7 @@ export function CodexLocalAccessModal({
                               >
                                 {maskAccountText(presentation.displayName)}
                               </button>
-                                {!grokRowAccount && canChooseCodexServiceAuthorization(account) && <CodexMemberAccessMode value={memberModeFor(rowAccountId)} disabled={membersInteractionDisabled}
+                                {isChatGptAccount && <CodexMemberAccessMode value={memberModeFor(rowAccountId)} disabled={membersInteractionDisabled}
                                   onChange={(value) => { void chooseMemberMode(rowAccountId, value); }} />}
                               </div>
                               <span
@@ -3309,7 +3308,7 @@ export function CodexLocalAccessModal({
                                     )}
                                   </span>
                                 )}
-                                {grokQuotaChip ??
+                                {isChatGptAccount &&
                                   renderQuotaPreview(presentation, 2)}
                               </span>
                             </div>

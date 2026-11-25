@@ -10,6 +10,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.5.1] - 2026-11-26
+
+### Added
+
+- **APIKEY.FUN → Gemini CLI** lets you select a saved key and a Gemini model it supports, preview the settings, and apply them locally with API key authentication. Other settings and existing backups are preserved. [#3104](https://github.com/jlcodes99/cockpit-tools/issues/3104)
+- **T3 Code** now offers Cockpit’s Codex API Service in Add Account. The account picker and overview show the pool’s combined remaining 5-hour and weekly quotas, including totals above 100%.
+- **Model providers** include a TeamoRouter preset for Codex, Claude Code and Claude Desktop. [#3280](https://github.com/jlcodes99/cockpit-tools/pull/3280)
+- **ZCode → Codex** connects Z.ai OAuth accounts with an active personal Start Plan to the native gateway. A missing plan record prompts you to refresh quota. BigModel Coding and Team Plan accounts require a project API key. [#3272](https://github.com/jlcodes99/cockpit-tools/pull/3272)
+- **WorkBuddy → Codex** supports standalone text requests using a saved account. The gateway returns the completed reply and attempts to delete the temporary conversation after completion or cancellation. [#3282](https://github.com/jlcodes99/cockpit-tools/pull/3282)
+
+### Changed
+
+- The **Antigravity IDE** account switch and instance launch dialogs now explain that all instances share one Google sign-in in IDE 2.6 and later. [#3232](https://github.com/jlcodes99/cockpit-tools/issues/3232)
+- **Antigravity** now uses the shared Gemini quota for Gemini 4 Argon models and preserves custom model groups. Automatic account switching and the Antigravity and T3 Code composers ignore retired Argon quota entries, including stale 0% readings. [#3271](https://github.com/jlcodes99/cockpit-tools/pull/3271)
+
+### Fixed
+
+- The **Codex native API service** now recognizes OpenAI’s message-only Subscription Sharing quota rejections across `response.failed`, flat SSE `error` frames, and `reasoning.summary = "none"` handshakes, putting the exhausted official authorization into cooldown and automatically failing over to the next available account in the pool. [#2866](https://github.com/jlcodes99/cockpit-tools/issues/2866)
+- The **Codex native API service** now keeps continuation checkpoints in a bounded self-contained hot cache instead of an unbounded chunked SQLite archive, automatically slimming oversized legacy `identity.sqlite` databases on startup while preserving active session mappings and recent turns. Background maintenance yields to active requests and runs within a bounded time budget without full-database compaction while the service is running. [#3044](https://github.com/jlcodes99/cockpit-tools/issues/3044) · [#3289](https://github.com/jlcodes99/cockpit-tools/pull/3289)
+- **WorkBuddy** now uses the authentication endpoint’s domain when refreshing an account with no saved domain. Accounts with a saved enterprise domain continue to use it. [#2979](https://github.com/jlcodes99/cockpit-tools/issues/2979)
+- On macOS, **Claude Desktop** account quick settings now include the same switch as General Settings for syncing the Code session list across account switches. [#3102](https://github.com/jlcodes99/cockpit-tools/issues/3102)
+- **Add to API Service** shows quota badges only for regular ChatGPT accounts. API key, relay and Grok accounts still show their request counts, with misleading 0% quota badges hidden.
+- **Codex Desktop 26.1120** on macOS can load native next-step predictions again. [#3278](https://github.com/jlcodes99/cockpit-tools/issues/3278)
+- **Codex SSH** now reads the current desktop client's saved connections and auto-connect preferences. On cold startup, it verifies the account on an already reconnected host. [#3286](https://github.com/jlcodes99/cockpit-tools/pull/3286)
+
 ## [1.5.0] - 2026-11-25
 
 ### Major update · T3 Code account management

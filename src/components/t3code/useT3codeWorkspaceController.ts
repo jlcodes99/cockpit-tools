@@ -13,6 +13,7 @@ import type {
   T3CodeProviderInstanceView,
   T3CodeProviderRuntimeView,
   T3CodeProviderWorkspaceView,
+  T3CodeQuotaWindowView,
 } from '../../types/t3code';
 import {
   isPrivacyModeEnabledByDefault,
@@ -48,6 +49,8 @@ export function useT3codeWorkspaceController() {
   const targetId = DEFAULT_T3_INSTANCE;
 
   const [workspace, setWorkspace] = useState<T3CodeProviderWorkspaceView | null>(null);
+  const [apiServiceQuota, setApiServiceQuota] = useState<T3CodeQuotaWindowView[]>([]);
+  const apiServiceQuotaPending = useRef(false);
   const [liveRuntime, setLiveRuntime] = useState<{
     target: string;
     rows: Map<string, T3CodeProviderRuntimeView>;
@@ -96,8 +99,22 @@ export function useT3codeWorkspaceController() {
     [claudeAccounts],
   );
 
+  const loadApiServiceQuota = useCallback(async () => {
+    if (apiServiceQuotaPending.current) return;
+    apiServiceQuotaPending.current = true;
+    try {
+      const windows = await service.getT3codeApiServiceQuota();
+      if (windows !== null) setApiServiceQuota(windows);
+    } catch (error) {
+      console.warn('[T3 Code] Unable to read Codex API Service quota', error);
+    } finally {
+      apiServiceQuotaPending.current = false;
+    }
+  }, []);
+
   const loadWorkspace = useCallback(async (id: string = DEFAULT_T3_INSTANCE, silent = false) => {
     const request = ++sequence.current;
+    void loadApiServiceQuota();
     if (!silent) {
       setLoading(true);
       setLoadError('');
@@ -119,7 +136,7 @@ export function useT3codeWorkspaceController() {
         setLoading(false);
       }
     }
-  }, []);
+  }, [loadApiServiceQuota]);
 
   useEffect(() => {
     const ag = useAccountStore.getState();
@@ -178,8 +195,17 @@ export function useT3codeWorkspaceController() {
     };
   }, [targetId]);
 
-  const gatewayName = t('common.apiBudget.gatewayName');
-  const activeWorkspace = workspace?.t3InstanceId === targetId ? workspace : null;
+  const gatewayName = t('codex.apiService.title');
+  const activeWorkspace = useMemo(() => {
+    if (workspace?.t3InstanceId !== targetId) return null;
+    return {
+      ...workspace,
+      codexAccounts: workspace.codexAccounts.map((account) => account.isApiService
+        ? { ...account, windows: apiServiceQuota } : account),
+      providerInstances: workspace.providerInstances.map((instance) => instance.boundIsApiService
+        ? { ...instance, windows: apiServiceQuota } : instance),
+    };
+  }, [workspace, targetId, apiServiceQuota]);
   const providerRows = activeWorkspace?.providerInstances ?? [];
   const t3Running = Boolean(activeWorkspace?.t3Running);
   const t3StartedAt = activeWorkspace?.t3StartedAt;
@@ -248,9 +274,10 @@ export function useT3codeWorkspaceController() {
     } catch (error) {
       setMessage({ tone: 'error', text: String(error) });
     } finally {
+      void loadApiServiceQuota();
       setRefreshingAll(false);
     }
-  }, [refreshingAll, loading, busyInstanceId, restarting, targetId]);
+  }, [refreshingAll, loading, busyInstanceId, restarting, targetId, loadApiServiceQuota]);
 
   const handleStartOrRestart = useCallback(async () => {
     if (restarting || busyInstanceId) return;
@@ -289,11 +316,12 @@ export function useT3codeWorkspaceController() {
           bindAccountId: accountId,
         });
         setWorkspace(updated);
+        if (account?.isApiService) void loadApiServiceQuota();
       } finally {
         setBusyInstanceId(null);
       }
     },
-    [activeWorkspace, gatewayName],
+    [activeWorkspace, gatewayName, loadApiServiceQuota],
   );
 
   const promoteProviderAccount = useCallback(async (instance: T3CodeProviderInstanceView) => {
@@ -356,6 +384,7 @@ export function useT3codeWorkspaceController() {
     maskAccountText,
     renderPlanBadge,
     loadWorkspace,
+    loadApiServiceQuota,
     handleRefreshAll,
     handleStartOrRestart,
     addProviderAccount,

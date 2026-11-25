@@ -65,6 +65,7 @@ use crate::commands::codex::{
     DeepSeekBalanceSnapshot,
 };
 use crate::models::codex::CodexAccount;
+use crate::models::t3code::{T3CodeQuotaRemaining, T3CodeQuotaWindowView};
 use crate::modules::{
     app_lifecycle, codex_account, codex_local_access, codex_quota, config, i18n, logger,
 };
@@ -1030,10 +1031,14 @@ async fn fetch_quota(
         let remote = crate::modules::codex_remote_service::discover(&gateway.base_url, &gateway.api_key, true).await.ok()??;
         return Some(QuotaResponse { remote: serde_json::to_value(remote).ok(), ..Default::default() });
     }
-    let url = local_quota_url(&gateway.base_url)?;
+    fetch_local_quota(client, &gateway.base_url, &gateway.api_key).await
+}
+
+async fn fetch_local_quota(client: &Client, base_url: &str, api_key: &str) -> Option<QuotaResponse> {
+    let url = local_quota_url(base_url)?;
     let response = client
         .get(url)
-        .bearer_auth(&gateway.api_key)
+        .bearer_auth(api_key)
         .timeout(CDP_CONNECT_TIMEOUT)
         .send()
         .await
@@ -1046,6 +1051,33 @@ async fn fetch_quota(
         .await
         .ok()
         .map(QuotaResponse::normalize_empty_pool)
+}
+
+pub(crate) async fn read_t3code_api_service_quota() -> Option<Vec<T3CodeQuotaWindowView>> {
+    let Some((base_url, api_key)) = codex_local_access::running_api_service_connection().await else {
+        return Some(Vec::new());
+    };
+    let client = Client::builder().no_proxy().build().ok()?;
+    let quota = fetch_local_quota(&client, &base_url, &api_key).await?;
+    Some(t3code_api_service_quota_windows(&quota))
+}
+
+fn t3code_api_service_quota_windows(quota: &QuotaResponse) -> Vec<T3CodeQuotaWindowView> {
+    [
+        ("5h", "5h", quota.five_hour_remaining_percent),
+        ("weekly", "7d", quota.weekly_remaining_percent),
+    ]
+    .into_iter()
+    .filter_map(|(id, label, remaining)| {
+        let remaining_percent = i32::try_from(remaining?).ok()?;
+        Some(T3CodeQuotaWindowView {
+            id: id.to_owned(),
+            label: label.to_owned(),
+            remaining: T3CodeQuotaRemaining::Percent { remaining_percent },
+            reset_time: None,
+        })
+    })
+    .collect()
 }
 
 fn t3code_gateway_windows(quota: &QuotaResponse) -> Value {

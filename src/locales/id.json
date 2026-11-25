@@ -11,6 +11,7 @@
     "pathLabel": "Jalur peluncuran",
     "switchAndCopy": "Ganti dan salin",
     "sharedInstanceStart": "Ganti akun bersama dan jalankan",
+    "ideSharedAccountHint": "Mulai Antigravity IDE 2.6, semua instans memakai satu sesi login Google. Mengganti akun di sini juga memengaruhi instans lain yang sedang terbuka.",
     "sharedInstanceHint": "Instans Antigravity lain tetap terbuka dan dapat beralih ke akun baru.",
     "sharedInstanceRestart": "Hanya instans terpilih yang akan dimulai ulang.",
     "lastSharedAccount": "Akun bersama terakhir yang dipilih",
@@ -728,6 +729,12 @@
         "singleToken": "Contoh tunggal (Token)",
         "singleJson": "Contoh tunggal (JSON)",
         "batchJson": "Contoh massal (JSON)"
+      },
+      "exposeToCodex": {
+        "action": "Hubungkan ke Codex",
+        "inProgress": "Menghubungkan…",
+        "success": "Terhubung ke Codex",
+        "failed": "Gagal terhubung ke Codex: {{error}}"
       }
     },
     "appName": "Cockpit Tools​",
@@ -7938,6 +7945,12 @@
     },
     "instances": {
       "unsupported": "Multi-instans ZCode hanya tersedia di macOS, Windows, dan Linux."
+    },
+    "exposeToCodex": {
+      "startPlan": "Muat ulang kuota ZCode untuk memastikan Z.ai Start Plan pribadi aktif.",
+      "projectKey": "Hubungkan akun BigModel API Key dengan kunci proyek Anda.",
+      "signIn": "Masuk kembali ke ZCode dan coba lagi.",
+      "title": "Terhubung melalui gateway Native Rust tanpa menyalin kunci API ZCode atau token OAuth ke konfigurasi Codex"
     }
   },
   "zed": {
@@ -8392,6 +8405,9 @@
       "until": "{{model}} dibatasi pada uji terakhir, pulih {{time}}",
       "unavailable": "{{model}} dibatasi pada uji terakhir",
       "failed": "Uji terakhir {{model}} gagal"
+    },
+    "exposeToCodex": {
+      "title": "Terhubung melalui gateway Native Rust tanpa menyalin token WorkBuddy"
     }
   },
   "minimaxCode": {
@@ -8850,7 +8866,10 @@
       "deploySuccess": "Diterapkan ke Codex: {{count}} model",
       "deployFailed": "Deployment gagal: {{error}}",
       "useKey": "Gunakan kunci",
-      "deleteConfirm": "Hapus kunci tersimpan \"{{name}}\"? Tindakan ini tidak dapat dibatalkan."
+      "deleteConfirm": "Hapus kunci tersimpan \"{{name}}\"? Tindakan ini tidak dapat dibatalkan.",
+      "addToGeminiCli": "Tambah ke Gemini CLI",
+      "geminiCliAdded": "Gemini CLI ditambahkan",
+      "addToGeminiCliFailed": "Gagal tambah ke Gemini CLI: {{error}}"
     },
     "prefill": {
       "codexReady": "Pengaturan APIKEY.FUN telah diisi. Periksa sebelum menambahkannya ke Codex.",

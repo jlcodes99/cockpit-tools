@@ -6,9 +6,8 @@
 const ZCODE_API_KEY_PROVIDER_KIND: &str = "zcode_api_key";
 const ZCODE_OAUTH_PROVIDER_KIND: &str = "zcode_oauth";
 pub(crate) const ZCODE_NATIVE_PROVIDER: &str = "zcode";
-pub(crate) const ZCODE_PLAN_API_BASE_URL: &str = "https://zcode.z.ai/api/v1/zcode-plan/anthropic";
-pub(crate) const ZCODE_PROVIDER_MODEL_CATALOG: &[&str] =
-    &["GLM-5.3", "GLM-5.3-Flash", "GLM-5.2", "glm-5-turbo"];
+use crate::modules::zcode_account::ZCODE_PLAN_API_BASE_URL;
+pub(crate) const ZCODE_PROVIDER_MODEL_CATALOG: &[&str] = &["GLM-5.2", "glm-5-turbo"];
 
 pub(crate) fn is_zcode_upstream_provider(account: &CodexAccount) -> bool {
     account.is_api_key_auth()
@@ -60,22 +59,12 @@ pub(crate) fn upsert_zcode_provider_account(
     }
     let source = crate::modules::zcode_account::load_account(zcode_account_id)
         .ok_or_else(|| "ZCode 账号不存在，请先在 ZCode 页面登录或导入".to_string())?;
-    let has_api_key = source.auth_mode == crate::models::zcode::ZcodeAuthMode::ApiKey
-        && source
-            .api_key
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .is_some();
-    let has_oauth = source.auth_mode == crate::models::zcode::ZcodeAuthMode::Oauth
-        && (!source.access_token.trim().is_empty() || !source.zcode_jwt_token.trim().is_empty());
-    if !has_api_key && !has_oauth {
-        return Err(
-            "ZCode 账号缺少可用的 API Key 或 OAuth 会话凭据，请先在 ZCode 页面重新登录".to_string(),
-        );
-    }
     let is_oauth = source.auth_mode == crate::models::zcode::ZcodeAuthMode::Oauth;
-
+    if is_oauth {
+        crate::modules::zcode_account::oauth_inference_session(&source)?;
+    } else if source.api_key.as_deref().is_none_or(|key| key.trim().is_empty()) {
+        return Err("ZCode 账号缺少 API Key".into());
+    }
     let provider_id = if source.provider.eq_ignore_ascii_case("bigmodel") {
         crate::modules::zcode_account::BIGMODEL_API_KEY_PROVIDER_ID
     } else {
@@ -86,7 +75,9 @@ pub(crate) fn upsert_zcode_provider_account(
     } else {
         "Z.ai"
     };
-    let base_url = if source.provider.eq_ignore_ascii_case("bigmodel") {
+    let base_url = if is_oauth {
+        ZCODE_PLAN_API_BASE_URL
+    } else if source.provider.eq_ignore_ascii_case("bigmodel") {
         crate::modules::zcode_account::BIGMODEL_API_BASE_URL
     } else {
         crate::modules::zcode_account::ZAI_API_BASE_URL
@@ -199,9 +190,6 @@ mod zcode_provider_tests {
     #[test]
     fn default_catalog_contains_zcode_models() {
         let models = zcode_provider_model_catalog();
-        assert_eq!(
-            models,
-            vec!["GLM-5.3", "GLM-5.3-Flash", "GLM-5.2", "glm-5-turbo"]
-        );
+        assert_eq!(models, vec!["GLM-5.2", "glm-5-turbo"]);
     }
 }

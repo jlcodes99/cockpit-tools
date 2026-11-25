@@ -11,6 +11,7 @@
     "pathLabel": "Chemin de lancement",
     "switchAndCopy": "Changer et copier",
     "sharedInstanceStart": "Changer de compte partagé et lancer",
+    "ideSharedAccountHint": "Depuis Antigravity IDE 2.6, toutes les instances partagent la même connexion Google. Changer de compte ici affecte aussi les autres instances ouvertes.",
     "sharedInstanceHint": "Les autres instances Antigravity restent ouvertes et peuvent adopter le nouveau compte.",
     "sharedInstanceRestart": "Seule l’instance sélectionnée redémarrera.",
     "lastSharedAccount": "Dernier compte partagé sélectionné",
@@ -721,6 +722,12 @@
         "singleToken": "Exemple unique (Token)",
         "singleJson": "Exemple unique (JSON)",
         "batchJson": "Exemple par lot (JSON)"
+      },
+      "exposeToCodex": {
+        "action": "Connecter à Codex",
+        "inProgress": "Connexion…",
+        "success": "Connecté à Codex",
+        "failed": "Échec de la connexion à Codex : {{error}}"
       }
     },
     "topRightAd": {
@@ -8217,6 +8224,9 @@
       "until": "{{model}} limité au dernier test, réinitialisation {{time}}",
       "unavailable": "{{model}} limité au dernier test",
       "failed": "Dernier test de {{model}} échoué"
+    },
+    "exposeToCodex": {
+      "title": "Se connecte via la passerelle Native Rust sans copier le jeton WorkBuddy"
     }
   },
   "minimaxCode": {
@@ -8428,6 +8438,12 @@
     },
     "instances": {
       "unsupported": "Le mode multi-instance de ZCode est disponible uniquement sur macOS, Windows et Linux."
+    },
+    "exposeToCodex": {
+      "startPlan": "Actualisez le quota ZCode pour vérifier que votre offre personnelle Z.ai Start Plan est active.",
+      "projectKey": "Connectez un compte BigModel API Key avec la clé du projet.",
+      "signIn": "Reconnectez-vous à ZCode et réessayez.",
+      "title": "Se connecte via la passerelle Native Rust sans copier la clé API ZCode ni le jeton OAuth dans la configuration de Codex"
     }
   },
   "zed": {
@@ -8850,7 +8866,10 @@
       "deploySuccess": "Déployé vers Codex : {{count}} modèles",
       "deployFailed": "Échec du déploiement : {{error}}",
       "useKey": "Utiliser la clé",
-      "deleteConfirm": "Supprimer la clé enregistrée « {{name}} » ? Cette action est irréversible."
+      "deleteConfirm": "Supprimer la clé enregistrée « {{name}} » ? Cette action est irréversible.",
+      "addToGeminiCli": "Ajouter à Gemini CLI",
+      "geminiCliAdded": "Gemini CLI ajouté",
+      "addToGeminiCliFailed": "Échec ajout Gemini CLI : {{error}}"
     },
     "prefill": {
       "codexReady": "Les paramètres APIKEY.FUN sont préremplis. Vérifiez-les avant de les ajouter à Codex.",

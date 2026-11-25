@@ -11,6 +11,7 @@
     "pathLabel": "실행 경로",
     "switchAndCopy": "전환 후 복사",
     "sharedInstanceStart": "공유 계정 전환 후 시작",
+    "ideSharedAccountHint": "Antigravity IDE 2.6부터 모든 인스턴스가 Google 로그인 상태를 공유합니다. 여기서 계정을 전환하면 열려 있는 다른 인스턴스에도 영향을 줍니다.",
     "sharedInstanceHint": "다른 Antigravity 인스턴스는 열린 상태로 유지되며 새 계정으로 전환될 수 있습니다.",
     "sharedInstanceRestart": "선택한 인스턴스만 다시 시작합니다.",
     "lastSharedAccount": "최근 전환한 공유 계정",
@@ -721,6 +722,12 @@
         "singleToken": "단일 예시(Token)",
         "singleJson": "단일 예시(JSON)",
         "batchJson": "일괄 예시(JSON)"
+      },
+      "exposeToCodex": {
+        "action": "Codex에 연결",
+        "inProgress": "연결 중…",
+        "success": "Codex에 연결됨",
+        "failed": "Codex에 연결하지 못했습니다: {{error}}"
       }
     },
     "topRightAd": {
@@ -8217,6 +8224,9 @@
       "until": "{{model}} 이전 확인 시 제한됨, 해제 {{time}}",
       "unavailable": "{{model}} 이전 확인 시 제한됨",
       "failed": "{{model}} 이전 확인 실패"
+    },
+    "exposeToCodex": {
+      "title": "WorkBuddy 토큰을 복사하지 않고 Native Rust 게이트웨이를 통해 연결합니다"
     }
   },
   "minimaxCode": {
@@ -8428,6 +8438,12 @@
     },
     "instances": {
       "unsupported": "ZCode 다중 인스턴스는 macOS, Windows, Linux에서만 지원됩니다."
+    },
+    "exposeToCodex": {
+      "startPlan": "ZCode 할당량을 새로 고쳐 개인 Z.ai Start Plan이 활성 상태인지 확인하세요.",
+      "projectKey": "프로젝트 키로 BigModel API Key 계정을 연결하세요.",
+      "signIn": "ZCode에 다시 로그인한 후 재시도하세요.",
+      "title": "ZCode API 키 또는 OAuth 토큰을 Codex 구성에 복사하지 않고 Native Rust 게이트웨이를 통해 연결합니다"
     }
   },
   "zed": {
@@ -8850,7 +8866,10 @@
       "deploySuccess": "Codex에 배포됨: 모델 {{count}}개",
       "deployFailed": "배포 실패: {{error}}",
       "useKey": "키 사용",
-      "deleteConfirm": "저장된 키 \"{{name}}\"을(를) 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다."
+      "deleteConfirm": "저장된 키 \"{{name}}\"을(를) 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.",
+      "addToGeminiCli": "Gemini CLI에 추가",
+      "geminiCliAdded": "Gemini CLI 추가됨",
+      "addToGeminiCliFailed": "Gemini CLI 추가 실패: {{error}}"
     },
     "prefill": {
       "codexReady": "APIKEY.FUN 설정을 불러왔습니다. 확인한 뒤 Codex에 추가하세요.",

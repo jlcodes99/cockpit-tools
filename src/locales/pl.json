@@ -11,6 +11,7 @@
     "pathLabel": "Ścieżka uruchamiania",
     "switchAndCopy": "Przełącz i skopiuj",
     "sharedInstanceStart": "Zmień wspólne konto i uruchom",
+    "ideSharedAccountHint": "Od wersji 2.6 Antigravity IDE wszystkie instancje korzystają z jednej sesji Google. Zmiana konta w tym miejscu wpływa także na inne otwarte instancje.",
     "sharedInstanceHint": "Pozostałe instancje Antigravity pozostaną otwarte i mogą przejść na nowe konto.",
     "sharedInstanceRestart": "Ponownie uruchomi się tylko wybrana instancja.",
     "lastSharedAccount": "Ostatnio wybrane wspólne konto",
@@ -716,6 +717,12 @@
         "singleToken": "Pojedynczy przykład (Token)",
         "singleJson": "Pojedynczy przykład (JSON)",
         "batchJson": "Przykład wsadowy (JSON)"
+      },
+      "exposeToCodex": {
+        "action": "Połącz z Codex",
+        "inProgress": "Łączenie…",
+        "success": "Połączono z Codex",
+        "failed": "Nie udało się połączyć z Codex: {{error}}"
       }
     },
     "sessionSharing": {
@@ -8217,6 +8224,9 @@
       "until": "{{model}} ograniczony w ostatnim teście, reset {{time}}",
       "unavailable": "{{model}} ograniczony w ostatnim teście",
       "failed": "Ostatni test {{model}} nieudany"
+    },
+    "exposeToCodex": {
+      "title": "Łączy przez bramę Native Rust bez kopiowania tokenu WorkBuddy"
     }
   },
   "minimaxCode": {
@@ -8428,6 +8438,12 @@
     },
     "instances": {
       "unsupported": "Wiele instancji ZCode jest dostępnych tylko w systemach macOS, Windows i Linux."
+    },
+    "exposeToCodex": {
+      "startPlan": "Odśwież limit ZCode, aby potwierdzić aktywny osobisty Z.ai Start Plan.",
+      "projectKey": "Połącz konto BigModel API Key za pomocą klucza projektu.",
+      "signIn": "Zaloguj się ponownie do ZCode i spróbuj jeszcze raz.",
+      "title": "Łączy przez bramę Native Rust bez kopiowania klucza API ZCode ani tokenu OAuth do konfiguracji Codex"
     }
   },
   "zed": {
@@ -8850,7 +8866,10 @@
       "deploySuccess": "Wdrożono do Codex: {{count}} modeli",
       "deployFailed": "Wdrożenie nie powiodło się: {{error}}",
       "useKey": "Użyj klucza",
-      "deleteConfirm": "Usunąć zapisany klucz „{{name}}”? Tej operacji nie można cofnąć."
+      "deleteConfirm": "Usunąć zapisany klucz „{{name}}”? Tej operacji nie można cofnąć.",
+      "addToGeminiCli": "Dodaj do Gemini CLI",
+      "geminiCliAdded": "Gemini CLI dodany",
+      "addToGeminiCliFailed": "Nie dodano do Gemini CLI: {{error}}"
     },
     "prefill": {
       "codexReady": "Uzupełniono ustawienia APIKEY.FUN. Sprawdź je przed dodaniem do Codex.",

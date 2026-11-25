@@ -33,28 +33,6 @@ test('filtering a source row does not bring back its hidden proxy', () => {
   assert.deepEqual(ids(selectCodexLocalAccessMemberRows({ ...input, grokRows: [] })), ['codex']);
 });
 
-test('Grok member quota chip uses the unified allowance even with a depleted product share', async () => {
-  const { CodexGrokBuildQuotaChip } = await import('./codexGrokMemberRows');
-  const account = {
-    id: 'unified', quota: {
-      isUnifiedBillingUser: true, weeklyLimitPercent: 99.99,
-      products: [{ product: 'PRODUCT_GROK_BUILD', usagePercent: 100 }],
-    },
-  } as GrokAccount;
-  const element = CodexGrokBuildQuotaChip({ account, t: (key, fallback) => typeof fallback === 'string' ? fallback : key });
-  assert.ok(element);
-  assert.match(element.props.children.props.title, /共享额度/);
-  assert.deepEqual(element.props.children.props.children[1].props.children, ['共享额度', ' ', 1, '%']);
-});
-
-test('incomplete legacy product amounts do not invent a fully available quota chip', async () => {
-  const { CodexGrokBuildQuotaChip } = await import('./codexGrokMemberRows');
-  for (const product of [{ product: 'GrokBuild', used: 12 }, { product: 'GrokBuild', total: 100 }]) {
-    const account = { id: 'legacy', quota: { products: [product] } } as GrokAccount;
-    assert.equal(CodexGrokBuildQuotaChip({ account, t: (key) => key }), null);
-  }
-});
-
 test('the Free filter hides non-members and keeps joined Free accounts visible', () => {
   const free = { ...input.codexAccounts[0], id: 'free', plan_type: 'free' };
   const joined = { ...free, id: 'joined-free' };

@@ -98,6 +98,23 @@ export function ZcodeAccountsPage() {
     try {
       await codexService.addCodexAccountFromZcode(account.id);
       await emitAccountsChanged({ platformId: 'codex', reason: 'import' });
+      page.setMessage({
+        text: t('common.shared.exposeToCodex.success', '已接入 Codex'),
+        tone: 'success',
+      });
+    } catch (error) {
+      const reason = String(error).replace(/^Error:\s*/, '');
+      const messages: Record<string, string> = {
+        ZCODE_START_PLAN_REQUIRED: t('zcode.exposeToCodex.startPlan'),
+        ZCODE_BIGMODEL_PROJECT_API_KEY_REQUIRED: t('zcode.exposeToCodex.projectKey'),
+        ZCODE_OAUTH_REAUTH_REQUIRED: t('zcode.exposeToCodex.signIn'),
+      };
+      page.setMessage({
+        text: t('common.shared.exposeToCodex.failed', '接入 Codex 失败：{{error}}', {
+          error: messages[reason] ?? reason,
+        }),
+        tone: 'error',
+      });
     } finally {
       setCodexBindingId(null);
     }
@@ -174,10 +191,12 @@ export function ZcodeAccountsPage() {
         className="btn btn-secondary"
         disabled={codexBindingId !== null}
         aria-busy={codexBindingId === account.id}
-        title="仅在 Native Rust 网关中接入，不会复制 ZCode API Key 或 OAuth Token 到 Codex 配置"
+        title={t('zcode.exposeToCodex.title', '仅在 Native Rust 网关中接入，不会复制 ZCode API Key 或 OAuth Token 到 Codex 配置')}
         onClick={() => { void handleExposeToCodex(account); }}
       >
-        {codexBindingId === account.id ? '接入中…' : '接入 Codex 网关'}
+        {codexBindingId === account.id
+          ? t('common.shared.exposeToCodex.inProgress', '接入中…')
+          : t('common.shared.exposeToCodex.action', '接入 Codex')}
       </button>
     ) : null,
     usagePrefix: 'zcode',

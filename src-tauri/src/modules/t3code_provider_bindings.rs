@@ -586,10 +586,12 @@ fn codex_switch_eligibility(account: &crate::models::codex::CodexAccount) -> Cod
     }
 }
 
-fn build_codex_bindable_accounts() -> (Vec<T3CodeBindableAccountView>, HashSet<String>, usize) {
-    let all_codex = codex_account::list_accounts();
+fn build_codex_bindable_accounts(
+    all_codex: Vec<crate::models::codex::CodexAccount>,
+) -> (Vec<T3CodeBindableAccountView>, HashSet<String>, usize) {
+    let api_service_id = codex_instance::CODEX_API_SERVICE_BIND_ACCOUNT_ID;
     let mut items = vec![T3CodeBindableAccountView {
-        id: codex_instance::CODEX_API_SERVICE_BIND_ACCOUNT_ID.to_string(),
+        id: api_service_id.to_owned(),
         driver: DRIVER_CODEX.to_string(),
         email: "Cockpit Codex API Service".to_string(),
         display_name: Some("Codex API Service".to_string()),
@@ -607,7 +609,7 @@ fn build_codex_bindable_accounts() -> (Vec<T3CodeBindableAccountView>, HashSet<S
         cache_hit_percent: None,
     }];
 
-    let mut switchable = HashSet::new();
+    let mut switchable = HashSet::from([api_service_id.to_owned()]);
     let mut unverified = 0;
     // 2. 各 Codex 账号
     for acc in all_codex {
@@ -1080,7 +1082,8 @@ pub fn get_provider_workspace(
     let injection_connected = t3code_app_injection::has_active_connection(&resolved_t3_id);
     let persisted = load_persisted_bindings(&state_dir);
 
-    let (mut codex_accounts, codex_switchable, codex_unverified_count) = build_codex_bindable_accounts();
+    let (mut codex_accounts, codex_switchable, codex_unverified_count) =
+        build_codex_bindable_accounts(codex_account::list_accounts());
     let antigravity_accounts = build_antigravity_bindable_accounts();
     let claude_accounts = build_claude_bindable_accounts();
     let extra_accounts = extensions::build_all_extra_bindable_accounts();
@@ -1387,8 +1390,7 @@ pub fn get_provider_workspace(
     }
 
     management::show_pending_defaults(&state_dir, &mut provider_instances);
-    // Keep the full library for identifying existing bindings. Only offer accounts
-    // that can be selected here. The shared gateway currently has no T3-only GPT scope.
+    // Keep the full library for identifying existing bindings. Only offer selectable accounts.
     codex_accounts.retain(|account| codex_switchable.contains(&account.id));
     Ok(T3CodeProviderWorkspaceView {
         t3_instance_id: resolved_t3_id,
@@ -1911,11 +1913,14 @@ async fn write_provider_account(
 
     match driver.as_str() {
         DRIVER_CODEX => {
+            let is_api_service = codex_instance::is_api_service_bind_account_id(&account_id);
             let same_binding = load_persisted_bindings(state_dir).get(&instance_id)
                 .is_some_and(|binding| binding.driver == DRIVER_CODEX && binding.account_id == account_id);
-            if !same_binding && (codex_instance::is_api_service_bind_account_id(&account_id)
-                || !codex_account::load_account(&account_id).is_some_and(|account|
-                    codex_switch_eligibility(&account) == CodexSwitchEligibility::Eligible))
+            if !same_binding
+                && !is_api_service
+                && !codex_account::load_account(&account_id).is_some_and(|account| {
+                    codex_switch_eligibility(&account) == CodexSwitchEligibility::Eligible
+                })
             {
                 return Err(live::message("switchCodexRequiresGpt"));
             }
@@ -1924,7 +1929,7 @@ async fn write_provider_account(
             let shared_home = dirs::home_dir().map(|h| h.join(".codex"));
             prepare_isolated_codex_home(shared_home.as_deref(), &target_home)?;
 
-            if codex_instance::is_api_service_bind_account_id(&account_id) {
+            if is_api_service {
                 if !codex_local_access::prepare_local_access_for_bound_profile_dir(&target_home)
                     .await?
                 {
@@ -2912,6 +2917,19 @@ mod tests {
         assert!(codex_switch_eligibility(&key) == Unsupported);
         key.api_model_catalog.push("openai/gpt-6.2-sol".into());
         assert!(codex_switch_eligibility(&key) == Eligible);
+
+        let mut non_gpt = key.clone();
+        non_gpt.id = "non-gpt".into();
+        non_gpt.api_model_catalog = vec!["deepseek-chat".into()];
+        let (accounts, switchable, _) = build_codex_bindable_accounts(vec![key, non_gpt]);
+        let api_service_id = codex_instance::CODEX_API_SERVICE_BIND_ACCOUNT_ID;
+        assert!(accounts
+            .iter()
+            .any(|account| account.id == api_service_id && account.is_api_service));
+        assert_eq!(
+            switchable,
+            HashSet::from([api_service_id.to_owned(), "test".to_owned()])
+        );
     }
 
     #[test]

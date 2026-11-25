@@ -1,9 +1,4 @@
-import {
-  formatGrokQuotaUsedTotal,
-  getGrokQuotaClass,
-  getGrokQuotaSummaryItems,
-  type GrokAccount,
-} from "../../types/grok";
+import type { GrokAccount } from "../../types/grok";
 import { getCodexPlanFilterKey, isCodexAgentIdentityAccount, isCodexEffectiveFreePlan, type CodexAccount } from "../../types/codex";
 import { getCodexServiceEndpoint } from "../../utils/chatgptPlanOverview";
 
@@ -106,48 +101,4 @@ export function buildGrokMemberRowAccounts(input: {
           last_used: account.last_used,
         }) as unknown as CodexAccount,
     );
-}
-
-/** Grok 账号额度：统一计费展示共享池，旧套餐保留 GrokBuild。 */
-export function CodexGrokBuildQuotaChip({
-  t,
-  account,
-}: {
-  t: (key: string, defaultValue?: string | any) => string;
-  account: GrokAccount;
-}) {
-  const item = getGrokQuotaSummaryItems(account, t).find((row) =>
-    account.quota?.isUnifiedBillingUser === true
-      ? row.key === "weekly"
-      : row.label.replace(/[^a-z0-9]/gi, "").replace(/^product/i, "").toLowerCase() === "grokbuild",
-  );
-  if (!item) return null;
-  const used = item.used ?? null;
-  const total = item.total ?? null;
-  const clampedUsed = Math.max(0, Math.min(100, Math.floor(item.percentage)));
-  const remainingPercent = 100 - clampedUsed;
-  const amountText = formatGrokQuotaUsedTotal(used, total);
-  const title = [
-    item.label,
-    amountText || null,
-    t("common.shared.quota.leftPercent", {
-      defaultValue: "{{value}}% left",
-      value: remainingPercent,
-    }),
-  ]
-    .filter(Boolean)
-    .join(" · ");
-  return (
-    <div className="codex-local-access-quota-line">
-      <span
-        className={`codex-local-access-quota-chip ${getGrokQuotaClass(clampedUsed)}`}
-        title={title}
-      >
-        <span className="codex-local-access-quota-dot" />
-        <span>
-          {item.label} {remainingPercent}%
-        </span>
-      </span>
-    </div>
-  );
 }

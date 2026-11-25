@@ -214,6 +214,7 @@ interface GeneralConfig {
   claude_quota_alert_enabled: boolean;
   claude_quota_alert_threshold: number;
   claude_quota_display_remaining?: boolean;
+  claude_share_code_sessions_on_switch?: boolean;
   codebuddy_quota_alert_enabled: boolean;
   codebuddy_quota_alert_threshold: number;
   codebuddy_cn_quota_alert_enabled: boolean;
@@ -2683,6 +2684,35 @@ export function QuickSettingsPopover({
                     )}
                   </div>
                 )}
+              </div>
+            )}
+
+            {type === 'claude' && isMacOS && (
+              <div className="qs-section">
+                <div className="qs-row qs-row--top">
+                  <div className="qs-row-label">
+                    <Zap size={15} />
+                    <span>{t('settings.general.claudeShareCodeSessionsOnSwitch')}</span>
+                  </div>
+                  <div className="qs-row-control">
+                    <label className="qs-switch">
+                      <input
+                        type="checkbox"
+                        aria-label={t('settings.general.claudeShareCodeSessionsOnSwitch')}
+                        checked={config.claude_share_code_sessions_on_switch ?? false}
+                        onChange={(event) =>
+                          saveConfig({
+                            claude_share_code_sessions_on_switch: event.target.checked,
+                          })
+                        }
+                      />
+                      <span className="qs-switch-slider"></span>
+                    </label>
+                  </div>
+                </div>
+                <div className="qs-hint">
+                  {t('settings.general.claudeShareCodeSessionsOnSwitchDesc')}
+                </div>
               </div>
             )}
 

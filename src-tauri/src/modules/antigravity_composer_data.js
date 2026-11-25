@@ -25,10 +25,26 @@
   function family(value) {
     const key = modelKey(value);
     if (/^(3p|claude|gpt)( |$)/.test(key)) return '3p';
-    if (/^(?:\d+ )?argon( |$)/.test(key)) return 'argon';
+    // Argon retired into the shared Gemini pool; Carbon keeps its own pool.
     if (/^(?:\d+ )?carbon( |$)/.test(key)) return 'carbon';
-    if (/^gemini( |$)|^\d+(?: \d+)* (?:neon|hydrogen|flash|pro|ultra)( |$)/.test(key)) return 'gemini';
+    if (/^gemini( |$)|^\d+(?: \d+)* (?:neon|argon|hydrogen|flash|pro|ultra)( |$)/.test(key)) return 'gemini';
     return null;
+  }
+
+  function retiredArgonBucket(id) {
+    const raw = String(id ?? '').trim().toLowerCase();
+    return raw === 'argon:weekly' || raw === 'argon:5h' ||
+      (raw.startsWith('gemini-argon-') && (raw.endsWith('-weekly') || raw.endsWith('-5h')));
+  }
+
+  function sharedGeminiBucket(id) {
+    const raw = String(id ?? '').trim().toLowerCase();
+    return raw === 'gemini-5h' || raw === 'gemini:5h' || raw === 'gemini-weekly' || raw === 'gemini:weekly';
+  }
+
+  function retiredArgonGroup(group) {
+    const buckets = group?.buckets ?? [];
+    return buckets.length > 0 && buckets.every(bucket => retiredArgonBucket(bucket.bucketId));
   }
 
   function quotaWindows(summary, status, label) {
@@ -39,13 +55,23 @@
       ...(group.modelIds ?? []),
       ...(group.description?.match(/^\s*Models within this group:\s*(.+)$/i)?.[1].split(',') ?? []),
     ].map(modelKey).filter(Boolean);
-    const explicit = groups.filter(group => identities(group).some(id => selected.has(id)));
-    const inferred = groups.filter(group => groupFamily && !identities(group).length &&
+    // Retired Argon groups are filtered before matching so they neither supply
+    // their stale buckets nor double up with the shared Gemini group.
+    const activeGroups = groups.filter(group => !retiredArgonGroup(group));
+    const explicit = activeGroups.filter(group => identities(group).some(id => selected.has(id)));
+    const inferred = activeGroups.filter(group => groupFamily && !identities(group).length &&
       group.buckets?.some(bucket => family(bucket.bucketId) === groupFamily));
-    const group = explicit.length === 1 ? explicit[0] :
+    let group = explicit.length === 1 ? explicit[0] :
       !explicit.length && inferred.length === 1 ? inferred[0] : null;
+    if (!group && !explicit.length && !inferred.length && groupFamily === 'gemini' &&
+        groups.some(retiredArgonGroup)) {
+      // Argon retired into the shared Gemini pool; fall back to the shared bucket.
+      group = activeGroups.find(item =>
+        item.buckets?.some(bucket => sharedGeminiBucket(bucket.bucketId))) ?? null;
+    }
     const byPeriod = new Map();
     for (const bucket of group?.buckets ?? []) {
+      if (retiredArgonBucket(bucket.bucketId)) continue;
       const period = bucket.window ||
         (/5h$/i.test(bucket.bucketId) ? '5h' : /weekly$/i.test(bucket.bucketId) ? 'weekly' : null);
       const fraction = bucket.remainingFraction;

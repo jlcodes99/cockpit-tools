@@ -152,6 +152,33 @@ test('composer quotas follow the selected model’s reported pool and retain rea
   assert.deepEqual(quotaWindows(summary, status, 'Gemini 4 Argon'), []);
 });
 
+test('composer quotas skip the retired Argon bucket and fall back to the shared Gemini pool', () => {
+  const status = { userStatus: { cascadeModelConfigData: { clientModelConfigs: [] } } };
+  const summary = { response: { groups: [
+    { description: 'Models within this group: Gemini 4 Carbon',
+      buckets: [{ bucketId: 'gemini-carbon-wtu-weekly', remainingFraction: 0.3 }] },
+    { description: 'Models within this group: Gemini 4 Neon',
+      buckets: [{ bucketId: 'gemini-5h', remainingFraction: 0.71 },
+        { bucketId: 'gemini-weekly', remainingFraction: 0.83 }] },
+    { description: 'Models within this group: Gemini 4 Argon',
+      buckets: [{ bucketId: 'gemini-argon-wtu-weekly', remainingFraction: 0 }] },
+  ] } };
+  assert.deepEqual(quotaWindows(summary, status, 'Gemini 4 Argon').map(({ period, percent }) => [period, percent]),
+    [['5h', 71], ['weekly', 83]]);
+});
+
+test('composer quotas dedupe a shared group listing Argon from a retired Argon group', () => {
+  const status = { userStatus: { cascadeModelConfigData: { clientModelConfigs: [] } } };
+  const summary = { response: { groups: [
+    { description: 'Models within this group: Gemini 4 Neon, Gemini 4 Argon',
+      buckets: [{ bucketId: 'gemini-5h', remainingFraction: 0.71 }] },
+    { description: 'Models within this group: Gemini 4 Argon',
+      buckets: [{ bucketId: 'gemini-argon-wtu-weekly', remainingFraction: 0 }] },
+  ] } };
+  assert.deepEqual(quotaWindows(summary, status, 'Gemini 4 Argon').map(({ period, percent }) => [period, percent]),
+    [['5h', 71]]);
+});
+
 test('composer speed ignores failed, partial, and other-model samples', () => {
   const chatModel = { modelDisplayName: 'Gemini 4 Hydrogen', timeToFirstToken: '1.250s',
     streamingDuration: '2s', usage: { outputTokens: 184, responseOutputTokens: 156 },

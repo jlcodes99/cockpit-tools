@@ -11,6 +11,7 @@
     "pathLabel": "Путь запуска",
     "switchAndCopy": "Сменить и скопировать",
     "sharedInstanceStart": "Сменить общий аккаунт и запустить",
+    "ideSharedAccountHint": "Начиная с Antigravity IDE 2.6 все экземпляры используют общий сеанс Google. Смена аккаунта здесь также влияет на другие открытые экземпляры.",
     "sharedInstanceHint": "Другие экземпляры Antigravity останутся открытыми и могут перейти на новый аккаунт.",
     "sharedInstanceRestart": "Перезапустится только выбранный экземпляр.",
     "lastSharedAccount": "Последний выбранный общий аккаунт",
@@ -721,6 +722,12 @@
         "singleToken": "Один пример (Token)",
         "singleJson": "Один пример (JSON)",
         "batchJson": "Пакетный пример (JSON)"
+      },
+      "exposeToCodex": {
+        "action": "Подключить к Codex",
+        "inProgress": "Подключение…",
+        "success": "Подключено к Codex",
+        "failed": "Не удалось подключиться к Codex: {{error}}"
       }
     },
     "topRightAd": {
@@ -8217,6 +8224,9 @@
       "until": "{{model}} ограничена при последней проверке, сброс {{time}}",
       "unavailable": "{{model}} ограничена при последней проверке",
       "failed": "Последняя проверка {{model}} не удалась"
+    },
+    "exposeToCodex": {
+      "title": "Подключается через шлюз Native Rust без копирования токена WorkBuddy"
     }
   },
   "minimaxCode": {
@@ -8428,6 +8438,12 @@
     },
     "instances": {
       "unsupported": "Несколько экземпляров ZCode доступны только в macOS, Windows и Linux."
+    },
+    "exposeToCodex": {
+      "startPlan": "Обновите данные о квоте ZCode, чтобы проверить, активен ли личный Z.ai Start Plan.",
+      "projectKey": "Подключите аккаунт BigModel API Key с помощью ключа проекта.",
+      "signIn": "Снова войдите в ZCode и повторите попытку.",
+      "title": "Подключается через шлюз Native Rust без копирования ключа API ZCode или токена OAuth в конфигурацию Codex"
     }
   },
   "zed": {
@@ -8850,7 +8866,10 @@
       "deploySuccess": "Развёрнуто в Codex: {{count}} моделей",
       "deployFailed": "Развёртывание не удалось: {{error}}",
       "useKey": "Использовать ключ",
-      "deleteConfirm": "Удалить сохранённый ключ «{{name}}»? Это действие нельзя отменить."
+      "deleteConfirm": "Удалить сохранённый ключ «{{name}}»? Это действие нельзя отменить.",
+      "addToGeminiCli": "В Gemini CLI",
+      "geminiCliAdded": "Gemini CLI добавлен",
+      "addToGeminiCliFailed": "Не удалось добавить в Gemini CLI: {{error}}"
     },
     "prefill": {
       "codexReady": "Настройки APIKEY.FUN заполнены. Проверьте их перед добавлением в Codex.",

@@ -11,6 +11,7 @@
     "pathLabel": "启动路径",
     "switchAndCopy": "切换并复制",
     "sharedInstanceStart": "切换共享账号并启动",
+    "ideSharedAccountHint": "Antigravity IDE 2.6 及以上版本的所有实例共用 Google 登录。在这里切号也会影响其他已打开的实例。",
     "sharedInstanceHint": "其他已打开的 Antigravity 实例会继续运行，也可能同步到新账号。",
     "sharedInstanceRestart": "只重启选中的实例。",
     "lastSharedAccount": "最近切换的共享账号",
@@ -728,6 +729,12 @@
         "singleToken": "单条示例（Token）",
         "singleJson": "单条示例（JSON）",
         "batchJson": "批量示例（JSON）"
+      },
+      "exposeToCodex": {
+        "action": "接入 Codex",
+        "inProgress": "接入中…",
+        "success": "已接入 Codex",
+        "failed": "接入 Codex 失败：{{error}}"
       }
     },
     "appName": "Cockpit Tools",
@@ -1049,7 +1056,10 @@
       "deploySuccess": "已部署到 Codex：{{count}} 个模型",
       "deployFailed": "部署失败：{{error}}",
       "useKey": "使用密钥",
-      "deleteConfirm": "确定删除已保存密钥“{{name}}”吗？此操作无法撤销。"
+      "deleteConfirm": "确定删除已保存密钥“{{name}}”吗？此操作无法撤销。",
+      "addToGeminiCli": "添加到 Gemini CLI",
+      "geminiCliAdded": "Gemini CLI 已添加",
+      "addToGeminiCliFailed": "添加到 Gemini CLI 失败：{{error}}"
     },
     "prefill": {
       "codexReady": "已填入 APIKEY.FUN 配置，请确认后添加到 Codex。",
@@ -8133,6 +8143,12 @@
     },
     "instances": {
       "unsupported": "ZCode 多开仅支持 macOS、Windows 和 Linux。"
+    },
+    "exposeToCodex": {
+      "startPlan": "请刷新 ZCode 额度，确认已启用个人 Z.ai Start Plan。",
+      "projectKey": "请通过 BigModel API Key 账号接入项目密钥。",
+      "signIn": "请重新登录 ZCode 后重试。",
+      "title": "仅在 Native Rust 网关中接入，不会复制 ZCode API Key 或 OAuth Token 到 Codex 配置"
     }
   },
   "t3code": {
@@ -8777,6 +8793,9 @@
       "until": "{{model}} 上次探测受限，恢复时间 {{time}}",
       "unavailable": "{{model}} 上次探测受限",
       "failed": "{{model}} 上次探测失败"
+    },
+    "exposeToCodex": {
+      "title": "仅在 Native Rust 网关中接入，不会复制 WorkBuddy Token"
     }
   },
   "minimaxCode": {

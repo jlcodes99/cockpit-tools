@@ -2,6 +2,7 @@ use tauri::{AppHandle, Emitter};
 
 use crate::models::t3code::{
     T3CodeAccount, T3CodeProviderRuntimeView, T3CodeProviderSwitchView, T3CodeProviderWorkspaceView,
+    T3CodeQuotaWindowView,
 };
 use crate::modules::{
     logger, process, t3code_account, t3code_app_injection, t3code_instance,
@@ -194,6 +195,11 @@ pub async fn get_t3code_provider_workspace(
     })
     .await
     .map_err(|e| format!("读取 T3 Code Provider 绑定失败: {}", e))?
+}
+
+#[tauri::command]
+pub async fn get_t3code_api_service_quota() -> Option<Vec<T3CodeQuotaWindowView>> {
+    crate::modules::codex_app_injection::read_t3code_api_service_quota().await
 }
 
 #[tauri::command]

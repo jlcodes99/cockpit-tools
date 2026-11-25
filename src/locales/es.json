@@ -11,6 +11,7 @@
     "pathLabel": "Ruta de inicio",
     "switchAndCopy": "Cambiar y copiar",
     "sharedInstanceStart": "Cambiar cuenta compartida e iniciar",
+    "ideSharedAccountHint": "Desde Antigravity IDE 2.6, todas las instancias comparten una sesión de Google. Cambiar de cuenta aquí también afecta a las demás instancias abiertas.",
     "sharedInstanceHint": "Las otras instancias de Antigravity seguirán abiertas y podrían usar la cuenta nueva.",
     "sharedInstanceRestart": "Solo se reiniciará la instancia seleccionada.",
     "lastSharedAccount": "Última cuenta compartida elegida",
@@ -721,6 +722,12 @@
         "singleToken": "Ejemplo individual (Token)",
         "singleJson": "Ejemplo individual (JSON)",
         "batchJson": "Ejemplo por lotes (JSON)"
+      },
+      "exposeToCodex": {
+        "action": "Conectar con Codex",
+        "inProgress": "Conectando…",
+        "success": "Conectado con Codex",
+        "failed": "No se pudo conectar con Codex: {{error}}"
       }
     },
     "topRightAd": {
@@ -8217,6 +8224,9 @@
       "until": "{{model}} limitado en la última prueba, reinicio {{time}}",
       "unavailable": "{{model}} limitado en la última prueba",
       "failed": "Última prueba de {{model}} fallida"
+    },
+    "exposeToCodex": {
+      "title": "Se conecta a través de la puerta de enlace Native Rust sin copiar el token de WorkBuddy"
     }
   },
   "minimaxCode": {
@@ -8428,6 +8438,12 @@
     },
     "instances": {
       "unsupported": "Las múltiples instancias de ZCode solo están disponibles en macOS, Windows y Linux."
+    },
+    "exposeToCodex": {
+      "startPlan": "Actualiza la cuota de ZCode para confirmar que tu Z.ai Start Plan personal está activo.",
+      "projectKey": "Conecta una cuenta BigModel API Key con la clave del proyecto.",
+      "signIn": "Vuelve a iniciar sesión en ZCode e inténtalo de nuevo.",
+      "title": "Se conecta a través de la puerta de enlace Native Rust sin copiar la clave de API ni el token OAuth de ZCode a la configuración de Codex"
     }
   },
   "zed": {
@@ -8850,7 +8866,10 @@
       "deploySuccess": "Desplegado en Codex: {{count}} modelos",
       "deployFailed": "Error de despliegue: {{error}}",
       "useKey": "Usar clave",
-      "deleteConfirm": "¿Eliminar la clave guardada «{{name}}»? Esta acción no se puede deshacer."
+      "deleteConfirm": "¿Eliminar la clave guardada «{{name}}»? Esta acción no se puede deshacer.",
+      "addToGeminiCli": "Añadir a Gemini CLI",
+      "geminiCliAdded": "Gemini CLI añadido",
+      "addToGeminiCliFailed": "Error al añadir a Gemini CLI: {{error}}"
     },
     "prefill": {
       "codexReady": "La configuración de APIKEY.FUN está rellenada. Revísala antes de añadirla a Codex.",

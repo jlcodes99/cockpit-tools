@@ -17,7 +17,7 @@ impl AutoSwitchGroups {
     ) -> Self {
         if scope == AUTO_SWITCH_SCOPE_ANY_GROUP {
             if let Some(groups) = account.quota.as_ref().and_then(fresh_quota_summary_groups) {
-                return Self::Summary(groups.to_vec());
+                return Self::Summary(QuotaSummaryGroup::without_retired_argon(groups.to_vec()));
             }
         }
         let reported = collect_group_quotas(account, &legacy_groups);
@@ -195,7 +195,7 @@ mod tests {
 
         let selected = default_auto_switch_groups()
             .into_iter()
-            .filter(|group| group.id == "g4_argon")
+            .filter(|group| group.id == "g4_carbon")
             .collect();
         let selected =
             AutoSwitchGroups::resolve(AUTO_SWITCH_SCOPE_SELECTED_GROUPS, selected, &current);
@@ -234,8 +234,8 @@ mod tests {
                 {"displayName":"Gemini Models","buckets":[
                     {"bucketId":"gemini-weekly","remainingFraction":0.8}
                 ]},
-                {"displayName":"Gemini 4 Argon","buckets":[
-                    {"bucketId":"gemini-argon-wtu-weekly","remainingFraction":0.04}
+                {"displayName":"Gemini 4 Carbon","buckets":[
+                    {"bucketId":"gemini-carbon-wtu-weekly","remainingFraction":0.04}
                 ]},
                 {"displayName":"New group","buckets":[
                     {"bucketId":"new-group-short","window":"5h","remainingFraction":0.09}
@@ -267,7 +267,7 @@ mod tests {
                 .iter()
                 .map(|group| group.group_name.as_str())
                 .collect::<Vec<_>>(),
-            ["Gemini 4 Argon", "New group"]
+            ["Gemini 4 Carbon", "New group"]
         );
         let mut next = current.clone();
         next.id = "next".into();
@@ -296,5 +296,69 @@ mod tests {
         assert!(!can_be_auto_switch_candidate(
             &next, "current", 0, &groups, false, 0, windows
         ));
+    }
+
+    #[test]
+    fn retired_argon_bucket_does_not_resurrect_an_independent_group() {
+        let current = account(
+            "current",
+            json!([
+                {"displayName":"Gemini Models","buckets":[
+                    {"bucketId":"gemini-5h","window":"5h","remainingFraction":0.71},
+                    {"bucketId":"gemini-weekly","window":"weekly","remainingFraction":0.83}
+                ]},
+                {"displayName":"Gemini 4 Argon","buckets":[
+                    {"bucketId":"gemini-argon-wtu-weekly","window":"weekly","remainingFraction":0.0}
+                ]}
+            ]),
+        );
+        let groups = AutoSwitchGroups::resolve(
+            AUTO_SWITCH_SCOPE_ANY_GROUP,
+            default_auto_switch_groups(),
+            &current,
+        );
+        let (ids, _) = groups.labels();
+        assert_eq!(ids, ["gemini"]);
+    }
+
+    #[test]
+    fn persisted_argon_group_is_filtered_from_auto_switch() {
+        let mut account = Account::new(
+            "current".into(),
+            "fixture@example.test".into(),
+            TokenData::new("access".into(), "refresh".into(), 3600, None, None, None),
+        );
+        let mut quota = QuotaData::new();
+        quota.quota_summary_groups = Some(serde_json::from_value(json!([
+            {"id":"argon","name":"Gemini 4 Argon","models":["Gemini 4 Argon"],
+             "windows":[{"id":"gemini-argon-wtu-weekly","period":"weekly","percentage":0}]},
+            {"id":"gemini","name":"Gemini Models","models":["Gemini 4 Neon","Gemini 4 Carbon"],
+             "windows":[{"id":"gemini-5h","period":"5h","percentage":71},
+                        {"id":"gemini-weekly","period":"weekly","percentage":83}]}
+        ])).unwrap());
+        account.quota = Some(quota);
+
+        let groups = AutoSwitchGroups::resolve(
+            AUTO_SWITCH_SCOPE_ANY_GROUP,
+            default_auto_switch_groups(),
+            &account,
+        );
+        let (ids, _) = groups.labels();
+        assert_eq!(ids, ["gemini"]);
+        let quotas = groups.collect_quotas(&account);
+        assert_eq!(quotas.len(), 1);
+        assert_eq!(quotas[0].id, "gemini");
+        assert_eq!(quotas[0].percentage, 71);
+        // The stale zeroed Argon bucket must not trigger a switch.
+        assert!(evaluate_auto_switch_trigger(
+            &account,
+            0,
+            AUTO_SWITCH_SCOPE_ANY_GROUP,
+            &groups,
+            false,
+            0,
+            None,
+        )
+        .is_none());
     }
 }

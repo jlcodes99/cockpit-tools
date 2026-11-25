@@ -1400,21 +1400,9 @@ fn provider_gateway_for_account(
         let source = codex_account::zcode_upstream_account(account)
             .ok_or_else(|| "ZCode 账号还不存在或已删除".to_string())?;
         let is_oauth = source.auth_mode == crate::models::zcode::ZcodeAuthMode::Oauth;
-        let has_credential = if is_oauth {
-            if source.team_plan.is_some() {
-                !source.access_token.trim().is_empty()
-            } else {
-                !source.zcode_jwt_token.trim().is_empty()
-            }
-        } else {
-            source
-                .api_key
-                .as_deref()
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-                .is_some()
-        };
-        if !has_credential {
+        if is_oauth {
+            crate::modules::zcode_account::oauth_inference_session(&source)?;
+        } else if source.api_key.as_deref().is_none_or(|key| key.trim().is_empty()) {
             return Err("ZCode 供应商账号缺少可用凭据，请先在 ZCode 页面重新登录".to_string());
         }
         let upstream_models = provider_gateway_models_for_account(account);
@@ -1439,11 +1427,7 @@ fn provider_gateway_for_account(
         return Ok(CodexLocalAccessProviderGateway {
             auth_scheme: Some(if is_oauth { "bearer" } else { "x-api-key" }.to_string()),
             base_url: if is_oauth {
-                if source.team_plan.is_some() {
-                    crate::modules::zcode_account::BIGMODEL_API_BASE_URL.to_string()
-                } else {
-                    codex_account::ZCODE_PLAN_API_BASE_URL.to_string()
-                }
+                crate::modules::zcode_account::ZCODE_PLAN_API_BASE_URL.to_string()
             } else if source.provider.eq_ignore_ascii_case("bigmodel") {
                 crate::modules::zcode_account::BIGMODEL_API_BASE_URL.to_string()
             } else {
@@ -1836,7 +1820,6 @@ fn build_mixed_model_gateway_collection_for_profile(
         id: mixed_model_routing_api_key_id(),
         label: "Mixed Model Routing".to_string(),
         key: key.clone(),
-        native_provider: None,
         provider_gateway: None,
         model_routing: Some(CodexLocalAccessModelRouting {
             default_route: "oauth".to_string(),
@@ -1969,7 +1952,6 @@ fn build_provider_gateway_collection_for_profile(
         id: provider_gateway_api_key_id(&account.id),
         label: format!("Provider Gateway: {}", account.email),
         key: key.clone(),
-        native_provider: native_provider_for_provider_account(account),
         provider_gateway: if uses_grok_upstream {
             None
         } else {
@@ -2055,7 +2037,6 @@ fn build_bound_oauth_local_gateway_collection_for_profile(
         id: provider_gateway_api_key_id(&account.id),
         label: format!("Bound OAuth Local Gateway: {}", account.email),
         key: key.clone(),
-        native_provider: None,
         provider_gateway: None,
         model_routing: None,
         inherit_account_pool: Some(false),
@@ -2246,7 +2227,6 @@ fn build_model_provider_gateway_test_collection(
         id: provider_gateway_test_api_key_id(request),
         label: provider_gateway_test_api_key_label(request),
         key: collection.api_key.clone(),
-        native_provider: None,
         provider_gateway,
         model_routing: None,
         inherit_account_pool: Some(false),

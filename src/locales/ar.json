@@ -11,6 +11,7 @@
     "pathLabel": "مسار التشغيل",
     "switchAndCopy": "تبديل ونسخ",
     "sharedInstanceStart": "تبديل الحساب المشترك والتشغيل",
+    "ideSharedAccountHint": "بدءًا من Antigravity IDE 2.6، تشترك جميع النسخ في تسجيل دخول واحد إلى Google. يؤثر تبديل الحساب هنا أيضًا على النسخ الأخرى المفتوحة.",
     "sharedInstanceHint": "تبقى نُسخ Antigravity الأخرى مفتوحة وقد تتزامن مع الحساب الجديد.",
     "sharedInstanceRestart": "ستُعاد فقط النسخة المحددة.",
     "lastSharedAccount": "آخر حساب مشترك تم اختياره",
@@ -716,6 +717,12 @@
         "singleToken": "مثال مفرد (Token)",
         "singleJson": "مثال مفرد (JSON)",
         "batchJson": "مثال دفعي (JSON)"
+      },
+      "exposeToCodex": {
+        "action": "الاتصال بـ Codex",
+        "inProgress": "جارٍ الاتصال…",
+        "success": "تم الاتصال بـ Codex",
+        "failed": "فشل الاتصال بـ Codex: {{error}}"
       }
     },
     "sessionSharing": {
@@ -8264,6 +8271,9 @@
       "until": "كان {{model}} مقيّدًا في آخر اختبار، إعادة التعيين {{time}}",
       "unavailable": "كان {{model}} مقيّدًا في آخر اختبار",
       "failed": "فشل آخر اختبار لـ {{model}}"
+    },
+    "exposeToCodex": {
+      "title": "يتصل عبر بوابة Native Rust دون نسخ رمز WorkBuddy"
     }
   },
   "minimaxCode": {
@@ -8475,6 +8485,12 @@
     },
     "instances": {
       "unsupported": "تعدد نسخ ZCode متاح فقط على macOS وWindows وLinux."
+    },
+    "exposeToCodex": {
+      "startPlan": "حدّث حصة ZCode للتحقق من تفعيل خطة Z.ai Start Plan الشخصية.",
+      "projectKey": "اربط حساب BigModel API Key باستخدام مفتاح المشروع.",
+      "signIn": "سجّل الدخول إلى ZCode مجددًا ثم أعد المحاولة.",
+      "title": "يتصل عبر بوابة Native Rust دون نسخ مفتاح API أو رمز OAuth الخاص بـ ZCode إلى إعدادات Codex"
     }
   },
   "zed": {
@@ -8850,7 +8866,10 @@
       "deploySuccess": "تم النشر إلى Codex: {{count}} طراز",
       "deployFailed": "فشل النشر: {{error}}",
       "useKey": "استخدام المفتاح",
-      "deleteConfirm": "هل تريد حذف المفتاح المحفوظ \"{{name}}\"؟ لا يمكن التراجع عن هذا الإجراء."
+      "deleteConfirm": "هل تريد حذف المفتاح المحفوظ \"{{name}}\"؟ لا يمكن التراجع عن هذا الإجراء.",
+      "addToGeminiCli": "إضافة إلى Gemini CLI",
+      "geminiCliAdded": "تمت إضافة Gemini CLI",
+      "addToGeminiCliFailed": "فشل الإضافة إلى Gemini CLI: {{error}}"
     },
     "prefill": {
       "codexReady": "تم ملء إعدادات APIKEY.FUN. راجعها قبل إضافتها إلى Codex.",

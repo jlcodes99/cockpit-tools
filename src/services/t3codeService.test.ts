@@ -7,11 +7,13 @@ test('account linking reads and writes the registered T3 Code commands with thei
   const workspace = { t3InstanceId: '__default__', providerInstances: [{ instanceId: 'google-work' }] };
   const switched = { workspace, appliedLive: true, restartRequired: false, message: 'Switch successful' };
   const runtime = [{ instanceId: 'google-work', modelCount: 2, authStatus: 'authenticated' }];
+  const gatewayQuota = [{ id: '5h', label: '5h', remainingPercent: 199 }];
   const { exports: service } = loadHookModule(new URL('./t3codeService.ts', import.meta.url), {
     '@tauri-apps/api/core': {
       async invoke(command: string, args: unknown) {
         calls.push({ command, args });
         if (command === 'get_t3code_provider_runtime_status') return runtime;
+        if (command === 'get_t3code_api_service_quota') return gatewayQuota;
         if (command === 'switch_t3code_provider_instance_account'
           || command === 'promote_t3code_provider_account'
           || command === 'remove_t3code_provider_instance') return switched;
@@ -20,6 +22,7 @@ test('account linking reads and writes the registered T3 Code commands with thei
     },
   });
   assert.equal(await service.getT3codeProviderWorkspace(null), workspace);
+  assert.equal(await service.getT3codeApiServiceQuota(), gatewayQuota);
   assert.equal(await service.bindT3codeProviderInstanceAccount({
     t3InstanceId: 'work', providerInstanceId: 'google-work', driver: 'antigravity', cockpitAccountId: 'google-account',
   }), workspace);
@@ -44,6 +47,7 @@ test('account linking reads and writes the registered T3 Code commands with thei
   }), workspace);
   assert.deepEqual(JSON.parse(JSON.stringify(calls)), [
     { command: 'get_t3code_provider_workspace', args: { t3InstanceId: null } },
+    { command: 'get_t3code_api_service_quota' },
     { command: 'bind_t3code_provider_instance_account', args: {
       t3InstanceId: 'work', providerInstanceId: 'google-work', driver: 'antigravity', cockpitAccountId: 'google-account',
     } },

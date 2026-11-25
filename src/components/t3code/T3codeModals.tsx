@@ -148,6 +148,7 @@ export function T3codeModals({
                         </span>
                         <T3codeQuotaSection driver={driver} windows={account.windows}
                           quotaSummaryGroups={account.quotaSummaryGroups} providerQuota={account.providerQuota}
+                          allowQuotaOverflow={account.isApiService}
                           compact emptyLabel={t('t3code.quotaQuery.empty')} />
                       </button>
                     );

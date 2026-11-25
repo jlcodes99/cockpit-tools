@@ -6,6 +6,7 @@ import type {
   T3CodeProviderRuntimeView,
   T3CodeProviderSwitchView,
   T3CodeProviderWorkspaceView,
+  T3CodeQuotaWindowView,
 } from '../types/t3code';
 
 export async function listT3codeAccounts(): Promise<T3CodeAccount[]> {
@@ -85,6 +86,10 @@ export function getT3codeProviderWorkspace(
 
 export function getT3codeProviderRuntimeStatus(t3InstanceId: string): Promise<T3CodeProviderRuntimeView[]> {
   return invoke('get_t3code_provider_runtime_status', { t3InstanceId });
+}
+
+export function getT3codeApiServiceQuota(): Promise<T3CodeQuotaWindowView[] | null> {
+  return invoke('get_t3code_api_service_quota');
 }
 
 export function syncT3codeProviderLaunchPaths(t3InstanceId: string): Promise<void> {

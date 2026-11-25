@@ -774,9 +774,7 @@ async fn context_rebuild_cache_miss_reasoning_and_agent_cipher_keep_original_a_p
         // durable response/cipher ownership must remain available on A.
         Connection::open(fixture.path())
             .unwrap()
-            .execute_batch(
-                "DELETE FROM native_rebuild_checkpoints_v1; DELETE FROM native_rebuild_history_v1;",
-            )
+            .execute_batch("DELETE FROM native_rebuild_checkpoints_v1;")
             .unwrap();
         let checkpoints: i64 = Connection::open(fixture.path())
             .unwrap()

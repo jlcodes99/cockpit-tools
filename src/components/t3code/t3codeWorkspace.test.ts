@@ -65,8 +65,8 @@ test('adding an account offers only accounts that are not already linked to the 
     'workbuddy'), undefined);
 });
 
-test('Antigravity account picker shows reported quota groups and omits individual model quotas', () => {
-  const modal = loadHookModule(new URL('./T3codeModals.tsx', import.meta.url), {
+function loadAccountPicker() {
+  return loadHookModule(new URL('./T3codeModals.tsx', import.meta.url), {
     'react-dom': { createPortal: (view: ReactNode) => view },
     'react-i18next': { useTranslation: () => ({ t: mockT }) },
     '../ModalErrorMessage': { ModalErrorMessage: () => null, useModalErrorState: () => ({}) },
@@ -77,6 +77,10 @@ test('Antigravity account picker shows reported quota groups and omits individua
     './t3codePlatformRegistry': registryMod.exports,
     './t3codePresentation': presentationMod.exports,
   }, { document: { body: {} } });
+}
+
+test('Antigravity account picker shows reported quota groups and omits individual model quotas', () => {
+  const modal = loadAccountPicker();
   const models = [
     { id: 'gemini-flash-lite', label: 'Gemini Flash Lite', remainingPercent: 100 },
     { id: 'gemini-hydrogen-xhigh', label: 'Gemini Hydrogen (XHigh)', remainingPercent: 100 },
@@ -112,6 +116,43 @@ test('Antigravity account picker shows reported quota groups and omits individua
   assert.match(markup, /Third-party models 5h<.*>0%/);
   assert.match(markup, /models-only@example\.test<.*t3code\.quotaQuery\.empty/);
   assert.doesNotMatch(markup, /Gemini Flash Lite|Gemini Hydrogen|100%/);
+});
+
+test('Codex API Service is offered once and shows its cumulative quota in both account views', () => {
+  const windows = [
+    { id: '5h', label: '5h', remainingPercent: 199 },
+    { id: 'weekly', label: '7d', remainingPercent: 178 },
+  ];
+  const gatewayName = 'Codex API Service';
+  const account = { id: '__api_service__', isApiService: true, windows };
+  const linked: T3CodeProviderInstanceView = {
+    instanceId: 'codex', driver: 'codex', displayName: 'Codex', enabled: true,
+    isBuiltinDefault: true, boundAccountId: account.id, boundIsApiService: true, windows,
+  };
+  const shared = { gatewayName, maskAccountText: (value: string) => value, renderPlanBadge: () => null };
+  const picker = loadAccountPicker();
+  const renderPicker = (providerInstances: T3CodeProviderInstanceView[]) => renderToStaticMarkup(
+    picker.render(() => picker.exports.T3codeModals({
+      ...shared,
+      modal: { kind: 'add', driver: 'codex' },
+      workspace: { providerInstances, codexAccounts: [account] },
+      onClose: () => {},
+      onAdd: async () => {},
+      onRemove: async () => {},
+    })),
+  );
+  const overview = loadOverview();
+  const overviewMarkup = renderToStaticMarkup(overview.render(() => overview.exports.T3codeOverviewSection({
+    ...shared,
+    workspace: { providerInstances: [linked], codexAccounts: [account] },
+    providers: [{ instance: linked, status: { tone: 'ready' } }],
+  })));
+  for (const markup of [renderPicker([]), overviewMarkup]) {
+    assert.match(markup, /Codex API Service/);
+    assert.match(markup, /5h<.*199%/);
+    assert.match(markup, /周<.*178%/);
+  }
+  assert.doesNotMatch(renderPicker([linked]), /Codex API Service|199%|178%/);
 });
 
 type Control = {

@@ -35,6 +35,7 @@ pub(crate) const ZAI_API_KEY_PROVIDER_ID: &str = "builtin:zai";
 pub(crate) const BIGMODEL_API_KEY_PROVIDER_ID: &str = "builtin:bigmodel";
 pub(crate) const ZAI_API_BASE_URL: &str = "https://api.z.ai/api/anthropic";
 pub(crate) const BIGMODEL_API_BASE_URL: &str = "https://open.bigmodel.cn/api/anthropic";
+pub(crate) const ZCODE_PLAN_API_BASE_URL: &str = "https://zcode.z.ai/api/v1/zcode-plan/anthropic";
 
 static ZCODE_ACCOUNT_LOCK: std::sync::LazyLock<Mutex<()>> =
     std::sync::LazyLock::new(|| Mutex::new(()));
@@ -101,6 +102,37 @@ fn api_key_suffix(api_key: &str) -> String {
     let mut chars: Vec<char> = api_key.chars().rev().take(4).collect();
     chars.reverse();
     chars.into_iter().collect()
+}
+
+/// Only an active personal Start Plan on Z.ai uses the session JWT for inference.
+/// The dashboard's display label can fall back to an expired plan.
+pub(crate) fn oauth_inference_session(account: &ZcodeAccount) -> Result<&str, &'static str> {
+    if account.provider.eq_ignore_ascii_case("bigmodel") {
+        return Err("ZCODE_BIGMODEL_PROJECT_API_KEY_REQUIRED");
+    }
+    if account.auth_mode != ZcodeAuthMode::Oauth
+        || !account.provider.eq_ignore_ascii_case("zai")
+        || account.team_plan.is_some()
+    {
+        return Err("ZCODE_START_PLAN_REQUIRED");
+    }
+    let plans = account.subscription_raw.as_ref().and_then(Value::as_array)
+        .ok_or("ZCODE_START_PLAN_REQUIRED")?;
+    let mut active = plans.iter().filter(|plan| plan["status"].as_str()
+        .is_some_and(|status| status.trim().eq_ignore_ascii_case("active"))).peekable();
+    if active.peek().is_none() || !active.all(|plan| {
+        ["plan_id", "name"].iter().filter_map(|key| plan[*key].as_str()).any(|value| {
+            let id = value.to_ascii_lowercase();
+            id.contains("start-plan") || id.contains("start plan")
+        })
+    }) {
+        return Err("ZCODE_START_PLAN_REQUIRED");
+    }
+    let jwt = account.zcode_jwt_token.trim();
+    if jwt.is_empty() {
+        return Err("ZCODE_OAUTH_REAUTH_REQUIRED");
+    }
+    Ok(jwt)
 }
 
 fn accounts_dir() -> Result<PathBuf, String> {
@@ -1336,6 +1368,14 @@ fn zcode_source_headers(app_version: &str) -> HeaderMap {
     headers
 }
 
+/// ZCode 官方客户端会随请求附带的稳定客户端身份头。
+///
+/// 供本地 Provider Gateway 的 OAuth 路径复用，避免用 Cockpit 内部账号 ID
+/// 捏造 `x-device-mid` / `x-session-id` 等设备或会话身份。
+pub(crate) fn zcode_client_headers() -> HeaderMap {
+    zcode_source_headers(&detect_app_version())
+}
+
 fn number(value: Option<&Value>) -> f64 {
     value
         .and_then(|value| match value {
@@ -2494,5 +2534,21 @@ mod tests {
                 .len(),
             2
         );
+    }
+
+    #[test]
+    fn oauth_inference_requires_an_unambiguous_active_start_plan() {
+        let mut account = sample_account();
+        account.plan_type = Some("ZCode Start Plan".into());
+        for plans in [json!([]), json!([{"name":"ZCode Start Plan","status":"expired"}]),
+            json!([{"name":"Coding Plan","status":"active"}]),
+            json!([{"name":"ZCode Start Plan","status":"active"},{"name":"Coding Plan","status":"active"}])] {
+            account.subscription_raw = Some(plans);
+            assert_eq!(oauth_inference_session(&account), Err("ZCODE_START_PLAN_REQUIRED"));
+        }
+        account.subscription_raw = Some(json!([{"plan_id":"zcode-v3-start-plan-0615","status":"active"}]));
+        assert_eq!(oauth_inference_session(&account), Ok(account.zcode_jwt_token.as_str()));
+        account.provider = "bigmodel".into();
+        assert_eq!(oauth_inference_session(&account), Err("ZCODE_BIGMODEL_PROJECT_API_KEY_REQUIRED"));
     }
 }

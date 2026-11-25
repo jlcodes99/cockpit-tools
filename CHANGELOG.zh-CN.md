@@ -10,6 +10,31 @@
 
 ## [Unreleased]
 
+## [1.5.1] - 2026-11-26
+
+### 新增
+
+- **中转站 → Gemini CLI**：选择已保存的密钥和它支持的 Gemini 模型，预览后即可写入本机并切换到 API Key 认证。写入时保留其他配置项和已有备份。 [#3104](https://github.com/jlcodes99/cockpit-tools/issues/3104)
+- **T3 Code** 的「添加账号」可选择 Cockpit 的 Codex API 服务。账号选择器和总览都显示账号池合计的 5 小时、每周剩余额度，多账号合计超过 100% 时显示实际数值。
+- **模型供应商**新增 TeamoRouter 预设，适用于 Codex、Claude Code 和 Claude Desktop。 [#3280](https://github.com/jlcodes99/cockpit-tools/pull/3280)
+- **ZCode → Codex**：已启用个人 Start Plan 的 Z.ai OAuth 账号可接入原生网关。套餐信息缺失时会提示刷新额度，BigModel Coding / Team Plan 则提示使用项目 API Key 接入。 [#3272](https://github.com/jlcodes99/cockpit-tools/pull/3272)
+- **WorkBuddy → Codex**：可用已保存的账号发送独立的纯文本请求。网关收到完整回复后返回文本，并在请求完成或取消后尝试清理临时会话。 [#3282](https://github.com/jlcodes99/cockpit-tools/pull/3282)
+
+### 变更
+
+- **Antigravity IDE** 的切号和实例启动弹框会提示，IDE 2.6 及以上版本的所有实例共用 Google 登录。 [#3232](https://github.com/jlcodes99/cockpit-tools/issues/3232)
+- **Antigravity** 的 Gemini 4 Argon 模型改用 Gemini 共享额度，保留已有的自定义模型分组。自动切号、Antigravity 和 T3 Code 的输入栏都会忽略缓存中已停用的 Argon 额度，避免旧的 0% 影响显示或切号。 [#3271](https://github.com/jlcodes99/cockpit-tools/pull/3271)
+
+### 修复
+
+- **Codex 原生 API 服务**在新版认证（官方第三方授权）模式下完整识别 `response.failed`（含 `server_error` / `rate_limit_exceeded`）、扁平 SSE `error` 事件及 `reasoning.summary = "none"` 握手流中的 Subscription Sharing 额度耗尽错误，自动将该官方授权标记为冷却并切换到账号池中的其他可用账号，避免流中途断开与任务卡住。 [#2866](https://github.com/jlcodes99/cockpit-tools/issues/2866)
+- **Codex 原生 API 服务**将会话续接检查点收敛为有界自包含热缓存，移除会无限增长的持久拆块历史归档表；启动时若检测到超大旧版 `identity.sqlite` 会自动保留活跃身份映射与最近会话并无损瘦身重建。后台维护在有活跃请求或前台占用连接时自动让路并限制单批耗时，服务运行期间不触发整库压缩。 [#3044](https://github.com/jlcodes99/cockpit-tools/issues/3044) · [#3289](https://github.com/jlcodes99/cockpit-tools/pull/3289)
+- **WorkBuddy** 刷新未保存域名的账号时会使用官方认证端点的域名，已有企业域名仍优先使用。 [#2979](https://github.com/jlcodes99/cockpit-tools/issues/2979)
+- macOS 的 **Claude Desktop** 账号页快捷设置现可直接开启「切号时同步 Code 会话列表」，与通用设置共用同一开关。 [#3102](https://github.com/jlcodes99/cockpit-tools/issues/3102)
+- 在**「添加至 API 服务」**中，仅普通 ChatGPT 账号显示额度。API 密钥、中转站和 Grok 账号仍显示请求次数，隐藏容易误读的「5h 0%」或「共享额度 0%」。
+- **macOS 上的 Codex Desktop 26.1120** 可再次加载原生下一步预测。 [#3278](https://github.com/jlcodes99/cockpit-tools/issues/3278)
+- **Codex SSH** 能读取新版桌面端保存的连接和自动连接设置。冷启动时，即使主机已经重连，也能核验切换后的账号。 [#3286](https://github.com/jlcodes99/cockpit-tools/pull/3286)
+
 ## [1.5.0] - 2026-11-25
 
 ### 重磅更新 · T3 Code 账号管理

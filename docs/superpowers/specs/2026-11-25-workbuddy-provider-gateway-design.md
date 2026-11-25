@@ -12,14 +12,14 @@ WorkBuddy 账号已经保存 `access_token`、`uid`、企业信息和域信息�
 
 第一阶段仅实现 **Native-only、`workbuddy_acp`、无状态、纯文本**链路：
 
-- 支持纯文本输入和文本流式输出；
+- 支持纯文本输入，读完整条回复后通过 Responses SSE 返回文本；
 - 不支持工具调用、图片、reasoning、多轮持久会话或跨请求上下文；
 - 不支持 legacy sidecar、自动 failover 或将 WorkBuddy 当作静态 HTTP 上游；
 - 只在显式选择 WorkBuddy ACP provider 时执行，不改变其他 provider 路由。
 
 ## 采用方案
 
-采用 Native Rust 专用 ACP executor，而不是扩展现有 `wire_api`。现有 HTTP executor 假设一次 POST 对应一次 JSON/SSE 上游响应，无法表达 WorkBuddy 的多阶段 session 生命周期，因此 `Route` 需要增加明确的 provider transport kind，并为 `workbuddy_acp` 走独立请求生命周期。
+采用 Native Rust 专用 ACP executor，而不是扩展现有 `wire_api`。现有 HTTP executor 假设一次 POST 对应一次 JSON/SSE 上游响应，无法表达 WorkBuddy 的多阶段 session 生命周期，因此用专用上游地址 `workbuddy-acp://native` 作为路由标记，在进入通用 HTTP 上游分支前拦截并走独立的 `workbuddy_acp` 请求生命周期。
 
 每个请求的流程：
 
@@ -27,12 +27,12 @@ WorkBuddy 账号已经保存 `access_token`、`uid`、企业信息和域信息�
 2. 校验当前 `access_token`，仅在内存中构造 WorkBuddy billing headers；Gateway 不把 token 写入 Codex 配置、sidecar、日志或会话状态。
 3. 创建临时 WorkBuddy conversation，获取 ACP session 地址、session token 和 session ID。
 4. 执行 ACP `initialize`、`session/load`、`session/set_model`、`session/prompt`。
-5. 将客户端纯文本输入转换为 ACP prompt，并将 ACP SSE 文本块转换为 Gateway 的文本流式响应。
+5. 将客户端纯文本输入转换为 ACP prompt，汇总 ACP 返回的文本，再发送 Responses 的创建、文本和完成事件。
 6. 请求完成、失败或取消后，默认删除临时 conversation；清理失败只保留脱敏诊断，不覆盖原始响应。
 
 ## 会话与并发
 
-第一版不保存客户端会话到 WorkBuddy session 的映射。每个 Gateway 请求拥有独立的临时会话，并使用账号级并发保护避免同一账号的 session 初始化和清理互相覆盖。持久多轮会话、恢复和跨请求上下文不在本 MVP 范围内。
+第一版不保存客户端会话到 WorkBuddy session 的映射。每个 Gateway 请求创建并删除自己独立的临时会话，请求之间没有共享会话状态，因此并发请求不会互相覆盖。持久多轮会话、恢复和跨请求上下文不在本 MVP 范围内。
 
 ## 凭据与错误边界
 

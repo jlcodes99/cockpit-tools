@@ -776,7 +776,11 @@ async fn native_account_credentials(
                     account.api_credential_ref.as_deref().unwrap_or(""),
                 )
                 .ok_or_else(|| "ZCode account is unavailable".to_string())?;
-                if codex_account::is_zcode_oauth_upstream_provider(&account) {
+                let oauth = codex_account::is_zcode_oauth_upstream_provider(&account);
+                if oauth != (source.auth_mode == crate::models::zcode::ZcodeAuthMode::Oauth) {
+                    return Err("ZCode credential type changed; reconnect the account".to_string());
+                }
+                if oauth {
                     headers = native_zcode::oauth_credential_headers(&source)?;
                 } else {
                     headers = native_zcode::credential_headers(&source)?;
@@ -838,6 +842,15 @@ fn native_credential_error(error: &str) -> native_contract::ServiceError {
             "ZCode OAuth credentials are unavailable; sign in again in ZCode",
         )
         .with_credential_scope(true),
+        "ZCODE_START_PLAN_REQUIRED" => native_error(
+            403, "zcode_start_plan_required",
+            "Refresh your ZCode quota to confirm an active personal Z.ai Start Plan",
+        ),
+        "ZCODE_BIGMODEL_PROJECT_API_KEY_REQUIRED" => native_error(
+            403,
+            "zcode_bigmodel_project_api_key_required",
+            "BigModel OAuth accounts require a project API key for inference; use a BigModel API Key account instead",
+        ),
         "CHATGPT_PLAN_REAUTH_REQUIRED" | "CHATGPT_PLAN_DISCONNECTED" | "CHATGPT_PLAN_NOT_FOUND" => {
             native_error(
                 401,
@@ -1513,7 +1526,11 @@ async fn native_select_route_once(
             let Some(quota_wait) = *quota_wait else {
                 return false;
             };
-            let memory_wait = if native_is_chatgpt_plan_account(account) {
+            let bound_official = native_is_chatgpt_plan_account(account)
+                && !account
+                    .id
+                    .starts_with(codex_account::CHATGPT_PLAN_ACCOUNT_PREFIX);
+            let memory_wait = if bound_official {
                 Duration::ZERO
             } else {
                 native_cooldown_wait(
@@ -1714,7 +1731,11 @@ async fn native_select_route_once(
         // Another request can cool this account while its semaphore is queued.
         // Recheck the mapped model after admission, without holding the state
         // lock across a wait or charging an upstream attempt for a local skip.
-        let (cooldown, quota_exhausted) = if native_is_chatgpt_plan_account(account) {
+        let bound_official = native_is_chatgpt_plan_account(account)
+            && !account
+                .id
+                .starts_with(codex_account::CHATGPT_PLAN_ACCOUNT_PREFIX);
+        let (cooldown, quota_exhausted) = if bound_official {
             (None, false)
         } else {
             let states = host.cooldowns.lock().map_err(|_| {

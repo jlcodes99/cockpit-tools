@@ -10,7 +10,7 @@
 
 - 支持 `ZcodeAuthMode::Oauth` 账号绑定为 Codex Provider Gateway 账号。
 - 请求时读取 Cockpit 已保存的 ZCode OAuth 账号，不把 token 写入 Codex `auth.json`、`config.toml` 或 legacy sidecar。
-- 根据账号当前可用来源选择 BigModel Team Plan 或 ZCode session/Start Plan 认证路径；个人 Coding Plan 项目 key 不在本 PR 猜测或替代。
+- OAuth 推理仅接入已确认活跃的 Z.ai 个人 Start Plan。BigModel 推理需要项目 API Key。
 - 复用现有 Native Rust Responses → Anthropic Messages 转换和流式处理。
 - 支持 ZCode OAuth 账号的模型目录和稳定的请求 owner 隔离。
 - OAuth 凭据缺失或失效时 fail closed，并提示用户回到 ZCode 面板重新登录。
@@ -28,7 +28,7 @@
 - Cockpit 的 `ZcodeAccount` 已保存加密还原后的 `access_token`、可选 `refresh_token`、`zcode_jwt_token`、provider、team plan 和账号元数据。
 - 现有 ZCode OAuth 代码已经完成登录和 token envelope 解析；配额请求使用 `zcode_jwt_token`，BigModel team 请求还使用 `access_token`、组织和项目头。
 - 现有 ZCode Provider Gateway 仅接受 API Key 账号，并且 Native adapter 仅生成 `x-api-key`。
-- ZCode OAuth 路由需要区分 Coding Plan 项目 key、Start Plan session token 和 Team Plan，并通过 Anthropic Messages API 发送；请求还需要 ZCode 客户端 headers、`x-session-id` 和请求级 query ID。
+- ZCode OAuth 路由需要区分 Coding Plan 项目 key、Start Plan session token 和 Team Plan，并通过 Anthropic Messages API 发送。当前接入复用 ZCode 客户端身份头。
 - 该 PR 必须从上游已经包含 `6fb8221f` 的最新 `main` 建立，而不是从旧的 `782b1cb` 分支直接继续。
 
 ## 方案比较
@@ -49,16 +49,16 @@ Cockpit 把外部 provider 进程当作独立服务，自己只保存服务地�
 
 - 同一账号同时存在个人 Coding Plan 与 Team Plan 时，跟随 ZCode 面板当前选择；Gateway 不自行改写或切换计划。
 - 本 PR 不由 Gateway 使用 `refresh_token` 做刷新；凭据失效时 fail closed，并提示用户回到 ZCode 面板重新登录。这样避免在未确认刷新接口的情况下引入 token 并发和持久化风险。
-- provider 范围为 Z.ai 与 BigModel 的个人 OAuth；Team Plan 仅支持现有 `BigModel` team_plan 数据结构。
+- Z.ai OAuth 需要活跃的个人 Start Plan。BigModel Coding / Team Plan 可通过单独的项目 API Key 账号接入。
 
 
-新增 OAuth 专用 provider kind，例如 `zcode_oauth`。绑定时只检查来源账号存在、`auth_mode == Oauth` 和至少一个可用的 OAuth 凭据；生成稳定的 Codex provider account ID，并继续将 `openai_api_key` 保持为空。
+新增 OAuth 专用 provider kind，例如 `zcode_oauth`。绑定时检查来源账号、套餐记录和会话 JWT；生成稳定的 Codex provider account ID，并继续将 `openai_api_key` 保持为空。
 
 ### 请求时解析
 
 `native_account_credentials` 根据 Codex provider account 的外部引用加载最新 `ZcodeAccount`：
 
-1. 若账号当前选择 BigModel Team Plan，附带 team organization/project headers 和对应访问 token。
+1. BigModel OAuth 在绑定、网关预检和请求前均返回需要项目 API Key 的错误。
 2. 若账号走个人 OAuth session/Start Plan，使用 `zcode_jwt_token` 和 ZCode 客户端 headers；失效时返回重新登录提示，不把失效 token 写入其他存储。
 3. Coding Plan 项目 `zcode-api-key` 的读取契约尚未在 Cockpit 中安全复用；本 PR 不把 `access_token` 猜测为 API key，也不在无法确认时发出个人 Coding Plan 请求，后续单独实现。
 4. 所有敏感 header 设置为 sensitive；owner fingerprint 只包含来源账号和非敏感 scope，不包含 token。
@@ -67,7 +67,7 @@ Cockpit 把外部 provider 进程当作独立服务，自己只保存服务地�
 
 ### 请求协议
 
-继续使用现有 Anthropic wire adapter。OAuth 路径补齐已验证的客户端身份字段、稳定的 `x-session-id`、ZCode client title/version 和计划路径需要的 authorization header。每个用户 turn 的 query/request ID，以及 Start Plan 特殊 system block 和风控错误细分，待现有请求上下文 fixture 完整后单独启用。
+继续使用现有 Anthropic wire adapter。OAuth 路径补齐已验证的客户端身份字段、ZCode client title/version 和计划路径需要的 authorization header。每个用户 turn 的 query/request ID，以及 Start Plan 特殊 system block 和风控错误细分，待现有请求上下文 fixture 完整后单独启用。
 
 ### 模型与错误
 

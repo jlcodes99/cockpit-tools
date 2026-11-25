@@ -306,7 +306,7 @@ test('reads the selected provider instance and model from the same composer pick
   assert.equal(readSelection(picker), null);
 });
 
-test('selects Antigravity Gemini, Argon, Carbon and shared Claude windows before truncating', () => {
+test('selects Antigravity Gemini, shared-Argon, Carbon and shared Claude windows before truncating', () => {
   const windows = [
     window('gemini-3.5-flash-lite', 15), window('gemini-4-carbon-high', 16),
     window('gemini-5h', 58), window('gemini-weekly', 52),
@@ -317,7 +317,8 @@ test('selects Antigravity Gemini, Argon, Carbon and shared Claude windows before
     driver: 'antigravity', model, modelLabel,
   }));
   assert.deepEqual(pick('gemini-3.5-flash-lite'), [['gemini-5h', 58], ['gemini-weekly', 52]]);
-  assert.deepEqual(pick('gemini-4-argon-medium'), [['gemini-argon-wtu-weekly', 22]]);
+  // Argon retired into the shared Gemini pool; the legacy argon bucket is orphaned.
+  assert.deepEqual(pick('gemini-4-argon-medium'), [['gemini-5h', 58], ['gemini-weekly', 52]]);
   assert.deepEqual(pick('gemini-4-carbon-high'), [['gemini-carbon-wtu-weekly', 30]]);
   assert.deepEqual(pick('MODEL_PLACEHOLDER_M405', 'Claude Sonnet 5.5 (High)'), [
     ['3p-5h', 100], ['3p-weekly', 70],
@@ -433,7 +434,7 @@ test('keeps verified Grok quota when the runtime reports the matching email with
   assert.deepEqual(rows(quotaSource(state, selection).windows), []);
 });
 
-test('shows the reported Argon quota when T3 Code supplies the thinking level separately', () => {
+test('shows the shared Gemini quota for Argon models when T3 Code supplies the thinking level separately', () => {
   const model = 'gemini-4-argon';
   const instanceId = 'argon-account';
   const props = {
@@ -465,7 +466,11 @@ test('shows the reported Argon quota when T3 Code supplies the thinking level se
   assert.equal(display(), '58%');
   modelSelection.options[0].value = 'medium';
   assert.equal(display(), '31%');
+  // The retired argon weekly bucket no longer overrides model-level windows; the
+  // shared Gemini weekly window does.
   instance.windows.push(window('gemini-argon-wtu-weekly', 42));
+  assert.equal(display(), '31%');
+  instance.windows.push(window('gemini-weekly', 42));
   assert.equal(display(), '周 42%');
 });
 
@@ -536,8 +541,28 @@ test('uses current Google group membership before cached model or bucket names',
     [{ ...shared, models: ['Gemini 4 Carbon'] }], windows.slice(2))), []);
   assert.deepEqual(rows(groupFor('gemini-4-argon-high', undefined, windows.slice(2))),
     [['gemini-5h', 71], ['gemini-weekly', 83]]);
+  // Without a group, retired Argon falls back to the shared Gemini windows
+  // instead of the orphaned legacy argon bucket.
   assert.deepEqual(rows(groupFor('gemini-4-argon-high', undefined)),
-    [['gemini-argon-wtu-weekly', 24]]);
+    [['gemini-5h', 71], ['gemini-weekly', 83]]);
+});
+
+test('retired Argon group yields to the shared Gemini pool instead of its stale zeroed bucket', () => {
+  const retired = { id: 'argon', name: 'Gemini 4 Argon', models: ['Gemini 4 Argon'],
+    windows: [{ id: 'gemini-argon-wtu-weekly', period: 'weekly', percentage: 0 }] };
+  const shared = { id: 'gemini', name: 'Gemini Models',
+    models: ['Gemini 4 Neon', 'Gemini 4 Carbon', 'Gemini 4 Hydrogen', 'Gemini 3.8 Flash'],
+    windows: [{ id: 'gemini-5h', period: '5h', percentage: 71 },
+      { id: 'gemini-weekly', period: 'weekly', percentage: 83 }] };
+  const windows = [window('gemini-argon-wtu-weekly', 0),
+    { ...window('gemini-5h', 71), resetTime: '2026-11-24T13:00:00Z' }, window('gemini-weekly', 83)];
+  const groupFor = (model, groups, records = windows) => relevantWindows(records,
+    { driver: 'antigravity', model }, groups);
+  const current = groupFor('gemini-4-argon-high', [retired, shared]);
+  assert.deepEqual(rows(current), [['gemini-5h', 71], ['gemini-weekly', 83]]);
+  assert.equal(current[0].resetTime, '2026-11-24T13:00:00Z');
+  // A retired group on its own is dropped entirely.
+  assert.deepEqual(rows(groupFor('gemini-4-argon-high', [retired], windows.slice(0, 1))), []);
 });
 
 test('updates gateway quota only for the endpoint T3 Code actually reports', () => {

@@ -7,9 +7,9 @@ use super::{
     is_safe_cdp_websocket_url, normalize_injection_model_slug,
     refresh_request_token_from_cdp_response, remote_debugging_port_from_command_line,
     sanitize_cdp_headers, selected_model_from_cdp_response, should_capture_cdp_response_body,
-    supports_bind_account, AuthPageSnapshot, CdpTarget, DeepSeekBalanceSnapshot,
-    InjectionBadgeKind, InjectionBalanceLine, InjectionGrokQuotaLine, QuotaPlanSummary,
-    QuotaResponse, AUTH_DIAGNOSTIC_SCRIPT,
+    supports_bind_account, t3code_api_service_quota_windows, AuthPageSnapshot, CdpTarget,
+    DeepSeekBalanceSnapshot, InjectionBadgeKind, InjectionBalanceLine, InjectionGrokQuotaLine,
+    QuotaPlanSummary, QuotaResponse, AUTH_DIAGNOSTIC_SCRIPT,
 };
 use crate::models::codex::{CodexAccount, CodexApiProviderMode, CodexTokens};
 use crate::modules::codex_account::{
@@ -72,6 +72,37 @@ fn only_api_service_binding_supports_quota_injection() {
         "__provider_gateway__:custom-provider"
     )));
     assert!(!supports_bind_account(None));
+}
+
+#[test]
+fn t3code_api_service_quota_keeps_cumulative_windows_only() {
+    let windows = |data| {
+        let quota = serde_json::from_value::<QuotaResponse>(data)
+            .unwrap()
+            .normalize_empty_pool();
+        serde_json::to_value(t3code_api_service_quota_windows(&quota)).unwrap()
+    };
+    assert_eq!(
+        windows(json!({
+            "accountCount": 2,
+            "remainingPercent": 199,
+            "fiveHourRemainingPercent": 199,
+            "weeklyRemainingPercent": 178,
+            "fiveHourCapacityPercent": 200,
+        })),
+        json!([
+            {"id": "5h", "label": "5h", "remainingPercent": 199},
+            {"id": "weekly", "label": "7d", "remainingPercent": 178},
+        ])
+    );
+    assert_eq!(
+        windows(json!({"weeklyRemainingPercent": 0})),
+        json!([{"id": "weekly", "label": "7d", "remainingPercent": 0}])
+    );
+    assert_eq!(
+        windows(json!({"accountCount": 0, "fiveHourRemainingPercent": 100})),
+        json!([])
+    );
 }
 
 #[test]

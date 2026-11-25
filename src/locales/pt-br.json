@@ -11,6 +11,7 @@
     "pathLabel": "Caminho de inicialização",
     "switchAndCopy": "Trocar e copiar",
     "sharedInstanceStart": "Trocar conta compartilhada e iniciar",
+    "ideSharedAccountHint": "A partir do Antigravity IDE 2.6, todas as instâncias compartilham o mesmo login do Google. Trocar de conta aqui também afeta as outras instâncias abertas.",
     "sharedInstanceHint": "Outras instâncias do Antigravity ficam abertas e podem adotar a nova conta.",
     "sharedInstanceRestart": "Apenas a instância selecionada será reiniciada.",
     "lastSharedAccount": "Última conta compartilhada escolhida",
@@ -721,6 +722,12 @@
         "singleToken": "Exemplo único (Token)",
         "singleJson": "Exemplo único (JSON)",
         "batchJson": "Exemplo em lote (JSON)"
+      },
+      "exposeToCodex": {
+        "action": "Conectar ao Codex",
+        "inProgress": "Conectando…",
+        "success": "Conectado ao Codex",
+        "failed": "Falha ao conectar ao Codex: {{error}}"
       }
     },
     "topRightAd": {
@@ -8217,6 +8224,9 @@
       "until": "{{model}} limitado no último teste, restauração {{time}}",
       "unavailable": "{{model}} limitado no último teste",
       "failed": "Último teste de {{model}} falhou"
+    },
+    "exposeToCodex": {
+      "title": "Conecta pela gateway Native Rust sem copiar o token do WorkBuddy"
     }
   },
   "minimaxCode": {
@@ -8428,6 +8438,12 @@
     },
     "instances": {
       "unsupported": "Várias instâncias do ZCode estão disponíveis apenas no macOS, Windows e Linux."
+    },
+    "exposeToCodex": {
+      "startPlan": "Atualize a cota do ZCode para confirmar que seu Z.ai Start Plan pessoal está ativo.",
+      "projectKey": "Conecte uma conta BigModel API Key com a chave do projeto.",
+      "signIn": "Entre novamente no ZCode e tente de novo.",
+      "title": "Conecta pela gateway Native Rust sem copiar a chave de API ou o token OAuth do ZCode para a configuração do Codex"
     }
   },
   "zed": {
@@ -8850,7 +8866,10 @@
       "deploySuccess": "Implantado no Codex: {{count}} modelos",
       "deployFailed": "Falha na implantação: {{error}}",
       "useKey": "Usar chave",
-      "deleteConfirm": "Excluir a chave salva \"{{name}}\"? Esta ação não pode ser desfeita."
+      "deleteConfirm": "Excluir a chave salva \"{{name}}\"? Esta ação não pode ser desfeita.",
+      "addToGeminiCli": "Adicionar ao Gemini CLI",
+      "geminiCliAdded": "Gemini CLI adicionado",
+      "addToGeminiCliFailed": "Falha ao adicionar ao Gemini CLI: {{error}}"
     },
     "prefill": {
       "codexReady": "As configurações do APIKEY.FUN foram preenchidas. Confira-as antes de adicionar ao Codex.",

@@ -11,6 +11,7 @@
     "pathLabel": "起動パス",
     "switchAndCopy": "切り替えてコピー",
     "sharedInstanceStart": "共有アカウントを切り替えて起動",
+    "ideSharedAccountHint": "Antigravity IDE 2.6 以降では、すべてのインスタンスが Google のログイン状態を共有します。ここでアカウントを切り替えると、開いている他のインスタンスにも影響します。",
     "sharedInstanceHint": "他の Antigravity インスタンスは起動したままで、新しいアカウントに切り替わる場合があります。",
     "sharedInstanceRestart": "選択したインスタンスだけを再起動します。",
     "lastSharedAccount": "最後に切り替えた共有アカウント",
@@ -721,6 +722,12 @@
         "singleToken": "単件の例（Token）",
         "singleJson": "単件の例（JSON）",
         "batchJson": "一括の例（JSON）"
+      },
+      "exposeToCodex": {
+        "action": "Codex に接続",
+        "inProgress": "接続中…",
+        "success": "Codex に接続しました",
+        "failed": "Codex への接続に失敗しました: {{error}}"
       }
     },
     "topRightAd": {
@@ -8217,6 +8224,9 @@
       "until": "{{model}} の前回確認は制限中、解除 {{time}}",
       "unavailable": "{{model}} の前回確認は制限中",
       "failed": "{{model}} の前回確認に失敗"
+    },
+    "exposeToCodex": {
+      "title": "WorkBuddy トークンをコピーせずに Native Rust ゲートウェイ経由で接続します"
     }
   },
   "minimaxCode": {
@@ -8428,6 +8438,12 @@
     },
     "instances": {
       "unsupported": "ZCode の複数インスタンスは macOS、Windows、Linux のみ対応しています。"
+    },
+    "exposeToCodex": {
+      "startPlan": "ZCode の利用枠を更新して、個人用 Z.ai Start Plan が有効か確認してください。",
+      "projectKey": "プロジェクトキーを使って BigModel API Key アカウントを接続してください。",
+      "signIn": "ZCode に再ログインしてから再試行してください。",
+      "title": "ZCode の API キーや OAuth トークンを Codex の設定にコピーせずに、Native Rust ゲートウェイ経由で接続します"
     }
   },
   "zed": {
@@ -8850,7 +8866,10 @@
       "deploySuccess": "Codex に展開しました：モデル {{count}} 件",
       "deployFailed": "展開に失敗しました：{{error}}",
       "useKey": "キーを使用",
-      "deleteConfirm": "保存済みキー「{{name}}」を削除しますか？この操作は元に戻せません。"
+      "deleteConfirm": "保存済みキー「{{name}}」を削除しますか？この操作は元に戻せません。",
+      "addToGeminiCli": "Gemini CLI に追加",
+      "geminiCliAdded": "Gemini CLI 追加済み",
+      "addToGeminiCliFailed": "Gemini CLI への追加に失敗: {{error}}"
     },
     "prefill": {
       "codexReady": "APIKEY.FUN の設定を入力しました。内容を確認して Codex に追加してください。",

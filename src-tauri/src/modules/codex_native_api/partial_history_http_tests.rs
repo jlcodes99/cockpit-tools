@@ -196,7 +196,7 @@ async fn scenario(case: &str, passthrough: bool) {
         assert_eq!(owner, "a");
         let count: i64 = connection
             .query_row(
-                "SELECT COUNT(*) FROM native_rebuild_history_v1 WHERE response='a-partial'",
+                "SELECT COUNT(*) FROM native_rebuild_checkpoints_v1 WHERE response='a-partial'",
                 [],
                 |r| r.get(0),
             )

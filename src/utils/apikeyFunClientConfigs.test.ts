@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { APIKEY_FUN_FAMILIES, buildCodexConfigToml, resolveApiKeyFunGrokModel, resolveDefaultModel } from './apikeyFunClientConfigs';
+import { APIKEY_FUN_FAMILIES, APIKEY_FUN_GOOGLE_GEMINI_BASE_URL, buildApiKeyFunClientPreview, buildCodexConfigToml, buildGeminiCliEnv, buildGeminiCliSettingsJson, resolveApiKeyFunGeminiModel, resolveApiKeyFunGrokModel, resolveDefaultModel } from './apikeyFunClientConfigs';
 import { APIKEY_FUN_DEFAULT_MODEL_CATALOG } from './apikeyFunLinks';
 
 const family = (id: string) => {
@@ -60,4 +60,46 @@ test('Grok account prefill selects a model actually available to the saved key',
   assert.equal(resolveApiKeyFunGrokModel(['gpt-5', 'grok-4.6', 'grok-4.7']), 'grok-4.7');
   assert.equal(resolveApiKeyFunGrokModel(['gpt-5', 'relay/Grok-4.6']), 'relay/Grok-4.6');
   assert.equal(resolveApiKeyFunGrokModel(['gemini-3', 'gpt-5']), undefined);
+});
+
+test('Gemini relay key only exposes the Gemini CLI client, not Codex / Claude Code', () => {
+  const gemini = family('gemini');
+  // Issue #3104: 同一 baseURL 无法推断密钥支持 Responses / Messages 协议，
+  // 因此不再把 Gemini 分组开放给 Codex / Claude Code，只保留官方文档的 Gemini CLI。
+  assert.deepEqual(gemini.clients, ['gemini_cli']);
+
+  const preview = buildApiKeyFunClientPreview({
+    family: gemini,
+    client: 'gemini_cli',
+    apiKey: 'sk-test',
+    model: 'gemini-3-pro-preview',
+    platform: 'macos',
+  });
+  assert.equal(preview.applyKind, 'gemini_cli');
+  const envBlock = preview.blocks.find((block) => block.label.includes('.env'));
+  assert.ok(envBlock, 'Gemini CLI preview must include the .env block');
+  assert.ok(envBlock.text.includes(`GOOGLE_GEMINI_BASE_URL="${APIKEY_FUN_GOOGLE_GEMINI_BASE_URL}"`));
+  assert.ok(envBlock.text.includes('GEMINI_API_KEY="sk-test"'));
+  assert.ok(envBlock.text.includes('GEMINI_MODEL="gemini-3-pro-preview"'));
+  const settingsBlock = preview.blocks.find((block) => block.label.includes('settings.json'));
+  assert.ok(settingsBlock, 'Gemini CLI preview must include the settings.json block');
+  assert.ok(settingsBlock.text.includes('"selectedType": "gemini-api-key"'));
+});
+
+test('Gemini CLI env and settings match the values actually written to disk', () => {
+  const env = buildGeminiCliEnv({ apiKey: 'sk-relay', model: 'gemini-3-pro-preview' });
+  assert.equal(
+    env,
+    `GOOGLE_GEMINI_BASE_URL="${APIKEY_FUN_GOOGLE_GEMINI_BASE_URL}"\nGEMINI_API_KEY="sk-relay"\nGEMINI_MODEL="gemini-3-pro-preview"`,
+  );
+  // 与 Rust 侧 build_env 输出一致；settings.json 只切认证方式，不携带明文密钥。
+  const settings = JSON.parse(buildGeminiCliSettingsJson());
+  assert.equal(settings.security.auth.selectedType, 'gemini-api-key');
+  assert.ok(!buildGeminiCliSettingsJson().includes('sk-relay'));
+});
+
+test('Gemini account prefill selects a model actually available to the saved key', () => {
+  assert.equal(resolveApiKeyFunGeminiModel(['gpt-5', 'gemini-3-pro-preview']), 'gemini-3-pro-preview');
+  assert.equal(resolveApiKeyFunGeminiModel(['gpt-5', 'relay/gemini-3-flash']), 'relay/gemini-3-flash');
+  assert.equal(resolveApiKeyFunGeminiModel(['gpt-5', 'grok-4.7']), undefined);
 });

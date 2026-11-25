@@ -11,6 +11,7 @@
     "pathLabel": "Launch path",
     "switchAndCopy": "Switch and copy",
     "sharedInstanceStart": "Switch shared account and launch",
+    "ideSharedAccountHint": "In Antigravity IDE 2.6 and later, all instances share one Google sign-in. Switching accounts here also affects other open instances.",
     "sharedInstanceHint": "Other Antigravity instances stay open and may also pick up the new account.",
     "sharedInstanceRestart": "Only the selected instance will restart.",
     "lastSharedAccount": "Last shared account switch",
@@ -728,6 +729,12 @@
         "singleToken": "Single example (Token)",
         "singleJson": "Single example (JSON)",
         "batchJson": "Batch example (JSON)"
+      },
+      "exposeToCodex": {
+        "action": "Connect to Codex",
+        "inProgress": "Connecting…",
+        "success": "Connected to Codex",
+        "failed": "Failed to connect to Codex: {{error}}"
       }
     },
     "appName": "Cockpit Tools",
@@ -1049,7 +1056,10 @@
       "deploySuccess": "Deployed to Codex: {{count}} models",
       "deployFailed": "Deployment failed: {{error}}",
       "useKey": "Use key",
-      "deleteConfirm": "Delete saved key \"{{name}}\"? This cannot be undone."
+      "deleteConfirm": "Delete saved key \"{{name}}\"? This cannot be undone.",
+      "addToGeminiCli": "Add to Gemini CLI",
+      "geminiCliAdded": "Gemini CLI added",
+      "addToGeminiCliFailed": "Failed to add to Gemini CLI: {{error}}"
     },
     "prefill": {
       "codexReady": "APIKEY.FUN settings are filled in. Review them before adding to Codex.",
@@ -8133,6 +8143,12 @@
     },
     "instances": {
       "unsupported": "ZCode multi-instance is available only on macOS, Windows, and Linux."
+    },
+    "exposeToCodex": {
+      "startPlan": "Refresh ZCode quota to confirm an active personal Z.ai Start Plan.",
+      "projectKey": "Connect a BigModel API Key account using your project key.",
+      "signIn": "Sign in to ZCode again and retry.",
+      "title": "Connects through the Native Rust gateway without copying the ZCode API key or OAuth token into the Codex configuration"
     }
   },
   "t3code": {
@@ -8777,6 +8793,9 @@
       "until": "{{model}} was limited at last probe, resets {{time}}",
       "unavailable": "{{model}} was limited at last probe",
       "failed": "Last probe of {{model}} failed"
+    },
+    "exposeToCodex": {
+      "title": "Connects through the Native Rust gateway without copying the WorkBuddy token"
     }
   },
   "minimaxCode": {

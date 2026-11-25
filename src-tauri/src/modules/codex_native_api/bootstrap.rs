@@ -408,7 +408,7 @@ pub(super) fn pre_execution(event: &Value) -> bool {
                 || response_envelope && key == "reasoning" && value.as_object().is_some_and(|fields| {
                     fields.iter().all(|(key,value)| match key.as_str() {
                         "effort" => value.is_null() || value.as_str().is_some_and(|v| matches!(v,"none"|"minimal"|"low"|"medium"|"high"|"xhigh"|"max"|"ultra")),
-                        "summary" | "generate_summary" => value.is_null() || value.as_str().is_some_and(|v| matches!(v,"auto"|"concise"|"detailed")),
+                        "summary" | "generate_summary" => value.is_null() || value.as_str().is_some_and(|v| matches!(v,"none"|"auto"|"concise"|"detailed")),
                         _ => false,
                     })
                 })
@@ -699,7 +699,7 @@ async fn probe_inner(
                 }
             };
             for frame in events {
-                if size >= MAX_BYTES || count >= MAX_EVENTS { break 'read; }
+                if count >= MAX_EVENTS { break 'read; }
                 // Comments and incomplete JSON do not expose a response ID.
                 // Start the bounded hold only once a complete semantic event
                 // can actually be forwarded; otherwise a slow first error can

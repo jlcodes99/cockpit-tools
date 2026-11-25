@@ -120,14 +120,14 @@
   function antigravityFamily(value) {
     const id = slug(value);
     if (/^(3p|claude|gpt)(-|$)/.test(id)) return '3p';
-    if (/^argon(-|$)|^gemini-.*\bargon\b/.test(id)) return 'argon';
+    // Argon retired into the shared Gemini pool; Carbon keeps its own pool.
     if (/^carbon(-|$)|^gemini-.*\bcarbon\b/.test(id)) return 'carbon';
     if (/^gemini(-|$)/.test(id)) return 'gemini';
     return null;
   }
 
   function bucket(id) {
-    const match = slug(id).match(/^(3p|claude|argon|carbon|gemini(?:-(?:argon|carbon)(?:-wtu)?)?)-(5h|weekly)$/);
+    const match = slug(id).match(/^(3p|claude|carbon|gemini(?:-carbon(?:-wtu)?)?)-(5h|weekly)$/);
     return match ? { family: antigravityFamily(match[1]), period: match[2] } : null;
   }
 
@@ -135,17 +135,34 @@
     return slug(value).replace(/-(minimal|low|medium|high|xhigh|max|thinking)$/, '');
   }
 
+  function isRetiredArgonWindow(id) {
+    const raw = String(id ?? '').trim().toLowerCase();
+    return raw === 'argon:weekly' || raw === 'argon:5h' ||
+      (raw.startsWith('gemini-argon-') && (raw.endsWith('-weekly') || raw.endsWith('-5h')));
+  }
+
+  function isRetiredArgonGroup(id) {
+    const raw = String(id ?? '').trim().toLowerCase();
+    return raw === 'argon' || raw === 'gemini-argon' || raw === 'gemini-argon-wtu';
+  }
+
   function reportedGroupWindows(groups, availableWindows, models, family) {
-    const group = groups?.find(item => item.models?.some(model => models.has(quotaModel(model)))) ??
-      groups?.find(item => !item.models?.length && antigravityFamily(item.id) === family);
+    const candidates = (groups ?? []).filter(item => !isRetiredArgonGroup(item.id));
+    const group = candidates.find(item => item.models?.some(model => models.has(quotaModel(model)))) ??
+      candidates.find(item => !item.models?.length && antigravityFamily(item.id) === family) ??
+      (family === 'gemini' && (groups ?? []).some(item => isRetiredArgonGroup(item.id))
+        ? candidates.find(item => antigravityFamily(item.id) === 'gemini')
+        : undefined);
     if (!group) return [];
-    return group.windows.map(entry => {
-      const source = availableWindows.find(window => window.id === entry.id);
-      return {
-        id: entry.id, label: source?.label || group.name, resetTime: source?.resetTime,
-        period: entry.period, remainingPercent: entry.percentage,
-      };
-    }).filter(window => Number.isFinite(window.remainingPercent));
+    return group.windows
+      .filter(entry => !isRetiredArgonWindow(entry.id))
+      .map(entry => {
+        const source = availableWindows.find(window => window.id === entry.id);
+        return {
+          id: entry.id, label: source?.label || group.name, resetTime: source?.resetTime,
+          period: entry.period, remainingPercent: entry.percentage,
+        };
+      }).filter(window => Number.isFinite(window.remainingPercent));
   }
 
   function displayGroupWindows(windows) {
@@ -212,7 +229,7 @@
     return valid.filter(window => exactModels.has(slug(window.id)) ||
       window.modelIds?.includes(selection.model) ||
       // Older upstream snapshots supply per-family reported limits without model IDs.
-      (family !== 'argon' && family !== 'carbon' &&
+      (family !== 'carbon' &&
         window.id === (family === 'gemini' ? 'gemini-quota' : isGpt ? 'gpt-quota' : 'claude-quota')));
   }
 

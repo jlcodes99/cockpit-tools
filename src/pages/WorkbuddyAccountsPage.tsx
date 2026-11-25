@@ -145,6 +145,18 @@ export function WorkbuddyAccountsPage() {
     try {
       await codexService.addCodexAccountFromWorkbuddy(account.id);
       await emitAccountsChanged({ platformId: 'codex', reason: 'import' });
+      page.setMessage({
+        text: page.t('common.shared.exposeToCodex.success', '已接入 Codex'),
+        tone: 'success',
+      });
+    } catch (error) {
+      console.error('[WorkBuddy] expose to Codex failed:', error);
+      page.setMessage({
+        text: page.t('common.shared.exposeToCodex.failed', '接入 Codex 失败：{{error}}', {
+          error: String(error).replace(/^Error:\s*/, ''),
+        }),
+        tone: 'error',
+      });
     } finally {
       setCodexBindingId(null);
     }
@@ -190,9 +202,11 @@ export function WorkbuddyAccountsPage() {
           disabled={codexBindingId !== null}
           aria-busy={codexBindingId === account.id}
           onClick={() => { void handleExposeToCodex(account); }}
-          title="仅在 Native Rust 网关中接入，不会复制 WorkBuddy Token"
+          title={page.t('workbuddy.exposeToCodex.title', '仅在 Native Rust 网关中接入，不会复制 WorkBuddy Token')}
         >
-          {codexBindingId === account.id ? '接入中…' : '接入 Codex'}
+          {codexBindingId === account.id
+            ? page.t('common.shared.exposeToCodex.inProgress', '接入中…')
+            : page.t('common.shared.exposeToCodex.action', '接入 Codex')}
         </button>
         <button
           type="button"

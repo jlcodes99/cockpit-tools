@@ -244,7 +244,6 @@ async fn legacy_tool_history_leaves_missing_wrong_and_duplicate_results_to_upstr
                 "native_opaque_v1",
                 "native_rebuild_active_v1",
                 "native_rebuild_checkpoints_v1",
-                "native_rebuild_history_v1",
             ] {
                 let count: i64 = db
                     .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| row.get(0))
@@ -268,7 +267,7 @@ async fn client_error_results_make_raw_tool_history_replayable_after_restart() {
     let archived: i64 = Connection::open(fixture.path())
         .unwrap()
         .query_row(
-            "SELECT COUNT(*) FROM native_rebuild_history_v1 WHERE response=?1",
+            "SELECT COUNT(*) FROM native_rebuild_checkpoints_v1 WHERE response=?1",
             [first["id"].as_str().unwrap()],
             |row| row.get(0),
         )

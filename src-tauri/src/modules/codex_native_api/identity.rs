@@ -402,7 +402,7 @@ impl IdentityStore {
                 account TEXT NOT NULL, owner TEXT NOT NULL, completed_at INTEGER NOT NULL);"
         ).map_err(|error| error.to_string())?;
         rebuild::initialize(&connection).map_err(|error| error.to_string())?;
-        partial_history::initialize(&connection).map_err(|error| error.to_string())?;
+        let connection = maintenance::migrate_and_slim_on_open(&path, connection)?;
         Ok(Self {
             connection: Mutex::new(connection),
             path,
@@ -925,7 +925,13 @@ impl IdentityStore {
                     && context.rebuild_input.as_ref().is_some_and(|input| {
                         super::responses_custom_results::replayable(input)
                     })));
+        let wait_started = std::time::Instant::now();
         let mut connection = self.connection.lock().map_err(storage)?;
+        let lock_wait = wait_started.elapsed();
+        if lock_wait >= Duration::from_secs(1) {
+            tracing::warn!(target: "codex_api", elapsed_ms = lock_wait.as_millis() as u64,
+                "[NativeAPI][slow_identity_rewrite_lock]");
+        }
         let transaction = connection
             .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
             .map_err(storage)?;
@@ -1031,6 +1037,7 @@ impl IdentityStore {
             }
         }
         transaction.commit().map_err(storage)?;
+        drop(connection);
         *headers = new_headers;
         *body = new_body;
         let pending_input = (generation.is_none() && !context.unregistered_blobs.is_empty())

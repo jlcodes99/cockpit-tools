@@ -213,6 +213,9 @@ impl Handle {
         self.stop.send_replace(true);
         if let Some(task) = self.maintenance_task.take() {
             task.abort();
+            // No new maintenance worker can be submitted after this join.
+            // An already submitted one retains its own BlockingWorkGuard.
+            let _ = task.await;
         }
         let deadline = tokio::time::Instant::now() + grace;
         if let Some(mut task) = self.task.take() {
@@ -507,13 +510,26 @@ fn spawn_identity_maintenance_loop(
                     if stop.stopped() {
                         return;
                     }
-                    let allow_full_vacuum = activity.count.load(Ordering::Acquire) == 0;
+                    if activity.count.load(Ordering::Acquire) != 0 {
+                        tokio::select! {
+                            _ = stop.wait() => return,
+                            _ = tokio::time::sleep(Duration::from_secs(1)) => continue,
+                        }
+                    }
                     let store = Arc::clone(&identity);
+                    let work = super::lifecycle::BlockingWorkGuard::new(Arc::clone(&activity));
                     let now_secs = chrono::Utc::now().timestamp();
+                    let started = std::time::Instant::now();
                     let batch = tokio::task::spawn_blocking(move || {
-                        store.prune_archive_batch(now_secs, &policy, allow_full_vacuum)
+                        let _work = work;
+                        store.prune_archive_batch(now_secs, &policy, false)
                     })
                     .await;
+                    let elapsed = started.elapsed();
+                    if elapsed >= Duration::from_secs(1) {
+                        tracing::warn!(target: "codex_api", elapsed_ms = elapsed.as_millis() as u64,
+                            active_requests = activity.count.load(Ordering::Acquire), "[NativeAPI][slow_maintenance_batch]");
+                    }
                     match batch {
                         Ok(Ok(report)) => {
                             let has_more = report.has_more;

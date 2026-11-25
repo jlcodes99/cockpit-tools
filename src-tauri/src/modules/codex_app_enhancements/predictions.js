@@ -104,7 +104,9 @@
     if (latest !== target.latestTurnId) return false;
     const metadata = await wait(manager.getCachedConversationMetadata(target.threadId));
     return metadata != null && metadata.latestTurnId === target.latestTurnId
-      && metadata.streamRole?.role === "owner" && !metadata.ephemeral && !metadata.sideConversation
+      && (metadata.streamRole?.role === "owner"
+        || metadata.streamRole == null && metadata.historyAttached === true)
+      && !metadata.ephemeral && !metadata.sideConversation
       && !["inProgress", "running", "active"].includes(metadata.status)
       && metadata.activeTurnId == null;
   }

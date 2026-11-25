@@ -23,6 +23,7 @@ pub(super) async fn open_text_stream(
     state: &Arc<AppState>,
     prepared: &Prepared,
     _compact: bool,
+    deadline: super::deadline::Deadline,
 ) -> Result<HttpResponseStream, super::contract::ServiceError> {
     let prompt = extract_text_prompt(&prepared.body)?;
     let model = prepared.route.model.trim();
@@ -33,42 +34,56 @@ pub(super) async fn open_text_stream(
             "WorkBuddy ACP requires a model",
         ));
     }
-    let source = codex_account::load_account(&prepared.route.account_id).ok_or_else(|| {
-        error(
-            401,
-            "workbuddy_reauthorization_required",
-            "The linked WorkBuddy account is unavailable; sign in again",
-        )
-    })?;
-    if !codex_account::is_workbuddy_upstream_provider(&source) {
-        return Err(error(
-            400,
-            "invalid_workbuddy_account",
-            "The selected account is not a WorkBuddy ACP account",
-        ));
-    }
-    let source = codex_account::workbuddy_upstream_account(&source).ok_or_else(|| {
-        error(
-            401,
-            "workbuddy_reauthorization_required",
-            "The linked WorkBuddy account is unavailable; sign in again",
-        )
-    })?;
-    if source.access_token.trim().is_empty()
-        || source
-            .expires_at
-            .is_some_and(|expires_at| expires_at <= chrono::Utc::now().timestamp_millis())
-        || source.status.as_deref().is_some_and(|status| {
-            matches!(status, "expired" | "reauth_required" | "reauthorization_required")
-        })
-    {
-        return Err(error(
-            401,
-            "workbuddy_reauthorization_required",
-            "WorkBuddy authorization is unavailable; sign in again",
-        ));
-    }
-    let probe_account = ProbeAccount::from_workbuddy(&source);
+    // Loading the linked account touches disk (index and detail files) and must
+    // not block the async worker. The whole read/validate sequence runs on a
+    // dedicated blocking worker with the request timeout as its budget.
+    let load = super::blocking::run_tracked(state, {
+        let account_id = prepared.route.account_id.clone();
+        move || {
+            let account = codex_account::load_account(&account_id).ok_or_else(|| {
+                error(
+                    401,
+                    "workbuddy_reauthorization_required",
+                    "The linked WorkBuddy account is unavailable; sign in again",
+                )
+            })?;
+            if !codex_account::is_workbuddy_upstream_provider(&account) {
+                return Err(error(
+                    400,
+                    "invalid_workbuddy_account",
+                    "The selected account is not a WorkBuddy ACP account",
+                ));
+            }
+            let source = codex_account::workbuddy_upstream_account(&account).ok_or_else(|| {
+                error(
+                    401,
+                    "workbuddy_reauthorization_required",
+                    "The linked WorkBuddy account is unavailable; sign in again",
+                )
+            })?;
+            if source.access_token.trim().is_empty()
+                || source
+                    .expires_at
+                    .is_some_and(|expires_at| expires_at <= chrono::Utc::now().timestamp_millis())
+                || source.status.as_deref().is_some_and(|status| {
+                    matches!(
+                        status,
+                        "expired" | "reauth_required" | "reauthorization_required"
+                    )
+                })
+            {
+                return Err(error(
+                    401,
+                    "workbuddy_reauthorization_required",
+                    "WorkBuddy authorization is unavailable; sign in again",
+                ));
+            }
+            Ok(source)
+        }
+    });
+    let source = super::deadline::timeout_at(deadline, load)
+        .await
+        .map_err(|_| super::retry::total_timeout())??;
     let client = reqwest::Client::builder()
         .user_agent("Mozilla/5.0 WorkBuddy Native ACP Gateway")
         .timeout(std::time::Duration::from_secs(60))
@@ -80,50 +95,30 @@ pub(super) async fn open_text_stream(
                 "Unable to prepare WorkBuddy client",
             )
         })?;
-    let base = workbuddy_model_probe::WORKBUDDY_WEB_ENDPOINT;
-    let conversation_id =
-        workbuddy_model_probe::create_conversation(&client, base, &probe_account, model, &prompt)
-            .await
-            .map_err(map_error)?;
-    let response_future = async {
-        let (api_url, session_token, session_id) =
-            workbuddy_model_probe::fetch_conversation_session(
-                &client,
-                base,
-                &conversation_id,
-                &probe_account,
-            )
-            .await
-            .map_err(map_error)?;
-        let text = workbuddy_model_probe::read_conversation_reply(
-            &client,
-            &api_url,
-            &session_token,
-            &session_id,
-            model,
-            &prompt,
-            source.enterprise_id.as_deref(),
-            45,
-        )
-        .await
-        .map_err(map_error)?;
-        Ok::<String, super::contract::ServiceError>(text)
-    };
+    let (reply, received) = tokio::sync::oneshot::channel();
+    let model_owned = model.to_owned();
     let mut stop = state.stop.clone();
-    let response = tokio::select! {
-        _ = stop.wait() => Err(error(503, "service_stopping", "Native Gateway is stopping")),
-        response = response_future => response,
+    let work = async move {
+        let account = ProbeAccount::from_workbuddy(&source);
+        serve_text_conversation(
+            reply,
+            &client,
+            workbuddy_model_probe::WORKBUDDY_WEB_ENDPOINT,
+            &account,
+            &model_owned,
+            &prompt,
+        )
+        .await;
     };
-    let cleanup =
-        workbuddy_model_probe::delete_conversation(&client, base, &probe_account, &conversation_id)
-            .await;
-    if let Err(cleanup_error) = cleanup {
-        crate::modules::logger::log_warn(&format!(
-            "WorkBuddy ACP conversation cleanup failed: {}",
-            cleanup_error.replace(source.access_token.trim(), "<redacted>")
-        ));
-    }
-    let text = response?;
+    let text = tokio::select! {
+        biased;
+        _ = stop.wait() => return Err(super::lifecycle::stopping_error()),
+        _ = super::deadline::sleep_until(deadline) => return Err(super::retry::total_timeout()),
+        result = async {
+            tokio::spawn(work);
+            received.await
+        } => result.map_err(|_| error(502, "workbuddy_unavailable", "WorkBuddy ACP task failed"))??,
+    };
     let event = format_response_events(model, &text);
     let bytes: ByteStream = stream::iter(vec![Ok(Bytes::from(event))]).boxed();
     let mut headers = HeaderMap::new();
@@ -251,6 +246,62 @@ fn error(status: u16, code: &'static str, message: &'static str) -> super::contr
     super::contract::ServiceError::new(status, code, message)
 }
 
+// If the caller leaves during creation, finish reading its bounded response so
+// the returned ID can still be deleted. Once created, cancellation drops the
+// reply read immediately and the owner makes one bounded deletion attempt.
+async fn serve_text_conversation(
+    mut result: tokio::sync::oneshot::Sender<Result<String, super::contract::ServiceError>>,
+    client: &reqwest::Client,
+    base: &str,
+    account: &ProbeAccount<'_>,
+    model: &str,
+    prompt: &str,
+) {
+    if result.is_closed() {
+        return;
+    }
+    let conversation = match workbuddy_model_probe::create_conversation(
+        client, base, account, model, prompt,
+    )
+    .await
+    {
+        Ok(id) => id,
+        Err(e) => {
+            let _ = result.send(Err(map_error(e)));
+            return;
+        }
+    };
+    let read = async {
+        let (url, token, session) =
+            workbuddy_model_probe::fetch_conversation_session(client, base, &conversation, account)
+                .await?;
+        workbuddy_model_probe::read_conversation_reply(
+            client,
+            &url,
+            &token,
+            &session,
+            model,
+            prompt,
+            account.enterprise_id,
+            45,
+        )
+        .await
+    };
+    tokio::select! {
+        biased;
+        _ = result.closed() => {}
+        response = read => { let _ = result.send(response.map_err(map_error)); }
+    }
+    if let Err(error) =
+        workbuddy_model_probe::delete_conversation(client, base, account, &conversation).await
+    {
+        crate::modules::logger::log_warn(&format!(
+            "WorkBuddy ACP conversation cleanup failed: {}",
+            map_error(error).code
+        ));
+    }
+}
+
 fn map_error(value: String) -> super::contract::ServiceError {
     let lower = value.to_ascii_lowercase();
     if value == "WORKBUDDY_PROBE_RATE_LIMITED"
@@ -308,5 +359,80 @@ mod tests {
         assert!(body.contains("response.output_text.delta"));
         assert!(body.contains("response.completed"));
         assert!(body.contains("hello"));
+    }
+
+    #[tokio::test]
+    async fn cancellation_during_creation_deletes_once_without_starting_a_session() {
+        use axum::{
+            routing::{get, post},
+            Json, Router,
+        };
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use tokio::sync::{oneshot, Notify};
+        let created = Arc::new(Notify::new());
+        let release = Arc::new(Notify::new());
+        let deleted = Arc::new(AtomicUsize::new(0));
+        let sessions = Arc::new(AtomicUsize::new(0));
+        let router = Router::new()
+            .route(
+                "/console/as/conversations/",
+                post({
+                    let created = created.clone();
+                    let release = release.clone();
+                    move || async move {
+                        created.notify_one();
+                        release.notified().await;
+                        Json(json!({"id":"temp-id"}))
+                    }
+                }),
+            )
+            .route(
+                "/console/as/conversations/temp-id/session",
+                get({
+                    let sessions = sessions.clone();
+                    move || async move {
+                        sessions.fetch_add(1, Ordering::SeqCst);
+                        "unexpected"
+                    }
+                }),
+            )
+            .route(
+                "/console/as/conversations/temp-id/delete",
+                post({
+                    let deleted = deleted.clone();
+                    move || async move {
+                        deleted.fetch_add(1, Ordering::SeqCst);
+                        "ok"
+                    }
+                }),
+            );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move {
+            axum::serve(listener, router).await.unwrap();
+        });
+        let (send, receive) = oneshot::channel();
+        let client = reqwest::Client::builder().no_proxy().build().unwrap();
+        let run = tokio::spawn(async move {
+            let account = ProbeAccount {
+                id: "fixture",
+                access_token: "fixture",
+                uid: Some("fixture"),
+                enterprise_id: None,
+                domain: None,
+            };
+            serve_text_conversation(send, &client, &base, &account, "model", "hello").await;
+        });
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            created.notified().await;
+            drop(receive);
+            release.notify_one();
+            run.await.unwrap();
+        })
+        .await
+        .unwrap();
+        assert_eq!(sessions.load(Ordering::SeqCst), 0);
+        assert_eq!(deleted.load(Ordering::SeqCst), 1);
+        server.abort();
     }
 }

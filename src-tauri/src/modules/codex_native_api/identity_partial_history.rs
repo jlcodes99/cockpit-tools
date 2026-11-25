@@ -1,8 +1,11 @@
 //! Recover explicit, observed incomplete terminals without claiming successful
-//! responses. Immutable rows survive failed retries, reconnects and restarts.
+//! responses. Self-contained rows are strictly bounded inline on write.
 //! All database/serialization work runs on the existing bounded blocking pool.
 use super::*;
 use rebuild::checkpoint_store;
+
+pub(crate) const MAX_PARTIAL_HISTORY_ROWS: i64 = 512;
+pub(crate) const MAX_PARTIAL_CACHE_BYTES: i64 = 32 * 1024 * 1024;
 
 #[derive(Clone, Debug)]
 pub(crate) struct PartialHistory {
@@ -29,18 +32,83 @@ impl RequestIdentity {
     }
 }
 
+pub(super) fn has_column(
+    connection: &Connection,
+    table: &str,
+    column: &str,
+) -> rusqlite::Result<bool> {
+    Ok(connection
+        .prepare(&format!("PRAGMA table_info({table})"))?
+        .query_map([], |row| row.get::<_, String>(1))?
+        .collect::<rusqlite::Result<Vec<_>>>()?
+        .iter()
+        .any(|name| name == column))
+}
+
 pub(super) fn initialize(connection: &Connection) -> rusqlite::Result<()> {
+    let table_exists: bool = connection.query_row(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type='table' AND name='native_partial_history_v1')",
+        [],
+        |row| row.get(0),
+    )?;
+    if table_exists && !has_column(connection, "native_partial_history_v1", "transcript")? {
+        // Legacy pre-slimming schema stored `manifest` referencing `native_rebuild_items_v1`.
+        // Salvage is performed before `initialize` when items exist; drop any remaining legacy schema.
+        connection.execute_batch("DROP TABLE IF EXISTS native_partial_history_v1;")?;
+    }
     connection.execute_batch(
         "CREATE TABLE IF NOT EXISTS native_partial_history_v1 (
             caller TEXT NOT NULL, response TEXT NOT NULL, thread TEXT NOT NULL,
             session TEXT, account TEXT NOT NULL, owner TEXT NOT NULL,
-            manifest TEXT NOT NULL, parameters TEXT, bytes INTEGER NOT NULL,
+            transcript TEXT NOT NULL, parameters TEXT, bytes INTEGER NOT NULL,
             created INTEGER NOT NULL DEFAULT 0,
             PRIMARY KEY(caller,response));
          CREATE INDEX IF NOT EXISTS native_partial_history_v1_response
-            ON native_partial_history_v1(response);",
+            ON native_partial_history_v1(response);
+         CREATE INDEX IF NOT EXISTS native_partial_history_v1_evict
+            ON native_partial_history_v1(created ASC, response ASC);",
     )?;
     super::maintenance::ensure_created_column(connection, "native_partial_history_v1")
+}
+
+pub(super) fn evict_partial_cache(transaction: &Transaction<'_>) -> Result<(), ServiceError> {
+    let (count, bytes): (i64, i64) = transaction
+        .query_row(
+            "SELECT COUNT(*),COALESCE(SUM(LENGTH(transcript) + COALESCE(LENGTH(parameters),0)),0)
+             FROM native_partial_history_v1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .map_err(storage)?;
+    if count <= MAX_PARTIAL_HISTORY_ROWS && bytes <= MAX_PARTIAL_CACHE_BYTES {
+        return Ok(());
+    }
+    transaction
+        .execute(
+            "DELETE FROM native_partial_history_v1 WHERE rowid IN (
+               SELECT rowid FROM (
+                 SELECT rowid,
+                        COALESCE(SUM(LENGTH(transcript) + COALESCE(LENGTH(parameters),0)) OVER (
+                          ORDER BY created, rowid
+                          ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+                        ), 0) AS prev_bytes,
+                        COUNT(*) OVER (
+                          ORDER BY created, rowid
+                          ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+                        ) AS prev_count
+                 FROM native_partial_history_v1
+               )
+               WHERE ?1 - prev_count > ?3 OR ?2 - prev_bytes > ?4
+             )",
+            params![
+                count,
+                bytes,
+                MAX_PARTIAL_HISTORY_ROWS,
+                MAX_PARTIAL_CACHE_BYTES
+            ],
+        )
+        .map_err(storage)?;
+    Ok(())
 }
 
 impl Binding {
@@ -139,15 +207,10 @@ impl IdentityStore {
                 )
             })
         });
-        // Hash/compress before the short publication transaction. No account
+        // Serialize/compress before the short publication transaction. No account
         // state or identity mutex is held while processing large transcripts.
-        let encoded = checkpoint_store::Encoded::prepare(
-            &self.checkpoint_reader()?,
-            &binding.caller,
-            input,
-            output,
-            parameters.as_ref(),
-        )?;
+        let encoded =
+            checkpoint_store::Encoded::prepare(input, output, parameters.as_ref())?;
         let mut connection = self.connection.lock().map_err(storage)?;
         let transaction = connection
             .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
@@ -218,10 +281,11 @@ impl IdentityStore {
             i64,
         );
         let saved: Option<Row> = connection.query_row(
-            "SELECT thread,session,account,owner,manifest,parameters,bytes FROM native_partial_history_v1 WHERE caller=?1 AND response=?2",
+            "SELECT thread,session,account,owner,transcript,parameters,bytes FROM native_partial_history_v1 WHERE caller=?1 AND response=?2",
             params![caller,previous], |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?,r.get(5)?,r.get(6)?)),
         ).optional().map_err(storage)?;
-        let Some((thread, session, account, owner, manifest, parameters, bytes)) = saved else {
+        let Some((thread, session, account, owner, raw_transcript, parameters, bytes)) = saved
+        else {
             let foreign: bool = connection.query_row("SELECT EXISTS(SELECT 1 FROM native_partial_history_v1 WHERE response=?1 AND caller!=?2)",params![previous,caller],|r|r.get(0)).map_err(storage)?;
             return if foreign {
                 Err(ServiceError::new(
@@ -277,7 +341,7 @@ impl IdentityStore {
             None | Some(Value::Null) => std::borrow::Cow::Owned(Vec::new()),
             _ => return Ok(None),
         };
-        let transcript = checkpoint_store::decode_manifest(&connection, caller, &manifest)?;
+        let transcript = checkpoint_store::decode_transcript(&raw_transcript)?;
         let Some(input) = rebuild::merge_checkpoint(transcript, &incoming) else {
             return Ok(None);
         };
@@ -290,8 +354,9 @@ impl IdentityStore {
             .expect("request object")
             .remove("previous_response_id");
         if let Some(parameters) = parameters {
+            let decoded_params = checkpoint_store::decode_text(&parameters)?;
             let parameters: serde_json::Map<String, Value> =
-                serde_json::from_str(&parameters).map_err(storage)?;
+                serde_json::from_str(&decoded_params).map_err(storage)?;
             for (key, value) in parameters {
                 let value = rebuild::inherited_parameter(&key, value);
                 full.as_object_mut().unwrap().entry(key).or_insert(value);
@@ -300,30 +365,14 @@ impl IdentityStore {
         if !rebuild::replay_tools(full.get("tools")) {
             return Ok(None);
         }
-        // Restore omitted client identities, never overwrite explicit values.
-        if supplied_thread.is_none() || supplied_session.is_none() {
-            let metadata = full
-                .as_object_mut()
-                .unwrap()
-                .entry("client_metadata")
-                .or_insert_with(|| serde_json::json!({}));
-            let Some(metadata) = metadata.as_object_mut() else {
-                return Err(invalid("Client metadata must be an object"));
-            };
-            if supplied_thread.is_none() {
-                metadata.insert("thread_id".into(), Value::String(thread));
-            }
-            if supplied_session.is_none() {
-                if let Some(session) = session {
-                    metadata.insert("session_id".into(), Value::String(session));
-                }
-            }
+        restore_identity(&mut full, "thread_id", &thread);
+        if let Some(session) = &session {
+            restore_identity(&mut full, "session_id", session);
         }
         if max_bytes != usize::MAX && serde_json::to_vec(&full).map_err(storage)?.len() > max_bytes
         {
             return Err(history_too_large());
         }
-        tracing::info!(target: "codex_api", "[NativeAPI][partial_history] recovery=expanded response_digest={} input_items={}", &digest("parent_response", &previous).digest[..16], full["input"].as_array().map_or(0, Vec::len));
         Ok(Some(PartialHistory {
             body: full,
             account_id: account,
@@ -331,11 +380,21 @@ impl IdentityStore {
     }
 }
 
+fn restore_identity(body: &mut Value, key: &str, value: &str) {
+    if !body.get("client_metadata").is_some_and(Value::is_object) {
+        body["client_metadata"] = serde_json::json!({});
+    }
+    let metadata = body["client_metadata"].as_object_mut().unwrap();
+    metadata
+        .entry(key)
+        .or_insert_with(|| Value::String(value.to_owned()));
+}
+
 fn history_too_large() -> ServiceError {
     ServiceError::new(
         413,
         "continuation_history_too_large",
-        "Expanded conversation exceeds the request size limit; existing history was preserved",
+        "Partial continuation exceeds the configured request size limit; existing history was preserved",
     )
 }
 

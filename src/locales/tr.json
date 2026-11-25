@@ -11,6 +11,7 @@
     "pathLabel": "Başlatma yolu",
     "switchAndCopy": "Değiştir ve kopyala",
     "sharedInstanceStart": "Ortak hesabı değiştir ve başlat",
+    "ideSharedAccountHint": "Antigravity IDE 2.6 ve sonraki sürümlerde tüm örnekler aynı Google oturumunu paylaşır. Burada hesap değiştirmek diğer açık örnekleri de etkiler.",
     "sharedInstanceHint": "Diğer Antigravity örnekleri açık kalır ve yeni hesaba geçebilir.",
     "sharedInstanceRestart": "Yalnızca seçilen örnek yeniden başlatılır.",
     "lastSharedAccount": "Son seçilen ortak hesap",
@@ -716,6 +717,12 @@
         "singleToken": "Tekli örnek (Token)",
         "singleJson": "Tekli örnek (JSON)",
         "batchJson": "Toplu örnek (JSON)"
+      },
+      "exposeToCodex": {
+        "action": "Codex'e bağlan",
+        "inProgress": "Bağlanıyor…",
+        "success": "Codex'e bağlanıldı",
+        "failed": "Codex'e bağlanılamadı: {{error}}"
       }
     },
     "sessionSharing": {
@@ -8217,6 +8224,9 @@
       "until": "{{model}} son testte sınırlıydı, yenileme {{time}}",
       "unavailable": "{{model}} son testte sınırlıydı",
       "failed": "{{model}} son testi başarısız"
+    },
+    "exposeToCodex": {
+      "title": "WorkBuddy belirtecini kopyalamadan Native Rust ağ geçidi üzerinden bağlanır"
     }
   },
   "minimaxCode": {
@@ -8428,6 +8438,12 @@
     },
     "instances": {
       "unsupported": "ZCode çoklu örnekleri yalnızca macOS, Windows ve Linux'ta kullanılabilir."
+    },
+    "exposeToCodex": {
+      "startPlan": "Kişisel Z.ai Start Plan aboneliğinizin etkin olduğunu doğrulamak için ZCode kotasını yenileyin.",
+      "projectKey": "Proje anahtarınızla bir BigModel API Key hesabı bağlayın.",
+      "signIn": "ZCode hesabınıza yeniden giriş yapıp tekrar deneyin.",
+      "title": "ZCode API anahtarını veya OAuth belirtecini Codex yapılandırmasına kopyalamadan Native Rust ağ geçidi üzerinden bağlanır"
     }
   },
   "zed": {
@@ -8850,7 +8866,10 @@
       "deploySuccess": "Codex'e kuruldu: {{count}} model",
       "deployFailed": "Kurulum başarısız: {{error}}",
       "useKey": "Anahtarı kullan",
-      "deleteConfirm": "Kayıtlı \"{{name}}\" anahtarı silinsin mi? Bu işlem geri alınamaz."
+      "deleteConfirm": "Kayıtlı \"{{name}}\" anahtarı silinsin mi? Bu işlem geri alınamaz.",
+      "addToGeminiCli": "Gemini CLI'ye ekle",
+      "geminiCliAdded": "Gemini CLI eklendi",
+      "addToGeminiCliFailed": "Gemini CLI'ye eklenemedi: {{error}}"
     },
     "prefill": {
       "codexReady": "APIKEY.FUN ayarları dolduruldu. Codex’e eklemeden önce inceleyin.",

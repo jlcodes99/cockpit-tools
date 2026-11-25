@@ -861,7 +861,17 @@ async fn official_fallback_recovers_a_message_only_sharing_quota_rejection() {
 data: {"type":"response.failed","response":{"status":"failed","output":[],"error":{"message":"The ChatGPT user has reached their Subscription Sharing usage limit. Ask the user to try again after their usage limit resets or use an API key instead","type":"invalid_request_error","resets_in_seconds":61}}}
 
 "#;
-    for event_stream in [None, Some(sse)] {
+    let sse_server_error = r#"data: {"type":"response.created","response":{"id":"opening","output":[],"reasoning":{"effort":"medium","summary":"none"}}}
+
+data: {"type":"response.failed","response":{"status":"failed","output":[],"error":{"code":"server_error","message":"The ChatGPT user has reached their Subscription Sharing usage limit. Ask the user to try again after their usage limit resets or use an API key instead","resets_in_seconds":61}}}
+
+"#;
+    let sse_flat_error = r#"data: {"type":"response.created","response":{"id":"opening","output":[],"reasoning":{"effort":"high","summary":"none"}}}
+
+data: {"type":"error","code":null,"message":"The ChatGPT user has reached their Subscription Sharing usage limit. Ask the user to try again after their usage limit resets or use an API key instead","param":null,"resets_in_seconds":61}
+
+"#;
+    for event_stream in [None, Some(sse), Some(sse_server_error), Some(sse_flat_error)] {
         let fixture = Fixture::new(
             400,
             json!({"error":{"message":message,"type":"invalid_request_error","resets_in_seconds":61}}),
@@ -891,6 +901,41 @@ data: {"type":"response.failed","response":{"status":"failed","error":{"message"
     assert!(response.text().await.unwrap().contains("Already generated"));
     assert_eq!(fixture.host.fallback_calls.load(Ordering::SeqCst), 0);
     assert_eq!(fixture.captures.lock().unwrap().len(), 1);
+    let late_failures = fixture.host.official_failures.lock().unwrap().clone();
+    assert_eq!(late_failures.len(), 1);
+    assert_eq!(
+        late_failures[0].code,
+        "subscription_sharing_usage_limit_exceeded"
+    );
+    fixture.close().await;
+
+    let fixture = Fixture::new(200, Value::Null, Some(sse_server_error), false).await;
+    fixture
+        .host
+        .local_preflight_error
+        .store(429, Ordering::SeqCst);
+    let mut streaming = request();
+    streaming["stream"] = json!(true);
+    let response = fixture.send(streaming).await;
+    assert_eq!(response.status(), 200);
+    let body = response.text().await.unwrap();
+    assert!(body.contains("response.completed"), "{body}");
+    assert_eq!(
+        fixture
+            .captures
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|capture| capture.0.as_str())
+            .collect::<Vec<_>>(),
+        ["/official/responses", "/backup/responses"]
+    );
+    let pool_failures = fixture.host.official_failures.lock().unwrap().clone();
+    assert_eq!(pool_failures.len(), 1);
+    assert_eq!(
+        pool_failures[0].code,
+        "subscription_sharing_usage_limit_exceeded"
+    );
     fixture.close().await;
 }
 

@@ -86,7 +86,6 @@ function getAntigravityGroupWindows(
   const knownGroups = [
     { name: 'Gemini', prefix: /^gemini[-:]/ },
     { name: 'Claude', prefix: /^(?:3p|claude)[-:]/ },
-    { name: 'Gemini 4 Argon', prefix: /^(?:gemini-argon(?:-wtu)?|argon)[-:]/ },
     { name: 'Gemini 4 Carbon', prefix: /^(?:gemini-carbon(?:-wtu)?|carbon)[-:]/ },
   ];
   return knownGroups.flatMap(({ name, prefix }) => ['5h', 'weekly'].flatMap((period) => {
@@ -108,14 +107,20 @@ export function pickSummaryWindows(
 
 const quotaAmountFormat = new Intl.NumberFormat(undefined, { maximumFractionDigits: 6 });
 
-export function formatT3codeQuotaWindow(driver: T3CodeDriverKind, window: T3CodeQuotaWindowView, t: TFunction) {
+export function formatT3codeQuotaWindow(
+  driver: T3CodeDriverKind,
+  window: T3CodeQuotaWindowView,
+  t: TFunction,
+  allowQuotaOverflow = false,
+) {
   let label = window.label;
   if (window.id === 'credits') label = t('accounts.credits.label');
   if (driver === 'codex' && (window.id === 'weekly' || window.label === '7d')) label = 'Weekly';
   if (window.remainingAmount != null) {
     return { label, value: quotaAmountFormat.format(window.remainingAmount), percent: undefined };
   }
-  const percent = Math.max(0, Math.min(100, Math.round(window.remainingPercent)));
+  const remaining = Math.max(0, Math.round(window.remainingPercent));
+  const percent = allowQuotaOverflow ? remaining : Math.min(100, remaining);
   return { label, value: `${percent}%`, percent };
 }
 
@@ -467,6 +472,7 @@ export interface T3codeQuotaSectionProps {
   speedTokPerSec?: number;
   cacheHitPercent?: number;
   compact?: boolean;
+  allowQuotaOverflow?: boolean;
   emptyLabel?: string;
 }
 
@@ -478,6 +484,7 @@ export function T3codeQuotaSection({
   speedTokPerSec,
   cacheHitPercent,
   compact = false,
+  allowQuotaOverflow = false,
   emptyLabel,
 }: T3codeQuotaSectionProps) {
   const { t } = useTranslation();
@@ -500,7 +507,7 @@ export function T3codeQuotaSection({
   return (
     <div className={`t3code-quota-list${compact ? ' is-compact' : ''}`}>
       {visibleWindows.map((window) => {
-        const { label: fullLabel, value, percent } = formatT3codeQuotaWindow(driver, window, t);
+        const { label: fullLabel, value, percent } = formatT3codeQuotaWindow(driver, window, t, allowQuotaOverflow);
         const weekly = t('settings.general.codexAppUiInjectionWeeklyLabel');
         const label = compact ? fullLabel.replace(/\b(?:7d|weekly)$/i, weekly) : fullLabel;
         const tone = percent == null ? null : getQuotaTone(percent);
@@ -515,7 +522,7 @@ export function T3codeQuotaSection({
             </div>
             {!compact && percent != null && (
               <div className="t3code-quota-track" aria-hidden="true">
-                <span className={`t3code-quota-fill is-${tone}`} style={{ width: `${percent}%` }} />
+                <span className={`t3code-quota-fill is-${tone}`} style={{ width: `${Math.min(100, percent)}%` }} />
               </div>
             )}
             {!compact && resetText && (

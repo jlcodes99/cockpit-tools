@@ -179,6 +179,7 @@ export function T3codeOverviewSection({
                       windows={instance.windows}
                       quotaSummaryGroups={instance.quotaSummaryGroups}
                       providerQuota={instance.providerQuota}
+                      allowQuotaOverflow={instance.boundIsApiService}
                       compact
                       emptyLabel={t('t3code.quotaQuery.empty')}
                     />

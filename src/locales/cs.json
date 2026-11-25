@@ -11,6 +11,7 @@
     "pathLabel": "Cesta ke spuštění",
     "switchAndCopy": "Přepnout a kopírovat",
     "sharedInstanceStart": "Přepnout sdílený účet a spustit",
+    "ideSharedAccountHint": "Od verze Antigravity IDE 2.6 sdílejí všechny instance jedno přihlášení ke Googlu. Přepnutí účtu zde ovlivní i ostatní otevřené instance.",
     "sharedInstanceHint": "Ostatní instance Antigravity zůstanou otevřené a mohou převzít nový účet.",
     "sharedInstanceRestart": "Restartuje se pouze vybraná instance.",
     "lastSharedAccount": "Naposledy přepnutý sdílený účet",
@@ -716,6 +717,12 @@
         "singleToken": "Jednotlivý příklad (Token)",
         "singleJson": "Jednotlivý příklad (JSON)",
         "batchJson": "Dávkový příklad (JSON)"
+      },
+      "exposeToCodex": {
+        "action": "Připojit k Codex",
+        "inProgress": "Připojování…",
+        "success": "Připojeno k Codex",
+        "failed": "Nepodařilo se připojit k Codex: {{error}}"
       }
     },
     "sessionSharing": {
@@ -8217,6 +8224,9 @@
       "until": "{{model}} při posledním testu omezen, obnova {{time}}",
       "unavailable": "{{model}} při posledním testu omezen",
       "failed": "Poslední test {{model}} selhal"
+    },
+    "exposeToCodex": {
+      "title": "Připojí se přes bránu Native Rust bez kopírování tokenu WorkBuddy"
     }
   },
   "minimaxCode": {
@@ -8428,6 +8438,12 @@
     },
     "instances": {
       "unsupported": "Více instancí ZCode je dostupných pouze v systémech macOS, Windows a Linux."
+    },
+    "exposeToCodex": {
+      "startPlan": "Obnovte kvótu ZCode a ověřte, že je osobní Z.ai Start Plan aktivní.",
+      "projectKey": "Připojte účet BigModel API Key pomocí klíče projektu.",
+      "signIn": "Přihlaste se znovu k ZCode a zkuste to znovu.",
+      "title": "Připojí se přes bránu Native Rust bez kopírování klíče ZCode API ani tokenu OAuth do konfigurace Codex"
     }
   },
   "zed": {
@@ -8850,7 +8866,10 @@
       "deploySuccess": "Nasazeno do Codexu: {{count}} modelů",
       "deployFailed": "Nasazení se nezdařilo: {{error}}",
       "useKey": "Použít klíč",
-      "deleteConfirm": "Smazat uložený klíč „{{name}}“? Tuto akci nelze vrátit zpět."
+      "deleteConfirm": "Smazat uložený klíč „{{name}}“? Tuto akci nelze vrátit zpět.",
+      "addToGeminiCli": "Přidat do Gemini CLI",
+      "geminiCliAdded": "Gemini CLI přidán",
+      "addToGeminiCliFailed": "Přidání do Gemini CLI selhalo: {{error}}"
     },
     "prefill": {
       "codexReady": "Nastavení APIKEY.FUN je vyplněno. Před přidáním do Codexu je zkontrolujte.",

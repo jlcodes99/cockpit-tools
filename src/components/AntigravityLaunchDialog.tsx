@@ -207,6 +207,9 @@ export function AntigravityLaunchDialog({
             ))}
           </div>
           {renderClientDetails?.(client, disabled || !!pathRecovery)}
+          {client === 'antigravity_ide' && (account || ideInstanceHasBoundAccount) && (
+            <p className="client-launch-hint">{t('antigravityLaunch.ideSharedAccountHint')}</p>
+          )}
           <PlatformLaunchPathField
             key={pathTarget}
             target={pathTarget}

@@ -4,8 +4,7 @@
 use crate::models::{codex::CodexAccount, zcode::ZcodeAccount};
 use axum::http::{HeaderMap, HeaderValue};
 
-pub(super) const ZCODE_PLAN_API_BASE_URL: &str = "https://zcode.z.ai/api/v1/zcode-plan/anthropic";
-const ZCODE_APP_VERSION: &str = "3.17.2";
+use crate::modules::zcode_account::ZCODE_PLAN_API_BASE_URL;
 
 pub(super) fn credential_headers(source: &ZcodeAccount) -> Result<HeaderMap, String> {
     let api_key = source
@@ -22,60 +21,29 @@ pub(super) fn credential_headers(source: &ZcodeAccount) -> Result<HeaderMap, Str
 }
 
 pub(super) fn oauth_credential_headers(source: &ZcodeAccount) -> Result<HeaderMap, String> {
-    let token = if source.team_plan.is_some() {
-        source.access_token.trim()
-    } else {
-        source.zcode_jwt_token.trim()
-    };
-    if token.is_empty() {
-        return Err("ZCODE_OAUTH_REAUTH_REQUIRED".to_string());
-    }
-    let mut headers = HeaderMap::new();
-    let mut authorization = HeaderValue::from_str(&format!("Bearer {token}"))
+    oauth_credential_headers_with_client_headers(
+        source,
+        crate::modules::zcode_account::zcode_client_headers,
+    )
+}
+
+fn oauth_credential_headers_with_client_headers(
+    source: &ZcodeAccount,
+    client_headers: impl FnOnce() -> HeaderMap,
+) -> Result<HeaderMap, String> {
+    let session_token = crate::modules::zcode_account::oauth_inference_session(source)?;
+    let mut headers = client_headers();
+    let mut authorization = HeaderValue::from_str(&format!("Bearer {session_token}"))
         .map_err(|_| "Invalid ZCode OAuth token")?;
     authorization.set_sensitive(true);
     headers.insert("authorization", authorization);
-    headers.insert("x-title", HeaderValue::from_static("Z Code@electron"));
-    headers.insert(
-        "x-zcode-app-version",
-        HeaderValue::from_static(ZCODE_APP_VERSION),
-    );
-    headers.insert(
-        "x-zcode-query-source",
-        HeaderValue::from_static("main_turn"),
-    );
-    headers.insert(
-        "x-device-mid",
-        HeaderValue::from_str(&source.id).map_err(|_| "Invalid ZCode device identity")?,
-    );
-    headers.insert("user-agent", HeaderValue::from_static("ZCode/3.17.2"));
-    headers.insert("x-platform", HeaderValue::from_static(std::env::consts::OS));
-    headers.insert(
-        "x-session-id",
-        HeaderValue::from_str(&source.id).map_err(|_| "Invalid ZCode session identity")?,
-    );
-    if let Some(team) = &source.team_plan {
-        headers.insert(
-            "bigmodel-organization",
-            HeaderValue::from_str(&team.organization_id)
-                .map_err(|_| "Invalid BigModel organization")?,
-        );
-        headers.insert(
-            "bigmodel-project",
-            HeaderValue::from_str(&team.project_id).map_err(|_| "Invalid BigModel project")?,
-        );
-        headers.insert("bigmodel-target-type", HeaderValue::from_static("TEAM"));
-    }
     Ok(headers)
 }
 
 pub(super) fn base_url(source: &ZcodeAccount) -> &'static str {
     if source.auth_mode == crate::models::zcode::ZcodeAuthMode::Oauth {
-        if source.team_plan.is_some() {
-            crate::modules::zcode_account::BIGMODEL_API_BASE_URL
-        } else {
-            ZCODE_PLAN_API_BASE_URL
-        }
+        // bigmodel OAuth 已在凭据构造处 fail closed；这里只承接 Z.ai 个人 Start Plan。
+        ZCODE_PLAN_API_BASE_URL
     } else if source.provider.eq_ignore_ascii_case("bigmodel") {
         crate::modules::zcode_account::BIGMODEL_API_BASE_URL
     } else {
@@ -94,9 +62,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn oauth_headers_use_session_token_and_plan_endpoint() {
+    fn oauth_headers_use_session_jwt_and_plan_endpoint() {
         let source: ZcodeAccount = serde_json::from_value(serde_json::json!({
             "id":"oauth-source",
+            "subscription_raw":[{"status":"active","name":"ZCode Start Plan"}],
             "auth_mode":"oauth",
             "provider":"zai",
             "email":"fixture@example.invalid",
@@ -106,18 +75,48 @@ mod tests {
             "last_used":1
         }))
         .unwrap();
-        let headers = oauth_credential_headers(&source).unwrap();
+        let headers =
+            oauth_credential_headers_with_client_headers(&source, HeaderMap::new).unwrap();
         assert_eq!(headers["authorization"], "Bearer session-jwt");
         assert!(headers["authorization"].is_sensitive());
-        assert_eq!(headers["x-title"], "Z Code@electron");
-        assert_eq!(headers["x-zcode-query-source"], "main_turn");
+        assert!(!headers.contains_key("x-bigmodel-authorization"));
+        assert!(!headers.contains_key("x-session-id"));
+        assert!(!headers.contains_key("x-zcode-query-source"));
         assert_eq!(base_url(&source), ZCODE_PLAN_API_BASE_URL);
+    }
+
+    #[test]
+    fn oauth_headers_merge_confirmed_client_identity_without_fabrication() {
+        let source: ZcodeAccount = serde_json::from_value(serde_json::json!({
+            "id":"oauth-source",
+            "subscription_raw":[{"status":"active","name":"ZCode Start Plan"}],
+            "auth_mode":"oauth",
+            "provider":"zai",
+            "email":"fixture@example.invalid",
+            "access_token":"provider-access",
+            "zcode_jwt_token":"session-jwt",
+            "created_at":1,
+            "last_used":1
+        }))
+        .unwrap();
+        let mut client = HeaderMap::new();
+        client.insert(
+            "x-device-mid",
+            HeaderValue::from_static("fixture-device-mid"),
+        );
+        client.insert("x-title", HeaderValue::from_static("Z Code@electron"));
+        let headers = oauth_credential_headers_with_client_headers(&source, || client).unwrap();
+        assert_eq!(headers["x-device-mid"], "fixture-device-mid");
+        assert_eq!(headers["x-title"], "Z Code@electron");
+        assert_ne!(headers["x-device-mid"], source.id.as_str());
+        assert!(!headers.contains_key("x-session-id"));
     }
 
     #[test]
     fn oauth_without_session_credential_is_rejected() {
         let source: ZcodeAccount = serde_json::from_value(serde_json::json!({
             "id":"oauth-empty",
+            "subscription_raw":[{"status":"active","name":"ZCode Start Plan"}],
             "auth_mode":"oauth",
             "provider":"zai",
             "email":"fixture@example.invalid",
@@ -128,13 +127,13 @@ mod tests {
         }))
         .unwrap();
         assert_eq!(
-            oauth_credential_headers(&source).unwrap_err(),
+            oauth_credential_headers_with_client_headers(&source, HeaderMap::new).unwrap_err(),
             "ZCODE_OAUTH_REAUTH_REQUIRED"
         );
     }
 
     #[test]
-    fn oauth_team_headers_use_bigmodel_access_token() {
+    fn oauth_bigmodel_team_plan_requires_project_api_key_and_fails_closed() {
         let source: ZcodeAccount = serde_json::from_value(serde_json::json!({
             "id":"oauth-team",
             "auth_mode":"oauth",
@@ -147,13 +146,56 @@ mod tests {
             "last_used":1
         }))
         .unwrap();
-        let headers = oauth_credential_headers(&source).unwrap();
-        assert_eq!(headers["authorization"], "Bearer team-access");
-        assert_eq!(headers["bigmodel-organization"], "org-1");
-        assert_eq!(headers["bigmodel-project"], "project-1");
-        assert_eq!(base_url(&source), crate::modules::zcode_account::BIGMODEL_API_BASE_URL);
+        assert_eq!(
+            oauth_credential_headers_with_client_headers(&source, HeaderMap::new).unwrap_err(),
+            "ZCODE_BIGMODEL_PROJECT_API_KEY_REQUIRED"
+        );
     }
 
+    #[test]
+    fn oauth_bigmodel_inference_never_receives_the_quota_session_jwt() {
+        // 配额（zcode.z.ai/api/v1/mcp/usage）使用的会话 JWT 不能发送到
+        // open.bigmodel.cn/api/anthropic 推理端点；BigModel OAuth 一律 fail closed，
+        // 不把 session JWT 或 access_token 猜测发送。
+        let source: ZcodeAccount = serde_json::from_value(serde_json::json!({
+            "id":"oauth-bigmodel-personal",
+            "auth_mode":"oauth",
+            "provider":"bigmodel",
+            "email":"fixture@example.invalid",
+            "access_token":"provider-access",
+            "zcode_jwt_token":"quota-session-jwt",
+            "created_at":1,
+            "last_used":1
+        }))
+        .unwrap();
+        assert_eq!(
+            oauth_credential_headers_with_client_headers(&source, HeaderMap::new).unwrap_err(),
+            "ZCODE_BIGMODEL_PROJECT_API_KEY_REQUIRED"
+        );
+    }
+
+    #[test]
+    fn oauth_bigmodel_without_tokens_also_fails_closed() {
+        let source: ZcodeAccount = serde_json::from_value(serde_json::json!({
+            "id":"oauth-bigmodel-empty",
+            "auth_mode":"oauth",
+            "provider":"bigmodel",
+            "email":"fixture@example.invalid",
+            "access_token":"",
+            "zcode_jwt_token":"",
+            "team_plan":{"organization_id":"org-1","project_id":"project-1"},
+            "created_at":1,
+            "last_used":1
+        }))
+        .unwrap();
+        assert_eq!(
+            oauth_credential_headers_with_client_headers(&source, HeaderMap::new).unwrap_err(),
+            "ZCODE_BIGMODEL_PROJECT_API_KEY_REQUIRED"
+        );
+    }
+
+    #[test]
+    fn headers_are_sensitive_and_provider_base_url_is_selected() {
         let source: ZcodeAccount = serde_json::from_value(serde_json::json!({
             "id":"zcode-source",
             "auth_mode":"api_key",

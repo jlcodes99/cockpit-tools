@@ -11,6 +11,7 @@
     "pathLabel": "啟動路徑",
     "switchAndCopy": "切換並複製",
     "sharedInstanceStart": "切換共用帳號並啟動",
+    "ideSharedAccountHint": "Antigravity IDE 2.6 起，所有執行個體共用 Google 登入。在此切換帳號也會影響其他已開啟的執行個體。",
     "sharedInstanceHint": "其他已開啟的 Antigravity 執行個體會繼續運作，也可能同步至新帳號。",
     "sharedInstanceRestart": "只重新啟動選取的執行個體。",
     "lastSharedAccount": "最近切換的共用帳號",
@@ -721,6 +722,12 @@
         "singleToken": "單筆範例（Token）",
         "singleJson": "單筆範例（JSON）",
         "batchJson": "批次範例（JSON）"
+      },
+      "exposeToCodex": {
+        "action": "接入 Codex",
+        "inProgress": "接入中…",
+        "success": "已接入 Codex",
+        "failed": "接入 Codex 失败：{{error}}"
       }
     },
     "topRightAd": {
@@ -8217,6 +8224,9 @@
       "until": "{{model}} 上次探測受限，恢復時間 {{time}}",
       "unavailable": "{{model}} 上次探測受限",
       "failed": "{{model}} 上次探測失敗"
+    },
+    "exposeToCodex": {
+      "title": "僅透過 Native Rust 閘道接入，不會複製 WorkBuddy Token"
     }
   },
   "minimaxCode": {
@@ -8428,6 +8438,12 @@
     },
     "instances": {
       "unsupported": "ZCode 多開僅支援 macOS、Windows 與 Linux。"
+    },
+    "exposeToCodex": {
+      "startPlan": "請重新整理 ZCode 額度，確認已啟用個人 Z.ai Start Plan。",
+      "projectKey": "請透過 BigModel API Key 帳號接入專案金鑰。",
+      "signIn": "請重新登入 ZCode 後再試。",
+      "title": "僅透過 Native Rust 閘道接入，不會複製 ZCode API Key 或 OAuth Token 到 Codex 設定"
     }
   },
   "zed": {
@@ -8850,7 +8866,10 @@
       "deploySuccess": "已部署到 Codex：{{count}} 個模型",
       "deployFailed": "部署失敗：{{error}}",
       "useKey": "使用密鑰",
-      "deleteConfirm": "確定刪除已儲存的金鑰「{{name}}」嗎？此操作無法復原。"
+      "deleteConfirm": "確定刪除已儲存的金鑰「{{name}}」嗎？此操作無法復原。",
+      "addToGeminiCli": "加入 Gemini CLI",
+      "geminiCliAdded": "Gemini CLI 已加入",
+      "addToGeminiCliFailed": "加入 Gemini CLI 失敗：{{error}}"
     },
     "prefill": {
       "codexReady": "已填入 APIKEY.FUN 設定，請確認後新增至 Codex。",
