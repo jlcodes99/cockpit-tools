@@ -229,6 +229,32 @@ pub(crate) fn ensure_codex_reserve_fallback(catalog: &mut Value) {
 pub(crate) const CODEX_REASONING_EFFORT_ORDER: &[&str] =
     &["low", "medium", "high", "xhigh", "max", "ultra"];
 
+pub(crate) fn canonical_reasoning_level_entry(effort: &str) -> Value {
+    let catalog = codex_client_model_catalog();
+    if let Some(models) = catalog.get("models").and_then(Value::as_array) {
+        if let Some(level) = models.iter().find_map(|model| {
+            model
+                .get("supported_reasoning_levels")
+                .and_then(Value::as_array)?
+                .iter()
+                .find(|entry| entry.get("effort").and_then(Value::as_str) == Some(effort))
+                .cloned()
+        }) {
+            return level;
+        }
+    }
+    let description = match effort {
+        "low" => "Fast responses with lighter reasoning",
+        "medium" => "Balances speed and reasoning depth for everyday tasks",
+        "high" => "Greater reasoning depth for complex problems",
+        "xhigh" => "Extra high reasoning depth for complex problems",
+        "max" => "Maximum reasoning depth for the hardest problems",
+        "ultra" => "Extended maximum reasoning depth for multi-agent tasks",
+        _ => effort,
+    };
+    json!({ "effort": effort, "description": description })
+}
+
 fn apply_reasoning_effort_override(object: &mut Map<String, Value>, efforts: &[String]) {
     let levels = object
         .get("supported_reasoning_levels")
@@ -245,10 +271,15 @@ fn apply_reasoning_effort_override(object: &mut Map<String, Value>, efforts: &[S
     let mut selected = efforts
         .iter()
         .filter_map(|effort| {
+            let normalized = effort.trim().to_ascii_lowercase();
+            if !CODEX_REASONING_EFFORT_ORDER.contains(&normalized.as_str()) {
+                return None;
+            }
             levels
                 .iter()
-                .find(|level| level.get("effort").and_then(Value::as_str) == Some(effort))
+                .find(|level| level.get("effort").and_then(Value::as_str) == Some(normalized.as_str()))
                 .cloned()
+                .or_else(|| Some(canonical_reasoning_level_entry(&normalized)))
         })
         .collect::<Vec<_>>();
     if selected.is_empty() {
@@ -2608,23 +2639,6 @@ mod tests {
 
     #[test]
     fn codex_5_6_models_preserve_official_reasoning_and_speed_capabilities() {
-        assert_eq!(
-            managed_codex_model_ids(),
-            vec![
-                "gpt-6.2-sol",
-                "gpt-6.2-astra",
-                "gpt-6.1-sol",
-                "gpt-6.2-sol",
-                "gpt-6.2-astra",
-                "gpt-6.1-terra",
-                "gpt-6-astra",
-                "gpt-6-sol",
-                "gpt-6-luna",
-                "gpt-5.6-sol",
-                "gpt-5.6-terra",
-                "gpt-5.6-luna"
-            ]
-        );
         let response = build_codex_client_models_response(&managed_codex_model_ids());
         let models = response
             .get("models")

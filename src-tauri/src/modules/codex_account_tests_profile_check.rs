@@ -691,3 +691,140 @@ fn profile_check_matches_legacy_flat_org_entry_under_alias_key_without_false_rej
     )
     .is_err());
 }
+
+#[test]
+fn account_profile_reads_nested_workspace_for_the_target_account() {
+    let _lock = crate::modules::test_support::env_lock()
+        .lock()
+        .unwrap_or_else(|err| err.into_inner());
+    let _env = TestEnvGuard::new("codex-nested-workspace-profile");
+    let mut account = CodexAccount::new(
+        "workspace-profile-test".into(),
+        "workspace@example.test".into(),
+        make_codex_tokens(
+            "workspace@example.test",
+            "workspace-team",
+            "org-workspace-team",
+            "workspace-profile",
+            "fixture",
+        ),
+    );
+    account.plan_type = Some("business".into());
+    let payload = serde_json::json!({
+        "accounts": {
+            "workspace-personal": {"account": {"name": "Personal", "structure": "personal"}},
+            "workspace-team": {"account": {
+                "id": "profile-record-id",
+                "account_id": "workspace-team",
+                "name": "Team Alpha",
+                "structure": "workspace"
+            }}
+        },
+        "account_ordering": ["workspace-personal", "workspace-team"]
+    });
+
+    let (name, structure, remote_id) =
+        super::parse_account_profile_from_check_response(&payload, &account).unwrap();
+    save_account(&account).unwrap();
+    super::persist_codex_account_profile(&account, name, structure, remote_id).unwrap();
+    let saved = load_account(&account.id).unwrap();
+    assert_eq!(saved.account_name.as_deref(), Some("Team Alpha"));
+    assert_eq!(saved.account_structure.as_deref(), Some("workspace"));
+    assert_eq!(saved.account_id.as_deref(), Some("workspace-team"));
+    assert_eq!(saved.tokens.access_token, account.tokens.access_token);
+
+    let legacy = serde_json::json!({"accounts": [
+        {"account_id": "workspace-team", "name": "Team Alpha", "structure": "workspace"}
+    ]});
+    assert_eq!(
+        super::parse_account_profile_from_check_response(&legacy, &account)
+            .unwrap().0.as_deref(),
+        Some("Team Alpha")
+    );
+}
+
+#[test]
+fn official_account_check_accepts_target_account_key() {
+    let account = CodexAccount::new(
+        "codex_account_check".to_string(),
+        "check@example.com".to_string(),
+        make_codex_tokens(
+            "check@example.com",
+            "3a7dc3f2-ea90-4456-9426-a46bd8b3e6f3",
+            "org-check",
+            "check",
+            "rt-check",
+        ),
+    );
+    let payload = serde_json::json!({
+        "accounts": {
+            "3a7dc3f2-ea90-4456-9426-a46bd8b3e6f3": {
+                "account": {
+                    "account_id": "3a7dc3f2-ea90-4456-9426-a46bd8b3e6f3",
+                    "account_residency_region": "no_constraint"
+                },
+                "can_access_with_session": true
+            }
+        },
+        "account_ordering": ["3a7dc3f2-ea90-4456-9426-a46bd8b3e6f3"]
+    });
+
+    super::validate_account_check_payload(&payload, &account)
+        .expect("target account should pass official account check validation");
+}
+
+#[test]
+fn official_account_check_rejects_another_account() {
+    let account = CodexAccount::new(
+        "codex_account_check_mismatch".to_string(),
+        "check-mismatch@example.com".to_string(),
+        make_codex_tokens(
+            "check-mismatch@example.com",
+            "3a7dc3f2-ea90-4456-9426-a46bd8b3e6f3",
+            "org-check",
+            "check-mismatch",
+            "rt-check-mismatch",
+        ),
+    );
+    let payload = serde_json::json!({
+        "accounts": {
+            "6a7dc3f2-ea90-4456-9426-a46bd8b3e6f9": {
+                "name": "Another"
+            }
+        },
+        "account_ordering": ["6a7dc3f2-ea90-4456-9426-a46bd8b3e6f9"]
+    });
+
+    let error = super::validate_account_check_payload(&payload, &account)
+        .expect_err("another account must not pass target account validation");
+    assert!(error.message.contains("与目标账号不一致"));
+}
+
+#[test]
+fn official_account_check_rejects_session_without_account_access() {
+    let account = CodexAccount::new(
+        "codex_account_check_denied".to_string(),
+        "check-denied@example.com".to_string(),
+        make_codex_tokens(
+            "check-denied@example.com",
+            "3a7dc3f2-ea90-4456-9426-a46bd8b3e6f3",
+            "org-check",
+            "check-denied",
+            "rt-check-denied",
+        ),
+    );
+    let payload = serde_json::json!({
+        "accounts": {
+            "3a7dc3f2-ea90-4456-9426-a46bd8b3e6f3": {
+                "account": {
+                    "account_id": "3a7dc3f2-ea90-4456-9426-a46bd8b3e6f3"
+                },
+                "can_access_with_session": false
+            }
+        }
+    });
+
+    let error = super::validate_account_check_payload(&payload, &account)
+        .expect_err("session without account access must be rejected");
+    assert!(error.message.contains("不允许当前登录态访问目标账号"));
+}

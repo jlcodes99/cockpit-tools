@@ -514,7 +514,7 @@ fn resolve_macos_app_root_from_config(app: &str) -> Option<String> {
 
 /// 从已解析的可执行文件路径中提取 .app 根路径
 #[cfg(target_os = "macos")]
-fn resolve_macos_app_root_from_launch_path(launch_path: &std::path::Path) -> Option<String> {
+pub(super) fn resolve_macos_app_root_from_launch_path(launch_path: &std::path::Path) -> Option<String> {
     let app_root = normalize_macos_app_root(launch_path)?;
     if std::path::Path::new(&app_root).exists() {
         Some(app_root)
@@ -524,7 +524,7 @@ fn resolve_macos_app_root_from_launch_path(launch_path: &std::path::Path) -> Opt
 }
 
 #[cfg(target_os = "macos")]
-fn spawn_open_app_with_options(
+pub(super) fn spawn_open_app_with_options(
     app_root: &str,
     args: &[String],
     force_new_instance: bool,
@@ -2614,35 +2614,43 @@ fn detect_opencode_exec_path() -> Option<std::path::PathBuf> {
 
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct AntigravityLaunchPath {
+pub(crate) struct DesktopLaunchPath {
     pub configured_path: Option<String>,
     pub resolved_path: Option<std::path::PathBuf>,
     pub uses_configured_path: bool,
 }
 
-pub(crate) fn inspect_antigravity_desktop_launch_path(legacy: bool) -> AntigravityLaunchPath {
+pub(crate) fn detect_preview_desktop_path(app: &str) -> Option<std::path::PathBuf> {
+    match app {
+        "antigravity" | "antigravity_ide" => detect_antigravity_exec_path(),
+        "antigravity_legacy" => detect_antigravity_legacy_exec_path(),
+        "codebuddy" => detect_codebuddy_exec_path(),
+        "codebuddy_cn" => detect_codebuddy_cn_exec_path(),
+        _ => None,
+    }
+}
+
+pub(crate) fn inspect_preview_desktop_path(app: &str) -> Option<DesktopLaunchPath> {
     let current = config::get_user_config();
-    let configured_path = normalize_custom_path(Some(if legacy {
-        &current.antigravity_legacy_app_path
-    } else {
-        &current.antigravity_app_path
+    let configured_path = normalize_custom_path(Some(match app {
+        "antigravity" | "antigravity_ide" => &current.antigravity_app_path,
+        "antigravity_legacy" => &current.antigravity_legacy_app_path,
+        "codebuddy" => &current.codebuddy_app_path,
+        "codebuddy_cn" => &current.codebuddy_cn_app_path,
+        _ => return None,
     }));
-    let configured_executable = configured_path
-        .as_deref()
-        .and_then(|path| resolve_antigravity_configured_path(path, legacy));
-    let uses_configured_path = configured_executable.is_some();
-    let resolved_path = configured_executable.or_else(|| {
-        if legacy {
-            detect_antigravity_legacy_exec_path()
-        } else {
-            detect_antigravity_exec_path()
-        }
+    let configured_executable = configured_path.as_deref().and_then(|path| match app {
+        "codebuddy" => resolve_codebuddy_macos_exec_path(path),
+        "codebuddy_cn" => resolve_codebuddy_cn_macos_exec_path(path),
+        _ => resolve_antigravity_configured_path(path, app == "antigravity_legacy"),
     });
-    AntigravityLaunchPath {
+    let uses_configured_path = configured_executable.is_some();
+    let resolved_path = configured_executable.or_else(|| detect_preview_desktop_path(app));
+    Some(DesktopLaunchPath {
         configured_path,
         resolved_path,
         uses_configured_path,
-    }
+    })
 }
 
 fn resolve_antigravity_configured_path(custom: &str, legacy: bool) -> Option<std::path::PathBuf> {
@@ -2692,8 +2700,8 @@ fn resolve_antigravity_configured_path(custom: &str, legacy: bool) -> Option<std
 }
 
 fn resolve_antigravity_launch_path() -> Result<std::path::PathBuf, String> {
-    inspect_antigravity_desktop_launch_path(false)
-        .resolved_path
+    inspect_preview_desktop_path("antigravity")
+        .and_then(|path| path.resolved_path)
         .ok_or_else(|| app_path_missing_error("antigravity"))
 }
 
@@ -2702,8 +2710,8 @@ pub fn ensure_antigravity_launch_path_configured() -> Result<(), String> {
 }
 
 fn resolve_antigravity_legacy_launch_path() -> Result<std::path::PathBuf, String> {
-    inspect_antigravity_desktop_launch_path(true)
-        .resolved_path
+    inspect_preview_desktop_path("antigravity_legacy")
+        .and_then(|path| path.resolved_path)
         .ok_or_else(|| app_path_missing_error("antigravity_legacy"))
 }
 

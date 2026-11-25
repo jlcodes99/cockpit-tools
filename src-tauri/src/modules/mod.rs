@@ -21,12 +21,14 @@ pub(crate) mod usage_rollup;
 pub mod announcement;
 pub mod apikey_fun_links;
 pub(crate) mod apikey_fun_vault;
+pub(crate) mod antigravity_composer_status;
 pub mod antigravity_credential;
 pub mod antigravity_legacy_instance;
 pub mod antigravity_paths;
 pub(crate) mod antigravity_shared_switch;
 pub mod antigravity_switch_history;
 pub mod antigravity_token_usage;
+pub(crate) mod app_cdp;
 pub mod app_lifecycle;
 #[cfg(target_os = "macos")]
 pub mod app_presence;
@@ -196,6 +198,11 @@ pub mod sponsor_route_sync;
 pub mod ssh_server;
 mod ssh_server_identity;
 pub mod sync_settings;
+pub mod t3code_account;
+pub mod t3code_app_injection;
+pub mod t3code_native_settings;
+pub mod t3code_instance;
+pub mod t3code_provider_bindings;
 #[cfg(test)]
 pub mod test_support;
 pub mod trae_account;

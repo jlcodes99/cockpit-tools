@@ -186,6 +186,7 @@ mod tests {
         config.minimax_code_auto_refresh_minutes = -1;
         config.qoder_auto_refresh_minutes = -1;
         config.zcode_auto_refresh_minutes = -1;
+        config.t3code_auto_refresh_minutes = -1;
         config.trae_auto_refresh_minutes = -1;
         config.trae_solo_auto_refresh_minutes = -1;
         config.trae_cn_auto_refresh_minutes = -1;
@@ -307,6 +308,7 @@ fn has_enabled_periodic_account_refresh(config: &modules::config::UserConfig) ->
         config.minimax_code_auto_refresh_minutes,
         config.qoder_auto_refresh_minutes,
         config.zcode_auto_refresh_minutes,
+        config.t3code_auto_refresh_minutes,
         config.trae_auto_refresh_minutes,
         config.trae_solo_auto_refresh_minutes,
         config.trae_cn_auto_refresh_minutes,
@@ -391,6 +393,11 @@ fn configure_main_window_decorations(config: &mut tauri::Config, is_linux: bool)
     }
 }
 
+fn create_app_context() -> tauri::Context<tauri::Wry> {
+    // A single expansion embeds the macOS Info.plist symbol once.
+    tauri::generate_context!()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     if frontend_smoke::try_run() {
@@ -415,7 +422,7 @@ pub fn run() {
     }
 
     // Tauri and the tray's window recreation both read this configuration.
-    let mut context = tauri::generate_context!();
+    let mut context = create_app_context();
     configure_main_window_decorations(context.config_mut(), cfg!(target_os = "linux"));
     let startup_main_window_state = context
         .config_mut()
@@ -934,7 +941,6 @@ pub fn run() {
             commands::account::refresh_current_quota,
             commands::account::switch_account,
             commands::account::antigravity_launch_current,
-            commands::account::cli_launch::get_antigravity_client_launch_path,
             commands::account::cli_launch::switch_antigravity_cli,
             commands::account::cli_launch::launch_antigravity_cli,
             commands::account::cli_launch::antigravity_cli_launch_command,
@@ -1080,6 +1086,8 @@ pub fn run() {
             commands::system::save_tray_platform_layout,
             commands::system::set_app_path,
             commands::cli_launch_path::inspect_cli_launch_path,
+            commands::cli_launch_path::get_platform_launch_path,
+            commands::cli_launch_path::scan_platform_launch_paths,
             commands::cli_launch_path::save_cli_launch_path,
             commands::system::launch_opencode_current,
             commands::system::validate_codex_app_path,
@@ -1735,6 +1743,44 @@ pub fn run() {
             commands::zcode_instance::zcode_stop_instance,
             commands::zcode_instance::zcode_open_instance_window,
             commands::zcode_instance::zcode_close_all_instances,
+            // T3 Code Commands
+            commands::t3code::list_t3code_accounts,
+            commands::t3code::delete_t3code_account,
+            commands::t3code::delete_t3code_accounts,
+            commands::t3code::import_t3code_from_json,
+            commands::t3code::import_t3code_from_file,
+            commands::t3code::import_t3code_from_local,
+            commands::t3code::import_t3code_token,
+            commands::t3code::export_t3code_accounts,
+            commands::t3code::refresh_t3code_account,
+            commands::t3code::refresh_all_t3code_accounts,
+            commands::t3code::inject_t3code_account,
+            commands::t3code::t3code_launch_current,
+            commands::t3code::update_t3code_account_tags,
+            commands::t3code::get_t3code_current_account_id,
+            commands::t3code::get_t3code_accounts_index_path,
+            commands::t3code::get_t3code_native_settings,
+            commands::t3code::update_t3code_native_settings,
+            commands::t3code::get_t3code_provider_workspace,
+            commands::t3code::t3code_sync_provider_launch_paths,
+            commands::t3code::t3code_install_antigravity_runtime,
+            commands::t3code::get_t3code_provider_runtime_status,
+            commands::t3code::bind_t3code_provider_instance_account,
+            commands::t3code::switch_t3code_provider_instance_account,
+            commands::t3code::promote_t3code_provider_account,
+            commands::t3code::upsert_t3code_provider_instance,
+            commands::t3code::remove_t3code_provider_instance,
+            commands::t3code::refresh_t3code_provider_account_quota,
+            // T3 Code Instance Commands
+            commands::t3code_instance::t3code_get_instance_defaults,
+            commands::t3code_instance::t3code_list_instances,
+            commands::t3code_instance::t3code_create_instance,
+            commands::t3code_instance::t3code_update_instance,
+            commands::t3code_instance::t3code_delete_instance,
+            commands::t3code_instance::t3code_start_instance,
+            commands::t3code_instance::t3code_stop_instance,
+            commands::t3code_instance::t3code_open_instance_window,
+            commands::t3code_instance::t3code_close_all_instances,
             // Qoder Instance Commands
             commands::qoder_instance::qoder_get_instance_defaults,
             commands::qoder_instance::qoder_list_instances,
@@ -1985,6 +2031,7 @@ pub fn run() {
                         commands::codex_instance::restore_mixed_model_profiles_for_app_exit();
                     }
                     modules::codex_app_injection::stop_all();
+                    modules::t3code_app_injection::stop_all();
                     modules::codex_proxy_engine::shutdown_all();
                     let app_to_exit = app_handle.clone();
                     tauri::async_runtime::spawn(async move {
@@ -2012,6 +2059,7 @@ pub fn run() {
                     commands::codex_instance::restore_mixed_model_profiles_for_app_exit();
                 }
                 modules::codex_app_injection::stop_all();
+                modules::t3code_app_injection::stop_all();
                 modules::codex_proxy_engine::shutdown_all();
                 tauri::async_runtime::spawn(async {
                     modules::codex_local_access::shutdown_local_access_gateway_for_app_exit().await;

@@ -467,12 +467,12 @@ pub(crate) fn prepare(home: &Path, owner: Option<&str>) -> Result<bool, String> 
         return Ok(false);
     };
     let before = decode(Some(&bytes))?;
-    // Older/unscoped state is handled by the existing recovery path. Its
-    // top-level preferences do not identify an owner that we can archive.
-    if before.get(SCOPES).is_none() && before.get(PARKED).is_none() {
-        return Ok(ssh::prepare_startup(home, &before));
-    }
     let mut after = before.clone();
+    ssh::inherit_scoped_auto_connect(&mut after, owner);
+    // Desktop can store account-specific SSH preferences before creating a project archive.
+    if before.get(SCOPES).is_none() && before.get(PARKED).is_none() {
+        return finish_prepare(home, &bytes, &before, &after);
+    }
     let mut scopes = before
         .get(SCOPES)
         .or_else(|| before.get(PARKED))
@@ -572,11 +572,15 @@ pub(crate) fn prepare(home: &Path, owner: Option<&str>) -> Result<bool, String> 
         after.as_object_mut().unwrap().remove(SCOPES);
         after[PARKED] = scopes;
     }
+    finish_prepare(home, &bytes, &before, &after)
+}
+
+fn finish_prepare(home: &Path, bytes: &[u8], before: &Value, after: &Value) -> Result<bool, String> {
     if after == before {
-        return Ok(ssh::prepare_startup(home, &after));
+        return Ok(ssh::prepare_startup(home, after));
     }
-    let expected_hash: [u8; 32] = Sha256::digest(&bytes).into();
-    let content = serde_json::to_string(&after).map_err(|e| e.to_string())?;
+    let expected_hash: [u8; 32] = Sha256::digest(bytes).into();
+    let content = serde_json::to_string(after).map_err(|e| e.to_string())?;
     // Codex owns the adjacent .bak. Do not replace it with a temporary backup
     // or treat it as a plaintext credential backup to remove.
     if !crate::modules::atomic_write::restore_string_atomic_if_hash_matches(
@@ -586,7 +590,7 @@ pub(crate) fn prepare(home: &Path, owner: Option<&str>) -> Result<bool, String> 
     )? {
         return Err("CODEX_PROJECT_CHANGED".into());
     }
-    ssh::prepare_startup(home, &after);
+    ssh::prepare_startup(home, after);
     Ok(true)
 }
 

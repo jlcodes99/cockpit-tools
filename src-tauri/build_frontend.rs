@@ -85,11 +85,18 @@ pub fn verify_production_frontend(target: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
     struct Fixture(PathBuf);
     impl Fixture {
         fn new() -> Self {
+            static NEXT_FIXTURE: AtomicU64 = AtomicU64::new(0);
             let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
-            let path = std::env::temp_dir().join(format!("cockpit-frontend-guard-{}-{stamp}", std::process::id()));
+            let sequence = NEXT_FIXTURE.fetch_add(1, Ordering::Relaxed);
+            let path = std::env::temp_dir().join(format!(
+                "cockpit-frontend-guard-{}-{stamp}-{sequence}",
+                std::process::id()
+            ));
             std::fs::create_dir_all(path.join("src-tauri")).unwrap();
             std::fs::create_dir_all(path.join("dist/assets")).unwrap();
             std::fs::write(path.join("src-tauri/tauri.conf.json"), r#"{"identifier":"test.cockpit","build":{"frontendDist":"../dist"}}"#).unwrap();

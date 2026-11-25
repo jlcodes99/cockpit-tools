@@ -2626,6 +2626,42 @@ fn managed_env_keys_for_settings(settings_path: &Path) -> BTreeSet<String> {
     keys
 }
 
+pub(super) struct ClaudeCodeProfileAuthSnapshot {
+    managed_env_keys: BTreeSet<String>,
+    #[cfg(target_os = "macos")]
+    keychain: Option<Option<Value>>,
+}
+
+impl ClaudeCodeProfileAuthSnapshot {
+    pub(super) fn capture(config_dir: &Path, _writes_oauth: bool) -> Result<Self, String> {
+        let settings_path = get_claude_code_settings_path(config_dir);
+        let managed_env_keys = read_settings_managed_env_keys()
+            .remove(&managed_env_store_key(&settings_path))
+            .unwrap_or_default().into_iter().collect();
+        Ok(Self {
+            managed_env_keys,
+            #[cfg(target_os = "macos")]
+            keychain: _writes_oauth.then(|| read_claude_code_keychain_credentials(config_dir)).transpose()?,
+        })
+    }
+
+    pub(super) fn restore(self, config_dir: &Path) -> Result<(), String> {
+        #[cfg(target_os = "macos")]
+        if let Some(saved) = self.keychain {
+            match saved {
+                Some(credentials) => write_claude_code_keychain_credentials(config_dir, &credentials)?,
+                None => {
+                    delete_claude_code_keychain_credentials(config_dir);
+                    if read_claude_code_keychain_credentials(config_dir)?.is_some() {
+                        return Err("Claude Code profile keychain rollback failed".into());
+                    }
+                }
+            }
+        }
+        record_settings_managed_env_keys(&get_claude_code_settings_path(config_dir), self.managed_env_keys)
+    }
+}
+
 fn clear_api_key_env_from_claude_code_settings(config_dir: &Path) -> Result<(), String> {
     let settings_path = get_claude_code_settings_path(config_dir);
     let recorded_keys = read_settings_managed_env_keys();

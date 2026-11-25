@@ -1607,9 +1607,45 @@ pub async fn update_local_access_bound_oauth_account(
 
 pub async fn clear_local_access_stats() -> Result<CodexLocalAccessState, String> {
     ensure_runtime_loaded().await?;
-    tauri::async_runtime::spawn_blocking(clear_local_access_usage_events_db)
-        .await
-        .map_err(|error| format!("清空 API 服务请求日志任务失败: {error}"))??;
+    let identity_store = {
+        let runtime = gateway_runtime().lock().await;
+        runtime
+            .native_handle
+            .as_ref()
+            .map(native_api::Handle::identity_store)
+    };
+    let identity_path = native_global_identity_path().ok();
+    tauri::async_runtime::spawn_blocking(move || {
+        clear_local_access_usage_events_db()?;
+        let compact_result = if let Some(store) = identity_store {
+            store.clear_archived_history_and_compact().map(Some)
+        } else if let Some(path) = identity_path {
+            native_api::identity::IdentityStore::compact_path_if_exists(&path)
+        } else {
+            Ok(None)
+        };
+        match compact_result {
+            Ok(Some(report)) => {
+                logger::log_info(&format!(
+                    "[API服务] 清空统计并压缩 identity.sqlite 完成: history={}, partial={}, checkpoints={}, items={}, vacuumed={}",
+                    report.deleted_history_rows,
+                    report.deleted_partial_rows,
+                    report.deleted_checkpoint_rows,
+                    report.deleted_item_rows,
+                    report.vacuumed,
+                ));
+            }
+            Ok(None) => {}
+            Err(error) => {
+                logger::log_warn(&format!(
+                    "[API服务] 压缩 identity.sqlite 失败（已清空统计日志）: {error}"
+                ));
+            }
+        }
+        Ok::<(), String>(())
+    })
+    .await
+    .map_err(|error| format!("清空 API 服务请求日志任务失败: {error}"))??;
 
     let cleared = empty_stats_snapshot();
     {

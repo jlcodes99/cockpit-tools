@@ -974,13 +974,31 @@ pub(crate) fn model_reasoning_efforts_for_profile(
     models: &[CodexExperimentalModelDefinition],
 ) -> HashMap<String, Vec<String>> {
     let mut result = model_reasoning_efforts(models);
+    // Validation also runs while migrating the catalog. Inspect the saved input
+    // directly so this lookup cannot start the migration again.
+    let saved_definitions = read_experimental_model_catalog_config(base_dir)
+        .map(|config| config.models)
+        .unwrap_or_default();
     let catalog = fs::read_to_string(experimental_model_catalog_path(base_dir))
         .ok()
         .and_then(|content| serde_json::from_str::<serde_json::Value>(&content).ok());
     for model in models {
+        if let Ok(Some(explicit)) = normalize_reasoning_efforts(model.reasoning_efforts.clone()) {
+            result.insert(model.model_id.clone(), explicit);
+            continue;
+        }
         // Official GPT metadata comes from the bundled source, rather than a previously
-        // narrowed user override. Supplier/namespaced models use the actual profile template.
-        if model.model_id.to_ascii_lowercase().starts_with("gpt-") {
+        // narrowed user override. Skip disk catalog if this model previously saved custom
+        // reasoning efforts so switching back to "follow official" never locks in stale levels.
+        if model.model_id.to_ascii_lowercase().starts_with("gpt-")
+            || saved_definitions.iter().any(|saved| {
+                saved.model_id.eq_ignore_ascii_case(&model.model_id)
+                    && saved
+                        .reasoning_efforts
+                        .as_ref()
+                        .is_some_and(|efforts| !efforts.is_empty())
+            })
+        {
             continue;
         }
         let entry = catalog
@@ -1001,12 +1019,6 @@ pub(crate) fn model_reasoning_efforts_for_profile(
             .into_iter()
             .flatten()
             .filter_map(|level| level["effort"].as_str().map(str::to_owned))
-            .filter(|effort| {
-                model
-                    .reasoning_efforts
-                    .as_ref()
-                    .is_none_or(|efforts| efforts.contains(effort))
-            })
             .collect::<Vec<_>>();
         if !efforts.is_empty() {
             result.insert(model.model_id.clone(), efforts);
@@ -1150,15 +1162,7 @@ pub(crate) fn normalize_experimental_model_definitions_with_template(
                 .into_iter()
                 .flatten()
                 .map(|effort| effort.trim().to_ascii_lowercase())
-                .filter(|effort| {
-                    template["supported_reasoning_levels"]
-                        .as_array()
-                        .is_some_and(|levels| {
-                            levels
-                                .iter()
-                                .any(|level| level["effort"].as_str() == Some(effort.as_str()))
-                        })
-                })
+                .filter(|effort| CODEX_REASONING_EFFORTS.contains(&effort.as_str()))
                 .collect::<Vec<_>>();
             if !template["default_reasoning_level"]
                 .as_str()
@@ -1460,11 +1464,14 @@ fn apply_model_reasoning_config_to_catalog(
             let selected = CODEX_REASONING_EFFORTS
                 .iter()
                 .filter(|effort| efforts.iter().any(|value| value == **effort))
-                .filter_map(|effort| {
+                .map(|effort| {
                     levels
                         .iter()
                         .find(|level| level["effort"].as_str() == Some(effort))
                         .cloned()
+                        .unwrap_or_else(|| {
+                            crate::modules::codex_protocol::canonical_reasoning_level_entry(effort)
+                        })
                 })
                 .collect::<Vec<_>>();
             if !selected.is_empty() {
@@ -1930,6 +1937,7 @@ fn apply_experimental_model_catalog_to_doc(
         .map_err(|_| "EXPERIMENTAL_MODEL_CATALOG_SERIALIZE_FAILED".to_string())?;
     crate::modules::codex_local_access::apply_attached_catalog_route_capabilities(doc, &mut catalog)?;
     apply_model_context_config_to_catalog(&mut catalog, &experimental_models);
+    apply_model_reasoning_config_to_catalog(&mut catalog, &experimental_models)?;
     crate::modules::codex_model_catalog_capabilities::supplement(&mut catalog)?;
     let content = serde_json::to_string_pretty(&catalog)
         .map_err(|_| "EXPERIMENTAL_MODEL_CATALOG_SERIALIZE_FAILED".to_string())?;
@@ -3462,6 +3470,7 @@ fn rebuild_managed_catalog_from_existing(catalog_path: &Path) -> Result<(), Stri
                 crate::modules::codex_local_access::apply_attached_catalog_route_capabilities(&doc, &mut rebuilt)?;
                 if experimental_model_policy_enabled(profile) {
                     apply_model_context_config_to_catalog(&mut rebuilt, &configured);
+                    apply_model_reasoning_config_to_catalog(&mut rebuilt, &configured)?;
                 }
             }
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}

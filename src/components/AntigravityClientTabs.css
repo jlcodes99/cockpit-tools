@@ -1,7 +1,76 @@
 .antigravity-client-tabs {
-  display: flex;
+  display: inline-flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 4px;
+  width: fit-content;
+  max-width: 100%;
+  padding: 4px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  background: var(--bg-tertiary);
+}
+
+.antigravity-client-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 32px;
+  padding: 5px 12px;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.35;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.antigravity-client-tab > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.antigravity-client-tab:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.antigravity-client-tab[aria-pressed='true'] {
+  background: var(--bg-surface);
+  border-color: var(--border);
+  color: var(--primary);
+  font-weight: 600;
+  box-shadow: var(--shadow-sm);
+}
+
+.antigravity-client-tab:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.antigravity-client-tab:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.qs-section > .antigravity-client-tabs {
+  display: flex;
+  width: 100%;
+  margin-bottom: 12px;
+}
+
+.qs-section > .antigravity-client-tabs > .antigravity-client-tab {
+  flex: 1 1 0;
 }
 
 .antigravity-client-icon {

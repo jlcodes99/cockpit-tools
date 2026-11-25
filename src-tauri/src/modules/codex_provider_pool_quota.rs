@@ -57,7 +57,7 @@ pub(crate) fn scoped_rows(
         .collect()
 }
 
-fn project(
+pub(super) fn project(
     account: &CodexAccount,
     now: i64,
     hide_relay_balance: bool,

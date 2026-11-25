@@ -44,7 +44,7 @@ pub(super) fn schedule(app: &AppHandle, ids: impl IntoIterator<Item = String>) {
             let Some(id) = id else { break };
             let result = tokio::time::timeout(
                 Duration::from_secs(90),
-                crate::modules::account::refresh_quota_after_wakeup(id.clone()),
+                crate::modules::account::refresh_account_quota_in_background(id.clone()),
             )
             .await
             .map_err(|_| "刷新配额超时".to_string())

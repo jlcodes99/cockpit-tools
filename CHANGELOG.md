@@ -10,56 +10,57 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-11-25
+
+### Major update · T3 Code account management
+
+- **Add accounts saved in Cockpit to T3 Code in one click.** Open **T3 Code → Account Setup**, select a supported account, and choose **Add Account**. Works with Antigravity, Codex, Claude Code, Grok, WorkBuddy, WorkBuddy AI, CodeBuddy, CodeBuddy CN, and MiniMax Code.
+- **Manage connected accounts in one place.** Account Overview groups accounts by platform and shows their subscriptions and remaining quotas, with balances, credits, and percentages in their original units. Add parallel accounts, remove accounts, or set a default. The default appears first and takes effect when the affected providers are idle. You can start or restart T3 Code from the overview.
+- **Check quota and context usage while chatting.** The Antigravity desktop app and T3 Code show usage for the selected model in the composer. Antigravity chats show response speed at a glance. Open the capsule to see response speed, total speed including thinking, and streaming speed for the same reply. Codex chats in T3 Code that use Cockpit Codex API Service also show output speed.
+- **Configure T3 Code in Cockpit.** Set the interface language, model and reasoning effort for new chats, notifications, launch path, and quota capsule. Local T3 Code can use CLI paths configured in Cockpit. Account Overview offers installation or path setup when a runtime is missing.
+
 ### Added
 
-- **Account automation**: Use the CLI to list accounts, check quotas, switch accounts across supported platforms, and manage Codex API Service members. Commands return structured output for scripts.
-- **Antigravity accounts**: See tags and notes in the account table and carry them over when importing pending accounts from JSON.
-- **Codex session usage**: Browse individual requests, filter by model, instance or project, and jump from grouped totals to matching requests. Local metrics and the official lifetime total have dedicated, compact sections.
-- **Provider presets**: Added AIGROW, Lazu, and WorldRouter for Codex, Claude Code, and Claude Desktop, and Atlas Cloud for Codex. [#3223](https://github.com/jlcodes99/cockpit-tools/pull/3223) · [#3249](https://github.com/jlcodes99/cockpit-tools/pull/3249) · [#3258](https://github.com/jlcodes99/cockpit-tools/pull/3258) · [#3263](https://github.com/jlcodes99/cockpit-tools/pull/3263)
-- **macOS menu bar**: Added a compact two-line quota layout option with live preview in settings. [#3253](https://github.com/jlcodes99/cockpit-tools/pull/3253)
-- **Sidebar**: Removed the entry count limit so any number of platforms can be selected and displayed in the sidebar. [#3158](https://github.com/jlcodes99/cockpit-tools/pull/3158)
-- **Codex SSH sync**: Sync the local Codex API Service and managed model catalog to remote servers over SSH reverse tunnels, and clean up tunnels when switching back to an account. [#3211](https://github.com/jlcodes99/cockpit-tools/pull/3211)
-- **ZCode**: Link ZCode API-key accounts to Codex through the native Provider Gateway. [#3243](https://github.com/jlcodes99/cockpit-tools/pull/3243)
-- **WorkBuddy and CodeBuddy CN**: Added a 24-hour expiring-credits badge with hover details, restored the expiring-credits footer hint on WorkBuddy cards, and unified CodeBuddy CN onto the categorized credits card. [#3247](https://github.com/jlcodes99/cockpit-tools/pull/3247) · [#3250](https://github.com/jlcodes99/cockpit-tools/pull/3250)
-- **Qoder**: Isolated public Qoder CN credentials and encrypted account storage. [#3193](https://github.com/jlcodes99/cockpit-tools/pull/3193)
+- **Account automation** lets scripts list accounts, check quotas, switch accounts, and manage Codex API Service members through the CLI with structured output.
+- **Codex session usage** supports filtering by model, instance, and project, and opening matching requests from grouped totals. Local and official lifetime usage appear separately. Existing totals stay available during scans.
+- **Codex SSH sync** lets remote environments use the local Codex API Service and model catalog. Account switches preserve auto-connect preferences, and leaving sync restores the remote configuration. [#3211](https://github.com/jlcodes99/cockpit-tools/pull/3211)
+- **Model providers** gain AIGROW, Lazu, and WorldRouter presets for Codex, Claude Code, and Claude Desktop. Codex also gains an Atlas Cloud preset and can use saved ZCode API keys. [#3223](https://github.com/jlcodes99/cockpit-tools/pull/3223) · [#3249](https://github.com/jlcodes99/cockpit-tools/pull/3249) · [#3258](https://github.com/jlcodes99/cockpit-tools/pull/3258) · [#3263](https://github.com/jlcodes99/cockpit-tools/pull/3263) · [#3243](https://github.com/jlcodes99/cockpit-tools/pull/3243)
+- **Antigravity, CodeBuddy, and CodeBuddy CN** let you detect, select, and save the client path in the launch preview, then continue launching the client.
+- **WorkBuddy and WorkBuddy AI** cards highlight credits expiring within 24 hours, with details on hover. CodeBuddy CN cards show credits by category. [#3247](https://github.com/jlcodes99/cockpit-tools/pull/3247) · [#3250](https://github.com/jlcodes99/cockpit-tools/pull/3250)
+- **Qoder CN** accounts are managed separately from the international edition, with independently encrypted credentials. [#3193](https://github.com/jlcodes99/cockpit-tools/pull/3193)
+- **macOS menu bar** adds a compact two-line quota layout with a preview in Settings. [#3253](https://github.com/jlcodes99/cockpit-tools/pull/3253)
+
+### Changed
+
+- **Account navigation and filtering** let you select all tags, display every selected platform in the sidebar, and wrap toolbar filters and actions in narrow windows. [#3248](https://github.com/jlcodes99/cockpit-tools/issues/3248) · [#3158](https://github.com/jlcodes99/cockpit-tools/pull/3158) · [#3191](https://github.com/jlcodes99/cockpit-tools/pull/3191)
+- **Large account exports** use a compact JSON preview while offering the full JSON for copying and downloading. [#3192](https://github.com/jlcodes99/cockpit-tools/pull/3192)
+- **Antigravity accounts** show tags and notes in the table and preserve them when importing pending accounts from JSON. Compact cards show available AI credits, and the last confirmed subscription stays visible if a refresh cannot confirm it. [#3202](https://github.com/jlcodes99/cockpit-tools/issues/3202)
+- **Antigravity auto-switching** uses the shared quota groups reported by Google when monitoring any group. Group changes take effect on refresh.
+- **Codex accounts** can be checked for quota before saving an OAuth import and filtered independently when linking them. Team and Business titles show the login email, and drag-and-drop card order survives a restart. [#3182](https://github.com/jlcodes99/cockpit-tools/pull/3182) · [#3227](https://github.com/jlcodes99/cockpit-tools/issues/3227) · [#3252](https://github.com/jlcodes99/cockpit-tools/pull/3252) · [#3230](https://github.com/jlcodes99/cockpit-tools/pull/3230) · [#3237](https://github.com/jlcodes99/cockpit-tools/pull/3237)
+- **Codex plans with two quota windows** show 5-hour and weekly quotas and reset times in account cards and the macOS quota menu. The menu bar status shows the corresponding quotas. [#3203](https://github.com/jlcodes99/cockpit-tools/issues/3203) · [#3204](https://github.com/jlcodes99/cockpit-tools/pull/3204) · [#3219](https://github.com/jlcodes99/cockpit-tools/issues/3219) · [#3220](https://github.com/jlcodes99/cockpit-tools/pull/3220) · [#3225](https://github.com/jlcodes99/cockpit-tools/pull/3225)
+- **Codex model management** lets you choose supported reasoning levels for custom and third-party models, including `max` and `ultra` on compatible models. Linking API Service or refreshing the catalog preserves your choices, and Follow Official restores official levels. Compatible Codex CLI instances load the model catalog automatically when linked to API Service. [#3254](https://github.com/jlcodes99/cockpit-tools/issues/3254) · [#3265](https://github.com/jlcodes99/cockpit-tools/issues/3265) · [#3238](https://github.com/jlcodes99/cockpit-tools/pull/3238)
+- **Codex request records** distinguish local and remote API services and show the account and failure reason for local requests. Codex Desktop and API Service use the same speed labels. [#3228](https://github.com/jlcodes99/cockpit-tools/issues/3228) · [#3229](https://github.com/jlcodes99/cockpit-tools/pull/3229)
+- **Codex API Service** lets eligible Team and Business accounts continue using workspace credits after their included quota runs out. It cleans up expired and redundant chat history, and clearing statistics reclaims space used by the associated logs and history. [#3257](https://github.com/jlcodes99/cockpit-tools/issues/3257) · [#3044](https://github.com/jlcodes99/cockpit-tools/issues/3044) · [#3246](https://github.com/jlcodes99/cockpit-tools/issues/3246)
+- **Codex proxy settings on Windows** let you view and edit client proxy environment variables, restore previous settings, and optionally check the proxy’s exit country. [#3171](https://github.com/jlcodes99/cockpit-tools/issues/3171) · [#3172](https://github.com/jlcodes99/cockpit-tools/pull/3172)
+- **Building desktop packages from source** stops with an error when the UI entry point or its referenced assets are missing. [#3284](https://github.com/jlcodes99/cockpit-tools/pull/3284)
 
 ### Fixed
 
-- **Codex batch import**: Check quota for OAuth accounts before they have been saved. [#3182](https://github.com/jlcodes99/cockpit-tools/pull/3182)
-- **WorkBuddy and CodeBuddy CN model probes**: Handle backends that send only the final probe result on the event stream, and restore the model picker and results layout. [#3231](https://github.com/jlcodes99/cockpit-tools/pull/3231)
-- **Codex quick session repair**: Skip sidebar metadata repairs for sessions whose history file is missing, while accepting compressed history files. [#3179](https://github.com/jlcodes99/cockpit-tools/pull/3179)
-- **Account export**: Limit large JSON previews to keep the dialog responsive. Copying and downloading still use the complete export. [#3192](https://github.com/jlcodes99/cockpit-tools/pull/3192)
-- **Codex subscription expiry**: Use the workspace's subscription details when available and mark a saved expiry as unconfirmed if the latest refresh fails.
-- **Codex session usage**: The details page now shows cached totals during a scan and updates automatically for the selected filters when the scan finishes.
-- **Codex OAuth binding**: The binding dialog has its own filters, so account overview groups and searches no longer hide candidates.
-- **Codex request records**: Quota & Usage distinguishes local API Service from remote services and shows local request accounts and reasons such as client disconnects and upstream overload.
-- **Codex Desktop**: Quota & Usage uses short speed labels in request records, matching the API Service log.
-- **Claude CLI**: Refreshing a locally imported account can use newer credentials from the official CLI when the account and organization match.
-- **Antigravity account cards**: Removed the duplicate switch time and show available AI credits next to the time in compact view.
-- **Codex account switching on Windows**: Use Windows package identity to distinguish similarly named ChatGPT and Codex processes so confirmed unrelated processes do not block switching.
-- **Codex Chat relays**: Context compaction omits orphaned tool choices when no tools are available, avoiding rejection by strict upstreams.
-- **Codex provider quotas**: Provider cards and the macOS quota menu show each reported window's remaining percentage and reset time.
-- **WorkBuddy and CodeBuddy CN model probes**: Retired models no longer count toward or run in a batch.
-- **WorkBuddy on Windows** now rejects the bundled Node runtime when saving or detecting the app path. If Node was already configured, the path dialog lets you select `WorkBuddy.exe` and retry the account switch. A failed key process shows the executable path it used.
-- **Instances**: Fixed an error when deleting managed instances, including Codex instances, after saving a CodeBuddy CLI launch preset.
-- **Codex instance copies**: Fixed a validation error that prevented copying an instance with valid session history split across an original file and a continuation file. [#3260](https://github.com/jlcodes99/cockpit-tools/issues/3260)
-- **Codex session repair**: Repair Session Index now accepts the official version 9 history database. [#3259](https://github.com/jlcodes99/cockpit-tools/issues/3259)
-- **Codex API Service**: Restored native web search for supported models using the local gateway. [#3210](https://github.com/jlcodes99/cockpit-tools/issues/3210)
-- **Codex API Service**: Eligible Team and Business accounts can continue using workspace credits after their included quota runs out, even when the upstream omits the numeric credit balance. [#3257](https://github.com/jlcodes99/cockpit-tools/issues/3257)
-- **Codex model management**: Startup no longer creates a Codex profile directory solely to migrate model management settings. [#3244](https://github.com/jlcodes99/cockpit-tools/issues/3244)
-- **macOS main window**: The app restores the saved window size before the first render, preventing clipped content when relaunching on an external display. [#3234](https://github.com/jlcodes99/cockpit-tools/issues/3234)
-- **Codex account cards**: Dragging cards saves the custom order so it survives an app restart. [#3237](https://github.com/jlcodes99/cockpit-tools/pull/3237)
-- **Antigravity wakeup**: New tasks, existing tasks without an explicit transport, and manual tests follow the configured default transport. [#3256](https://github.com/jlcodes99/cockpit-tools/pull/3256)
-- **Antigravity wakeup**: The standalone App's Language Server starts with the selected wakeup account, fixing the missing authentication provider error. [#3255](https://github.com/jlcodes99/cockpit-tools/issues/3255)
-- **Codex CLI instances**: Compatible CLI versions automatically receive the dynamic model catalog when bound to API Service. [#3238](https://github.com/jlcodes99/cockpit-tools/pull/3238)
-- **Codex account proxy on Windows**: Aligned launch arguments with `.env` proxy overrides and encrypted recovery, added client ENV inspection/editing, and added an optional exit-country preflight check. [#3171](https://github.com/jlcodes99/cockpit-tools/issues/3171) · [#3172](https://github.com/jlcodes99/cockpit-tools/pull/3172)
-- **macOS Dock icon**: Made the Dock icon preference the sole activation policy input so waking the window from the tray no longer restores a hidden Dock icon and Dock visibility is decoupled from the tray icon setting. [#3266](https://github.com/jlcodes99/cockpit-tools/pull/3266)
-- **Codex account titles**: Team and Business account titles now display the login email directly to distinguish accounts sharing a workspace name. [#3230](https://github.com/jlcodes99/cockpit-tools/pull/3230)
-- **Codex reauthorization**: Verify identity against saved tokens first and refuse to overwrite another account that already holds the updated email. [#3217](https://github.com/jlcodes99/cockpit-tools/pull/3217)
-- **Codex API Service**: Drop silent zero-token `response.incomplete` terminals on HTTP Responses streams and abort downstream so Codex clients can reconnect automatically. [#3188](https://github.com/jlcodes99/cockpit-tools/issues/3188) · [#3201](https://github.com/jlcodes99/cockpit-tools/pull/3201)
-- **Linux AppImage**: Exclude bundled `libwayland-*` libraries so AppImages work on Arch / Mesa 26 without `EGL_BAD_PARAMETER` crashes. [#3187](https://github.com/jlcodes99/cockpit-tools/issues/3187) · [#3218](https://github.com/jlcodes99/cockpit-tools/pull/3218)
-- **macOS updater**: Show an actionable hint to move the app to Applications when update installation fails under Gatekeeper App Translocation. [#3183](https://github.com/jlcodes99/cockpit-tools/pull/3183)
-- **Account overview toolbar**: Allow filter and action controls to wrap cleanly inside narrow viewports instead of overflowing the page. [#3191](https://github.com/jlcodes99/cockpit-tools/pull/3191)
+- Fixed Codex account switching on Windows when ChatGPT and Codex are both running. [#3205](https://github.com/jlcodes99/cockpit-tools/issues/3205)
+- Codex shows subscription expiry for the corresponding workspace and flags an unconfirmed expiry when refresh fails. Reauthorization checks existing accounts and protects email addresses already used by another account. [#3217](https://github.com/jlcodes99/cockpit-tools/pull/3217)
+- Codex can copy instances with continued session history and repair the session index created by newer clients. Quick repair handles compressed history and skips sessions whose history is missing. [#3179](https://github.com/jlcodes99/cockpit-tools/pull/3179) · [#3260](https://github.com/jlcodes99/cockpit-tools/issues/3260) · [#3262](https://github.com/jlcodes99/cockpit-tools/pull/3262) · [#3259](https://github.com/jlcodes99/cockpit-tools/issues/3259)
+- Fixed Codex model management creating an unused Codex profile directory at startup. [#3244](https://github.com/jlcodes99/cockpit-tools/issues/3244) · [#3245](https://github.com/jlcodes99/cockpit-tools/pull/3245)
+- Codex API Service applies member priority to request and search routing. Supported models can use native web search through the local API Service. [#3210](https://github.com/jlcodes99/cockpit-tools/issues/3210) · [#3215](https://github.com/jlcodes99/cockpit-tools/pull/3215)
+- Fixed context compaction failures with some Codex Chat relays and corrected interruption reporting when certain API Service requests end early. [#3190](https://github.com/jlcodes99/cockpit-tools/issues/3190) · [#3196](https://github.com/jlcodes99/cockpit-tools/pull/3196) · [#3188](https://github.com/jlcodes99/cockpit-tools/issues/3188) · [#3201](https://github.com/jlcodes99/cockpit-tools/pull/3201)
+- **Codex API Service** stops recovery for ordinary requests after 120 seconds from the first network failure or four consecutive network failures, whichever comes first, and reports the network error. The service handles retries for Cockpit-managed Codex connections. If a reply is interrupted after output starts, retry it manually. [#3284](https://github.com/jlcodes99/cockpit-tools/pull/3284)
+- Antigravity wakeup tasks and manual tests follow the configured default transport. Wakeup through the standalone app uses the selected account, fixing the missing authentication provider error. [#3256](https://github.com/jlcodes99/cockpit-tools/pull/3256) · [#3255](https://github.com/jlcodes99/cockpit-tools/issues/3255)
+- Refreshing an account imported from Claude CLI can use credentials updated by the official CLI for the same account and organization. [#3226](https://github.com/jlcodes99/cockpit-tools/issues/3226)
+- WorkBuddy and CodeBuddy CN model probes display model choices and test results correctly. Batch probes skip retired models. [#3231](https://github.com/jlcodes99/cockpit-tools/pull/3231) · [#3213](https://github.com/jlcodes99/cockpit-tools/issues/3213) · [#3216](https://github.com/jlcodes99/cockpit-tools/pull/3216)
+- WorkBuddy detects the correct Windows client. You can choose `WorkBuddy.exe` again during an account switch and see the executable path if the related process cannot exit. [#3264](https://github.com/jlcodes99/cockpit-tools/pull/3264)
+- Managed instances, including Codex, can be removed after saving a CodeBuddy CLI launch configuration.
+- On macOS, reopening the app on an external display restores the saved window size. Opening the window from the tray respects the Hide Dock Icon setting, and Dock and tray icons can be configured independently. [#3234](https://github.com/jlcodes99/cockpit-tools/issues/3234) · [#3235](https://github.com/jlcodes99/cockpit-tools/pull/3235) · [#3266](https://github.com/jlcodes99/cockpit-tools/pull/3266)
+- If macOS cannot update the app from a temporary mount, the updater prompts you to move it to Applications and retry. [#3183](https://github.com/jlcodes99/cockpit-tools/pull/3183)
+- Fixed an AppImage crash on Arch Linux with Mesa 26. [#3187](https://github.com/jlcodes99/cockpit-tools/issues/3187) · [#3218](https://github.com/jlcodes99/cockpit-tools/pull/3218)
 
 ## [1.4.2] - 2026-11-18
 

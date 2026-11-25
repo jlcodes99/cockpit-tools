@@ -46,6 +46,8 @@ pub mod qoder_instance;
 pub mod remote_config;
 pub mod ssh_server;
 pub mod system;
+pub mod t3code;
+pub mod t3code_instance;
 pub mod trae;
 pub mod trae_instance;
 pub mod update;

@@ -1,0 +1,168 @@
+.platform-launch-path {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.client-launch-dialog .platform-launch-path {
+  margin-top: 14px;
+}
+
+.qs-section > .antigravity-client-tabs + .platform-launch-path {
+  margin-top: 12px;
+}
+
+.qs-section > .platform-launch-path + .platform-launch-path {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-light);
+}
+
+.qs-section > .qs-path-control + .platform-launch-path {
+  margin-top: 12px;
+}
+
+.platform-launch-path > label {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.platform-launch-path-controls,
+.platform-launch-path-actions,
+.platform-launch-path-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.platform-launch-path-controls > input {
+  flex: 1 1 205px;
+  min-width: 0;
+  height: 34px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+:is(.qs-section, .settings-row) .platform-launch-path-controls > input {
+  background: var(--bg-tertiary);
+}
+
+.platform-launch-path-controls > input::placeholder {
+  color: var(--text-muted);
+}
+
+.platform-launch-path-controls > input[aria-invalid='true'] {
+  border-color: var(--danger);
+}
+
+.platform-launch-path-controls > input:focus,
+.platform-launch-path-controls > input:focus-visible {
+  outline: none;
+  border-color: var(--primary);
+  background: var(--bg-secondary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 15%, transparent);
+}
+
+.platform-launch-path .platform-launch-path-actions > .btn {
+  min-width: 0;
+  max-width: 100%;
+  min-height: 34px;
+  padding: 6px 10px;
+  gap: 5px;
+  border-radius: var(--radius-sm);
+  box-shadow: none;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+:is(.qs-section, .settings-row) .platform-launch-path .platform-launch-path-actions > .btn-secondary {
+  background: var(--bg-tertiary);
+  border-color: var(--border);
+  color: var(--text-secondary);
+}
+
+:is(.qs-section, .settings-row) .platform-launch-path .platform-launch-path-actions > .btn-secondary:hover:not(:disabled) {
+  background: var(--bg-hover);
+  border-color: var(--border-light);
+  color: var(--text-primary);
+}
+
+.platform-launch-path .platform-launch-path-actions > .btn-primary {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+  box-shadow: none;
+}
+
+.platform-launch-path .platform-launch-path-actions > .btn-primary:hover:not(:disabled) {
+  transform: none;
+  background: var(--primary-hover, var(--primary));
+  border-color: var(--primary-hover, var(--primary));
+  box-shadow: none;
+}
+
+.platform-launch-path .btn > svg {
+  flex: 0 0 auto;
+}
+
+.platform-launch-path-status > span {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+.platform-launch-path .platform-launch-path-status > .btn {
+  max-width: 100%;
+  min-height: 24px;
+  padding: 2px 6px;
+  border-color: transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--primary);
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: 500;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.platform-launch-path .platform-launch-path-status > .btn:hover:not(:disabled) {
+  border-color: transparent;
+  background: var(--bg-hover);
+}
+
+.platform-launch-path-candidates {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.platform-launch-path .platform-launch-path-candidates > .btn {
+  justify-content: flex-start;
+  min-width: 0;
+  border-radius: var(--radius-sm);
+  font-size: inherit;
+}
+
+.platform-launch-path-candidates .btn > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

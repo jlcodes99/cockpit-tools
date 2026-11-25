@@ -14,11 +14,11 @@ import { formatAntigravitySwitchError } from '../utils/antigravitySwitchError';
 import { presentWindowsOperationError } from '../utils/windowsOperationDialog';
 import { ANTIGRAVITY_LAUNCH_CLIENT_STORAGE_KEY, previewDurableUiSetting } from '../utils/durableUiSettings';
 import { useDurableUiSetting } from '../hooks/useDurableUiSetting';
-import { ANTIGRAVITY_CLIENT_LABELS, ANTIGRAVITY_DESKTOP_CLIENTS, getMissingAntigravityPathTarget, type AntigravityLaunchClient } from '../utils/antigravityRuntimeTarget';
+import { antigravityAppPathTarget, ANTIGRAVITY_CLIENT_LABELS, ANTIGRAVITY_DESKTOP_CLIENTS, getMissingAntigravityPathTarget, type AntigravityLaunchClient } from '../utils/antigravityRuntimeTarget';
 import { ModalErrorMessage, useModalErrorState } from './ModalErrorMessage';
 import { AntigravityClientIcon } from './AntigravityClientIcon';
 import { CliLaunchFields } from './CliLaunchFields';
-import { AntigravityLaunchPathField } from './AntigravityLaunchPathField';
+import { PlatformLaunchPathField } from './PlatformLaunchPathField';
 import './ClientLaunchDialog.css';
 import './AntigravityLaunchDialog.css';
 
@@ -68,6 +68,8 @@ export function AntigravityLaunchDialog({
   const [busy, setBusy] = useState<Action | null>(null);
   const [pathSaving, setPathSaving] = useState(false);
   const [pathRecovery, setPathRecovery] = useState<{ missingClient: AntigravityLaunchClient; action: Action; run: () => Promise<void>; switched?: boolean }>();
+  const pathClient = pathRecovery?.missingClient ?? client;
+  const pathTarget = pathClient === 'cli' ? 'antigravity_cli' : antigravityAppPathTarget(pathClient);
   const [directoryInvalid, setDirectoryInvalid] = useState(false);
   const pending = useRef(false);
   const dialog = useRef<HTMLDivElement>(null);
@@ -205,11 +207,11 @@ export function AntigravityLaunchDialog({
             ))}
           </div>
           {renderClientDetails?.(client, disabled || !!pathRecovery)}
-          <AntigravityLaunchPathField
-            key={pathRecovery?.missingClient ?? client}
-            client={pathRecovery?.missingClient ?? client}
+          <PlatformLaunchPathField
+            key={pathTarget}
+            target={pathTarget}
             disabled={disabled}
-            recovering={!!pathRecovery}
+            recovery={!!pathRecovery}
             onSaving={setPathSaving}
             onSaved={() => { if (pathRecovery) void submit(pathRecovery.action, pathRecovery.run); }}
           />

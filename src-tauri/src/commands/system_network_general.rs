@@ -315,6 +315,8 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         minimax_code_auto_refresh_minutes: user_config.minimax_code_auto_refresh_minutes,
         qoder_auto_refresh_minutes: user_config.qoder_auto_refresh_minutes,
         zcode_auto_refresh_minutes: user_config.zcode_auto_refresh_minutes,
+        t3code_auto_refresh_minutes: user_config.t3code_auto_refresh_minutes,
+        t3code_app_ui_injection_enabled: user_config.t3code_app_ui_injection_enabled,
         trae_auto_refresh_minutes: user_config.trae_auto_refresh_minutes,
         trae_solo_auto_refresh_minutes: user_config.trae_solo_auto_refresh_minutes,
         trae_cn_auto_refresh_minutes: user_config.trae_cn_auto_refresh_minutes,
@@ -397,6 +399,9 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         ),
         zcode_app_path: modules::process::normalize_windows_user_facing_path(
             &user_config.zcode_app_path,
+        ),
+        t3code_app_path: modules::process::normalize_windows_user_facing_path(
+            &user_config.t3code_app_path,
         ),
         trae_app_path: modules::process::normalize_windows_user_facing_path(
             &user_config.trae_app_path,

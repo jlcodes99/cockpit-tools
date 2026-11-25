@@ -260,6 +260,7 @@ async fn deepseek_responses_can_continue_after_an_incomplete_tool_batch() {
         repaired["input"].as_array_mut().unwrap().insert(5, hook);
         assert_eq!(sent[3], repaired);
         let mut restored = summary;
+        restored.as_object_mut().unwrap().remove("encrypted_content");
         restored["content"] = json!([{
             "type": "reasoning_text",
             "text": "Read both files before answering."
@@ -355,7 +356,7 @@ async fn deepseek_child_history_replays_plaintext_without_forwarding_the_parent_
         .json(&child).send().await.unwrap();
     assert_eq!(response.status(), 400);
     let error = response.json::<Value>().await.unwrap();
-    assert_eq!(error["error"]["code"], "deepseek_reasoning_history_missing");
+    assert_eq!(error["error"]["code"], "deepseek_reasoning_replay_required");
     assert_eq!(observed.lock().unwrap().len(), 4);
     gateway.shutdown(Duration::from_secs(2)).await.unwrap();
     upstream.abort();

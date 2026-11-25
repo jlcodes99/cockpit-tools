@@ -89,7 +89,7 @@ fn reasoning_order_sorts_six_levels_and_preserves_explicit_and_template_defaults
 }
 
 #[test]
-fn reasoning_order_preserves_profile_template_subset_and_its_implicit_default() {
+fn reasoning_order_honors_explicit_custom_levels_and_implicit_default() {
     let dir = temp_dir();
     let template = serde_json::json!({ "models": [{ "slug": "provider/custom",
         "default_reasoning_level": "xhigh", "supported_reasoning_levels": [
@@ -98,16 +98,84 @@ fn reasoning_order_preserves_profile_template_subset_and_its_implicit_default() 
     let mut model = definition("provider/custom");
     model.reasoning_efforts = Some(vec!["ultra".into(), "high".into(), "low".into()]);
     let models = normalize_experimental_model_definitions_for_profile(Some(&dir), vec![model.clone()]).unwrap();
-    assert_eq!(models[0].default_reasoning_effort.as_deref(), Some("high"));
+    assert_eq!(models[0].default_reasoning_effort.as_deref(), Some("ultra"));
     let mut rendered = template.clone();
     apply_model_reasoning_config_to_catalog(&mut rendered, &models).unwrap();
-    assert_eq!(rendered["models"][0]["default_reasoning_level"], "high");
-    assert_eq!(rendered["models"][0]["supported_reasoning_levels"], serde_json::json!([{"effort":"low"}, {"effort":"high"}]));
+    assert_eq!(rendered["models"][0]["default_reasoning_level"], "ultra");
+    let efforts: Vec<&str> = rendered["models"][0]["supported_reasoning_levels"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|level| level["effort"].as_str())
+        .collect();
+    assert_eq!(efforts, vec!["low", "high", "ultra"]);
     let mut existing = snapshot(Vec::new()); existing.profile_dir = Some(dir.clone());
     let (preview, imported) = prepare_model_config_import(&existing, &json(vec![model]), "replace").unwrap();
     assert!(preview.errors.is_empty(), "{:?}", preview.errors);
     assert_eq!(imported.models[0], models[0]);
     fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn explicit_reasoning_levels_allow_adding_max_ultra_and_opencode_deepseek_levels_without_ratchet() {
+    let dir = tempfile::tempdir().unwrap();
+    let profile = dir.path();
+
+    // #3265: custom / third-party model explicitly adding max and ultra
+    let mut custom = definition("custom-model");
+    custom.reasoning_efforts = Some(vec!["low".into(), "high".into(), "max".into(), "ultra".into()]);
+    custom.default_reasoning_effort = Some("max".into());
+    custom.ultra_reasoning_effort = Some("high".into());
+
+    // #3254: opencode DeepSeek model narrowed once to low/high, then expanded to all 6 levels or reset
+    let mut deepseek_narrow = definition("opencode/deepseek-v4-pro");
+    deepseek_narrow.reasoning_efforts = Some(vec!["low".into(), "high".into()]);
+    deepseek_narrow.default_reasoning_effort = Some("high".into());
+
+    save_model_catalog_for_base_dir_preserving_context(
+        profile,
+        true,
+        vec![custom.clone(), deepseek_narrow.clone()],
+        Some(custom.model_id.clone()),
+    )
+    .unwrap();
+
+    let catalog: serde_json::Value =
+        serde_json::from_slice(&fs::read(experimental_model_catalog_path(profile)).unwrap()).unwrap();
+    let custom_entry = catalog["models"].as_array().unwrap().iter().find(|m| m["slug"] == "custom-model").unwrap();
+    let custom_levels: Vec<&str> = custom_entry["supported_reasoning_levels"]
+        .as_array().unwrap().iter().filter_map(|l| l["effort"].as_str()).collect();
+    assert_eq!(custom_levels, vec!["low", "high", "max", "ultra"]);
+    assert_eq!(custom_entry["default_reasoning_level"], "max");
+    assert_eq!(custom_entry["multi_agent_reasoning_effort"], "high");
+
+    // Resetting opencode/deepseek-v4-pro back to "follow official" must recover template's [low, high, max]
+    let mut deepseek_follow = definition("opencode/deepseek-v4-pro");
+    deepseek_follow.reasoning_efforts = None;
+    let follow_efforts = model_reasoning_efforts_for_profile(profile, std::slice::from_ref(&deepseek_follow));
+    assert_eq!(
+        follow_efforts.get("opencode/deepseek-v4-pro").map(Vec::as_slice),
+        Some(&["low".to_string(), "high".to_string(), "max".to_string()][..])
+    );
+
+    // Expanding opencode/deepseek-v4-pro with medium/xhigh/max/ultra must honor every chosen level
+    let mut deepseek_expanded = definition("opencode/deepseek-v4-pro");
+    deepseek_expanded.reasoning_efforts = Some(vec!["low".into(), "medium".into(), "high".into(), "xhigh".into(), "max".into()]);
+    deepseek_expanded.default_reasoning_effort = Some("xhigh".into());
+    save_model_catalog_for_base_dir_preserving_context(
+        profile,
+        true,
+        vec![custom, deepseek_expanded],
+        Some("opencode/deepseek-v4-pro".into()),
+    )
+    .unwrap();
+    let expanded_catalog: serde_json::Value =
+        serde_json::from_slice(&fs::read(experimental_model_catalog_path(profile)).unwrap()).unwrap();
+    let ds_entry = expanded_catalog["models"].as_array().unwrap().iter().find(|m| m["slug"] == "opencode/deepseek-v4-pro").unwrap();
+    let ds_levels: Vec<&str> = ds_entry["supported_reasoning_levels"]
+        .as_array().unwrap().iter().filter_map(|l| l["effort"].as_str()).collect();
+    assert_eq!(ds_levels, vec!["low", "medium", "high", "xhigh", "max"]);
+    assert_eq!(ds_entry["default_reasoning_level"], "xhigh");
 }
 
 #[test]

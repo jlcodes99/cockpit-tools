@@ -15,6 +15,8 @@ A **universal AI IDE account management tool**, currently supporting **Antigravi
 
 **WorkBuddy AI** (macOS and Windows) supports browser sign-in, import from the desktop app or JSON, credit balance, and desktop account switching.
 
+**T3 Code** offers one overview for linked provider accounts. Add, remove, or set a default account and check its subscription and available quota. When T3 Code is running, the composer can show the current account's quota.
+
 **Languages**: Supports 18 languages
 
 🇺🇸 English · 🇨🇳 简体中文 · 繁體中文 · 🇯🇵 日本語 · 🇩🇪 Deutsch · 🇪🇸 Español · 🇫🇷 Français · 🇮🇹 Italiano · 🇰🇷 한국어 · 🇧🇷 Português · 🇷🇺 Русский · 🇹🇷 Türkçe · 🇵🇱 Polski · 🇨🇿 Čeština · 🇸🇦 العربية · 🇻🇳 Tiếng Việt · 🇮🇩 Bahasa Indonesia

@@ -23,6 +23,7 @@ import { getWorkbuddyOfficialQuotaModel } from '../types/workbuddy';
 import type { ZedAccount } from '../types/zed';
 import { getZedUsage } from '../types/zed';
 import type { ZcodeAccount } from '../types/zcode';
+import type { T3CodeAccount } from '../types/t3code';
 
 type TimestampedAccount = {
   id: string;
@@ -415,6 +416,35 @@ export function getRecommendedZcodeAccount(
   if (others.length === 0) return null;
 
   const getScore = (account: ZcodeAccount) => {
+    const total = toFiniteNumber(account.quota_total);
+    const remaining = toFiniteNumber(account.quota_remaining);
+    return {
+      remaining: total != null && total > 0 && remaining != null
+        ? (remaining / total) * 100
+        : -1,
+      freshness: account.last_used || account.created_at || 0,
+    };
+  };
+
+  return others.reduce((best, candidate) => {
+    const bestScore = getScore(best);
+    const candidateScore = getScore(candidate);
+    if (candidateScore.remaining !== bestScore.remaining) {
+      return candidateScore.remaining > bestScore.remaining ? candidate : best;
+    }
+    return candidateScore.freshness > bestScore.freshness ? candidate : best;
+  });
+}
+
+export function getRecommendedT3codeAccount(
+  accounts: T3CodeAccount[],
+  currentId: string | null | undefined,
+): T3CodeAccount | null {
+  if (accounts.length <= 1) return null;
+  const others = accounts.filter((account) => account.id !== currentId);
+  if (others.length === 0) return null;
+
+  const getScore = (account: T3CodeAccount) => {
     const total = toFiniteNumber(account.quota_total);
     const remaining = toFiniteNumber(account.quota_remaining);
     return {

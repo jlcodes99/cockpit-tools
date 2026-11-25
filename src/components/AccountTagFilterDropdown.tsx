@@ -9,6 +9,7 @@ interface AccountTagFilterDropdownProps {
   availableTags: string[]
   selectedTags: string[]
   onToggleTag: (tag: string) => void
+  onSelectAll?: () => void
   onClear: () => void
   onDeleteTag?: (tag: string) => void
   groupByTag?: boolean
@@ -19,6 +20,7 @@ export function AccountTagFilterDropdown({
   availableTags,
   selectedTags,
   onToggleTag,
+  onSelectAll,
   onClear,
   onDeleteTag,
   groupByTag = false,
@@ -124,10 +126,34 @@ export function AccountTagFilterDropdown({
               </label>
             </>
           )}
-          {selectedTags.length > 0 && (
-            <button type="button" className="tag-filter-clear" onClick={onClear}>
-              {t('accounts.clearFilter', '清空筛选')}
-            </button>
+          {(availableTags.length > 0 || selectedTags.length > 0) && (
+            <div className="tag-filter-actions">
+              {availableTags.length > 0 && (
+                <button
+                  type="button"
+                  className="tag-filter-action-btn"
+                  disabled={availableTags.every((tag) => selectedTags.includes(tag))}
+                  onClick={() => {
+                    if (onSelectAll) {
+                      onSelectAll()
+                      return
+                    }
+                    availableTags.forEach((tag) => {
+                      if (!selectedTags.includes(tag)) {
+                        onToggleTag(tag)
+                      }
+                    })
+                  }}
+                >
+                  {t('common.selectAll', '全选')}
+                </button>
+              )}
+              {selectedTags.length > 0 && (
+                <button type="button" className="tag-filter-clear" onClick={onClear}>
+                  {t('accounts.clearFilter', '清空筛选')}
+                </button>
+              )}
+            </div>
           )}
         </div>
       )}

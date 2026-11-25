@@ -65,6 +65,6 @@ export async function getCodebuddyAccountsIndexPath(): Promise<string> {
   return await invoke('get_codebuddy_accounts_index_path');
 }
 
-export async function injectCodebuddyToVSCode(accountId: string): Promise<string> {
-  return await invoke('inject_codebuddy_to_vscode', { accountId });
+export async function injectCodebuddyToVSCode(accountId: string, inlinePathRecovery = false): Promise<string> {
+  return await invoke('inject_codebuddy_to_vscode', { accountId, inlinePathRecovery });
 }

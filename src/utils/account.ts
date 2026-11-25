@@ -30,24 +30,25 @@ export function matchModelName(modelName: string, target: string): boolean {
   return left === right || left.startsWith(`${right}-`) || right.startsWith(`${left}-`);
 }
 
-export function getSubscriptionTier(quota?: QuotaData): string {
+function getKnownSubscriptionTier(quota?: Pick<QuotaData, 'subscription_tier'>): string | undefined {
   const rawTier = quota?.subscription_tier?.trim();
-  if (!rawTier) return 'UNKNOWN';
+  return rawTier && rawTier.toLowerCase() !== 'unknown' ? rawTier : undefined;
+}
 
-  const tier = rawTier.toLowerCase();
+export function getSubscriptionTier(quota?: Pick<QuotaData, 'subscription_tier'>): string {
+  const tier = getKnownSubscriptionTier(quota)?.toLowerCase();
+  if (!tier) return 'UNKNOWN';
   // 映射等级名称
   if (tier.includes('ultra')) return 'ULTRA';
   if (tier.includes('pro')) return 'PRO';
   return 'FREE';
 }
 
-export function getSubscriptionTierDisplay(quota?: QuotaData): string {
-  const rawTier = quota?.subscription_tier?.trim();
-  if (rawTier) return rawTier;
-  return getSubscriptionTier(quota);
+export function getSubscriptionTierDisplay(quota?: Pick<QuotaData, 'subscription_tier'>): string {
+  return getKnownSubscriptionTier(quota) ?? '—';
 }
 
-export function getAntigravityTierBadge(quota?: QuotaData): {
+export function getAntigravityTierBadge(quota?: Pick<QuotaData, 'subscription_tier'>): {
   tier: string;
   label: string;
   className: string;
@@ -55,7 +56,7 @@ export function getAntigravityTierBadge(quota?: QuotaData): {
   const tier = getSubscriptionTier(quota);
   return {
     tier,
-    label: tier,
+    label: getSubscriptionTierDisplay(quota),
     className: tier.toLowerCase(),
   };
 }

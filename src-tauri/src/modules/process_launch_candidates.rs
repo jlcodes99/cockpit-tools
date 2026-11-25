@@ -864,6 +864,18 @@ fn windows_app_launch_signature(app: &str) -> Option<WindowsAppLaunchSignature> 
             common_paths: &["ZCode\\ZCode.exe"],
             supports_multi_instance: true,
         }),
+        "t3code" => Some(WindowsAppLaunchSignature {
+            label: "T3 Code",
+            exe_names: &["T3 Code (Beta).exe", "T3 Code.exe", "T3 Code (Nightly).exe", "t3code.exe"],
+            command_names: &["t3code", "t3"],
+            protocol_names: &["t3code", "t3"],
+            display_keywords: &["t3 code", "t3code"],
+            common_paths: &[
+                "T3 Code (Beta)\\T3 Code (Beta).exe",
+                "T3 Code\\T3 Code.exe",
+            ],
+            supports_multi_instance: true,
+        }),
         "trae" => Some(WindowsAppLaunchSignature {
             label: "Trae",
             exe_names: &["Trae.exe"],
@@ -2259,6 +2271,7 @@ fn update_app_path_in_config(app: &str, path: &Path, expected_current: &str) {
             "codebuddy_cn" => &mut current.codebuddy_cn_app_path,
             "qoder" => &mut current.qoder_app_path,
             "zcode" => &mut current.zcode_app_path,
+            "t3code" => &mut current.t3code_app_path,
             "trae" => &mut current.trae_app_path,
             "trae_solo" => &mut current.trae_solo_app_path,
             "trae_cn" => &mut current.trae_cn_app_path,

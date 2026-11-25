@@ -116,7 +116,7 @@ fn run(output: PathBuf) -> Result<(), String> {
         consecutive_valid_snapshots: 0,
     }));
     state.lock().unwrap().save();
-    let mut context = tauri::generate_context!();
+    let mut context = crate::create_app_context();
     context.config_mut().identifier = "com.jlcodes.cockpit-tools.frontend-smoke".into();
     context.config_mut().app.windows.clear();
     let handler_state = state.clone();

@@ -173,7 +173,7 @@ async fn start(options: Options) -> Running {
                         json!("app://-/index.html")
                     } else if expression == "window.__cockpitQuotaState.install()" {
                         json!({"ok":!options.live_plan_invalid,"reason":"quota-http-boundary-unavailable"})
-                    } else if expression == "window.__cockpitServiceRspack.verifyDocument()" {
+                    } else if expression == "window.__cockpitServiceRspack.verifyRequestedDocument()" {
                         json!({"ok":true,"predictions":{"ok":true}})
                     } else if let Some(nonce) = argument(expression, "prepareHandoff") {
                         prepared_nonce = Some(nonce);
@@ -554,7 +554,7 @@ async fn fresh_bound_oauth_predictions_preflight_without_fast_and_respect_the_dr
     );
     assert_eq!(runtime.navigations.load(Ordering::Acquire), 1);
     let calls = runtime.finish(false).await;
-    assert_eq!(expressions(&calls, "window.__cockpitServiceRspack.verifyDocument()"), 1);
+    assert_eq!(expressions(&calls, "window.__cockpitServiceRspack.verifyRequestedDocument()"), 1);
     assert_eq!(methods(&calls, "Page.addScriptToEvaluateOnNewDocument"), 1);
     assert_eq!(expressions(&calls, "window.__cockpitStartupGuard.reload()"), 2);
     assert_safe_protocol(&calls);

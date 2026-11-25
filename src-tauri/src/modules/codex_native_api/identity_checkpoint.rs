@@ -22,11 +22,12 @@ pub(super) fn initialize(connection: &Connection) -> rusqlite::Result<()> {
         "CREATE TABLE IF NOT EXISTS native_rebuild_history_v1 (
            caller TEXT NOT NULL, response TEXT NOT NULL, thread TEXT NOT NULL,
            account TEXT NOT NULL, generation TEXT NOT NULL, manifest TEXT NOT NULL,
-           parameters TEXT, PRIMARY KEY(caller,response));
+           parameters TEXT, created INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(caller,response));
          CREATE TABLE IF NOT EXISTS native_rebuild_items_v1 (
            caller TEXT NOT NULL, digest TEXT NOT NULL, body BLOB NOT NULL,
            PRIMARY KEY(caller,digest));",
-    )
+    )?;
+    super::super::maintenance::ensure_created_column(connection, "native_rebuild_history_v1")
 }
 
 /// Prefer an existing legacy/hot record, including its missing or invalid
@@ -102,8 +103,8 @@ impl Encoded {
         response: &str,
     ) -> Result<(), ServiceError> {
         let inserted = transaction.execute(
-            "INSERT OR IGNORE INTO native_partial_history_v1(caller,response,thread,session,account,owner,manifest,parameters,bytes) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9)",
-            params![binding.caller,response,binding.thread_id,binding.session_id,binding.account_id,binding.owner_id,self.manifest,self.parameters,self.bytes as i64],
+            "INSERT OR IGNORE INTO native_partial_history_v1(caller,response,thread,session,account,owner,manifest,parameters,bytes,created) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
+            params![binding.caller,response,binding.thread_id,binding.session_id,binding.account_id,binding.owner_id,self.manifest,self.parameters,self.bytes as i64,timestamp()],
         ).map_err(storage)?;
         if inserted == 0 { return Ok(()); }
         let mut insert = transaction.prepare_cached("INSERT OR IGNORE INTO native_rebuild_items_v1(caller,digest,body) VALUES(?1,?2,?3)").map_err(storage)?;
@@ -201,9 +202,10 @@ impl Encoded {
         {
             return Ok(());
         }
+        let created = timestamp();
         let inserted = transaction.execute(
-            "INSERT OR IGNORE INTO native_rebuild_history_v1(caller,response,thread,account,generation,manifest,parameters) VALUES(?1,?2,?3,?4,?5,?6,?7)",
-            params![binding.caller,response,thread,binding.account_id,generation.id,self.manifest,self.parameters],
+            "INSERT OR IGNORE INTO native_rebuild_history_v1(caller,response,thread,account,generation,manifest,parameters,created) VALUES(?1,?2,?3,?4,?5,?6,?7,?8)",
+            params![binding.caller,response,thread,binding.account_id,generation.id,self.manifest,self.parameters,created],
         ).map_err(storage)?;
         if inserted == 0 {
             return Ok(());
@@ -215,7 +217,7 @@ impl Encoded {
                 .map_err(storage)?;
         }
         if let Some(raw) = &self.hot {
-            transaction.execute("INSERT OR IGNORE INTO native_rebuild_checkpoints_v1(caller,response,thread,account,generation,transcript,bytes,created,parameters) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9)",params![binding.caller,response,thread,binding.account_id,generation.id,raw,self.bytes as i64,timestamp(),self.parameters]).map_err(storage)?;
+            transaction.execute("INSERT OR IGNORE INTO native_rebuild_checkpoints_v1(caller,response,thread,account,generation,transcript,bytes,created,parameters) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9)",params![binding.caller,response,thread,binding.account_id,generation.id,raw,self.bytes as i64,created,self.parameters]).map_err(storage)?;
         }
         Ok(())
     }

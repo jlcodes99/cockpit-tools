@@ -35,10 +35,10 @@ fn main() {
     // 8 MiB for the Windows MSVC host application even when cross-compiling.
     // Scope the flag to the application binary, not the library or sidecars.
     let target = std::env::var("TARGET").expect("TARGET is required");
-    build_frontend::verify_production_frontend(&target);
     if target.ends_with("-windows-msvc") {
         println!("cargo:rustc-link-arg-bin=cockpit-tools=/STACK:8388608");
     }
+    build_frontend::verify_production_frontend(&target);
     println!("cargo:rustc-env=COCKPIT_RUST_TARGET={target}");
 
     // The cfg gate selects the build host. Only link Swift for a macOS target,

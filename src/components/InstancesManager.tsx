@@ -31,6 +31,7 @@ import {
   ArrowDownWideNarrow,
   RefreshCw,
   ExternalLink,
+  Link2,
   Eye,
   EyeOff,
   ArrowDown,
@@ -213,7 +214,8 @@ interface InstancesManagerProps<TAccount extends AccountLike> {
     | "trae_solo_cn"
     | "workbuddy"
     | "minimax_code"
-    | "zcode";
+    | "zcode"
+    | "t3code";
   onLaunchRequest?: (instance: InstanceProfile) => void;
   onInstanceStarted?: (instance: InstanceProfile) => void | Promise<void>;
   onBeforeStart?: (instance: InstanceProfile) => boolean | Promise<boolean>;
@@ -227,6 +229,7 @@ interface InstancesManagerProps<TAccount extends AccountLike> {
     launchMode: InstanceLaunchMode,
   ) => boolean;
   toolbarExtraActions?: ReactNode;
+  onManageInstanceProviders?: (instance: InstanceProfile) => void;
 }
 
 const INSTANCE_AUTO_REFRESH_INTERVAL_MS = 10_000;
@@ -636,6 +639,7 @@ export function InstancesManager<TAccount extends AccountLike>({
   resolveStartSuccessMessage,
   isAccountAllowedForLaunchMode,
   toolbarExtraActions,
+  onManageInstanceProviders,
 }: InstancesManagerProps<TAccount>) {
   const { t, i18n } = useTranslation();
   const copyTimeoutDuration = useMemo(
@@ -2916,6 +2920,18 @@ export function InstancesManager<TAccount extends AccountLike>({
                 </div>
 
                 <div className="instance-actions">
+                  {onManageInstanceProviders && (
+                    <button
+                      className="icon-button"
+                      title={t("t3code.providerWorkspace.linkTab")}
+                      onClick={() => onManageInstanceProviders(instance)}
+                      disabled={
+                        isInstanceBusy || restartingAll || bulkActionLoading
+                      }
+                    >
+                      <Link2 size={16} />
+                    </button>
+                  )}
                   <button
                     className="icon-button"
                     title={floatingCardActionTitle}

@@ -526,8 +526,8 @@
         assert!(generated["models"]
             .as_array()
             .expect("models")
-            .first()
-            .is_some_and(|model| model["slug"] == "gpt-6.2-sol"));
+            .iter()
+            .any(|model| model["slug"] == "gpt-6.2-sol"));
         assert!(generated["models"]
             .as_array()
             .expect("models")

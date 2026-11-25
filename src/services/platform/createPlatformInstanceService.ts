@@ -23,7 +23,8 @@ type PlatformInstanceCommandPrefix =
   | "trae"
   | "workbuddy"
   | "minimax_code"
-  | "zcode";
+  | "zcode"
+  | "t3code";
 
 type InstancePayload = {
   name: string;

@@ -119,14 +119,22 @@ fn build_local_oauth_snapshot(tokens: CodexAuthTokens) -> Option<LocalCodexOAuth
 /// 认证存储可能是 auth.json，也可能是配置指定的 macOS Keychain；两者均属于
 /// 官方持久化数据。读取失败返回 None，由调用方按 Unknown 处理，不能据此判定账号失效。
 pub(crate) fn read_official_oauth_identity(base_dir: &Path) -> Option<CodexOfficialOAuthIdentity> {
-    load_local_oauth_snapshot_from_official_store(base_dir).map(|snapshot| {
-        CodexOfficialOAuthIdentity {
-            email: snapshot.email,
-            user_id: snapshot.user_id,
-            account_id: snapshot.account_id,
-            organization_id: snapshot.organization_id,
-        }
-    })
+    load_local_oauth_snapshot_from_official_store(base_dir).map(local_oauth_identity)
+}
+
+pub(super) fn codex_auth_file_oauth_identity(
+    auth_file: CodexAuthFile,
+) -> Option<CodexOfficialOAuthIdentity> {
+    load_local_oauth_snapshot_from_auth_file(auth_file).map(local_oauth_identity)
+}
+
+fn local_oauth_identity(snapshot: LocalCodexOAuthSnapshot) -> CodexOfficialOAuthIdentity {
+    CodexOfficialOAuthIdentity {
+        email: snapshot.email,
+        user_id: snapshot.user_id,
+        account_id: snapshot.account_id,
+        organization_id: snapshot.organization_id,
+    }
 }
 
 /// 将官方 profile 身份与本地账号身份进行强字段优先匹配。

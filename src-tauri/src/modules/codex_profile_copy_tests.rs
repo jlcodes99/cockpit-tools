@@ -185,7 +185,7 @@ fn copy_resolves_archived_compressed_parent_at_its_decoded_byte_boundary() {
     assert_eq!(fs::read(f.target_path(&parent_zstd)).unwrap(), compressed);
     let db = Connection::open(f.target.join(STATE_DB)).unwrap();
     let indexed: String = db.query_row("SELECT rollout_path FROM threads WHERE id=?1", [ROOT], |r| r.get(0)).unwrap();
-    assert_eq!(Path::new(&indexed), f.target_path(&parent));
+    assert_eq!(Path::new(&indexed), f.target_path(&parent_zstd));
     assert_eq!(
         fs::read(f.target_path(&f.child_rollout)).unwrap(),
         fs::read(&f.child_rollout).unwrap(),

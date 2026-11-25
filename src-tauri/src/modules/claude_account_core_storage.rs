@@ -1258,7 +1258,7 @@ fn get_claude_code_settings_managed_env_keys_path() -> Result<PathBuf, String> {
     Ok(get_data_dir()?.join(CLAUDE_CODE_SETTINGS_MANAGED_ENV_KEYS_FILE))
 }
 
-fn get_claude_code_global_config_path(config_dir: &Path) -> Result<PathBuf, String> {
+pub(super) fn get_claude_code_global_config_path(config_dir: &Path) -> Result<PathBuf, String> {
     let config_json = config_dir.join(CLAUDE_CODE_CONFIG_FILE);
     if config_json.exists() {
         return Ok(config_json);

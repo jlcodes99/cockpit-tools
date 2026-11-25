@@ -716,6 +716,24 @@ fn remove_auth_json_after_keyring_write(auth_path: &Path) {
     }
 }
 
+pub(super) fn snapshot_profile_keychain(base_dir: &Path) -> Result<Option<Option<serde_json::Value>>, String> {
+    if !matches!(codex_auth_credentials_store_mode(base_dir),
+        CodexAuthCredentialsStoreMode::Keyring | CodexAuthCredentialsStoreMode::Auto)
+    {
+        return Ok(None);
+    }
+    let auth = read_codex_keychain_auth_file_from_dir(base_dir)?
+        .map(serde_json::to_value).transpose().map_err(|error| error.to_string())?;
+    Ok(Some(auth))
+}
+
+pub(super) fn restore_profile_keychain(base_dir: &Path, auth: Option<serde_json::Value>) -> Result<(), String> {
+    match auth {
+        Some(auth) => write_codex_keychain_value_to_dir(base_dir, &auth),
+        None => delete_codex_keychain_entry_for_dir(base_dir).map(|_| ()),
+    }
+}
+
 fn write_auth_value_to_configured_store(
     base_dir: &Path,
     auth_path: &Path,
@@ -752,7 +770,6 @@ fn write_auth_value_to_configured_store(
     }
 }
 
-#[cfg(test)]
 pub fn write_auth_file_to_dir(base_dir: &Path, account: &CodexAccount) -> Result<(), String> {
     write_auth_file_to_dir_with_after_commit(base_dir, account, || {})
 }
@@ -880,6 +897,18 @@ pub(crate) fn write_prepared_account_bundle_to_dir(
         |credentials_changed| write_prepared_account_bundle(base_dir, account, credentials_changed),
         |complete| notify_after_account_bundle_write(base_dir, account, complete),
     )
+}
+
+pub(crate) fn write_saved_account_bundle_to_dir(
+    base_dir: &Path, account_id: &str,
+) -> Result<(), String> {
+    let account = load_account(account_id).ok_or_else(|| format!("账号不存在: {account_id}"))?;
+    if account.is_api_key_auth() {
+        if let Some(oauth) = load_optional_bound_oauth_account_for_api_key(&account)? {
+            return write_api_key_account_bundle_with_oauth_to_dir(base_dir, &account, &oauth);
+        }
+    }
+    write_prepared_account_bundle_to_dir(base_dir, &account)
 }
 
 fn notify_after_account_bundle_write(base_dir: &Path, account: &CodexAccount, complete: bool) {

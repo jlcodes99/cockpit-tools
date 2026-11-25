@@ -278,8 +278,15 @@ pub async fn inject_codebuddy_cn_to_vscode(
     app: AppHandle,
     account_id: String,
     require_launch: Option<bool>,
+    inline_path_recovery: Option<bool>,
 ) -> Result<String, String> {
     let require_launch = require_launch.unwrap_or(false);
+    let inline_path_recovery = inline_path_recovery.unwrap_or(false);
+    if inline_path_recovery && require_launch {
+        tokio::task::spawn_blocking(crate::modules::process::ensure_codebuddy_cn_launch_path_configured)
+            .await
+            .map_err(|error| error.to_string())??;
+    }
     let started_at = Instant::now();
     logger::log_info(&format!(
         "[CodeBuddy CN Switch] 开始切换账号: account_id={}",
@@ -318,8 +325,7 @@ pub async fn inject_codebuddy_cn_to_vscode(
                 if err.starts_with("APP_PATH_NOT_FOUND:") || err.contains("启动 CodeBuddy CN 失败")
                 {
                     logger::log_warn(&format!("CodeBuddy CN 默认实例启动失败: {}", err));
-                    if err.starts_with("APP_PATH_NOT_FOUND:") || err.contains("APP_PATH_NOT_FOUND:")
-                    {
+                    if !inline_path_recovery && err.contains("APP_PATH_NOT_FOUND:") {
                         let _ = app.emit(
                         "app:path_missing",
                         serde_json::json!({ "app": "codebuddy_cn", "retry": { "kind": "launchOnly" } }),

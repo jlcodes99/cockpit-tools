@@ -9,6 +9,7 @@ import { useCodebuddyAccountStore } from '../stores/useCodebuddyAccountStore';
 import { useCodebuddyCnAccountStore } from '../stores/useCodebuddyCnAccountStore';
 import { useQoderAccountStore } from '../stores/useQoderAccountStore';
 import { useZcodeAccountStore } from '../stores/useZcodeAccountStore';
+import { useT3codeAccountStore } from '../stores/useT3codeAccountStore';
 import { useTraeAccountStore } from '../stores/useTraeAccountStore';
 import { useWorkbuddyAccountStore } from '../stores/useWorkbuddyAccountStore';
 import { useMinimaxCodeAccountStore } from '../stores/useMinimaxCodeAccountStore';
@@ -25,6 +26,7 @@ const ALL_STORES = [
   useCodebuddyCnAccountStore,
   useQoderAccountStore,
   useZcodeAccountStore,
+  useT3codeAccountStore,
   useTraeAccountStore,
   useWorkbuddyAccountStore,
   useMinimaxCodeAccountStore,

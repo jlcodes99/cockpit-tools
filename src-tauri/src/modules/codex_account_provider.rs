@@ -236,7 +236,7 @@ fn normalize_api_base_url_for_match(raw: Option<&str>) -> Option<String> {
     Some(format!("{}://{}{}{}", parsed.scheme(), host, port, path).to_ascii_lowercase())
 }
 
-fn is_cockpit_api_base_url(raw: Option<&str>) -> bool {
+pub(super) fn is_cockpit_api_base_url(raw: Option<&str>) -> bool {
     let Some(actual) = normalize_api_base_url_for_match(raw) else {
         return false;
     };

@@ -29,6 +29,8 @@ mod automatic_history;
 mod key_continuity;
 #[path = "identity_partial_history.rs"]
 mod partial_history;
+#[path = "identity_maintenance.rs"]
+pub mod maintenance;
 pub(crate) use partial_history::PartialHistory;
 #[cfg(test)]
 #[path = "identity_opaque_replay_tests.rs"]
@@ -48,6 +50,7 @@ pub struct IdentityStore {
     path: PathBuf,
     session_identity_mapping_enabled: AtomicBool,
     shared_continuation_references: AtomicBool,
+    maintenance_running: AtomicBool,
 }
 
 #[derive(Clone, Debug)]
@@ -375,6 +378,8 @@ impl IdentityStore {
         connection
             .busy_timeout(Duration::from_secs(2))
             .map_err(|error| error.to_string())?;
+        maintenance::enable_incremental_auto_vacuum_if_empty(&connection)
+            .map_err(|error| error.to_string())?;
         connection.execute_batch(
             "PRAGMA journal_mode=WAL;
              CREATE TABLE IF NOT EXISTS native_identity_v1 (
@@ -403,6 +408,7 @@ impl IdentityStore {
             path,
             session_identity_mapping_enabled: AtomicBool::new(true),
             shared_continuation_references: AtomicBool::new(false),
+            maintenance_running: AtomicBool::new(false),
         })
     }
 

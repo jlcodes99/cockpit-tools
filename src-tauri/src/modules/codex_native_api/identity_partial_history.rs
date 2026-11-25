@@ -35,10 +35,12 @@ pub(super) fn initialize(connection: &Connection) -> rusqlite::Result<()> {
             caller TEXT NOT NULL, response TEXT NOT NULL, thread TEXT NOT NULL,
             session TEXT, account TEXT NOT NULL, owner TEXT NOT NULL,
             manifest TEXT NOT NULL, parameters TEXT, bytes INTEGER NOT NULL,
+            created INTEGER NOT NULL DEFAULT 0,
             PRIMARY KEY(caller,response));
          CREATE INDEX IF NOT EXISTS native_partial_history_v1_response
             ON native_partial_history_v1(response);",
-    )
+    )?;
+    super::maintenance::ensure_created_column(connection, "native_partial_history_v1")
 }
 
 impl Binding {

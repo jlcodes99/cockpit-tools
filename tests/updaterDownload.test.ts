@@ -5,6 +5,7 @@ import vm from 'node:vm';
 import ts from 'typescript';
 import type { DownloadEvent } from '@tauri-apps/plugin-updater';
 import { createUpdaterDownloadProgress } from '../src/utils/updaterDownloadProgress';
+import { resolveUpdateApplyFailureMessage } from '../src/utils/updateApplyFailureMessage';
 import * as retry from '../src/utils/updaterRetry';
 import { deferred, settlePromises } from './helpers/reactHookHarness';
 
@@ -154,6 +155,8 @@ test('install and relaunch failures show the error before recovering the API lis
       setUpdateRetryStatus() {}, writeUpdateLog() {},
       setUpdateDownloadError(value: string) { displayedError = value; },
       sanitizeUpdaterErrorMessage: retry.sanitizeUpdaterErrorMessage,
+      resolveUpdateApplyFailureMessage,
+      updateRuntimeInfo: null,
       console: { error() {} },
       t: (key: string) => key,
     };

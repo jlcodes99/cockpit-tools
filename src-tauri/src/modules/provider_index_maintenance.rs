@@ -3,9 +3,18 @@ use super::{
     provider_account_index::{self, provider_index},
 };
 use crate::models::{
-    claude, codebuddy, github_copilot, grok, minimax_code, qoder, workbuddy, zcode, zed,
+    claude, codebuddy, github_copilot, grok, minimax_code, qoder, t3code, workbuddy, zcode, zed,
 };
 use std::{collections::VecDeque, path::Path};
+
+provider_index!(
+    crate::models::t3code::T3CodeAccountIndex,
+    crate::models::t3code::T3CodeAccountSummary,
+    "t3code",
+    true,
+    None,
+    current_account_id
+);
 
 provider_index!(
     crate::models::minimax_code::MinimaxCodeAccountIndex,
@@ -74,6 +83,7 @@ fn schedule_root(root: &Path) {
         batch::<minimax_code::MinimaxCodeAccountIndex>(root, "minimax_code_accounts.json"),
         batch::<grok::GrokAccountIndex>(root, "grok_accounts.json"),
         batch::<zcode::ZcodeAccountIndex>(root, "zcode_accounts.json"),
+        batch::<t3code::T3CodeAccountIndex>(root, "t3code_accounts.json"),
         batch::<claude::ClaudeAccountIndex>(root, "claude_accounts.json"),
         batch::<crate::models::kiro::KiroAccountIndex>(root, "kiro_accounts.json"),
         batch::<crate::models::windsurf::WindsurfAccountIndex>(root, "windsurf_accounts.json"),
