@@ -45,6 +45,7 @@ pub(crate) mod grok_thinking;
 mod grok_errors;
 mod grok_wire;
 mod http;
+mod workbuddy_acp;
 mod http_compression;
 pub mod identity;
 mod images;
@@ -65,6 +66,7 @@ mod opencode_go_http_tests;
 mod official_fallback;
 #[cfg(test)]
 mod official_fallback_http_tests;
+mod opencode_session;
 mod output_error;
 mod output_items;
 mod output_usage;
