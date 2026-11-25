@@ -260,6 +260,7 @@
       "offline": "Offline · uložená data"
     },
     "networkErrors": {
+      "recoveryExhausted": "Opakovaná selhání komunikace s nadřazenou službou překročila limit obnovy tohoto požadavku. Automatické opakování bylo zastaveno. Před dalším pokusem zkontrolujte proxy nebo síť; tato chyba neznamená vyčerpání kvóty účtu.",
       "upstream": "nadřazené službě",
       "proxyConnection": "Připojení k {{target}} přes proxy „{{proxy}}“ selhalo. Může jít o problém proxy nebo sítě. Zkontrolujte proxy nebo zkuste jiný uzel.",
       "proxyTimeout": "Vypršel čas připojení k {{target}} přes proxy „{{proxy}}“. Může jít o problém proxy nebo sítě. Zkontrolujte proxy nebo zkuste jiný uzel.",

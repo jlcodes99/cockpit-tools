@@ -260,6 +260,7 @@
       "offline": "Brak połączenia · pamięć podręczna"
     },
     "networkErrors": {
+      "recoveryExhausted": "Powtarzające się błędy komunikacji z usługą docelową przekroczyły limit odzyskiwania tego żądania. Automatyczne ponawianie zostało zatrzymane. Przed ponowną próbą sprawdź proxy lub sieć; ten błąd nie oznacza wyczerpania limitu konta.",
       "upstream": "usługą docelową",
       "proxyConnection": "Nie udało się połączyć z {{target}} przez proxy „{{proxy}}”. Możliwy problem z proxy lub siecią. Sprawdź proxy lub wypróbuj inny węzeł.",
       "proxyTimeout": "Przekroczono czas połączenia z {{target}} przez proxy „{{proxy}}”. Możliwy problem z proxy lub siecią. Sprawdź proxy lub wypróbuj inny węzeł.",

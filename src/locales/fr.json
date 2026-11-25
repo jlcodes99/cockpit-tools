@@ -260,6 +260,7 @@
       "offline": "Hors ligne · données en cache"
     },
     "networkErrors": {
+      "recoveryExhausted": "Les échecs répétés de communication avec le service en amont ont dépassé la limite de récupération de cette requête. Les tentatives automatiques ont été arrêtées. Vérifiez le proxy ou le réseau avant de réessayer ; cette erreur ne signifie pas que le quota du compte est épuisé.",
       "upstream": "ce service en amont",
       "proxyConnection": "Échec de connexion à {{target}} via le proxy « {{proxy}} ». Le proxy ou le réseau peut être en cause. Vérifiez le proxy ou essayez un autre nœud.",
       "proxyTimeout": "Délai de connexion à {{target}} dépassé via le proxy « {{proxy}} ». Le proxy ou le réseau peut être en cause. Vérifiez le proxy ou essayez un autre nœud.",

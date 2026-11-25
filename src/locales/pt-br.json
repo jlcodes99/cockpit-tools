@@ -260,6 +260,7 @@
       "offline": "Sem conexão · dados em cache"
     },
     "networkErrors": {
+      "recoveryExhausted": "Falhas repetidas na comunicação com o serviço de destino excederam o limite de recuperação desta solicitação. As tentativas automáticas foram interrompidas. Verifique o proxy ou a rede antes de tentar novamente; este erro não indica que a cota da conta foi esgotada.",
       "upstream": "este serviço de destino",
       "proxyConnection": "Falha ao conectar a {{target}} pelo proxy “{{proxy}}”. Pode haver um problema no proxy ou na rede. Verifique o proxy ou tente outro nó.",
       "proxyTimeout": "A conexão com {{target}} pelo proxy “{{proxy}}” excedeu o tempo limite. Pode haver um problema no proxy ou na rede. Verifique o proxy ou tente outro nó.",

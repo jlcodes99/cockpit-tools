@@ -337,3 +337,33 @@ results; they were not rerun merely to repackage unchanged source. A full
 repository test run, macOS/Linux GUI run, fault injection into live production,
 real account-exhaustion test, and a rebuilt post-merge release are outside the
 claims of this submission.
+
+## 11. Upstream CI feedback and locale completion
+
+The first published revision (33 files) exposed a real omission in this
+contribution: `common.networkErrors.recoveryExhausted` had only been added to
+English and Simplified Chinese. The upstream locale parity gate correctly
+rejected it. The follow-up adds exactly that message, translated, to the other
+16 existing locales; none of the original 24 repaired files changes. The final
+contribution therefore contains 40 source/test/locale files plus 6 release-check
+files and 3 evidence documents (49 files total). The installed local artifact
+identity above still describes the original validated artifact; these extra
+translations have not been deployed or included in a new local release build.
+
+The complete repository locale checker is rerun for this follow-up. The
+machine-readable result and each additional locale hash are recorded under
+`localeCompletion` in `submission-verification.json`.
+
+The initial GitHub regression job also failed in an unrelated updater test:
+`install and relaunch failures show the error before recovering the API listener`
+raised `ReferenceError: resolveUpdateApplyFailureMessage is not defined`.
+The same test and exact error already failed on upstream main
+`714471e528747b4ee028cbc89ed80cc63a5abd73` before this PR:
+
+- [Upstream main failure](https://github.com/jlcodes99/cockpit-tools/actions/runs/45442208675/job/138616144350)
+- [Initial PR failure](https://github.com/jlcodes99/cockpit-tools/actions/runs/45547761769/job/138981370768)
+
+This PR does not change that updater implementation or its test. Its existing
+failure is disclosed, not counted as a passing check or silently attributed to
+the network repair. The new revision's GitHub checks must be read from the PR;
+local historical success is not a substitute for a green merge build.

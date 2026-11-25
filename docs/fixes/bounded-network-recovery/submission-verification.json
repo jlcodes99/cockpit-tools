@@ -262,5 +262,81 @@
     "macOS/Linux GUI verification",
     "Live upstream fault injection or real account exhaustion",
     "Desktop per-request runtime retry readback"
-  ]
+  ],
+  "localeCompletion": {
+    "scope": "Follow-up locale parity correction; original 24 source files unchanged",
+    "additionalFiles": [
+      {
+        "path": "src/locales/ar.json",
+        "sha256": "8B4124FF6D1CAB5957C41733C4CB030ED8D0749420A48DA25EC6C7C53A709A16"
+      },
+      {
+        "path": "src/locales/cs.json",
+        "sha256": "A8822C27FFF4CE35EE168C91DE3CCD7A5520A0AC981F63EEA1D3830037FCF6AF"
+      },
+      {
+        "path": "src/locales/de.json",
+        "sha256": "DEB9EC4E7AC6F46BB7D8CF102382BB417FB976F193BB4363D7AC46DCC041380F"
+      },
+      {
+        "path": "src/locales/en-US.json",
+        "sha256": "624FC88BEDF46F67587A188310E330FA18FAE9EB772A4533591C6E0BB3736227"
+      },
+      {
+        "path": "src/locales/es.json",
+        "sha256": "DA27BD2D9FB00532D030B03C4548584CE1E0DB375451FA96921F08ECCD6D4E72"
+      },
+      {
+        "path": "src/locales/fr.json",
+        "sha256": "91465151C8D9553418B2CECB82309A8411002399E808CF32275E4BC440435B5B"
+      },
+      {
+        "path": "src/locales/id.json",
+        "sha256": "4EA43D07BBA140CE92F434238CF583831A79041B720A7585BF95C08241CDAA26"
+      },
+      {
+        "path": "src/locales/it.json",
+        "sha256": "2104F505B862A13F122A04A563108FB9588F93ABE0EA85666AE24F44AA1B4991"
+      },
+      {
+        "path": "src/locales/ja.json",
+        "sha256": "52090F89CCADB4B116D6A5ABE3D003C5FBCCF75DF33FAE5EB5A84F6CA0EF3B6C"
+      },
+      {
+        "path": "src/locales/ko.json",
+        "sha256": "A917B687D756B3FB544102FAA02B501E3075619B3F9EDBFDD40B906001D3C60F"
+      },
+      {
+        "path": "src/locales/pl.json",
+        "sha256": "7C26A136CCBFA065CC5127F14D0D119BB51E489B36993093A4A9B5D3E0824965"
+      },
+      {
+        "path": "src/locales/pt-br.json",
+        "sha256": "66BBFA02093C7BC3FEC2E02B4C1C417FE110ECF0A8749AC5940B101F590D3AC2"
+      },
+      {
+        "path": "src/locales/ru.json",
+        "sha256": "2F837C99617E608038283A2E80463E25B7C30F095772F964878B5D94350954CA"
+      },
+      {
+        "path": "src/locales/tr.json",
+        "sha256": "1BCB9BD905086C71AAC8574A791127E4D739FB234527ACD748362242341B69F1"
+      },
+      {
+        "path": "src/locales/vi.json",
+        "sha256": "BC35551B5E87AB9D22270EC02B4D401E19AB84CD8EA127E60EDED77DFD6B69A5"
+      },
+      {
+        "path": "src/locales/zh-tw.json",
+        "sha256": "60EABACEACEE7DC41FB3A5B8B880F3836DC757B87E12390F331F3E6ED0F0278F"
+      }
+    ],
+    "command": "node scripts/check_locales.cjs",
+    "exitCode": 0,
+    "languageFiles": 18,
+    "keysPerLanguage": 8819,
+    "installedArtifactRebuilt": false,
+    "logSha256": "FE475CA094AFC9B47AE461B6B06B18C8A010F06A9D2D0DAD0E5DE36E8DF4D704"
+  },
+  "totalSubmittedFiles": 49
 }

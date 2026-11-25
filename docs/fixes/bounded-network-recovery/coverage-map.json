@@ -554,5 +554,24 @@
     "secretsAndConfigurationBodiesExcluded": true,
     "note": "The public evidence uses repository paths and <WORK> placeholders; raw local evidence remains private. Public submission files are scanned separately before publication."
   },
-  "submissionVerification": "submission-verification.json"
+  "submissionVerification": "submission-verification.json",
+  "additionalLocaleFiles": [
+    "src/locales/ar.json",
+    "src/locales/cs.json",
+    "src/locales/de.json",
+    "src/locales/en-US.json",
+    "src/locales/es.json",
+    "src/locales/fr.json",
+    "src/locales/id.json",
+    "src/locales/it.json",
+    "src/locales/ja.json",
+    "src/locales/ko.json",
+    "src/locales/pl.json",
+    "src/locales/pt-br.json",
+    "src/locales/ru.json",
+    "src/locales/tr.json",
+    "src/locales/vi.json",
+    "src/locales/zh-tw.json"
+  ],
+  "totalSubmittedFiles": 49
 }

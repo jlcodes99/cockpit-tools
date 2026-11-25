@@ -260,6 +260,7 @@
       "offline": "Luring · data tersimpan"
     },
     "networkErrors": {
+      "recoveryExhausted": "Batas pemulihan permintaan ini terlampaui akibat kegagalan komunikasi berulang dengan layanan hulu. Percobaan ulang otomatis telah dihentikan. Periksa proksi atau jaringan sebelum mencoba lagi; kesalahan ini tidak berarti kuota akun telah habis.",
       "upstream": "layanan hulu",
       "proxyConnection": "Gagal terhubung ke {{target}} melalui proksi “{{proxy}}”. Mungkin ada masalah proksi atau jaringan. Periksa proksi atau coba simpul lain.",
       "proxyTimeout": "Koneksi ke {{target}} melalui proksi “{{proxy}}” kehabisan waktu. Mungkin ada masalah proksi atau jaringan. Periksa proksi atau coba simpul lain.",
