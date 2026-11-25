@@ -108,6 +108,7 @@ test('Codex 26.1111 validates predictions independently from Fast for OAuth API 
     + Object.keys(current).map(id => `${id}:"abcdef1234"`).join(',') + '})[e]+".js";');
   h.root.__cockpitEnhancements = { nativeFast:false, nativePredictions:true, apiKeyAuthVerified:false, apiService:true };
   h.root.document.scripts = [{src:entry}];
+  h.root.document.querySelectorAll = () => [];
   h.root.AbortSignal = AbortSignal;
   h.root.fetch = async url => ({ok:h.sources.has(url), text:async () => h.read(url)});
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, 'service_rspack.js'), 'utf8'), h.root);

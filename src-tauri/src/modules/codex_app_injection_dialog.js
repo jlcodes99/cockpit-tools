@@ -292,15 +292,17 @@
       ? '<dl class="response-speeds">' + input.speedDetails.map(([name, value]) =>
         '<dt title="' + esc(name) + '">' + esc(name) + '</dt><dd>' + metricValue(value) + '</dd>').join('') + '</dl>'
       : '';
-    const speedMetrics = input.showSpeed === false || input.speedDetails ? '' :
+    const speedMetrics = input.speedDetails ? '' :
       (input.latestSpeed ? metric(input.speedLabel, input.latestSpeed) : '')
       + metric(label('averageSpeed'),input.averageSpeed || missingLabel);
+    const sessionMetrics = input.showSessionMetrics === false ? '' :
+      (input.contextDetail ? metric(input.contextLabel, input.contextDetail) : '')
+      + speedMetrics + metric(label('averageCache'),input.averageCache || missingLabel)
+      + metric(label('firstResponse'),ms(session?.firstResponseMs ?? input.direct?.firstResponseMs)) + responseSpeeds;
     return '<div class="overview-sections"><section class="business-section quota-block" data-resource-kind="' + esc(input.badgeKind) + '"><div class="business-label"><h3 class="section-title">' + dot('purple') + esc(root.usageState?.__remoteService ? label('remoteBudget') : input.badgeKind === 'deepseek' ? balanceLabel : label('quotaTitle')) + '</h3></div><div class="business-content">' + quotaContent(root,input) + '</div></section>'
       + '<section class="business-section session-block"><div class="business-label"><h3 class="section-title">' + dot('blue') + esc(label('session')) + '</h3></div><div class="business-content session-metrics"><dl class="session-metric model"><dt>' + esc(label('model')) + '</dt><dd title="' + esc(sessionModel) + '">' + esc(sessionModel) + '</dd>'
       + (session?.upstreamModel && session.upstreamModel !== sessionModel ? '<dd class="metric-sub" title="' + esc(session.upstreamModel) + '">↳ ' + esc(session.upstreamModel) + '</dd>' : '') + '<dd class="metric-sub">' + esc(session?.reasoningEffort || '') + '</dd></dl>'
-      + (input.contextDetail ? metric(input.contextLabel, input.contextDetail) : '')
-      + speedMetrics + metric(label('averageCache'),input.averageCache || missingLabel)
-      + metric(label('firstResponse'),ms(session?.firstResponseMs ?? input.direct?.firstResponseMs)) + responseSpeeds + '</div></section>'
+      + sessionMetrics + '</div></section>'
       + (input.direct ? '' : '<section class="business-section stats-block"><div class="business-label"><h3 class="section-title" title="' + esc(statsHint) + '">' + dot('green') + esc(statsTitle) + '</h3>' + segmented('period',[['today','periodToday'],['week','periodWeek']],s.period) + '</div><div class="business-content"><div class="stats-grid">'
       + '<dl><dt>' + esc(label('requestsCount')) + '</dt><dd>' + number(summary?.requests) + '</dd><dd class="stats-sub">' + esc(label('successRate')) + ' ' + esc(successRate) + '</dd></dl>'
       + '<dl><dt>' + esc(label('totalTokens')) + '</dt><dd>' + number(summary?.totalTokens) + '</dd></dl><dl><dt>' + esc(label('estimatedValue')) + '</dt><dd class="value">' + esc(cost) + '</dd></dl><dl><dt>' + esc(label('avgLatency')) + '</dt><dd>' + metricValue(ms(summary?.averageLatencyMs)) + '</dd></dl></div><p class="stats-date">' + esc(range) + '</p></div></section>') + '</div>';

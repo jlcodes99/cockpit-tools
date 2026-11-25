@@ -123,7 +123,7 @@
     const providerStatus = local && !selection.multiple
       ? quotaSelection.providerStatus(selection.instanceEntries, state.gateways) : [];
     root.evaluation = { activeInstanceId: null, gatewayActive: false, providerStatus, clerkAccount };
-    if (!surface || !selection || selection.multiple) {
+    if (!surface || !selection || selection.multiple || !selection.supportsQuota) {
       if (capsule) capsule.hidden = true;
       if (details) details.hidden = true;
       root.dialog?.reset(root);
@@ -164,7 +164,7 @@
     const scopedSpeed = gateway?.binding && thread?.speed?.binding === gateway.binding &&
       thread.speed.threadId === root.threadId && thread.model === selection.model ? thread.speed : null;
     const isAntigravity = selection.driver === 'antigravity';
-    const showSpeed = isAntigravity || Boolean(gateway);
+    const showSessionMetrics = isAntigravity || Boolean(gateway);
     const antigravitySpeed = isAntigravity && selection.contextProviderThreadId &&
       thread?.model === selection.model ? thread.usage?.antigravitySpeed : null;
     const responseSpeed = antigravitySpeed?.rate > 0 ? speedNumber.format(antigravitySpeed.rate) : null;
@@ -249,14 +249,14 @@
       const summary = `<span data-cockpit-quota-metric>${quota}</span>`;
       quotaFields = [{ html: summary }];
     }
-    const quotaHtml = selection.supportsQuota ? quotaFields.map(field => field.html || metric(field)).join('') : '';
+    const quotaHtml = quotaFields.map(field => field.html || metric(field)).join('');
     const contextFill = contextUsage.percent === null ? 'data-cockpit-metric-unknown' :
       `style="--cockpit-context-fill:${contextUsage.percent}"`;
-    const contextHtml = `<span data-cockpit-quota-metric data-cockpit-metric-key="context"
-      data-cockpit-context-ring title="${esc(contextUsage.tooltip)}" ${contextFill}>
-      <span data-cockpit-context-reading>${esc(contextUsage.label)}</span>
-    </span>`;
-    const speedHtml = showSpeed ? metric({
+    const contextHtml = showSessionMetrics ? `<span data-cockpit-quota-metric data-cockpit-metric-key="context"
+      data-cockpit-context-ring title="${esc(contextUsage.tooltip)}" aria-label="${esc(contextUsage.label)}" ${contextFill}>
+      <span data-cockpit-metric-value>${esc(contextUsage.percent ?? missing)}</span>
+    </span>` : '';
+    const speedHtml = showSessionMetrics ? metric({
       key: 'speed', value: latestSpeed, unit: 'tok/s',
       title: antigravitySpeed
         ? `${speedLabel}\n${antigravitySpeed.outputTokens.toLocaleString()} ${labels.token} / ${antigravitySpeed.elapsedSeconds.toLocaleString(undefined, { maximumFractionDigits: 3 })} s`
@@ -267,7 +267,9 @@
     const fullHtml = quotaHtml + contextHtml + speedHtml;
     if (capsule.__cockpitT3Html !== fullHtml) {
       capsule.innerHTML = fullHtml;
-      capsule.setAttribute('aria-label', `${labels.title} · ${capsule.textContent.replace(/\s+/g, ' ').trim()}`);
+      const summary = Array.from(capsule.children, item => item.getAttribute('aria-label') ?? item.textContent)
+        .join(' ').replace(/\s+/g, ' ').trim();
+      capsule.setAttribute('aria-label', `${labels.title} · ${summary}`);
       capsule.__cockpitT3Html = fullHtml;
     }
     // Yield speed, then context before hiding the quota capsule.
@@ -312,7 +314,7 @@
       badgeKind, formatMoney, shortProductLabel,
       canRefresh: Boolean(local && (gateway || source.refreshAccountId)),
       latestSpeed: latestSpeed === null ? labels.noData : latestSpeed + ' tok/s',
-      speedLabel, speedDetails, showSpeed,
+      speedLabel, speedDetails, showSessionMetrics,
       averageSpeed: averageSpeed === null ? missing : averageSpeed + ' tok/s',
       averageCache: cacheValue ?? missing,
       direct: gateway ? null : {

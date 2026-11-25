@@ -16,7 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - **Add accounts saved in Cockpit to T3 Code in one click.** Open **T3 Code → Account Setup**, select a supported account, and choose **Add Account**. Works with Antigravity, Codex, Claude Code, Grok, WorkBuddy, WorkBuddy AI, CodeBuddy, CodeBuddy CN, and MiniMax Code.
 - **Manage connected accounts in one place.** Account Overview groups accounts by platform and shows their subscriptions and remaining quotas, with balances, credits, and percentages in their original units. Add parallel accounts, remove accounts, or set a default. The default appears first and takes effect when the affected providers are idle. You can start or restart T3 Code from the overview.
-- **Check quota and context usage while chatting.** The Antigravity desktop app and T3 Code show usage for the selected model in the composer. Antigravity chats show response speed at a glance. Open the capsule to see response speed, total speed including thinking, and streaming speed for the same reply. Codex chats in T3 Code that use Cockpit Codex API Service also show output speed.
+- **Check quota and context usage while chatting.** The Antigravity desktop app and T3 Code show usage for the selected model in the composer. In T3 Code, Antigravity chats and Codex chats using Cockpit Codex API Service show the context usage percentage and output speed. Other providers show their own quotas. Antigravity chats show response speed at a glance. Open the capsule to see response speed, total speed including thinking, and streaming speed for the same reply.
 - **Configure T3 Code in Cockpit.** Set the interface language, model and reasoning effort for new chats, notifications, launch path, and quota capsule. Local T3 Code can use CLI paths configured in Cockpit. Account Overview offers installation or path setup when a runtime is missing.
 
 ### Added
@@ -46,6 +46,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- Fixed a startup screen hang in newer ChatGPT desktop clients using API keys. On supported models, the native menu can switch between Standard, Fast, and Ultrafast after the client opens.
 - Fixed Codex account switching on Windows when ChatGPT and Codex are both running. [#3205](https://github.com/jlcodes99/cockpit-tools/issues/3205)
 - Codex shows subscription expiry for the corresponding workspace and flags an unconfirmed expiry when refresh fails. Reauthorization checks existing accounts and protects email addresses already used by another account. [#3217](https://github.com/jlcodes99/cockpit-tools/pull/3217)
 - Codex can copy instances with continued session history and repair the session index created by newer clients. Quick repair handles compressed history and skips sessions whose history is missing. [#3179](https://github.com/jlcodes99/cockpit-tools/pull/3179) · [#3260](https://github.com/jlcodes99/cockpit-tools/issues/3260) · [#3262](https://github.com/jlcodes99/cockpit-tools/pull/3262) · [#3259](https://github.com/jlcodes99/cockpit-tools/issues/3259)

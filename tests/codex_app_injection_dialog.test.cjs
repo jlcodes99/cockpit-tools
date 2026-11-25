@@ -127,6 +127,29 @@ function harness(providerQuotas = []) {
   return { api, root, details, input, dispatched, respond, action, advance: (ms) => { now += ms; } };
 }
 
+test('quota-only sessions keep the provider balance and suppress session usage metrics', () => {
+  const h = harness();
+  Object.assign(h.input, {
+    contextLabel: 'Context usage', contextDetail: '315,000 / 490,000',
+    latestSpeed: '63.7 tok/s', speedLabel: 'Output speed',
+    showSessionMetrics: false,
+    direct: {
+      account: 'workbuddy-test', model: 'DeepSeek', windows: [],
+      balances: [{ name: 'AI Credits', value: '8,640.91' }], firstResponseMs: 700,
+    },
+  });
+  const sessionLabels = ['Context usage', 'Output speed', usageLabels.averageCache, usageLabels.firstResponse];
+  h.root.render();
+  assert.ok(h.details.innerHTML.includes('8,640.91'));
+  assert.ok(h.details.innerHTML.includes('DeepSeek'));
+  for (const label of sessionLabels) assert.ok(!h.details.innerHTML.includes(label), label);
+
+  h.input.showSessionMetrics = true;
+  h.root.render();
+  assert.ok(h.details.innerHTML.includes('315,000 / 490,000'));
+  for (const label of sessionLabels) assert.ok(h.details.innerHTML.includes(label), label);
+});
+
 test('first query dispatches immediately once and old binding responses cannot populate a new binding', () => {
   const h = harness();
   const query = h.api.query(h.root);

@@ -16,7 +16,7 @@
 
 - **把 Cockpit 里已保存的账号一键添加到 T3 Code。** 打开「T3 Code → 账号配置」，选择受支持的账号，点击「添加账号」即可接入本机 T3 Code。支持 Antigravity、Codex、Claude Code、Grok、WorkBuddy、WorkBuddy AI、CodeBuddy、CodeBuddy CN 和 MiniMax Code。
 - **集中管理已接入的账号。** 总览按平台展示账号、订阅和剩余额度，余额、积分和百分比按原单位显示。可添加并行账号、移除账号或设为默认。默认账号排到组内首位，相关提供方空闲时自动应用。也可以在总览里直接启动或重启 T3 Code。
-- **在聊天中查看额度和上下文占用。** Antigravity 桌面版和 T3 Code 的底栏会随所选模型显示用量。Antigravity 会话底栏显示正文速度，点开可查看同一回复的正文速度、含思考总速度和流式速度。在 T3 Code 中，通过 Cockpit Codex API 服务运行的 Codex 会话也可查看输出速度。
+- **在聊天中查看额度和上下文占用。** Antigravity 桌面版和 T3 Code 的底栏会随所选模型显示用量。T3 Code 中的 Antigravity 会话和通过 Cockpit Codex API 服务运行的 Codex 会话可直接查看上下文占用百分比和输出速度，其他提供方显示各自额度。Antigravity 会话底栏显示正文速度，点开可查看同一回复的正文速度、含思考总速度和流式速度。
 - **在 Cockpit 配置 T3 Code。** 可设置界面语言、新对话的模型与推理强度、通知、启动路径和额度胶囊。本机 T3 Code 可使用 Cockpit 已配置的 CLI 路径，缺少运行环境时可从账号总览进入安装或路径设置。
 
 ### 新增
@@ -46,6 +46,7 @@
 
 ### 修复
 
+- 修复新版 ChatGPT 桌面客户端使用 API Key 时可能卡在启动页的问题。支持的模型可在客户端打开后通过原生菜单切换标准、快速和超快。
 - Windows 同时打开 ChatGPT 和 Codex 时，修复其他应用进程误拦住 Codex 切号的问题。 [#3205](https://github.com/jlcodes99/cockpit-tools/issues/3205)
 - Codex 会按工作区订阅显示到期时间，刷新失败时会注明待确认。重新授权时会核对已有账号，保护已由其他账号使用的邮箱。 [#3217](https://github.com/jlcodes99/cockpit-tools/pull/3217)
 - Codex 能复制包含续接会话历史的实例，并修复新版客户端生成的会话索引。快速修复支持压缩历史文件，遇到已缺失的历史文件时会跳过对应会话。 [#3179](https://github.com/jlcodes99/cockpit-tools/pull/3179) · [#3260](https://github.com/jlcodes99/cockpit-tools/issues/3260) · [#3262](https://github.com/jlcodes99/cockpit-tools/pull/3262) · [#3259](https://github.com/jlcodes99/cockpit-tools/issues/3259)

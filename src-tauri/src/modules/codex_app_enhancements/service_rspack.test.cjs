@@ -14,8 +14,9 @@ const queue = [
   'export function policy(e,D,R,nn,t,tE,c){return {authMethod:e.hostId===R.local?D.authMethod:null,includeUltraReasoningEffort:(0,nn.flag)(t,"1186680773"),isAuthLoading:D.loading,isCustomModelProvider:(0,tE.cc)(c),workspaceDependenciesEnabled:true}}',
 ].join('\n');
 
-function setup(flags = {}, { host = 182735, menus = menuIds, queries = modelQueryIds } = {}) {
+function setup(flags = {}, { host = 182735, menus = menuIds, queries = modelQueryIds, policy } = {}) {
   const modules = new Map();
+  const requestedUrls = [];
   const routeIds = [...new Set([...menus, ...queries])];
   const sources = new Map(routeIds.map(id => [
     id, [menus.includes(id) ? menu : '', queries.includes(id) ? modelQuery : ''].join('\n'),
@@ -23,7 +24,9 @@ function setup(flags = {}, { host = 182735, menus = menuIds, queries = modelQuer
   sources.set(host, queue);
   const assetName = id => id + '.abcdef1234.js';
   const html = '<script type="module" src="/assets/123.abcdef1234.js"></script>';
+  const policies = policy ? [{ content: policy }] : [];
   const root = {
+    DOMParser: class { parseFromString() { return { querySelectorAll: () => policies }; } },
     URL: class extends URL { static createObjectURL(blob) {
       const id = String(modules.size);
       modules.set(id, blob);
@@ -41,6 +44,7 @@ function setup(flags = {}, { host = 182735, menus = menuIds, queries = modelQuer
     HTMLScriptElement: { supports: () => true }, addEventListener() {},
     document: {
       documentElement: null,
+      querySelectorAll: () => policies,
       scripts: [{ src: 'app://-/assets/123.abcdef1234.js' }],
       createElement() {
         return { relList: { supports: () => true }, appendChild: node => {
@@ -53,6 +57,7 @@ function setup(flags = {}, { host = 182735, menus = menuIds, queries = modelQuer
     XMLHttpRequest: class {
       open(_, url) { this.url = url; }
       send() {
+        requestedUrls.push(this.url);
         if (this.url.endsWith('/index.html')) this.responseText = html;
         else if (this.url.endsWith('/123.abcdef1234.js'))
           this.responseText = 'r.u=e=>"assets/async/"+e+"."+({' + [...sources.keys()].map(id => id + ':"abcdef1234"').join(',') + '})[e]+".js"';
@@ -80,7 +85,7 @@ function setup(flags = {}, { host = 182735, menus = menuIds, queries = modelQuer
     await module.evaluate();
     return module.namespace;
   }
-  return { root, sources, preload: () => load('startup_preload.js'), exports };
+  return { root, sources, requestedUrls, preload: () => load('startup_preload.js'), exports };
 }
 
 test('Rspack enables the native local API speed menu and both queued request paths', async () => {
@@ -155,6 +160,37 @@ test('Codex 26.1111.71025 restores the speed menu and forwards GPT-6.2 Sol Ultra
   }), 'ultrafast');
 });
 
+test('Codex 26.1120 reads the thread provider and applies each native speed selection', async () => {
+  const host = 49792;
+  const h = setup({}, { host });
+  h.sources.set(host, h.sources.get(host)
+    .replace('async readServiceTier(){return (async f=>f())(',
+      'async readServiceTier(thread){return (async(f,provider)=>await f()&&provider)(')
+    .replace('})},async writeServiceTier()', '},e.getThreadModelProvider(thread))},async writeServiceTier()'));
+
+  const verified = await h.root.__cockpitServiceRspack.verifyRequestedDocument();
+  assert.equal(verified.ok, true, verified.reason);
+  h.preload();
+  assert.equal(h.root.__cockpitStartupPreload.speed.ok, true);
+
+  const { menu: show } = await h.exports(menuIds[0]);
+  assert.equal(show({}, 'local', { tn: () => ({ authMethod: 'apiKey' }) }).serviceTierAccess, true);
+
+  const { saved, explicit } = await h.exports(host);
+  const manager = {
+    getHostId: () => 'local',
+    getAccount: async () => ({ account: { type: 'apiKey' } }),
+    getThreadModelProvider: thread => thread === 'active-thread' ? 'active-provider' : null,
+  };
+  const environment = { runtime: { isUsingCopilotInference: async () => false }, settings: { ready: true } };
+  assert.equal(await saved(manager, environment).readServiceTier('active-thread'), 'active-provider');
+
+  const submit = explicit(manager, environment);
+  for (const serviceTier of ['priority', 'ultrafast', null]) {
+    assert.equal(await submit({ submissionOptions: { serviceTier } }), serviceTier);
+  }
+});
+
 test('previously unseen host and lazy chunks retain the speed selector and model query', async () => {
   const host = 400000;
   const menus = [400001, 400002];
@@ -184,6 +220,24 @@ test('candidates for another installed build do not patch the running document',
   h.preload();
   assert.equal(h.root.__cockpitStartupPreload.speed.ok, false);
   assert.equal(h.root.imports, undefined);
+});
+
+test('a restrictive script policy skips patch assets and leaves the native load in place', async () => {
+  for (const policy of [
+    "default-src 'none'; script-src 'self'; img-src 'self' blob:",
+    "script-src 'self' blob:; script-src-elem 'self'",
+  ]) {
+    const h = setup({ nativePredictions: true }, { policy });
+    const verified = await h.root.__cockpitServiceRspack.verifyRequestedDocument();
+    assert.equal(verified.ok, false);
+    assert.equal(verified.reason, 'blob-scripts-blocked-by-csp');
+    h.preload();
+    assert.equal(h.root.__cockpitStartupPreload.reason, 'blob-scripts-blocked-by-csp');
+    assert.equal(h.root.__cockpitStartupPreload.speed.ok, false);
+    assert.equal(h.root.__cockpitStartupPreload.predictions.ok, false);
+    assert.equal(h.root.imports, undefined);
+    assert.deepEqual(h.requestedUrls, ['app://-/index.html']);
+  }
 });
 
 test('the earlier Rspack build with the same host still enables native speed', async () => {

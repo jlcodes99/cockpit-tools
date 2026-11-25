@@ -90,6 +90,8 @@ const ACTIVATION_TIMEOUT: Duration = Duration::from_secs(35);
 const RETRY_DELAYS: [u64; 5] = [1, 2, 5, 10, 15];
 type Socket = WebSocketStream<MaybeTlsStream<TcpStream>>;
 type ContextKey = (u64, i64);
+#[path = "service_tier_live.rs"]
+mod service_tier_live;
 #[path = "startup_draft.rs"]
 mod startup_draft;
 
@@ -187,6 +189,7 @@ struct Session {
     registrations: HashSet<String>,
     pending_additions: HashSet<u64>,
     pending_removals: HashMap<u64, String>,
+    service_tier_notice: Option<i64>,
 }
 
 impl Session {
@@ -284,6 +287,7 @@ impl Session {
             Some("Runtime.executionContextsCleared") => {
                 self.contexts.clear();
                 self.generation += 1;
+                self.service_tier_notice = None;
             }
             Some("Runtime.executionContextDestroyed") => {
                 if let Some(id) = event
@@ -315,6 +319,12 @@ impl Session {
                         self.main_frame = Some(id.to_string());
                     }
                 }
+            }
+            Some("Runtime.bindingCalled")
+                if event.pointer("/params/name").and_then(Value::as_str) == Some(service_tier_live::NOTICE)
+                    && event.pointer("/params/payload").and_then(Value::as_str) == Some("active") =>
+            {
+                self.service_tier_notice = event.pointer("/params/executionContextId").and_then(Value::as_i64);
             }
             _ => {}
         }
@@ -388,6 +398,9 @@ struct Registration {
     live_quota: bool,
     live_quota_armed: bool,
     is_rspack: bool,
+    live_speed: bool,
+    live_speed_attempt: Attempt,
+    live_speed_armed: bool,
     nonce: String,
     startup: Option<Arc<StartupReload>>,
     draft_file: PathBuf,
@@ -426,9 +439,10 @@ impl Registration {
     }
 
     async fn report(&mut self, phase: &str, reason: &str) {
-        let state = if self.active && self.capability_only {
+        let active = self.active || phase == "speed" && reason == "native-speed-menu-live";
+        let state = if active && self.capability_only {
             "active-capability"
-        } else if self.active {
+        } else if active {
             "active"
         } else if self.script_id.is_some() {
             "next-document"
@@ -456,7 +470,7 @@ impl Registration {
         if let Some(prediction_reason) = &self.prediction_unsupported_reason {
             message.push_str(&format!("; predictions=unsupported:{prediction_reason}"));
         }
-        if self.active {
+        if active {
             crate::modules::logger::log_info(&message);
         } else {
             crate::modules::logger::log_warn(&message);
@@ -1024,6 +1038,49 @@ async fn arm_live_quota_guard(
     Ok(())
 }
 
+async fn maintain_live_speed(registration: &mut Registration, context: ContextKey) {
+    if !registration.is_rspack || !registration.live_speed || registration.native_module_active {
+        return;
+    }
+    if registration.live_speed_armed {
+        if registration.session().service_tier_notice.take() == Some(context.1) {
+            registration.live_speed_armed = false;
+            service_tier_live::detach(registration.session()).await;
+            registration.report("speed", "native-speed-menu-live").await;
+        }
+        return;
+    }
+    if !registration.live_speed_attempt.due() {
+        return;
+    }
+    match service_tier_live::attach(registration.session(), context).await {
+        Ok(service_tier_live::Attach::Pending) => {
+            registration.live_speed_attempt.next = Some(Instant::now() + Duration::from_secs(1));
+        }
+        Ok(service_tier_live::Attach::Active) => {
+            registration.live_speed_attempt.done = true;
+            registration.report("speed", "native-speed-menu-live").await;
+        }
+        Ok(service_tier_live::Attach::Armed) => {
+            registration.live_speed_attempt.done = true;
+            registration.live_speed_armed = true;
+        }
+        Err(error) => {
+            let retryable = matches!(
+                error.as_str(),
+                "context-changed" | "speed-requirements-unavailable"
+            );
+            registration.live_speed_attempt.failed(retryable);
+            let reason = if error.starts_with("native enhancement ") {
+                command_reason(&error)
+            } else {
+                error
+            };
+            registration.report("speed", &reason).await;
+        }
+    }
+}
+
 async fn maintain(registration: &mut Registration) -> Result<(), String> {
     let Some(context) = registration.session().context() else {
         return Ok(());
@@ -1044,6 +1101,12 @@ async fn maintain(registration: &mut Registration) -> Result<(), String> {
         registration.capability_only = false;
         registration.live_quota_armed = false;
         registration.live_quota_attempt = Attempt::default();
+        if registration.live_speed_armed {
+            service_tier_live::detach(registration.session()).await;
+        }
+        registration.live_speed_armed = false;
+        registration.live_speed_attempt = Attempt::default();
+        registration.session().service_tier_notice = None;
         registration.next_state_read = None;
         registration.last_diagnostic = None;
         registration.activation_until = registration
@@ -1083,6 +1146,11 @@ async fn maintain(registration: &mut Registration) -> Result<(), String> {
             return Ok(());
         }
         registration.is_rspack = probe.get("rspack").and_then(Value::as_bool) == Some(true);
+        if registration.is_rspack && registration.live_speed {
+            // Rspack speed support is attached to the running picker. A
+            // compatibility or transport failure cannot reload the client.
+            registration.startup = None;
+        }
         let installed = probe
             .get("installed")
             .and_then(Value::as_bool)
@@ -1137,6 +1205,7 @@ async fn maintain(registration: &mut Registration) -> Result<(), String> {
                 }
             }
         }
+        maintain_live_speed(registration, context).await;
         return Ok(());
     }
     if registration.script_id.is_none()
@@ -1181,6 +1250,7 @@ async fn maintain(registration: &mut Registration) -> Result<(), String> {
     {
         try_startup_reload(registration, context).await;
     }
+    maintain_live_speed(registration, context).await;
     Ok(())
 }
 
@@ -1324,6 +1394,7 @@ async fn run_with_live_quota(
             registrations: HashSet::new(),
             pending_additions: HashSet::new(),
             pending_removals: HashMap::new(),
+            service_tier_notice: None,
         }),
         script_id: None,
         owner,
@@ -1334,6 +1405,9 @@ async fn run_with_live_quota(
         live_quota,
         live_quota_armed: false,
         is_rspack: false,
+        live_speed: native_fast && api_key_auth_verified,
+        live_speed_attempt: Attempt::default(),
+        live_speed_armed: false,
         nonce: uuid::Uuid::new_v4().to_string(),
         startup,
         draft_file: profile_dir.join(".codex-global-state.json"),

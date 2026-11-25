@@ -120,7 +120,7 @@ function mountChatFooter(selection, state, source) {
     getClientRects: () => [frame], getBoundingClientRect: () => frame,
   };
   const capsule = {
-    style: {}, children: [{}], textContent: '', setAttribute() {},
+    style: {}, children: [{ getAttribute: () => null, textContent: '' }], setAttribute() {},
     querySelectorAll: () => [], getBoundingClientRect: () => frame,
   };
   const details = {
@@ -135,10 +135,10 @@ function mountChatFooter(selection, state, source) {
   const root = {};
   let rendered;
   const labels = {
-    missing: '—', noData: 'No data', speed: 'Output speed', token: 'Token',
+    missing: '—', noData: 'No data', context: 'Context', speed: 'Output speed', token: 'Token',
     responseSpeed: 'Response speed', overallSpeed: 'Speed incl. thinking', streamingSpeed: 'Streaming speed',
   };
-  const usageLabels = { averageSpeed: 'Average speed' };
+  const usageLabels = { averageSpeed: 'Average speed', averageCache: 'Average cache', firstResponse: 'First response' };
   const dialog = vm.runInNewContext(
     fs.readFileSync(path.join(__dirname, 'codex_app_injection_dialog.js'), 'utf8'),
     { document: {}, window: {}, usageLabels, accountCount: 0, plans: [], missingLabel: labels.missing,
@@ -167,7 +167,7 @@ function mountChatFooter(selection, state, source) {
           dialog.render(root, details, data);
         },
       }),
-      formatContextUsage: () => ({ percent: null, label: '—' }),
+      formatContextUsage: vm.runInNewContext(fs.readFileSync(path.join(__dirname, 'composer_context_usage.js'), 'utf8')),
       clerkSync: { read: () => null }, state, labels, usageLabels,
     },
   );
@@ -181,7 +181,7 @@ function mountChatFooter(selection, state, source) {
   };
 }
 
-test('the native Grok capsule and details omit speed and identity diagnostics', () => {
+test('the native Grok capsule and details show quotas without session metrics or identity diagnostics', () => {
   const { capsule, details, openDetails } = mountChatFooter(
     { driver: 'grok', model: 'grok', name: 'Grok', supportsQuota: true },
     {},
@@ -191,32 +191,52 @@ test('the native Grok capsule and details omit speed and identity diagnostics', 
 
   assert.doesNotMatch(capsule.innerHTML, /账号不一致/);
   assert.match(capsule.innerHTML, /98%/);
-  assert.match(capsule.innerHTML, /context/);
-  assert.doesNotMatch(capsule.innerHTML, /tok\/s/);
-  assert.doesNotMatch(details.innerHTML, /Output speed|Average speed/);
+  assert.doesNotMatch(capsule.innerHTML, /context-ring|tok\/s/);
+  assert.doesNotMatch(details.innerHTML, /Context|Output speed|Average speed|Average cache|First response/);
   assert.equal(rendered.direct.account, 'signed-in@example.test');
 });
 
-test('Codex displays speed only for an active API Service source', () => {
+test('WorkBuddy only displays credits and providers without quota keep the capsule hidden', () => {
+  const selection = { driver: 'workbuddy', model: 'deepseek-v4.1-flash', supportsQuota: true };
+  const source = { windows: [{ id: 'credits', remainingAmount: 8640.91 }], providerQuotas: [] };
+  const workbuddy = mountChatFooter(selection, {}, source);
+  workbuddy.openDetails();
+  assert.ok(workbuddy.capsule.innerHTML.includes((8640.91).toLocaleString()));
+  assert.doesNotMatch(workbuddy.capsule.innerHTML, /context-ring|tok\/s/);
+  assert.doesNotMatch(workbuddy.details.innerHTML, /Context|Output speed|Average cache|First response/);
+
+  const other = mountChatFooter({ ...selection, supportsQuota: false }, {}, { windows: [], providerQuotas: [] });
+  assert.equal(other.capsule.hidden, true);
+  assert.equal(other.details.hidden, true);
+});
+
+test('Codex displays context and speed only for an active API Service source', () => {
   const conversation = { environmentId: 'local', threadId: 'thread', providerInstanceId: 'codex',
     contextProviderThreadId: 'provider-thread', driver: 'codex' };
   const model = 'gpt-5';
-  const selection = { ...conversation, instanceId: conversation.providerInstanceId, model, instanceEntries: [] };
+  const selection = { ...conversation, instanceId: conversation.providerInstanceId, model, instanceEntries: [], supportsQuota: true };
   const source = { windows: [], providerQuotas: [] };
   const gateway = { ...source, gateway: { binding: 'api-service' } };
-  const thread = { model, conversation, usage: { nativeThreadId: 'native-thread' }, speed: {
+  const thread = { model, conversation, usage: {
+    nativeThreadId: 'native-thread', context: { usedTokens: 315000, maxTokens: 490000 },
+  }, speed: {
     binding: 'api-service', threadId: 'native-thread', latestTokensPerSecond: 40, tokensPerSecond: 30, samples: 1,
   } };
   const state = { environmentId: 'local', thread };
   const native = mountChatFooter(selection, state, source);
   native.openDetails();
-  assert.doesNotMatch(native.capsule.innerHTML, /tok\/s/);
-  assert.doesNotMatch(native.details.innerHTML, /Output speed|Average speed/);
+  assert.doesNotMatch(native.capsule.innerHTML, /context-ring|tok\/s/);
+  assert.doesNotMatch(native.details.innerHTML, /Context|Output speed|Average speed/);
 
   const waiting = mountChatFooter(selection, { environmentId: 'local' }, gateway);
+  assert.match(waiting.capsule.innerHTML, /data-cockpit-context-ring[^>]*data-cockpit-metric-unknown>\s*<span data-cockpit-metric-value>—/);
   assert.match(waiting.capsule.innerHTML, /—<\/span>\s*<span data-cockpit-metric-unit>tok\/s/);
   const measured = mountChatFooter(selection, state, gateway);
   measured.openDetails();
+  const budget = (315000).toLocaleString() + ' / ' + (490000).toLocaleString();
+  assert.match(measured.capsule.innerHTML, /data-cockpit-metric-value>64%<\/span>/);
+  assert.ok(measured.capsule.innerHTML.includes(budget + ' Token'));
+  assert.ok(measured.details.innerHTML.includes(budget));
   assert.match(measured.capsule.innerHTML, /data-cockpit-metric-value>40\.0<\/span>/);
   assert.match(measured.details.innerHTML, /<dt>Output speed<\/dt><dd>40\.0/);
   assert.match(measured.details.innerHTML, /<dt>Average speed<\/dt><dd>30\.0/);
@@ -229,7 +249,7 @@ test('the T3 Code capsule shows response speed and opens all three Antigravity r
   const elapsedSeconds = 3.469878834;
   const firstResponseMs = 2816.600167;
   const { capsule, details, openDetails } = mountChatFooter(
-    { ...conversation, instanceId: conversation.providerInstanceId, model, instanceEntries: [] },
+    { ...conversation, instanceId: conversation.providerInstanceId, model, instanceEntries: [], supportsQuota: true },
     { environmentId: 'local', thread: { model, conversation, usage: {
       antigravitySpeed: {
         rate: 221 / elapsedSeconds, overallRate: 328 / elapsedSeconds,
