@@ -142,6 +142,16 @@ test("WorldRouter preset uses its native Responses endpoint directly", () => {
   assert.equal(profile.requiresGateway, false);
 });
 
+test("TeamoRouter preset uses its native Responses endpoint directly", () => {
+  const preset = findCodexApiProviderPresetByBaseUrl("https://api.teamorouter.com/v1/");
+  assert.equal(preset?.id, "teamorouter");
+  assert.ok(preset.modelCatalog?.includes("gpt-6.2-astra"));
+  const profile = resolveCodexProviderCapabilityProfile({ baseUrl: preset.baseUrls[0] });
+  assert.equal(profile.wireApi, "responses");
+  assert.equal(profile.supportsDirect, true);
+  assert.equal(profile.requiresGateway, false);
+});
+
 test("DeepSeek keeps its native Responses default", () => {
   const profile = resolveCodexProviderCapabilityProfile({
     presetId: "deepseek",
