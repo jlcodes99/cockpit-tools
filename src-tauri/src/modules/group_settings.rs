@@ -28,6 +28,9 @@ const GROUP_NAME_GEMINI_FLASH: &str = "Gemini Flash";
 
 const DEPRECATED_GROUP_ID_G3_IMAGE: &str = "g3_image";
 const DEPRECATED_MODEL_ID_GEMINI_3_PRO_IMAGE: &str = "gemini-3-pro-image";
+const DEPRECATED_GROUP_ID_G4_ARGON: &str = "g4_argon";
+const DEPRECATED_MODEL_ID_ARGON_WEEKLY: &str = "argon:weekly";
+const DEPRECATED_MODEL_ID_GEMINI_ARGON_WTU_WEEKLY: &str = "gemini-argon-wtu-weekly";
 
 /// 配置来源
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -81,11 +84,6 @@ impl Default for GroupSettings {
         group_mappings.insert("gemini-4-carbon-high".into(), "g4_carbon".into());
         group_mappings.insert("carbon:weekly".into(), "g4_carbon".into());
         group_mappings.insert("gemini-carbon-wtu-weekly".into(), "g4_carbon".into());
-        group_mappings.insert("gemini-4-argon".into(), "g4_argon".into());
-        group_mappings.insert("gemini-4-argon-medium".into(), "g4_argon".into());
-        group_mappings.insert("gemini-4-argon-high".into(), "g4_argon".into());
-        group_mappings.insert("argon:weekly".into(), "g4_argon".into());
-        group_mappings.insert("gemini-argon-wtu-weekly".into(), "g4_argon".into());
         group_mappings.insert("gemini-3.8-flash".into(), "g3_flash".into());
         group_mappings.insert("gemini-3.8-flash-low".into(), "g3_flash".into());
         group_mappings.insert("gemini-3.8-flash-medium".into(), "g3_flash".into());
@@ -107,7 +105,6 @@ impl Default for GroupSettings {
         group_mappings.insert("claude-sonnet-5-5-medium".into(), "claude_45".into());
         group_mappings.insert("claude-sonnet-5-5-high".into(), "claude_45".into());
         group_names.insert("g4_carbon".into(), "Gemini 4 Carbon".into());
-        group_names.insert("g4_argon".into(), "Gemini 4 Argon".into());
         // Claude 4.5 分组
         group_mappings.insert(
             "claude-opus-4-5-thinking".to_string(),
@@ -139,7 +136,6 @@ impl Default for GroupSettings {
 
         let group_order = vec![
             "g4_carbon".to_string(),
-            "g4_argon".to_string(),
             "claude_45".to_string(),
             "g3_pro".to_string(),
             "g3_flash".to_string(),
@@ -259,12 +255,16 @@ fn migrate_legacy_group_names(settings: &mut GroupSettings) {
 
 fn remove_deprecated_groups(settings: &mut GroupSettings) {
     settings.group_names.remove(DEPRECATED_GROUP_ID_G3_IMAGE);
-    settings
-        .group_order
-        .retain(|group_id| group_id != DEPRECATED_GROUP_ID_G3_IMAGE);
+    settings.group_names.remove(DEPRECATED_GROUP_ID_G4_ARGON);
+    settings.group_order.retain(|group_id| {
+        group_id != DEPRECATED_GROUP_ID_G3_IMAGE && group_id != DEPRECATED_GROUP_ID_G4_ARGON
+    });
     settings.group_mappings.retain(|model_id, group_id| {
         group_id != DEPRECATED_GROUP_ID_G3_IMAGE
             && model_id != DEPRECATED_MODEL_ID_GEMINI_3_PRO_IMAGE
+            && group_id != DEPRECATED_GROUP_ID_G4_ARGON
+            && model_id != DEPRECATED_MODEL_ID_ARGON_WEEKLY
+            && model_id != DEPRECATED_MODEL_ID_GEMINI_ARGON_WTU_WEEKLY
     });
 }
 
@@ -406,12 +406,12 @@ mod tests {
             settings.group_order,
             vec![
                 "g4_carbon".to_string(),
-            "g4_argon".to_string(),
                 "claude_45".to_string(),
                 "g3_pro".to_string(),
                 "g3_flash".to_string(),
             ]
         );
+        assert!(!settings.group_names.contains_key("g4_argon"));
 
         assert_eq!(
             settings.group_names.get("claude_45").map(String::as_str),
@@ -459,6 +459,22 @@ mod tests {
         settings
             .group_mappings
             .insert("gemini-3-pro-image".to_string(), "g3_image".to_string());
+        settings
+            .group_names
+            .insert("g4_argon".to_string(), "Gemini 4 Argon".to_string());
+        settings.group_order.push("g4_argon".to_string());
+        settings
+            .group_mappings
+            .insert("gemini-4-argon-high".to_string(), "g4_argon".to_string());
+        settings
+            .group_mappings
+            .insert("argon:weekly".to_string(), "my-group".to_string());
+        settings
+            .group_mappings
+            .insert("gemini-argon-wtu-weekly".to_string(), "g4_argon".to_string());
+        settings
+            .group_mappings
+            .insert("gemini-4-argon".to_string(), "my-group".to_string());
 
         remove_deprecated_groups(&mut settings);
 
@@ -468,6 +484,18 @@ mod tests {
             .iter()
             .any(|group_id| group_id == "g3_image"));
         assert!(!settings.group_mappings.contains_key("gemini-3-pro-image"));
+        assert!(!settings.group_names.contains_key("g4_argon"));
+        assert!(!settings
+            .group_order
+            .iter()
+            .any(|group_id| group_id == "g4_argon"));
+        assert!(!settings.group_mappings.contains_key("gemini-4-argon-high"));
+        assert!(!settings.group_mappings.contains_key("argon:weekly"));
+        assert!(!settings.group_mappings.contains_key("gemini-argon-wtu-weekly"));
+        assert_eq!(
+            settings.group_mappings.get("gemini-4-argon").map(String::as_str),
+            Some("my-group")
+        );
     }
 
     #[test]
@@ -506,14 +534,13 @@ mod model_upgrade_tests {
         let mut saved = GroupSettings::default();
         saved.group_order = vec!["claude_45".into(), "g3_pro".into(), "g3_flash".into()];
         saved.group_names.remove("g4_carbon");
-        saved.group_names.remove("g4_argon");
         saved
             .group_mappings
             .insert("gemini-4-argon".into(), "my-group".into());
         merge_default_groups(&mut saved, &GroupSettings::default());
         assert_eq!(
             saved.group_order,
-            vec!["claude_45", "g3_pro", "g3_flash", "g4_carbon", "g4_argon"]
+            vec!["claude_45", "g3_pro", "g3_flash", "g4_carbon"]
         );
         assert_eq!(saved.group_mappings["gemini-4-argon"], "my-group");
         assert_eq!(saved.group_mappings["claude-sonnet-5-5-high"], "claude_45");

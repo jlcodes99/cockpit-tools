@@ -564,9 +564,6 @@ export function getAntigravityQuotaDisplayItems(
   let claudeWeekly: (typeof models)[0] | undefined;
   let gemini5h: (typeof models)[0] | undefined;
   let geminiWeekly: (typeof models)[0] | undefined;
-  const argonWeekly = models.find(({ name }) =>
-    name === 'argon:weekly' || (name.startsWith('gemini-argon-') && name.endsWith('-weekly')),
-  );
   const carbonWeekly = models.find(({ name }) =>
     name === 'carbon:weekly' || name === 'gemini-carbon-wtu-weekly',
   );
@@ -685,15 +682,6 @@ export function getAntigravityQuotaDisplayItems(
       label: 'Gemini (Weekly)',
       percentage: geminiWeekly.percentage,
       resetTime: geminiWeekly.reset_time,
-      stale,
-    });
-  }
-  if (argonWeekly) {
-    result.push({
-      key: 'argon:weekly',
-      label: 'Gemini 4 Argon (Weekly)',
-      percentage: argonWeekly.percentage,
-      resetTime: argonWeekly.reset_time,
       stale,
     });
   }

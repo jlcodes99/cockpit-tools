@@ -1197,7 +1197,7 @@ export function FloatingCardWindow() {
   ]);
 
   const isCurrentViewed = Boolean(viewedAccount?.id && viewedAccount.id === currentAccount?.id);
-  // Antigravity's independent windows (including weekly/Argon) must not be
+  // Antigravity's independent windows (including weekly/Carbon) must not be
   // truncated. WorkBuddy and CodeBuddy CN use the account page's grouped totals.
   const hideRelayBalance = relayBalanceDisabled && selectedPlatform === 'codex' && viewedAccount != null
     && isCodexNewApiAccount(viewedAccount as typeof codexAccounts[number]);

@@ -16,11 +16,16 @@ export function AntigravityMenuBarQuotaSelect({ accounts, value, onChange }: {
     `${window.model} (${window.weekly ? weekly : '5h'})`,
   ]));
   const aliases = new Set(windows.flatMap((window) => window.aliases));
+  const isLegacyArgonQuotaWindow = (id: string) =>
+    id === 'argon:weekly'
+    || id === 'argon:5h'
+    || id === 'gemini-argon-5h'
+    || /^gemini-argon-.*-(weekly|5h)$/i.test(id);
   const modelLabels = new Map<string, string>();
   for (const account of accounts) {
     for (const model of account.quota?.models ?? []) {
       const id = model.name.trim();
-      if (id && !aliases.has(id)) {
+      if (id && !aliases.has(id) && !isLegacyArgonQuotaWindow(id)) {
         modelLabels.set(id, model.display_name?.trim() || id);
       }
     }

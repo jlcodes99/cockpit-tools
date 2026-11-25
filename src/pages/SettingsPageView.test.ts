@@ -173,6 +173,8 @@ test('the Antigravity menu bar selector keeps exact models and one choice per qu
   const view = h.render(() => h.exports.AntigravityMenuBarQuotaSelect({
     accounts: [{ quota: { models: [
       { name: 'gemini-weekly', percentage: 80 },
+      { name: 'gemini-argon-wtu-weekly', percentage: 90 },
+      { name: 'argon:weekly', percentage: 90 },
       { name: 'gemini-3.8-flash', display_name: 'Gemini Flash', percentage: 20 },
     ] } }],
     value: 'unavailable-model',
@@ -182,6 +184,8 @@ test('the Antigravity menu bar selector keeps exact models and one choice per qu
   assert.ok(view.props.options.some(({ value, label }: { value: string; label: string }) =>
     value === 'gemini:weekly' && label === 'Gemini (Weekly)'));
   assert.ok(!view.props.options.some(({ value }: { value: string }) => value === 'gemini-weekly'));
+  assert.ok(!view.props.options.some(({ value }: { value: string }) =>
+    value === 'argon:weekly' || value === 'gemini-argon-wtu-weekly'));
   assert.ok(view.props.options.some(({ value, label }: { value: string; label: string }) =>
     value === 'gemini-3.8-flash' && label === 'Gemini Flash'));
   assert.ok(view.props.options.some(({ value }: { value: string }) => value === 'unavailable-model'));

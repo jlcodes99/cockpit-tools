@@ -1446,16 +1446,6 @@ fn default_auto_switch_groups() -> Vec<AutoSwitchGroupDefinition> {
             ],
         },
         AutoSwitchGroupDefinition {
-            id: "g4_argon".into(),
-            name: "Gemini 4 Argon".into(),
-            summary_family: SummaryBucketFamily::Argon,
-            models: vec![
-                "gemini-4-argon".into(),
-                "gemini-4-argon-medium".into(),
-                "gemini-4-argon-high".into(),
-            ],
-        },
-        AutoSwitchGroupDefinition {
             id: "claude_45".to_string(),
             name: "Claude".to_string(),
             summary_family: SummaryBucketFamily::Claude,
@@ -1636,12 +1626,7 @@ fn normalize_model_for_group_match(value: &str) -> String {
     {
         return "gemini-4-carbon".into();
     }
-    if normalized.starts_with("gemini-4-argon")
-        || matches!(
-            normalized.as_str(),
-            "argon:weekly" | "gemini-argon-wtu-weekly"
-        )
-    {
+    if normalized.starts_with("gemini-4-argon") {
         return "gemini-4-argon".into();
     }
     if normalized.starts_with("gemini-3.8-flash") {
@@ -3536,7 +3521,8 @@ mod new_antigravity_model_tests {
         for rejected in [
             account("exhausted", &[("gemini-weekly", 0)], false),
             account("stale", &[("gemini-weekly", 90)], true),
-            account("other-pool", &[("gemini-argon-wtu-weekly", 90)], false),
+            account("other-pool", &[("gemini-carbon-wtu-weekly", 90)], false),
+            account("legacy-argon-pool", &[("gemini-argon-wtu-weekly", 90)], false),
         ] {
             assert!(!can_be_auto_switch_candidate(&rejected, "current", 0, &groups, false, 0, None));
         }
@@ -3609,7 +3595,7 @@ mod new_antigravity_model_tests {
             &reported,
         );
         assert!(explicit.iter().any(|group| group.id == "g4_carbon"));
-        assert!(explicit.iter().any(|group| group.id == "g4_argon"));
+        assert!(!explicit.iter().any(|group| group.id == "g4_argon"));
     }
 
     #[test]
@@ -3622,8 +3608,7 @@ mod new_antigravity_model_tests {
             normalize_model_for_group_match("gemini-4-carbon-high"),
             "gemini-4-carbon"
         );
-        let argon = groups.iter().find(|group| group.id == "g4_argon").unwrap();
-        assert!(argon.models.contains(&"gemini-4-argon-high".into()));
+        assert!(!groups.iter().any(|group| group.id == "g4_argon"));
         assert_eq!(
             normalize_model_for_group_match("gemini-4-argon-high"),
             "gemini-4-argon"

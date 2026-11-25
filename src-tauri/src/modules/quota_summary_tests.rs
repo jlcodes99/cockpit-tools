@@ -102,7 +102,8 @@ fn previous() -> QuotaData {
     quota.last_updated = 100;
     quota.quota_summary_updated_at = Some(90);
     quota.add_model("gemini-5h".into(), None, 25, "later".into());
-    quota.add_model("gemini-argon-wtu-weekly".into(), None, 91, "weekly-reset".into());
+    quota.add_model("gemini-carbon-wtu-weekly".into(), None, 91, "weekly-reset".into());
+    quota.add_model("gemini-argon-wtu-weekly".into(), None, 77, "argon-reset".into());
     quota.add_model("gemini-3-pro-high".into(), None, 60, String::new());
     quota
 }
@@ -116,8 +117,9 @@ fn failed_summary_keeps_real_windows_but_not_old_model_quotas() {
     assert_eq!(next.models.len(), 3);
     assert_eq!(next.models[0].percentage, 10);
     assert_eq!(next.models[1].percentage, 25);
-    assert_eq!(next.models[2].name, "gemini-argon-wtu-weekly");
+    assert_eq!(next.models[2].name, "gemini-carbon-wtu-weekly");
     assert_eq!(next.models[2].percentage, 91);
+    assert!(!next.models.iter().any(|m| m.name == "gemini-argon-wtu-weekly"));
     assert!(next.quota_summary_stale);
     assert_eq!(next.quota_summary_updated_at, Some(90));
     preserve_failed_quota_summary(&mut next, Some(&previous()));

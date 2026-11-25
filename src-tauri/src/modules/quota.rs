@@ -1293,7 +1293,6 @@ fn build_quota_data_from_response(
 pub(super) enum SummaryBucketFamily {
     Claude,
     Gemini,
-    Argon,
     Carbon,
 }
 
@@ -1302,10 +1301,6 @@ pub(super) fn summary_bucket_family(name: &str) -> Option<SummaryBucketFamily> {
     match name {
         "3p-5h" | "claude:5h" | "3p-weekly" | "claude:weekly" => Some(Claude),
         "gemini-5h" | "gemini:5h" | "gemini-weekly" | "gemini:weekly" => Some(Gemini),
-        "argon:weekly" | "argon:5h" => Some(Argon),
-        "carbon:weekly" | "gemini-carbon-wtu-weekly" => Some(Carbon),
-        name if name.starts_with("gemini-argon-")
-            && (name.ends_with("-weekly") || name.ends_with("-5h")) => Some(Argon),
         "carbon:weekly" | "gemini-carbon-wtu-weekly" => Some(Carbon),
         _ => None,
     }
