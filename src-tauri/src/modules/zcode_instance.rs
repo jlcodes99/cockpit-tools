@@ -141,6 +141,10 @@ fn sanitize_managed_setting(root: &Path) -> Result<(), String> {
         .map_err(|error| format!("保存 ZCode 实例设置失败: {}", error))
 }
 
+fn should_normalize_family_domain_after_copy(mode: &str) -> bool {
+    mode != "existingdir" && mode != "existing_dir" && mode != "empty"
+}
+
 fn copy_default_to_root(root: &Path) -> Result<(), String> {
     let electron_source = get_default_user_data_dir()?;
     if electron_source.exists() {
@@ -213,6 +217,15 @@ pub fn create_instance(params: CreateInstanceParams) -> Result<InstanceProfile, 
             instance_store::copy_dir_recursive(Path::new(&source.user_data_dir), &root)?;
         } else {
             copy_default_to_root(&root)?;
+        }
+    }
+    if should_normalize_family_domain_after_copy(&mode) {
+        if let Err(error) =
+            modules::zcode_account::normalize_instance_family_domain_after_copy(&root)
+        {
+            modules::logger::log_warn(&format!(
+                "归一化 ZCode 实例 provider family 失败: {error}"
+            ));
         }
     }
 
@@ -681,6 +694,14 @@ mod tests {
         ));
         fs::create_dir_all(&path).unwrap();
         path
+    }
+
+    #[test]
+    fn family_domain_normalization_only_runs_for_copy_modes() {
+        assert!(should_normalize_family_domain_after_copy("copy"));
+        assert!(!should_normalize_family_domain_after_copy("empty"));
+        assert!(!should_normalize_family_domain_after_copy("existingdir"));
+        assert!(!should_normalize_family_domain_after_copy("existing_dir"));
     }
 
     #[test]
