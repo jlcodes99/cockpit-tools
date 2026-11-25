@@ -2,6 +2,7 @@
 //! Only projects and user threads verified in this profile's SQLite registry are
 //! shared. Remote/cloud state and account atoms stay in their original scope.
 use super::*;
+use crate::modules::{ssh_server_desktop_state as desktop_state, ssh_server_identity as identity};
 use sha2::{Digest, Sha256};
 #[path = "account_state_ssh.rs"]
 mod ssh;
@@ -463,12 +464,26 @@ fn merge_local(target: &mut Value, view: &Value) {
 /// Native Desktop clears top-level groups during its constructor, so restore the
 /// target owner *and* its globals together, before the existing quick repair.
 pub(crate) fn prepare(home: &Path, owner: Option<&str>) -> Result<bool, String> {
+    match desktop_state::prepare_sqlite_startup(home, owner) {
+        Ok(Some((state, changed))) => {
+            let startup_changed = ssh::prepare_startup(home, &state);
+            Ok(startup_changed || changed)
+        }
+        Ok(None) => prepare_legacy(home, owner),
+        Err(error) => {
+            crate::modules::logger::log_warn(&format!("[Codex SSH] 自动连接设置准备推迟: {error}"));
+            Ok(false)
+        }
+    }
+}
+
+fn prepare_legacy(home: &Path, owner: Option<&str>) -> Result<bool, String> {
     let Some(bytes) = read_bytes(&home.join(STATE))? else {
         return Ok(false);
     };
     let before = decode(Some(&bytes))?;
     let mut after = before.clone();
-    ssh::inherit_scoped_auto_connect(&mut after, owner);
+    identity::inherit_scoped_auto_connect(&mut after, owner.unwrap_or(identity::SIGNED_OUT_OWNER));
     // Desktop can store account-specific SSH preferences before creating a project archive.
     if before.get(SCOPES).is_none() && before.get(PARKED).is_none() {
         return finish_prepare(home, &bytes, &before, &after);

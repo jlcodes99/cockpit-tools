@@ -400,6 +400,48 @@ fn scoped_ssh_preferences_follow_the_outgoing_account_to_the_next_launch() {
 }
 
 #[test]
+fn sqlite_ssh_preferences_drive_startup_and_follow_the_next_account() {
+    let f = Fixture::new();
+    let legacy = json!({
+        "codex-managed-remote-connections": [{"hostId":"stale","alias":"stale"}],
+        "remote-connection-auto-connect-by-host-id": {"stale":true}
+    });
+    f.write(&legacy);
+    let outgoing = "electron-account-remote-preference:remote-connection-auto-connect-by-host-id:old";
+    let incoming = "electron-account-remote-preference:remote-connection-auto-connect-by-host-id:new";
+    let db = desktop_state::desktop_settings_fixture(
+        f.home(),
+        &[
+            ("electron-renderer-content-owner", json!("old")),
+            ("codex-managed-remote-connections", json!([
+                {"hostId":"ssh-on","alias":"enabled"}, {"hostId":"ssh-off","alias":"disabled"}
+            ])),
+            (outgoing, json!({"ssh-on":true,"ssh-off":false,"cloud-old":true})),
+            (incoming, json!({"ssh-on":false,"ssh-off":true,"cloud-new":true})),
+        ],
+    );
+    prepare(f.home(), Some("new")).unwrap();
+    let read = |key: &str| -> Value {
+        let stored: String = db
+            .query_row(
+                "SELECT value FROM settings WHERE scope = 'global' AND key = ?1",
+                [key],
+                |row| row.get(0),
+            )
+            .unwrap();
+        serde_json::from_str(&stored).unwrap()
+    };
+    assert_eq!(read(incoming), json!({"ssh-on":true,"ssh-off":false,"cloud-new":true}));
+    assert_eq!(read(outgoing), json!({"ssh-on":true,"ssh-off":false,"cloud-old":true}));
+    assert_eq!(read("electron-renderer-content-owner"), "old");
+    assert_eq!(f.state(), legacy);
+    let startup: Value =
+        serde_json::from_slice(&fs::read(f.home().join("codex-app/config.json")).unwrap()).unwrap();
+    assert_eq!(startup["remoteConnections"], json!([{"sshAlias":"enabled","projects":[]}]));
+    assert!(!prepare(f.home(), Some("new")).unwrap());
+}
+
+#[test]
 fn ssh_startup_removes_disabled_owned_aliases_and_preserves_user_configuration() {
     let f = Fixture::new();
     let config_path = f.home().join("codex-app/config.json");
