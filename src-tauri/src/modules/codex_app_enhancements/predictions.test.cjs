@@ -89,6 +89,23 @@ function activate(env, fake) {
   return env.api.runtime.serviceFor({}, "local", null);
 }
 
+test('Codex 26.1120 attached history supports sampling and still rejects observers', async () => {
+  for (const [metadata, expected] of [
+    [{streamRole: undefined, historyAttached: true}, true],
+    [{streamRole: undefined, historyAttached: false}, false],
+    [{streamRole: {role: 'subscriber'}, historyAttached: true}, false],
+  ]) {
+    const env = environment();
+    const fake = nativeManager({metadata});
+    try {
+      const service = activate(env, fake);
+      const result = await service.requestUserMessagePrediction(target);
+      assert.equal(result != null, expected);
+      assert.equal(env.samples.length, expected ? 1 : 0);
+    } finally { env.stop(); }
+  }
+});
+
 function deferred() {
   let resolve, reject;
   const promise = new Promise((yes, no) => { resolve = yes; reject = no; });

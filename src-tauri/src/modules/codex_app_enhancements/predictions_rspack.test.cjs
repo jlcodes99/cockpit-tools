@@ -87,6 +87,38 @@ test('a changed native contract cannot partially replace an otherwise valid sour
   assert.equal(result.source, original);
 });
 
+test('Codex 26.1120 prepares wrapped module factories without changing older layouts', () => {
+  const h = setup();
+  const current = {
+    173367: fixtures[559161],
+    779071: fixtures[563813].replace('function C(e){let {hostId:h,pluginHostId:k,roots:c}=e,',
+      'function C({controller:e,hostId:h,pluginHostId:k,roots:c}){let '),
+    49792: fixtures[24191].split('function managerModule')[0]
+      + 'const modules={Dgwo:(function(e,t,n){let marker=true;n.d(t,{},{V:function(scope,host){return [scope,host]}})})};',
+    25051: fixtures[572868],
+  };
+  h.sources.set('app://-/assets/123.abcdef1234.js',
+    'r.u=e=>"assets/async/"+e+"."+({' + Object.keys(current).map(id => `${id}:"abcdef1234"`).join(',') + '})[e]+".js";');
+  for (const [id, body] of Object.entries(current)) {
+    h.sources.set(`app://-/assets/async/${id}.abcdef1234.js`, `export const __rspack_esm_ids=[${id}];${body}`);
+  }
+  const result = h.api.prepare(h.html, h.read);
+  assert.equal(result.ok, true, result.reason);
+  assert.equal(result.modules.length, 4);
+  const host = result.modules.find(module => module.url.includes('/49792.'));
+  let bindings;
+  const root = { __cockpitNativePredictions: { runtime: { register(value) { bindings = value; } } } };
+  const factories = vm.runInNewContext(host.source.replace('export const', 'const') + 'modules;', {window:root});
+  const exports = {};
+  const require = name => name === 'RxZZ' ? {CN: (get, key) => get(key)} : {W: () => ({enabled:'enabled'})};
+  require.d = (target, _, values) => Object.assign(target, values);
+  factories.Dgwo(null, exports, require);
+  assert.equal(bindings.managerForHost('scope', 'local')[1], 'local');
+  assert.equal(bindings.nativeEnabled({get:key=>key==='enabled'}), true);
+  const broken = h.api.prepare(h.html, url => h.read(url).replace('Dgwo:', 'Unknown:'));
+  assert.equal(broken.ok, false);
+});
+
 test('Codex 26.1111 validates predictions independently from Fast for OAuth API Service', async () => {
   const h = setup();
   const host = fixtures[24191].split('function managerModule')[0]
