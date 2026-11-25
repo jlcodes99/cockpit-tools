@@ -1,5 +1,15 @@
 // Soft scheduling state is independent of durable upstream ownership.
-type NativeAccountRank = (u8, usize, (i64, i64, i64));
+type NativeAccountRank = (std::cmp::Reverse<AccountUsagePriority>, usize, (i64, i64, i64));
+
+fn native_account_routing_rule<'a>(
+    account: &CodexAccount,
+    collection: &'a CodexLocalAccessCollection,
+) -> Option<&'a CodexLocalAccessCustomRoutingRule> {
+    collection
+        .custom_routing_rules
+        .iter()
+        .find(|rule| rule.account_id == account.id)
+}
 
 fn native_account_rank(
     account: &CodexAccount,
@@ -15,10 +25,7 @@ fn native_account_rank(
                 .position(|id| id == &account.id)
         })
         .unwrap_or(usize::MAX);
-    let rule = collection
-        .custom_routing_rules
-        .iter()
-        .find(|rule| rule.account_id == account.id);
+    let rule = native_account_routing_rule(account, collection);
     let plan = resolve_plan_rank(account);
     let quota = resolve_remaining_quota(account);
     let high_plan = -i64::from(plan.unwrap_or(-1));
@@ -45,12 +52,7 @@ fn native_account_rank(
         Strategy::Random => (0, 0, 0),
         _ => (high_plan, high_quota, 0),
     };
-    let tier = match rule {
-        Some(rule) if rule.is_preferred => 0,
-        Some(rule) if rule.is_backup => 2,
-        _ => 1,
-    };
-    (tier, pinned, order)
+    (std::cmp::Reverse(account_usage_priority(rule)), pinned, order)
 }
 
 fn native_routing_namespace(
@@ -211,7 +213,8 @@ fn native_soft_binding_ids<'a>(
 }
 
 fn native_soft_failure_unbinds(report: &native_contract::RequestReport) -> bool {
-    if report.success || report.account_id.is_empty() {
+    if report.success || report.account_id.is_empty()
+        || report.error.as_deref() == Some("network_recovery_exhausted") {
         return false;
     }
     // The full upstream body decides request scope. A generic credential-scope

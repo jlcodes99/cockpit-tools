@@ -147,16 +147,49 @@ fn cli_sync_before_quota_refresh_adopts_rotation_only_from_still_bound_identity(
     let rotated = credentials("new", "new-refresh", Some(now_ts_ms() + 3_600_000));
     let mut other_org = config.clone();
     other_org["oauthAccount"]["organizationUuid"] = json!("org-b");
-    assert!(sync_cli_account_from_config_dir(&account.id, &dir, true, |_| {
-        fs::write(&config_path, other_org.to_string()).unwrap();
-        Ok(rotated.clone())
-    }).unwrap().is_none());
+    assert!(sync_cli_account_from_config_dir(
+        &account.id,
+        &dir,
+        CliCredentialSource::BoundInstance,
+        |_| {
+            fs::write(&config_path, other_org.to_string()).unwrap();
+            Ok(rotated.clone())
+        },
+    )
+    .unwrap()
+    .is_none());
     assert_eq!(load_account(&account.id).unwrap().claude_credentials_raw, Some(old));
     fs::write(&config_path, config.to_string()).unwrap();
-    let adopted = sync_cli_account_from_config_dir(&account.id, &dir, true, |_| Ok(rotated.clone())).unwrap().unwrap();
+    let adopted = sync_cli_account_from_config_dir(
+        &account.id,
+        &dir,
+        CliCredentialSource::BoundInstance,
+        |_| Ok(rotated.clone()),
+    )
+    .unwrap()
+    .unwrap();
     let saved = load_account(&account.id).unwrap().claude_credentials_raw.unwrap();
     assert_eq!(credentials_refresh_token(&saved), credentials_refresh_token(&rotated));
     assert!(!token_is_expired(adopted.claude_credentials_raw.as_ref().unwrap()));
+
+    let mut store = crate::modules::claude_instance::load_instance_store().unwrap();
+    store.instances.clear();
+    crate::modules::claude_instance::save_instance_store(&store).unwrap();
+    let rotated_again = credentials("newer", "newer-refresh", Some(now_ts_ms() + 7_200_000));
+    fs::write(&config_path, other_org.to_string()).unwrap();
+    let unchanged = read_cli_oauth_before_refresh_blocking(
+        &account.id,
+        Some(dir.clone()),
+        |_| panic!("a different organization must be rejected before reading credentials"),
+    )
+    .unwrap();
+    assert_eq!(unchanged.claude_credentials_raw, Some(rotated));
+    fs::write(&config_path, config.to_string()).unwrap();
+    let adopted = read_cli_oauth_before_refresh_blocking(&account.id, Some(dir), |_| {
+        Ok(rotated_again.clone())
+    })
+    .unwrap();
+    assert_eq!(adopted.claude_credentials_raw, Some(rotated_again));
 }
 
 #[test]

@@ -1,3 +1,118 @@
+pub(super) fn usage_dialog_labels(locale: &str) -> Value {
+    serde_json::Value::Object(
+        [
+            "available",
+            "issues",
+            "cooling",
+            "overview",
+            "requestsTitle",
+            "quotaTitle",
+            "statistics",
+            "verifiedStatistics",
+            "excludedHistory",
+            "model",
+            "provider",
+            "periodToday",
+            "periodWeek",
+            "scopeChat",
+            "scopeService",
+            "newestFirst",
+            "shownRows",
+            "more",
+            "allLoaded",
+            "loading",
+            "dataFailed",
+            "retry",
+            "noRequests",
+            "unlinkedSession",
+            "statsUnavailable",
+            "serviceUnavailable",
+            "averageSpeed",
+            "averageCache",
+            "requestTime",
+            "account",
+            "token",
+            "performance",
+            "result",
+            "input",
+            "output",
+            "cached",
+            "total",
+            "firstResponse",
+            "totalDuration",
+            "success",
+            "failed",
+            "cancelled",
+            "clientDisconnected",
+            "upstreamOverloaded",
+            "requestServiceUnavailable",
+            "incomplete",
+            "recovered",
+            "official",
+            "local",
+            "serviceUnknown",
+            "refreshData",
+            "requestsCount",
+            "totalTokens",
+            "estimatedValue",
+            "avgLatency",
+            "successRate",
+            "title",
+            "session",
+            "speed",
+            "cache",
+            "cacheShort",
+            "speedHint",
+            "cacheHint",
+            "aggregateHint",
+            "waiting",
+            "refreshFailed",
+            "refreshPartial",
+            "hostUnavailable",
+            "refreshing",
+            "recent",
+            "recentAccount",
+            "noRecentAccount",
+            "recentAccountHint",
+        ]
+        .into_iter()
+        .map(|name| {
+            (
+                name.to_string(),
+                json!(i18n::translate(
+                    locale,
+                    &format!("common.codexUsage.{}", name),
+                    &[]
+                )),
+            )
+        })
+        .chain([
+            ("remoteBudget", "common.apiBudget.budget"),
+            ("remoteGatewayName", "common.apiBudget.gatewayName"),
+            ("remoteKeyScope", "common.apiBudget.keyScope"),
+            ("remoteUpgradeRequired", "common.apiBudget.upgradeRequired"),
+            ("remotePreparing", "common.apiBudget.preparing"),
+            ("requestId", "common.requestId"),
+            ("imageGeneration", "codex.localAccess.requestKind.imageGeneration"),
+            ("imageEdit", "codex.localAccess.requestKind.imageEdit"),
+            ("remoteUsed", "common.apiBudget.consumed"),
+            ("remoteUnlimited", "codex.apiService.keys.tokenLimitUnlimited"),
+            ("providerQuotaStale", "codex.apiService.providerQuotaStale"),
+            ("providerQuotaUnitUnknown", "codex.apiService.providerQuotaUnitUnknown"),
+            ("providerQuotaFailed", "common.shared.quota.queryFailed"),
+            ("providerQuotaUnavailable", "common.shared.quota.noData"),
+            ("remoteBudgetHint", "common.apiBudget.hint"),
+            ("speedAdjusted", "codex.apiService.logs.speedAdjusted"),
+            ("officialDefaultSpeed", "codex.apiService.logs.officialDefaultSpeed"),
+            ("tierFast", "codex.speed.fast"),
+            ("tierUltrafast", "codex.speed.ultrafast"),
+            ("tierStandard", "codex.speed.standard"),
+            ("tierAuto", "codex.contextOverride.automatic"),
+        ].into_iter().map(|(name, key)| (name.to_string(), json!(i18n::translate(locale, key, &[])))))
+        .collect(),
+    )
+}
+
 fn injection_script(
     provider_name: &str,
     quota: &QuotaResponse,
@@ -150,123 +265,11 @@ fn injection_script(
     let usage_metrics = include_str!("codex_app_injection_usage.js");
     let renderer = include_str!("codex_app_injection_statusline.js");
     let dialog_renderer = include_str!("codex_app_injection_dialog.js");
+    let footer_styles = serde_json::to_string(include_str!("codex_app_injection_footer.css")).unwrap_or_default();
     let dialog_styles = serde_json::to_string(include_str!("codex_app_injection_dialog.css")).unwrap_or_default();
     let usage_state = usage_state.to_string();
     let refresh_error = serde_json::to_string(&refresh_error).unwrap_or_else(|_| "null".into());
-    let usage_labels = serde_json::Value::Object(
-        [
-            "available",
-            "issues",
-            "cooling",
-            "overview",
-            "requestsTitle",
-            "quotaTitle",
-            "statistics",
-            "verifiedStatistics",
-            "excludedHistory",
-            "model",
-            "provider",
-            "periodToday",
-            "periodWeek",
-            "scopeChat",
-            "scopeService",
-            "newestFirst",
-            "shownRows",
-            "more",
-            "allLoaded",
-            "loading",
-            "dataFailed",
-            "retry",
-            "noRequests",
-            "unlinkedSession",
-            "statsUnavailable",
-            "serviceUnavailable",
-            "averageSpeed",
-            "averageCache",
-            "tierAdjusted",
-            "requestTime",
-            "account",
-            "token",
-            "performance",
-            "result",
-            "input",
-            "output",
-            "cached",
-            "total",
-            "firstResponse",
-            "totalDuration",
-            "success",
-            "failed",
-            "cancelled",
-            "incomplete",
-            "recovered",
-            "official",
-            "local",
-            "serviceUnknown",
-            "refreshData",
-            "requestsCount",
-            "totalTokens",
-            "estimatedValue",
-            "avgLatency",
-            "successRate",
-            "title",
-            "session",
-            "speed",
-            "cache",
-            "cacheShort",
-            "speedHint",
-            "cacheHint",
-            "aggregateHint",
-            "waiting",
-            "refreshFailed",
-            "refreshPartial",
-            "hostUnavailable",
-            "refreshing",
-            "recent",
-            "recentAccount",
-            "noRecentAccount",
-            "recentAccountHint",
-        ]
-        .into_iter()
-        .map(|name| {
-            (
-                name.to_string(),
-                json!(i18n::translate(
-                    locale,
-                    &format!("common.codexUsage.{}", name),
-                    &[]
-                )),
-            )
-        })
-        .chain([
-            ("remoteBudget", "common.apiBudget.budget"),
-            ("remoteGatewayName", "common.apiBudget.gatewayName"),
-            ("remoteKeyScope", "common.apiBudget.keyScope"),
-            ("remoteUpgradeRequired", "common.apiBudget.upgradeRequired"),
-            ("remotePreparing", "common.apiBudget.preparing"),
-            ("requestId", "common.requestId"),
-            ("imageGeneration", "codex.localAccess.requestKind.imageGeneration"),
-            ("imageEdit", "codex.localAccess.requestKind.imageEdit"),
-            ("remoteUsed", "common.apiBudget.consumed"),
-            ("remoteUnlimited", "codex.apiService.keys.tokenLimitUnlimited"),
-            ("providerQuotaStale", "codex.apiService.providerQuotaStale"),
-            ("providerQuotaUnitUnknown", "codex.apiService.providerQuotaUnitUnknown"),
-            ("providerQuotaFailed", "common.shared.quota.queryFailed"),
-            ("providerQuotaUnavailable", "common.shared.quota.noData"),
-            ("remoteBudgetHint", "common.apiBudget.hint"),
-            ("requestTier", "codex.apiService.logs.requestedTier"),
-            ("responseTier", "codex.apiService.logs.responseTier"),
-            ("legacyTier", "codex.apiService.logs.legacyTier"),
-            ("tierHint", "codex.apiService.logs.serviceTierHint"),
-            ("tierFast", "codex.speed.fast"),
-            ("tierUltrafast", "codex.speed.ultrafast"),
-            ("tierStandard", "codex.speed.standard"),
-            ("tierAuto", "codex.contextOverride.automatic"),
-            ("tierUnknown", "common.requestProxy.unknown"),
-        ].into_iter().map(|(name, key)| (name.to_string(), json!(i18n::translate(locale, key, &[])))))
-        .collect(),
-    )
-    .to_string();
+    let usage_labels = usage_dialog_labels(locale).to_string();
     format!(
         r#"(() => {{
       const providerName = {provider};
@@ -310,6 +313,7 @@ fn injection_script(
       const usageLabels = {usage_labels};
       const refreshError = {refresh_error};
       const usageDialog = {dialog_renderer};
+      const footerStyles = {footer_styles};
       const dialogStyles = {dialog_styles};
       return (
 {renderer}

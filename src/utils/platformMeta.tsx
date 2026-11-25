@@ -17,6 +17,7 @@ import { WorkbuddyIcon } from '../components/icons/WorkbuddyIcon';
 import { MinimaxCodeIcon } from '../components/icons/MinimaxCodeIcon';
 import { ZedIcon } from '../components/icons/ZedIcon';
 import { ZcodeIcon } from '../components/icons/ZcodeIcon';
+import { T3CodeIcon } from '../components/icons/T3CodeIcon';
 export function getPlatformLabel(platformId: PlatformId, _t: TFunction): string {
   switch (platformId) {
     case 'antigravity':
@@ -49,6 +50,8 @@ export function getPlatformLabel(platformId: PlatformId, _t: TFunction): string 
       return _t('nav.qoder', 'Qoder');
     case 'zcode':
       return 'ZCode';
+    case 't3code':
+      return 'T3 Code';
     case 'trae':
       return _t('nav.trae', 'Trae');
     case 'trae_solo':
@@ -100,6 +103,8 @@ export function renderPlatformIcon(platformId: PlatformId, size = 20): ReactNode
       return <QoderIcon style={{ width: size, height: size }} />;
     case 'zcode':
       return <ZcodeIcon size={size} />;
+    case 't3code':
+      return <T3CodeIcon size={size} />;
     case 'trae':
       return <TraeIcon style={{ width: size, height: size }} />;
     case 'trae_solo':

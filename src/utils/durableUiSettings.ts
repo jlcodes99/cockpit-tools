@@ -62,6 +62,12 @@ const settings = {
   'agtools.codex.top_layout.v1': {
     valid: topLayout, event: 'codex:top-layout-updated',
   },
+  'agtools.t3code.top_layout.v1': {
+    valid: topLayout, event: 't3code:top-layout-updated', portable: false,
+  },
+  'agtools.t3code.accounts_view_mode': {
+    valid: (value: string) => ['list', 'grid'].includes(value),
+  },
   'agtools.codex_show_code_review_quota': {
     valid: bool, event: 'agtools:codex-code-review-quota-visibility-changed', detail: (value: string | null) => value === '1',
   },

@@ -1,5 +1,111 @@
 // Codex Local Access 测试：Takeover reconciliation, gateway configuration and remaining integration cases。
 // 测试与生产实现共享 super 作用域，验证真实网关、持久化和请求协议行为。
+    #[test]
+    fn bounded_network_client_policy_writes_only_selected_local_provider() {
+        let dir = tempfile::tempdir().unwrap();
+        let collection = test_local_access_collection(Vec::new());
+        let input = r#"
+model_provider = "codex_local_access"
+[model_providers.codex_local_access]
+base_url = "http://127.0.0.1:8317/v1"
+request_max_retries = 7
+[model_providers.other]
+request_max_retries = 6
+stream_max_retries = 8
+"#;
+        let path = super::profile_config_path(dir.path());
+        fs::write(&path, input).unwrap();
+        super::write_local_access_profile_transport_config(
+            dir.path(), &collection, "unused", None, false,
+        ).unwrap();
+        let output = fs::read_to_string(&path).unwrap();
+        let doc = output.parse::<Document>().unwrap();
+        for key in super::LOCAL_ACCESS_CLIENT_RETRY_KEYS {
+            assert_eq!(doc["model_providers"]["codex_local_access"][key].as_integer(), Some(0));
+        }
+        assert_eq!(doc["model_providers"]["other"]["request_max_retries"].as_integer(), Some(6));
+        assert_eq!(doc["model_providers"]["other"]["stream_max_retries"].as_integer(), Some(8));
+        super::write_local_access_profile_transport_config(
+            dir.path(), &collection, "unused", None, false,
+        ).unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), output);
+
+        let external = input.replace("model_provider = \"codex_local_access\"", "model_provider = \"other\"");
+        fs::write(&path, &external).unwrap();
+        super::write_local_access_profile_transport_config(
+            dir.path(), &collection, "unused", None, false,
+        ).unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), external);
+    }
+
+    #[test]
+    fn bounded_network_client_policy_restores_backup_and_preserves_later_edits() {
+        let current = r#"
+model_provider = "codex_local_access"
+[model_providers.codex_local_access]
+base_url = "http://127.0.0.1:8317/v1"
+request_max_retries = 0
+stream_max_retries = 0
+[model_providers.other]
+request_max_retries = 9
+"#;
+        let backup = r#"
+model_provider = "openai"
+[model_providers.codex_local_access]
+request_max_retries = 3
+stream_max_retries = 2
+"#;
+        let restored = restore_config_toml_from_takeover_backup(Some(current), Some(backup))
+            .unwrap().unwrap().parse::<Document>().unwrap();
+        assert_eq!(restored["model_provider"].as_str(), Some("openai"));
+        assert_eq!(restored["model_providers"]["codex_local_access"]["request_max_retries"].as_integer(), Some(3));
+        assert_eq!(restored["model_providers"]["codex_local_access"]["stream_max_retries"].as_integer(), Some(2));
+        assert_eq!(restored["model_providers"]["other"]["request_max_retries"].as_integer(), Some(9));
+
+        let edited = current.replace("request_max_retries = 0", "request_max_retries = 7")
+            .replace("stream_max_retries = 0", "");
+        let restored = restore_config_toml_from_takeover_backup(Some(&edited), Some(backup))
+            .unwrap().unwrap().parse::<Document>().unwrap();
+        let provider = &restored["model_providers"]["codex_local_access"];
+        assert_eq!(provider["request_max_retries"].as_integer(), Some(7));
+        assert!(provider.get("stream_max_retries").is_none());
+
+        for backup in [None, Some("model_provider = 'openai'"), Some("[model_providers.codex_local_access]\nname = 'original'\n")] {
+            let restored = restore_config_toml_from_takeover_backup(Some(current), backup)
+                .unwrap().unwrap().parse::<Document>().unwrap();
+            for key in super::LOCAL_ACCESS_CLIENT_RETRY_KEYS {
+                assert!(restored["model_providers"]["codex_local_access"].get(key).is_none());
+            }
+        }
+        let detached = current.replace("model_provider = \"codex_local_access\"", "model_provider = \"other\"");
+        let restored = restore_config_toml_from_takeover_backup(Some(&detached), Some(backup))
+            .unwrap().unwrap().parse::<Document>().unwrap();
+        assert_eq!(restored["model_provider"].as_str(), Some("other"));
+        assert_eq!(restored["model_providers"]["codex_local_access"]["stream_max_retries"].as_integer(), Some(0));
+    }
+
+    #[test]
+    fn bounded_network_client_policy_upgrades_owned_profile_without_auth_changes() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut collection = test_local_access_collection(Vec::new());
+        collection.enabled = true;
+        let input = format!(
+            "model_provider = 'codex_local_access'\n[model_providers.codex_local_access]\nbase_url = '{}'\nexperimental_bearer_token = '{}'\n",
+            build_collection_base_url(&collection), collection.api_key,
+        );
+        let path = super::profile_config_path(dir.path());
+        fs::write(&path, input).unwrap();
+        let auth = "{\"auth_mode\":\"chatgpt\",\"tokens\":{\"access_token\":\"fixture\"}}";
+        fs::write(super::profile_auth_path(dir.path()), auth).unwrap();
+        super::remember_takeover_ownership(dir.path()).unwrap();
+        super::maintain_local_access_profile(dir.path(), &collection).unwrap();
+        let doc = fs::read_to_string(&path).unwrap().parse::<Document>().unwrap();
+        for key in super::LOCAL_ACCESS_CLIENT_RETRY_KEYS {
+            assert_eq!(doc["model_providers"]["codex_local_access"][key].as_integer(), Some(0));
+        }
+        assert_eq!(fs::read_to_string(super::profile_auth_path(dir.path())).unwrap(), auth);
+    }
+
     #[tokio::test]
     async fn service_pool_maintenance_preserves_external_router_and_live_identity() {
         let dir = tempfile::tempdir().unwrap();

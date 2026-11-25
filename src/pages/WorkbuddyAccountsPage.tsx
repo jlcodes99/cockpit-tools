@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronRight, Crosshair } from 'lucide-react';
+import { ChevronRight, Crosshair, Sparkles } from 'lucide-react';
 import { PlatformOverviewTabsHeader, PlatformOverviewTab } from '../components/platform/PlatformOverviewTabsHeader';
 import { WorkbuddyInstancesContent } from './WorkbuddyInstancesPage';
 import { useWorkbuddyAccountStore } from '../stores/useWorkbuddyAccountStore';
@@ -19,7 +19,7 @@ import { CodebuddySessionManager } from '../components/codebuddy/CodebuddySessio
 import { CodebuddySuiteAccountsSharedView, type CodebuddySuiteAccountsPlatformConfig } from '../components/codebuddy-suite/CodebuddySuiteAccountsSharedView';
 import { compareCurrentAccountFirst } from '../utils/currentAccountSort';
 import { WorkbuddyCreditsDialog, WorkbuddyCreditsSummary } from '../components/codebuddy-suite/WorkbuddyCredits';
-import { getWorkbuddyCredits } from '../utils/workbuddyCredits';
+import { getWorkbuddyCredits, getWorkbuddyExpiringCredits, hasWorkbuddyExpiringCredits } from '../utils/workbuddyCredits';
 import {
   subscribeWorkbuddyProbeStatus,
 } from '../utils/workbuddyProbeStatus';
@@ -155,7 +155,11 @@ export function WorkbuddyAccountsPage() {
       if (account.enterprise_id) return null;
       const credits = getWorkbuddyCredits(account);
       return credits.left == null ? null : (
-        <WorkbuddyCreditsSummary credits={credits} onDetails={() => setCreditAccountId(account.id)} />
+        <WorkbuddyCreditsSummary
+          credits={credits}
+          account={account}
+          onDetails={() => setCreditAccountId(account.id)}
+        />
       );
     },
     renderQuotaAction: (account) => account.enterprise_id ? null : (
@@ -177,6 +181,27 @@ export function WorkbuddyAccountsPage() {
         <Crosshair size={14} />
       </button>
     ),
+    // 卡片底部「包含即将到期的积分」提示（24h 内已由右上角精确徽章展示时避免重复）
+    renderCardFooterHint: (account) => {
+      if (
+        account.enterprise_id ||
+        !hasWorkbuddyExpiringCredits(account) ||
+        getWorkbuddyExpiringCredits(account).total > 0
+      ) {
+        return null;
+      }
+      return (
+        <button
+          type="button"
+          className="workbuddy-credit-expiring-hint"
+          onClick={() => setCreditAccountId(account.id)}
+          title={page.t('workbuddy.credits.expiringHintTitle', '查看即将到期的积分明细')}
+        >
+          <Sparkles size={12} aria-hidden="true" />
+          {page.t('workbuddy.credits.expiring', '包含即将到期的积分')}
+        </button>
+      );
+    },
     // 卡片内的模型受限标识（切号前一眼确认）：可点 × 关闭
     renderCardNotice: (account) => <WorkbuddyProbeNotice accountId={account.id} />,
   }), [page.t, probeVersion]);

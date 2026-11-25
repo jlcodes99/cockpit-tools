@@ -76,16 +76,24 @@
       .map(match => new URL(match[2], "app://-/index.html").href)
       .filter(url => /^app:\/\/-\/assets\/\d+\.[a-f0-9]+\.js$/.test(url));
     if (!entries.length) return null;
-    const hashes = new Map();
-    for (const source of entries.map(read)) {
-      for (const [, manifest] of source.matchAll(/\.u=\w+=>"assets\/async\/"\+\w+\+"\."\+\(\{([^}]+)\}/g)) {
-        for (const [, id, hash] of manifest.matchAll(/(?:^|,)(\d+):"([a-f0-9]+)"/g)) {
-          hashes.set(id, hashes.has(id) && hashes.get(id) !== hash ? null : hash);
+    // Discover the layout from HTML before reading any scripts. The preload
+    // can then honor the document policy without paying for the manifest.
+    let manifestHashes;
+    function getManifestHashes() {
+      if (manifestHashes) return manifestHashes;
+      const hashes = new Map();
+      for (const url of entries) {
+        for (const [, manifest] of read(url).matchAll(/\.u=\w+=>"assets\/async\/"\+\w+\+"\."\+\(\{([^}]+)\}/g)) {
+          for (const [, id, hash] of manifest.matchAll(/(?:^|,)(\d+):"([a-f0-9]+)"/g)) {
+            hashes.set(id, hashes.has(id) && hashes.get(id) !== hash ? null : hash);
+          }
         }
       }
+      manifestHashes = hashes;
+      return manifestHashes;
     }
     const urlFor = id => {
-      const hash = hashes.get(String(id));
+      const hash = getManifestHashes().get(String(id));
       if (!hash) throw Error("chunk-manifest-contract");
       return "app://-/assets/async/" + id + "." + hash + ".js";
     };
@@ -97,7 +105,7 @@
       return { url, source };
     };
     readChunk.urlFor = urlFor;
-    readChunk.has = id => Boolean(hashes.get(String(id)));
+    readChunk.has = id => Boolean(getManifestHashes().get(String(id)));
     readChunk.entryScripts = entries.map(url => url.split("/").at(-1));
     return readChunk;
   }
@@ -143,8 +151,7 @@
       map.type = "importmap"; map.textContent = JSON.stringify({ imports });
       container = doc.createElement("html");
       doc.appendChild(container); container.appendChild(map);
-      // The document's CSP excludes blob scripts. Populate the module map
-      // before its meta tag is parsed, including chunks imported later.
+      // Warm the redirected chunks before the native app requests them.
       preloads.forEach(preload => container.appendChild(preload));
       // Lazy chunks must retain their URLs for the lifetime of this document.
       root.addEventListener("pagehide", () => {

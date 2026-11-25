@@ -63,6 +63,16 @@
 [data-cockpit-quota-details] .stats-grid dd.value{color:var(--cockpit-green)}
 [data-cockpit-quota-details] .session-metric.model dd{font-size:11px;letter-spacing:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 4px}
 [data-cockpit-quota-details] .session-metric.model dd.metric-sub,[data-cockpit-quota-details] .stats-grid dd.stats-sub{font-size:9px;font-weight:400;line-height:1.4;letter-spacing:0;color:var(--cockpit-muted);margin-top:3px}
+[data-cockpit-quota-details] .response-speeds{
+  grid-column:1 / -1;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;
+  margin:8px 0 0;padding-top:8px;border-top:1px solid var(--cockpit-line);
+}
+[data-cockpit-quota-details] .response-speeds dt{
+  min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--cockpit-muted);
+}
+[data-cockpit-quota-details] .response-speeds dd{
+  margin:0;text-align:end;white-space:nowrap;font-variant-numeric:tabular-nums;
+}
 [data-cockpit-quota-details] .stats-date{font-size:9px;color:var(--cockpit-muted);margin:7px 0 0;text-align:center}
 /* Request records have their own scroll viewport; keep tabs and actions fixed. */
 [data-cockpit-quota-details] .panel[data-view="logs"]{overflow:hidden;scrollbar-gutter:auto;display:flex;flex-direction:column}

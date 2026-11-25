@@ -67,6 +67,48 @@ function modalHarness(focusCalls: any[] = [], escapeCalls: any[] = []) {
   return loadHookModule(new URL("./CodexOAuthBindingModal.tsx", import.meta.url), imports);
 }
 
+test("both binding targets use their own search and filters", () => {
+  for (const targetKind of ["api_key_account", "local_access"]) {
+    const h = modalHarness();
+    const props: any = {
+      t: (key: string, fallback: any) => typeof fallback === "string" ? fallback : key,
+      oauthBindingAccount: { id: "provider", account_name: "Provider" },
+      maskAccountText: (value: string) => value,
+      resolvePresentation: () => ({ displayName: "Provider" }),
+      isLocalAccessOAuthBinding: targetKind === "local_access",
+      oauthBindingTargetActive: true,
+      oauthBindingTargetKind: targetKind,
+      oauthAccounts: [{ id: "oauth" }],
+      oauthBindingEligibleAccounts: [{ id: "oauth" }],
+      oauthBindingFilteredAccounts: [],
+      oauthBindingTierCounts: { all: 1 },
+      oauthBindingPagination: {},
+      oauthBindingFilters: { searchQuery: "", filterTypes: [], tagFilter: [] },
+      searchQuery: "overview search",
+      filterTypes: ["FREE"],
+      tagFilter: ["overview"],
+      setOauthBindingFilters: (update: (previous: unknown) => unknown) => {
+        props.oauthBindingFilters = update(props.oauthBindingFilters);
+      },
+    };
+    h.render(() => h.exports.CodexOAuthBindingModal(props));
+    const search = () => nodes(h.flush()).find((node) => node.type === "input" && node.props.type === "text");
+    assert.equal(search().props.value, "");
+    search().props.onChange({ target: { value: "binding search" } });
+    let tree = nodes(h.flush());
+    tree.find((node) => node.type === "MultiSelectFilterDropdown").props.onToggleValue("PLUS");
+    tree.find((node) => node.type === "AccountTagFilterDropdown").props.onToggleTag("binding");
+    tree = nodes(h.flush());
+    assert.equal(search().props.value, "binding search");
+    assert.equal(tree.find((node) => node.type === "MultiSelectFilterDropdown").props.selectedValues.join(), "PLUS");
+    assert.equal(tree.find((node) => node.type === "AccountTagFilterDropdown").props.selectedTags.join(), "binding");
+    assert.equal(props.searchQuery, "overview search");
+    assert.deepEqual(props.filterTypes, ["FREE"]);
+    assert.deepEqual(props.tagFilter, ["overview"]);
+    h.unmount();
+  }
+});
+
 test("binding dialog shows saved percentages directly and opens the shared editor", () => {
   const h = modalHarness();
   let editCount = 0;
@@ -74,6 +116,7 @@ test("binding dialog shows saved percentages directly and opens the shared edito
     t: (key: string, fallback: any) => typeof fallback === "string" ? fallback : fallback?.defaultValue ?? key,
     oauthBindingTargetActive: true,
     oauthBindingTargetKind: "local_access",
+    oauthBindingFilters: { searchQuery: "", filterTypes: [], tagFilter: [] },
     isLocalAccessOAuthBinding: true,
     oauthAccounts: [],
     oauthBindingQuotaReserve: { hourlyPercent: 15, weeklyPercent: 25 },
@@ -112,6 +155,7 @@ test("binding and reserve dialogs keep focus and Escape with only the active lay
   const props: any = {
     t: (key: string, fallback: any) => typeof fallback === "string" ? fallback : key,
     oauthBindingTargetActive: true,
+    oauthBindingFilters: { searchQuery: "", filterTypes: [], tagFilter: [] },
     isLocalAccessOAuthBinding: true,
     oauthAccounts: [],
     oauthBindingQuotaReserve: { hourlyPercent: 10, weeklyPercent: 10 },
@@ -160,6 +204,7 @@ test("quota protection is built in and validates its margin for both engines", (
   const props: any = {
     t: (key: string, fallback: any) => typeof fallback === "string" ? fallback : key,
     oauthBindingTargetActive: false, isLocalAccessOAuthBinding: true,
+    oauthBindingFilters: { searchQuery: "", filterTypes: [], tagFilter: [] },
     oauthBindingQuotaReserveEditorOpen: true,
     oauthBindingQuotaReserve: { hourlyPercent: 10, weeklyPercent: 10 },
     oauthBindingQuotaReserveFieldErrors: {}, oauthBindingHourlyReserveDraft: "10",

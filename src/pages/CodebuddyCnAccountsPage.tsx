@@ -17,6 +17,7 @@ import {
 import { useProviderAccountsPage } from '../hooks/useProviderAccountsPage';
 import { useWorkbuddyProbeAutoRecheck } from '../hooks/useWorkbuddyProbeAutoRecheck';
 import { CodebuddySuiteAccountsSharedView, type CodebuddySuiteAccountsPlatformConfig } from '../components/codebuddy-suite/CodebuddySuiteAccountsSharedView';
+import { CodebuddyQuotaCreditsSummary } from '../components/codebuddy-suite/CodebuddyQuotaCreditsSummary';
 import { CodebuddyLaunchDialog } from '../components/codebuddy/CodebuddyLaunchDialog';
 import { CodebuddySessionManager } from '../components/codebuddy/CodebuddySessionManager';
 import { emitCurrentAccountChanged } from '../utils/accountSyncEvents';
@@ -153,7 +154,7 @@ export function CodebuddyCnAccountsPage() {
 
   async function launchDesktop(accountId: string) {
     try {
-      await codebuddyCnService.injectCodebuddyCnToVSCode(accountId, true);
+      await codebuddyCnService.injectCodebuddyCnToVSCode(accountId, true, true);
       store.setCurrentAccountId(accountId);
       void emitCurrentAccountChanged({ platformId: 'codebuddy_cn', accountId, reason: 'switch' });
     } finally {
@@ -179,6 +180,16 @@ export function CodebuddyCnAccountsPage() {
   >(
     () => ({
       ...codebuddyCnPlatformConfig,
+      // 与 WorkBuddy 一致：用「总剩余额度 + 分组明细」的新版概览替换平铺资源包列表
+      renderQuotaSummary: (account) => {
+        const groups = getCodebuddyQuotaCategoryGroups(
+          account,
+          page.t as (key: string, defaultValue?: string) => string,
+        );
+        return groups.some((group) => group.visible) ? (
+          <CodebuddyQuotaCreditsSummary groups={groups} />
+        ) : null;
+      },
       renderCardActionExtra: (account) => (
         <button
           type="button"

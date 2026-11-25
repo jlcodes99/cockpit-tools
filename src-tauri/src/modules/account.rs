@@ -9,8 +9,13 @@ use std::time::{Duration, Instant};
 use uuid::Uuid;
 
 use crate::models::{Account, AccountIndex, AccountSummary, QuotaData, QuotaErrorInfo, TokenData};
+use crate::models::quota::QuotaSummaryGroup;
 use crate::modules;
 use crate::modules::quota::{summary_bucket_family, SummaryBucketFamily};
+
+#[path = "account_auto_switch_groups.rs"]
+mod account_auto_switch_groups;
+use account_auto_switch_groups::AutoSwitchGroups;
 
 // The desktop and IDE entry points share the current-account index and may
 // target the same legacy client database.
@@ -692,10 +697,19 @@ pub fn create_pending_oauth_account(
     email: String,
     update: AccountNoteUpdate,
 ) -> Result<Account, String> {
+    create_pending_oauth_account_with_tags(email, update, Vec::new())
+}
+
+pub(super) fn create_pending_oauth_account_with_tags(
+    email: String,
+    update: AccountNoteUpdate,
+    tags: Vec<String>,
+) -> Result<Account, String> {
     let email = email.trim().to_string();
     if email.is_empty() || !email.contains('@') {
         return Err("账号邮箱不能为空或格式无效".to_string());
     }
+    let tags = normalize_tags(tags)?;
     let _lock = lock_account_index()?;
     let mut index = load_account_index_locked()?;
     let target_id = build_account_storage_id(&email);
@@ -728,6 +742,9 @@ pub fn create_pending_oauth_account(
     };
 
     update.apply_to(&mut account);
+    if !tags.is_empty() {
+        account.tags = tags;
+    }
     account.update_last_used();
 
     save_account(&account)?;
@@ -1065,7 +1082,7 @@ fn save_account_quota(mut account: Account, mut quota: QuotaData) -> Result<(), 
     Ok(())
 }
 
-pub(super) async fn refresh_quota_after_wakeup(account_id: String) -> Result<(), String> {
+pub(super) async fn refresh_account_quota_in_background(account_id: String) -> Result<(), String> {
     let mut account = tokio::task::spawn_blocking(move || load_account(&account_id))
         .await
         .map_err(|error| error.to_string())??;
@@ -1118,6 +1135,34 @@ mod quota_refresh_cache_tests {
     fn manual_batch_bypasses_cache_while_automatic_refresh_reuses_it() {
         assert!(QuotaRefreshTrigger::ManualBatch.skip_cache());
         assert!(!QuotaRefreshTrigger::Auto.skip_cache());
+    }
+
+    #[test]
+    fn quota_refresh_keeps_the_last_known_subscription_tier() {
+        let _lock = crate::modules::test_support::env_lock().lock().unwrap();
+        let account = Account::new(
+            "cached-tier-fixture".into(),
+            "cached-tier@example.invalid".into(),
+            TokenData::new("access".into(), "refresh".into(), 3600, None, None, None),
+        );
+        save_account(&account).unwrap();
+
+        for (tier, expected, percentage) in [
+            (Some("UNKNOWN"), None, 75),
+            (Some("g1-ultra-tier"), Some("g1-ultra-tier"), 76),
+            (None, Some("g1-ultra-tier"), 77),
+            (Some("  unknown  "), Some("g1-ultra-tier"), 78),
+            (Some(" "), Some("g1-ultra-tier"), 79),
+            (Some("free-tier"), Some("free-tier"), 80),
+        ] {
+            let mut quota = QuotaData::new();
+            quota.subscription_tier = tier.map(str::to_owned);
+            quota.add_model("gemini-3-flash".into(), None, percentage, String::new());
+            update_account_quota(&account, quota).unwrap();
+            let stored = load_account(&account.id).unwrap().quota.unwrap();
+            assert_eq!(stored.subscription_tier.as_deref(), expected);
+            assert_eq!(stored.models[0].percentage, percentage);
+        }
     }
 
     #[test]
@@ -1266,6 +1311,7 @@ struct AutoSwitchGroupQuota {
     percentage: i32,
     five_hour: Option<i32>,
     weekly: Option<i32>,
+    other_window: Option<i32>,
     model_average: Option<i32>,
 }
 
@@ -1315,6 +1361,7 @@ fn group_hit_percentage(
     [
         group.five_hour.filter(|p| *p <= windows.five_hour),
         group.weekly.filter(|p| *p <= windows.weekly),
+        group.other_window.filter(|p| *p <= threshold),
         group.model_average.filter(|p| *p <= threshold),
     ]
     .into_iter()
@@ -1333,6 +1380,7 @@ fn group_is_switch_ready(
     let ready = |value: Option<i32>, limit: i32| value.map_or(true, |p| p > 0 && p >= limit);
     ready(group.five_hour, windows.five_hour)
         && ready(group.weekly, windows.weekly)
+        && ready(group.other_window, threshold)
         && ready(group.model_average, threshold)
 }
 
@@ -1693,6 +1741,7 @@ fn collect_group_quotas(
                 percentage,
                 five_hour,
                 weekly,
+                other_window: None,
                 model_average,
             })
         })
@@ -1719,23 +1768,12 @@ fn evaluate_auto_switch_trigger(
     account: &Account,
     threshold: i32,
     scope_mode: &str,
-    monitored_groups: &[AutoSwitchGroupDefinition],
+    monitored_groups: &AutoSwitchGroups,
     credits_enabled: bool,
     credits_threshold: i32,
     windows: Option<AutoSwitchWindowThresholds>,
 ) -> Option<AutoSwitchTriggerContext> {
-    if monitored_groups.is_empty() {
-        return None;
-    }
-
-    let selected_group_ids: Vec<String> = monitored_groups
-        .iter()
-        .map(|group| group.id.clone())
-        .collect();
-    let selected_group_names: Vec<String> = monitored_groups
-        .iter()
-        .map(|group| group.name.clone())
-        .collect();
+    let (selected_group_ids, selected_group_names) = monitored_groups.labels();
 
     if account.disabled {
         return Some(AutoSwitchTriggerContext {
@@ -1775,7 +1813,7 @@ fn evaluate_auto_switch_trigger(
         });
     }
 
-    let group_quotas = collect_group_quotas(account, monitored_groups);
+    let group_quotas = monitored_groups.collect_quotas(account);
     let hit_groups: Vec<modules::antigravity_switch_history::AntigravityAutoSwitchHitGroup> =
         group_quotas
             .into_iter()
@@ -1827,7 +1865,7 @@ fn can_be_auto_switch_candidate(
     account: &Account,
     current_id: &str,
     threshold: i32,
-    monitored_groups: &[AutoSwitchGroupDefinition],
+    monitored_groups: &AutoSwitchGroups,
     credits_enabled: bool,
     credits_threshold: i32,
     windows: Option<AutoSwitchWindowThresholds>,
@@ -1844,7 +1882,7 @@ fn can_be_auto_switch_candidate(
         return false;
     }
 
-    let group_quotas = collect_group_quotas(account, monitored_groups);
+    let group_quotas = monitored_groups.collect_quotas(account);
     if group_quotas.len() < monitored_groups.len() {
         return false;
     }
@@ -2224,8 +2262,7 @@ where
         None => return Ok(None),
     };
 
-    let reported = collect_group_quotas(current, &monitored_groups);
-    let monitored_groups = reported_auto_switch_groups(&scope_mode, monitored_groups, &reported);
+    let monitored_groups = AutoSwitchGroups::resolve(&scope_mode, monitored_groups, current);
 
     let Some(trigger_context) = evaluate_auto_switch_trigger(
         current,
@@ -3489,6 +3526,7 @@ mod new_antigravity_model_tests {
         let current = account("current", &[("gemini:5h", 78), ("gemini-weekly", 0)], false);
         let reported = collect_group_quotas(&current, &groups);
         let groups = reported_auto_switch_groups(AUTO_SWITCH_SCOPE_ANY_GROUP, groups, &reported);
+        let groups = AutoSwitchGroups::Legacy(groups);
         let trigger = evaluate_auto_switch_trigger(&current, 0, AUTO_SWITCH_SCOPE_ANY_GROUP, &groups, false, 0, None).unwrap();
         assert_eq!(trigger.hit_groups.len(), 2);
         assert!(trigger.hit_groups.iter().all(|group| group.percentage == 0));
@@ -3523,10 +3561,10 @@ mod new_antigravity_model_tests {
             account.quota = Some(quota);
             account
         };
-        let groups: Vec<_> = default_auto_switch_groups()
+        let groups = AutoSwitchGroups::Legacy(default_auto_switch_groups()
             .into_iter()
             .filter(|group| group.id == "g3_flash")
-            .collect();
+            .collect());
         let split = Some(AutoSwitchWindowThresholds { five_hour: 30, weekly: 5 });
         let scope = AUTO_SWITCH_SCOPE_SELECTED_GROUPS;
 

@@ -5,14 +5,14 @@
 //! never leaves a running desktop process pointing at a retired random port.
 //!
 //! 同一入口兼容 SOCKS5 与 HTTP CONNECT（仅 TCP）。每条新连接都会重新解析当前绑定：有绑定就走 Mihomo 出口，
-//! 未绑定（例如运行中解绑）则直接连客户端给出的目标主机名，出口 IP 与客户端自己直连一致；
+//! 运行中解绑后，旧入口拒绝新连接；重启恢复客户端原设置或明确的直连设置。
 //! UDP/QUIC 由客户端按 SOCKS 代理语义处理（Chromium 不会把 UDP 交给 SOCKS 入口），因此
 //! 这种链路不能描述成与“完全直连”等价。
 //!
 //! 启动时只为**已有生效出口**（独立绑定或统一代理）的账号安装入口：未绑定账号若也被注入
 //! 本地入口，会替代应用全局代理环境变量、用户自定义的 `--proxy-server`/PAC 参数与系统代理，
 //! 属于静默改变出口。因此未绑定账号保持原有启动参数，首次绑定后需要重启一次，之后换节点、
-//! 换策略或解绑都不再需要重启。显式“不使用代理”的新启动不安装入口，
+//! 换策略可复用入口；解绑或切换代理模式需要重启。显式“强制直连”的新启动不安装入口，
 //! 由启动层清除代理环境并强制客户端直连；旧客户端需重启才能脱离本地入口。
 //!
 //! 端口属于账号入口而不是某次内核：分配结果持久化在应用数据目录的
@@ -504,7 +504,9 @@ async fn handle_connection(
         let target = if super::codex_proxy_direct_hosts::matches(&direct_hosts, &destination.host) {
             None
         } else {
-            resolve_desktop_target(account_id).await?
+            let target = resolve_desktop_target(account_id).await?;
+            if target.is_none() { return Err("PROXY_BINDING_CHANGED".into()); }
+            target
         };
         diagnostic.route(target.as_ref().and_then(|(_, lease)| lease.as_ref().map(|tunnel| tunnel.diagnostic_id())), None);
         diagnostic.phase("connect_upstream");

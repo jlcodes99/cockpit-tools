@@ -47,12 +47,42 @@ fn object_field<'a>(
     })
 }
 
+fn quota_has_usable_workspace_credits(
+    raw: &serde_json::Map<String, serde_json::Value>,
+    credits: &serde_json::Map<String, serde_json::Value>,
+) -> bool {
+    if !["remaining", "balance"]
+        .iter()
+        .all(|field| object_field(credits, field).is_none_or(serde_json::Value::is_null))
+    {
+        return false;
+    }
+    json_bool(object_field(credits, "has_credits")).unwrap_or_else(|| {
+        raw.get("ambient_usage")
+            .and_then(|usage| usage.pointer("/default/source/kind"))
+            .and_then(serde_json::Value::as_str)
+            == Some("credits")
+    })
+}
+
 fn quota_has_usable_credits(quota: &CodexQuota) -> bool {
     let Some(raw) = quota.raw_data.as_ref().and_then(serde_json::Value::as_object) else {
         return false;
     };
-    if let Some(limit) = object_field(raw, "spend_control")
-        .and_then(serde_json::Value::as_object)
+    let workspace = matches!(
+        object_field(raw, "plan_type").and_then(serde_json::Value::as_str),
+        Some("team" | "business")
+    );
+    let spend = object_field(raw, "spend_control").and_then(serde_json::Value::as_object);
+    let credits = object_field(raw, "credits").and_then(serde_json::Value::as_object);
+    if workspace
+        && (json_bool(spend.and_then(|spend| object_field(spend, "reached"))) == Some(true)
+            || json_bool(credits.and_then(|credits| object_field(credits, "overage_limit_reached")))
+                == Some(true))
+    {
+        return false;
+    }
+    if let Some(limit) = spend
         .and_then(|spend| object_field(spend, "individual_limit"))
         .and_then(serde_json::Value::as_object)
     {
@@ -75,7 +105,7 @@ fn quota_has_usable_credits(quota: &CodexQuota) -> bool {
             }
         }
     }
-    let Some(credits) = object_field(raw, "credits").and_then(serde_json::Value::as_object) else {
+    let Some(credits) = credits else {
         return false;
     };
     if json_bool(object_field(credits, "unlimited")).unwrap_or(false) {
@@ -83,6 +113,7 @@ fn quota_has_usable_credits(quota: &CodexQuota) -> bool {
     }
     json_finite_f64(object_field(credits, "remaining")).is_some_and(|value| value > 0.0)
         || json_finite_f64(object_field(credits, "balance")).is_some_and(|value| value > 0.0)
+        || (workspace && quota_has_usable_workspace_credits(raw, credits))
 }
 
 fn account_quota_cooldown(account: &CodexAccount, now: i64) -> Option<AccountQuotaCooldown> {

@@ -185,7 +185,7 @@ fn copy_resolves_archived_compressed_parent_at_its_decoded_byte_boundary() {
     assert_eq!(fs::read(f.target_path(&parent_zstd)).unwrap(), compressed);
     let db = Connection::open(f.target.join(STATE_DB)).unwrap();
     let indexed: String = db.query_row("SELECT rollout_path FROM threads WHERE id=?1", [ROOT], |r| r.get(0)).unwrap();
-    assert_eq!(Path::new(&indexed), f.target_path(&parent));
+    assert_eq!(Path::new(&indexed), f.target_path(&parent_zstd));
     assert_eq!(
         fs::read(f.target_path(&f.child_rollout)).unwrap(),
         fs::read(&f.child_rollout).unwrap(),
@@ -735,7 +735,7 @@ fn rejects_projection_captured_ahead_of_rollout_snapshot() {
     let bytes = fs::metadata(&f.child_rollout).unwrap().len() as i64;
     db.execute(
         "INSERT INTO thread_history_projection_state VALUES (?1, ?2, 4)",
-        rusqlite::params![ROOT, bytes + 10],
+        rusqlite::params![CHILD, bytes + 10],
     )
     .unwrap();
     assert!(copy_profile(&f.source, &f.target)

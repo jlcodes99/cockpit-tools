@@ -14,6 +14,9 @@ anyhow.workspace = true
 tokio.workspace = true
 chrono.workspace = true
 tabled = "0.15"
+tokio-tungstenite.workspace = true
+futures-util.workspace = true
+uuid.workspace = true
 
 [dev-dependencies]
 rusqlite.workspace = true

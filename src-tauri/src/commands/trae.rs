@@ -340,6 +340,15 @@ pub async fn inject_trae_account(
     account_id: String,
     platform_id: Option<String>,
 ) -> Result<String, String> {
+    switch_trae(app, account_id, platform_id, false).await
+}
+
+pub(crate) async fn switch_trae(
+    app: AppHandle,
+    account_id: String,
+    platform_id: Option<String>,
+    require_binding: bool,
+) -> Result<String, String> {
     let platform = trae_account::TraePlatformKind::parse(platform_id.as_deref())?;
     let platform_key = platform.provider_key();
     let platform_label = platform.display_name();
@@ -415,6 +424,9 @@ pub async fn inject_trae_account(
             None,
             Some(false),
         ) {
+            if require_binding {
+                return Err(err);
+            }
             logger::log_warn(&format!(
                 "更新 {} 默认实例绑定账号失败: {}",
                 platform_label, err

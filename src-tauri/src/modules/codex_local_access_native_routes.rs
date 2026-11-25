@@ -1,5 +1,7 @@
 #[path = "codex_local_access_native_grok.rs"]
 mod native_grok;
+#[path = "codex_local_access_native_zcode.rs"]
+mod native_zcode;
 
 // Native provider selection, credentials and model catalogs. No legacy wire executor.
 
@@ -179,7 +181,7 @@ fn native_model_route_plan(
                 || route
                     .native_provider
                     .as_deref()
-                    .is_some_and(|provider| !matches!(provider, "" | "xai"))
+                    .is_some_and(|provider| !matches!(provider, "" | "xai" | "zcode"))
             {
                 return Err(native_error(
                     400,
@@ -583,15 +585,29 @@ fn native_account_owner(account: &CodexAccount, base_url: &str) -> String {
     // replacement has no such identity proof, even when the local record is the
     // same, so it must not reuse the old key's upstream continuation state.
     // Keep only a digest; credentials must never enter the identity database.
-    let credential_scope =
-        if account.is_api_key_auth() && !codex_account::is_grok_upstream_provider(account) {
-            format!(
-                "{:x}",
-                Sha256::digest(account.openai_api_key.as_deref().unwrap_or("").as_bytes())
-            )
-        } else {
-            String::new()
-        };
+    let credential_scope = if codex_account::is_zcode_upstream_provider(account) {
+        format!(
+            "{}:{}",
+            account.api_credential_kind.as_deref().unwrap_or(""),
+            account.api_credential_ref.as_deref().unwrap_or("")
+        )
+    } else if account.is_api_key_auth() && !codex_account::is_grok_upstream_provider(account) {
+        format!(
+            "{:x}",
+            Sha256::digest(account.openai_api_key.as_deref().unwrap_or("").as_bytes())
+        )
+    } else {
+        String::new()
+    };
+    let upstream_scope = if account.api_credential_ref.is_some() {
+        format!(
+            "{}:{}",
+            account.upstream_grok_account_id.as_deref().unwrap_or(""),
+            account.api_credential_ref.as_deref().unwrap_or("")
+        )
+    } else {
+        account.upstream_grok_account_id.as_deref().unwrap_or("").to_string()
+    };
     let agent_scope = account.agent_identity.as_ref().map(|identity| {
         (
             identity.agent_runtime_id.as_str(),
@@ -612,7 +628,7 @@ fn native_account_owner(account: &CodexAccount, base_url: &str) -> String {
         },
         account.user_id.as_deref().unwrap_or(""),
         account.account_id.as_deref().unwrap_or(""),
-        account.upstream_grok_account_id.as_deref().unwrap_or(""),
+        upstream_scope,
         base_url.trim_end_matches('/'),
         credential_scope
     )
@@ -735,6 +751,17 @@ async fn native_account_credentials(
                 account = updated;
                 headers = auth;
                 "https://chatgpt.com/backend-api/codex".to_string()
+            } else if codex_account::is_zcode_upstream_provider(&account) {
+                let source = crate::modules::zcode_account::load_account(
+                    account.api_credential_ref.as_deref().unwrap_or(""),
+                )
+                .ok_or_else(|| "ZCode account is unavailable".to_string())?;
+                if source.auth_mode != crate::models::zcode::ZcodeAuthMode::ApiKey {
+                    return Err("ZCode source must be an API Key account".to_string());
+                }
+                headers = native_zcode::credential_headers(&source)?;
+                native_zcode::bind_owner(&mut account, &source);
+                native_zcode::base_url(&source).to_string()
             } else if account.is_api_key_auth() {
                 if account.api_wire_api.as_deref() == Some("anthropic") && account.api_auth_scheme.as_deref() != Some("bearer") {
                     headers.insert("x-api-key", HeaderValue::from_str(account.openai_api_key.as_deref().unwrap_or("")).map_err(|_| "Invalid API key")?);
@@ -1539,18 +1566,19 @@ async fn native_select_route_once(
         request.target_account_id.as_deref(),
     );
     native_sort_accounts_scoped(host, &mut accounts, &collection, key, &routing_namespace);
-    if request.auxiliary.as_deref() == Some("search") {
-        // Preserve the native OAuth search path when a scoped OAuth account
-        // is available. A compatible relay can serve API-key-only pools.
-        accounts.sort_by_key(CodexAccount::is_api_key_auth);
-    } else if plan.automatic {
-        // The old automatic gateway exhausts native candidates before provider routes.
-        // Preserve the configured selection order within each group.
-        accounts.sort_by_key(|account| {
-            automatic_api_service_provider_route_eligible(
-                account,
-                || native_automatic_upstream_models(&collection, account),
-            ) && !codex_account::is_grok_upstream_provider(account)
+    let search = request.auxiliary.as_deref() == Some("search");
+    if search || plan.automatic {
+        // Prefer the native transport within each configured account priority.
+        accounts.sort_by_cached_key(|account| {
+            let priority = account_usage_priority(native_account_routing_rule(account, &collection));
+            let relay = if search {
+                account.is_api_key_auth()
+            } else {
+                automatic_api_service_provider_route_eligible(account, || {
+                    native_automatic_upstream_models(&collection, account)
+                }) && !codex_account::is_grok_upstream_provider(account)
+            };
+            (std::cmp::Reverse(priority), relay)
         });
     }
     if request.capability_fallback_from.is_some() {

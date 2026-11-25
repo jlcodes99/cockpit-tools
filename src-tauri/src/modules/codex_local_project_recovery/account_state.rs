@@ -484,8 +484,7 @@ fn prepare_legacy(home: &Path, owner: Option<&str>) -> Result<bool, String> {
     let before = decode(Some(&bytes))?;
     let mut after = before.clone();
     identity::inherit_scoped_auto_connect(&mut after, owner.unwrap_or(identity::SIGNED_OUT_OWNER));
-    // Older/unscoped state is handled by the existing recovery path. Its
-    // top-level preferences do not identify an owner that we can archive.
+    // Desktop can store account-specific SSH preferences before creating a project archive.
     if before.get(SCOPES).is_none() && before.get(PARKED).is_none() {
         return finish_prepare(home, &bytes, &before, &after);
     }

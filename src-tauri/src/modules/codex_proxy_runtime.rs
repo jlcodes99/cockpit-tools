@@ -442,11 +442,44 @@ pub async fn client_builder(
     account: &CodexAccount,
     builder: reqwest::ClientBuilder,
 ) -> Result<reqwest::ClientBuilder, String> {
+    client_builder_with_account_lookup(account, builder, false).await
+}
+
+pub(crate) async fn import_preview_client_builder(
+    account: &CodexAccount,
+    builder: reqwest::ClientBuilder,
+) -> Result<reqwest::ClientBuilder, String> {
+    client_builder_with_account_lookup(account, builder, true).await
+}
+
+async fn client_builder_with_account_lookup(
+    account: &CodexAccount,
+    builder: reqwest::ClientBuilder,
+    allow_unsaved_account: bool,
+) -> Result<reqwest::ClientBuilder, String> {
     if !codex_account_proxy::eligible(account) {
         return Ok(builder);
     }
     // Refresh the routing choice before applying caller defaults.
-    let current = load(&account.id).await?;
+    let current = if allow_unsaved_account
+        && super::codex_client_proxy::route_target(&account.id).is_none()
+    {
+        let account_id = account.id.clone();
+        let Some(current) = read_with_limit(
+            READS.clone(),
+            READ_QUEUE_TIMEOUT,
+            READ_TOTAL_TIMEOUT,
+            move || codex_account::load_account_checked(&account_id),
+        )
+        .await??
+        else {
+            return Ok(builder);
+        };
+        current
+    } else {
+        load_stored(&account.id).await?
+    };
+    ensure_account_proxy_state(&current).await?;
     if current.egress_proxy_disabled {
         return Ok(builder.no_proxy());
     }
@@ -514,6 +547,7 @@ pub(crate) async fn stored_accounts() -> Result<Vec<CodexAccount>, String> {
 pub(crate) async fn ensure_account_proxy_state(account: &CodexAccount) -> Result<(), String> {
     if codex_account_proxy::eligible(account)
         && !account.egress_proxy_disabled
+        && !account.egress_proxy_client_defaults
         && !account
             .egress_proxy_url
             .as_deref()
@@ -750,16 +784,20 @@ pub async fn save_binding_with_mode(
     input: Option<String>,
     disabled: bool,
 ) -> Result<CodexAccount, String> {
-    save_binding_with_policy(account_id, input, disabled, false).await
+    save_binding_with_policy(account_id, input, disabled, false, false).await
 }
 
 /// Explicit pool allocation must not overwrite a manual binding made while a
 /// candidate engine was starting. Recheck under the durable account token lock.
 pub(crate) async fn save_binding_if_unbound(account_id: String, input: String) -> Result<CodexAccount, String> {
-    save_binding_with_policy(account_id, Some(input), false, true).await
+    save_binding_with_policy(account_id, Some(input), false, true, false).await
 }
 
-async fn save_binding_with_policy(account_id: String, input: Option<String>, disabled: bool, require_unbound: bool) -> Result<CodexAccount, String> {
+pub async fn save_client_defaults(account_id: String) -> Result<CodexAccount, String> {
+    save_binding_with_policy(account_id, None, false, false, true).await
+}
+
+async fn save_binding_with_policy(account_id: String, input: Option<String>, disabled: bool, require_unbound: bool, client_defaults: bool) -> Result<CodexAccount, String> {
     if disabled && input.is_some() {
         return Err("PROXY_INVALID_URL".into());
     }
@@ -813,11 +851,12 @@ async fn save_binding_with_policy(account_id: String, input: Option<String>, dis
         let _write_reservation = write_reservation;
         if require_unbound {
             let current = codex_account::load_account(&account_id).ok_or("PROXY_ACCOUNT_NOT_FOUND")?;
-            if current.egress_proxy_url.is_some() || current.egress_proxy_disabled {
+            if current.egress_proxy_url.is_some() || current.egress_proxy_disabled || current.egress_proxy_client_defaults {
                 return Err("codex.proxyQuality.errors.bindingChanged".into());
             }
         }
-        codex_account::update_account_egress_proxy(&account_id, persisted, disabled)
+        if client_defaults { codex_account::update_account_client_proxy_defaults(&account_id) }
+        else { codex_account::update_account_egress_proxy(&account_id, persisted, disabled) }
     })
     .await?;
     // Publication is still under the token lock. Include starts that appeared during the

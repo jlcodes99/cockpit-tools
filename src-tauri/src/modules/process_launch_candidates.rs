@@ -864,6 +864,18 @@ fn windows_app_launch_signature(app: &str) -> Option<WindowsAppLaunchSignature> 
             common_paths: &["ZCode\\ZCode.exe"],
             supports_multi_instance: true,
         }),
+        "t3code" => Some(WindowsAppLaunchSignature {
+            label: "T3 Code",
+            exe_names: &["T3 Code (Beta).exe", "T3 Code.exe", "T3 Code (Nightly).exe", "t3code.exe"],
+            command_names: &["t3code", "t3"],
+            protocol_names: &["t3code", "t3"],
+            display_keywords: &["t3 code", "t3code"],
+            common_paths: &[
+                "T3 Code (Beta)\\T3 Code (Beta).exe",
+                "T3 Code\\T3 Code.exe",
+            ],
+            supports_multi_instance: true,
+        }),
         "trae" => Some(WindowsAppLaunchSignature {
             label: "Trae",
             exe_names: &["Trae.exe"],
@@ -1144,6 +1156,10 @@ fn running_app_candidate_matches(
     signature: WindowsAppLaunchSignature,
 ) -> bool {
     if app == "codex" && is_codex_embedded_backend_executable(path) {
+        return false;
+    }
+
+    if app == "workbuddy" && is_workbuddy_node_runtime(path) {
         return false;
     }
 
@@ -1894,6 +1910,7 @@ fn account_proxy_env_pairs(proxy_url: &str) -> Vec<(&'static str, String)> {
 }
 
 pub fn apply_effective_proxy_env_to_command(cmd: &mut Command, launch_proxy: &CodexLaunchProxy) {
+    if matches!(launch_proxy, CodexLaunchProxy::ClientDefaults) { return; }
     let pairs = match launch_proxy {
         CodexLaunchProxy::Inherit => {
             let direct_hosts = config::get_codex_proxy_direct_hosts();
@@ -2254,6 +2271,7 @@ fn update_app_path_in_config(app: &str, path: &Path, expected_current: &str) {
             "codebuddy_cn" => &mut current.codebuddy_cn_app_path,
             "qoder" => &mut current.qoder_app_path,
             "zcode" => &mut current.zcode_app_path,
+            "t3code" => &mut current.t3code_app_path,
             "trae" => &mut current.trae_app_path,
             "trae_solo" => &mut current.trae_solo_app_path,
             "trae_cn" => &mut current.trae_cn_app_path,

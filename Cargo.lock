@@ -939,12 +939,15 @@ dependencies = [
  "chrono",
  "clap",
  "cockpit-core",
+ "futures-util",
  "rusqlite",
  "serde",
  "serde_json",
  "tabled",
  "tempfile",
  "tokio",
+ "tokio-tungstenite 0.26.2",
+ "uuid",
 ]
 
 [[package]]
@@ -1004,7 +1007,7 @@ dependencies = [
 
 [[package]]
 name = "cockpit-tools"
-version = "1.4.2"
+version = "1.5.0"
 dependencies = [
  "aes",
  "aes-gcm",
@@ -1030,6 +1033,7 @@ dependencies = [
  "hyper-util",
  "iana-time-zone",
  "ipnet",
+ "json-patch",
  "junction",
  "keyring",
  "lazy_static",
@@ -1080,6 +1084,7 @@ dependencies = [
  "tauri-plugin-process",
  "tauri-plugin-single-instance",
  "tauri-plugin-updater",
+ "tauri-utils",
  "tempfile",
  "thiserror 2.0.18",
  "tiny_http",

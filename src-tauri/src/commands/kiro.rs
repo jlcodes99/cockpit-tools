@@ -199,6 +199,10 @@ pub fn get_kiro_accounts_index_path() -> Result<String, String> {
 
 #[tauri::command]
 pub async fn inject_kiro_to_vscode(app: AppHandle, account_id: String) -> Result<String, String> {
+    switch_kiro(app, account_id, false).await
+}
+
+pub(crate) async fn switch_kiro(app: AppHandle, account_id: String, require_binding: bool) -> Result<String, String> {
     let started_at = Instant::now();
     logger::log_info(&format!(
         "[Kiro Switch] 开始切换账号: account_id={}",
@@ -214,6 +218,9 @@ pub async fn inject_kiro_to_vscode(app: AppHandle, account_id: String) -> Result
         None,
         Some(false),
     ) {
+        if require_binding {
+            return Err(err);
+        }
         logger::log_warn(&format!("更新 Kiro 默认实例绑定账号失败: {}", err));
     }
     crate::modules::provider_current_state::set_current_account_id(

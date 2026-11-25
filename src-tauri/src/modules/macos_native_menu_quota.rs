@@ -74,6 +74,7 @@
 
     /// Codex API Key / 模型供应商账号：展示剩余额度金额或数量，前缀固定为 API。
     fn build_codex_api_key_menu_bar_status(
+        lang: &str,
         account: &crate::models::codex::CodexAccount,
     ) -> MenuBarStatus {
         // 「API」是类型标签，不是邮箱前缀，不受「显示邮箱前 4 位」开关影响。
@@ -90,6 +91,13 @@
             .map(str::trim)
             .unwrap_or_default();
         let unit = json_path(Some(summary), &["unit"]).and_then(Value::as_str);
+        if mode == "token_plan" {
+            if let Some(status) =
+                build_codex_token_plan_menu_bar_status(lang, summary, prefix.clone())
+            {
+                return status;
+            }
+        }
         let has_new_api_fields = codex_api_key_usage_detail(summary, "totalGranted").is_some()
             || codex_api_key_usage_detail(summary, "totalAvailable").is_some()
             || codex_api_key_usage_detail(summary, "expiresAt").is_some();
@@ -202,7 +210,7 @@
         if matches!(platform, PlatformId::Codex) {
             if let Some(account) = modules::codex_account::get_current_account() {
                 if account.is_api_key_auth() {
-                    return Some(build_codex_api_key_menu_bar_status(&account));
+                    return Some(build_codex_api_key_menu_bar_status(&lang, &account));
                 }
             }
         }
@@ -243,6 +251,7 @@
     pub(crate) fn update_status_item<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
         let status = build_menu_bar_status();
         let enabled = status.is_some();
+        let stacked = modules::config::get_user_config().menu_bar_quota_layout == "stacked";
         let account_prefix_raw = status
             .as_ref()
             .map(|value| value.account_prefix.clone())
@@ -301,6 +310,7 @@
                         value_text.as_ptr(),
                         remaining_percent,
                         i32::from(enabled),
+                        i32::from(stacked),
                         status_item_ptr as *mut c_void,
                     );
                 }
@@ -974,6 +984,90 @@
             .unwrap_or_else(|| "-".to_string())
     }
 
+    fn codex_token_plan_window_data(summary: &Value) -> Vec<(&'static str, i32, Option<i64>)> {
+        [
+            ("5h", "intervalRemainingPercent", "intervalExpiresAt"),
+            ("Weekly", "weeklyRemainingPercent", "weeklyExpiresAt"),
+            ("Monthly", "monthlyRemainingPercent", "monthlyExpiresAt"),
+        ]
+        .into_iter()
+        .filter_map(|(label, percent_key, reset_key)| {
+            let percent = clamp_percent(codex_api_key_usage_detail_number(summary, percent_key)?);
+            let reset_at = codex_api_key_usage_detail(summary, reset_key)
+                .and_then(|item| item.get("value"))
+                .and_then(parse_timestamp_like);
+            Some((label, percent, reset_at))
+        })
+        .collect()
+    }
+
+    fn build_codex_token_plan_usage_rows(lang: &str, summary: &Value) -> Vec<QuotaRow> {
+        codex_token_plan_window_data(summary)
+            .into_iter()
+            .map(|(label, percent, reset_at)| {
+                let label = if label == "Monthly" {
+                    modules::i18n::translate(lang, "codex.localAccess.statsRange.monthly", &[])
+                } else {
+                    localize_codex_pool_window_label(lang, label)
+                };
+                make_progress_row(
+                    label,
+                    format!("{percent}%"),
+                    percent,
+                    format_reset_subtext(lang, reset_at),
+                    codex_remaining_tone(percent),
+                )
+            })
+            .collect()
+    }
+
+    fn build_codex_token_plan_menu_bar_status(
+        lang: &str,
+        summary: &Value,
+        account_prefix: String,
+    ) -> Option<MenuBarStatus> {
+        let windows = codex_token_plan_window_data(summary);
+        if windows.is_empty() {
+            return None;
+        }
+        let remaining_percent = windows.iter().map(|(_, percent, _)| *percent).min();
+        let value_text = codex_menu_bar_value(
+            lang,
+            windows.iter().map(|(label, percent, _)| (*label, *percent)),
+            remaining_percent,
+        );
+        Some(MenuBarStatus {
+            account_prefix,
+            value_text,
+            remaining_percent,
+        })
+    }
+
+    #[cfg(test)]
+    #[test]
+    fn token_plan_menu_rows_render_recorded_windows_and_reset_times() {
+        let summary = serde_json::json!({"details": [
+            {"key":"intervalRemainingPercent","value":"85"},
+            {"key":"intervalExpiresAt","value":1795000000},
+            {"key":"weeklyRemainingPercent","value":0},
+            {"key":"weeklyExpiresAt","value":"1795500000"},
+            {"key":"monthlyRemainingPercent","value":25}
+        ]});
+        let rows = build_codex_token_plan_usage_rows("en", &summary);
+        assert_eq!(rows.iter().map(|row| row.progress).collect::<Vec<_>>(), vec![Some(85), Some(0), Some(25)]);
+        assert_eq!(rows[0].label, "5h");
+        assert_eq!(rows[1].label, "Week");
+        assert!(rows[0].subtext.is_some() && rows[1].subtext.is_some());
+        assert!(rows[2].subtext.is_none());
+        let status = build_codex_token_plan_menu_bar_status("en", &summary, "API".to_string())
+            .expect("token_plan menu bar status");
+        assert_eq!(status.remaining_percent, Some(0));
+        assert!(status.value_text.contains("5h 85%") && status.value_text.contains("Week 0%"));
+        assert!(build_codex_token_plan_usage_rows("en", &serde_json::json!({
+            "details":[{"key":"weeklyRemaining","value":"42.0"}]
+        })).is_empty());
+    }
+
     fn build_codex_api_key_usage_rows(
         lang: &str,
         account: &crate::models::codex::CodexAccount,
@@ -993,6 +1087,12 @@
             .map(str::trim)
             .unwrap_or_default();
         let unit = json_path(Some(summary), &["unit"]).and_then(Value::as_str);
+        if mode == "token_plan" {
+            let rows = build_codex_token_plan_usage_rows(lang, summary);
+            if !rows.is_empty() {
+                return rows;
+            }
+        }
         let has_new_api_fields = codex_api_key_usage_detail(summary, "totalGranted").is_some()
             || codex_api_key_usage_detail(summary, "totalAvailable").is_some()
             || codex_api_key_usage_detail(summary, "expiresAt").is_some();

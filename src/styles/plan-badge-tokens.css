@@ -1,0 +1,44 @@
+/* Shared plan/tier badge tokens across all platforms */
+:root {
+  --plan-free-bg: rgba(148, 163, 184, 0.2);
+  --plan-free-color: var(--text-secondary);
+  --plan-free-border: rgba(148, 163, 184, 0.35);
+
+  --plan-individual-bg: rgba(16, 185, 129, 0.14);
+  --plan-individual-color: #047857;
+  --plan-individual-border: rgba(16, 185, 129, 0.3);
+
+  --plan-business-bg: rgba(59, 130, 246, 0.14);
+  --plan-business-color: #1d4ed8;
+  --plan-business-border: rgba(59, 130, 246, 0.28);
+
+  --plan-plus-bg: rgba(16, 185, 129, 0.15);
+  --plan-plus-color: #059669;
+  --plan-plus-border: rgba(16, 185, 129, 0.35);
+
+  --plan-team-bg: rgba(139, 92, 246, 0.15);
+  --plan-team-color: var(--text-purple);
+  --plan-team-border: rgba(139, 92, 246, 0.35);
+
+  --plan-enterprise-bg: rgba(245, 158, 11, 0.18);
+  --plan-enterprise-color: #b45309;
+  --plan-enterprise-border: rgba(245, 158, 11, 0.35);
+
+  /* Align with Antigravity account management style */
+  --plan-pro-bg: linear-gradient(135deg, #1d4ed8, #0ea5a5);
+  --plan-pro-color: #ffffff;
+  --plan-pro-border: rgba(255, 255, 255, 0.25);
+
+  /* Align with Antigravity account management style */
+  --plan-ultra-bg: linear-gradient(135deg, #f97316, #f59e0b);
+  --plan-ultra-color: #3f1d00;
+  --plan-ultra-border: rgba(249, 115, 22, 0.4);
+
+  --plan-trial-bg: rgba(168, 85, 247, 0.15);
+  --plan-trial-color: #7c3aed;
+  --plan-trial-border: rgba(168, 85, 247, 0.35);
+
+  --plan-unknown-bg: rgba(239, 68, 68, 0.16);
+  --plan-unknown-color: #b91c1c;
+  --plan-unknown-border: rgba(239, 68, 68, 0.35);
+}

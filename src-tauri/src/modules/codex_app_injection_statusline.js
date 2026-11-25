@@ -160,16 +160,6 @@
       if (host.children[index] !== node) host.insertBefore(node, host.children[index] || null);
     });
   }
-  function placeDetails(details, host) {
-    const anchor = host.getBoundingClientRect();
-    const width = Math.min(660, Math.max(0, window.innerWidth - 24));
-    details.style.width = width + 'px';
-    details.style.left = Math.max(12, Math.min(anchor.left + (anchor.width - width) / 2, window.innerWidth - width - 12)) + 'px';
-    usageDialog.fit(details);
-    const height = details.getBoundingClientRect().height;
-    // Keep the complete dialog inside the viewport, even when it must overlap the composer.
-    details.style.top = Math.max(12, Math.min(anchor.top - height - 8, window.innerHeight - height - 12)) + 'px';
-  }
   function setDetailsOpen(open, trigger, restoreFocus = true) {
     root.quotaDetailsOpen = open;
     if (trigger) root.lastTrigger = trigger;
@@ -389,7 +379,7 @@
         root.refreshing = true;
         root.render();
       };
-      placeDetails(details, host);
+      usageDialog.place(details, host);
     }
   }
   root.render = render;
@@ -446,26 +436,7 @@
     root.observer.observe(document.documentElement, {childList:true,subtree:true,characterData:true,attributes:true,
       attributeFilter:['class','style','hidden','aria-hidden','aria-expanded','data-state','data-fast-mode-enabled','data-dictation-view','data-above-composer-conversation-id','data-composer-placement','data-app-action-sidebar-thread-selected','data-app-action-sidebar-thread-id']});
   }
-  const styleText = `
-      [data-cockpit-quota-footer]{appearance:none;-webkit-appearance:none;position:fixed;transform:translate(-50%,-50%);z-index:2;display:flex;align-items:center;justify-content:center;gap:0;width:max-content;height:28px;box-sizing:border-box;font:inherit;font-size:12px;font-weight:500;line-height:17px;color:var(--color-token-text-secondary,#737373);background:var(--color-token-main-surface-primary,#fff);border:1px solid rgba(127,127,127,.12);border-radius:9px;padding:0 6px;margin:0;white-space:nowrap;pointer-events:auto;cursor:pointer;box-shadow:none}
-      [data-cockpit-quota-footer]::before{content:"";width:4px;height:4px;flex:0 0 4px;align-self:center;margin-inline:3px 4px;border-radius:50%;background:#8b7cdf;box-shadow:0 0 0 2px rgba(139,124,223,.10)}
-      [data-cockpit-quota-details] button{appearance:none;-webkit-appearance:none;font:inherit;font-weight:inherit;line-height:inherit;color:inherit;background:transparent;border:0;padding:0;margin:0;cursor:pointer}
-      [data-cockpit-quota-footer] [data-cockpit-quota-metric]{display:inline-flex;align-items:baseline;justify-content:center;gap:4px;box-sizing:border-box;border:0;border-radius:0;padding:0 5px;background:transparent;color:var(--color-token-text-primary,inherit);box-shadow:none;font-variant-numeric:tabular-nums}
-      [data-cockpit-quota-footer] [data-cockpit-metric-label]{font-size:11px;font-weight:400;color:var(--color-token-text-secondary,#737373)}
-      [data-cockpit-quota-footer] [data-cockpit-metric-value]{font-size:12px;font-weight:500}
-      [data-cockpit-quota-footer] [data-cockpit-metric-unit]{font-size:10px;font-weight:400;color:var(--color-token-text-secondary,#737373)}
-      [data-cockpit-quota-footer] [data-cockpit-metric-key="speed"]{border-inline-start:1px solid rgba(127,127,127,.18);margin-inline-start:3px;padding-inline-start:8px}
-      [data-cockpit-quota-footer] [data-cockpit-metric-key="speed"] [data-cockpit-metric-value],[data-cockpit-quota-footer] [data-cockpit-metric-icon]{color:#3f729f;color:color-mix(in srgb,var(--color-token-text-primary,#202123) 30%,#5594c7)}
-      [data-cockpit-quota-footer] [data-cockpit-metric-icon]{display:inline-block;width:10px;font-size:11px;font-weight:500;text-align:center}
-      [data-cockpit-quota-footer] [data-cockpit-quota-tone="high"] [data-cockpit-metric-value]{color:var(--cockpit-quota-high)}
-      [data-cockpit-quota-footer] [data-cockpit-quota-tone="medium"] [data-cockpit-metric-value]{color:var(--cockpit-quota-medium)}
-      [data-cockpit-quota-footer] [data-cockpit-quota-tone="low"] [data-cockpit-metric-value]{color:var(--cockpit-quota-low)}
-      [data-cockpit-quota-footer] [data-cockpit-quota-tone="critical"] [data-cockpit-metric-value]{color:var(--cockpit-quota-critical)}
-      [data-cockpit-quota-footer] [data-cockpit-metric-unknown] [data-cockpit-metric-value],[data-cockpit-quota-footer] [data-cockpit-metric-unknown] [data-cockpit-metric-icon]{color:var(--color-token-text-secondary,#737373);font-weight:400}
-      [data-cockpit-quota-footer]:hover{background:var(--color-token-main-surface-secondary,#fafafa)}
-      [data-cockpit-quota-footer]:disabled{opacity:.5;cursor:default}
-      [data-cockpit-quota-footer]:focus-visible{outline:2px solid var(--color-token-text-primary,currentColor);outline-offset:2px}
-    ` + dialogStyles;
+  const styleText = footerStyles + dialogStyles;
   let style = document.querySelector('[data-cockpit-quota-style]');
   if (!style) {
     style = document.createElement('style');

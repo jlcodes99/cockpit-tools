@@ -1,7 +1,7 @@
 {
   "name": "cockpit-tools",
   "private": true,
-  "version": "1.4.2",
+  "version": "1.5.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -54,7 +54,7 @@
     "zustand": "^5.0.10"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "2.10.1",
+    "@tauri-apps/cli": "2.12.6",
     "@types/blueimp-md5": "^2.18.2",
     "@types/otplib": "^7.0.0",
     "@types/react": "^19.1.8",

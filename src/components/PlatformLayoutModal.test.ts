@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { loadHookModule } from '../../tests/helpers/reactHookHarness';
-import { SIDEBAR_ENTRY_LIMITS, type SideNavLayoutMode } from '../stores/useSideNavLayoutStore';
 
 const PLATFORM_IDS = [
   'codex',
@@ -16,6 +15,7 @@ const PLATFORM_IDS = [
   'codebuddy_cn',
   'qoder',
   'zcode',
+  't3code',
   'trae',
   'trae_solo',
   'trae_cn',
@@ -93,7 +93,7 @@ function findCheckboxes(tree: any) {
   return checkboxes;
 }
 
-function renderLayoutModal(mode: SideNavLayoutMode, sidebarEntryIds: string[]) {
+function renderLayoutModal(sidebarEntryIds: string[]) {
   const orderedEntryIds = [
     GROUP_ENTRY_ID,
     ...PLATFORM_IDS.filter((id) => !GROUP_PLATFORM_IDS.includes(id)).map((id) => `platform:${id}`),
@@ -139,8 +139,12 @@ function renderLayoutModal(mode: SideNavLayoutMode, sidebarEntryIds: string[]) {
     resetPlatformLayout() {},
   };
 
-  const t = (key: string, options?: { count?: number; max?: number }) =>
-    options?.count === undefined ? key : `${key}(${options.count}/${options.max})`;
+  const t = (key: string, options?: { count?: number; max?: number }) => {
+    if (options?.count === undefined) return key;
+    return options.max === undefined
+      ? `${key}(${options.count})`
+      : `${key}(${options.count}/${options.max})`;
+  };
 
   const parsePlatformEntryId = (entryId: string) =>
     entryId.startsWith('platform:') ? entryId.slice('platform:'.length) : null;
@@ -174,10 +178,6 @@ function renderLayoutModal(mode: SideNavLayoutMode, sidebarEntryIds: string[]) {
     '../stores/useSponsorStore': {
       useSponsorStore: (selector: (state: any) => unknown) =>
         selector({ state: { sponsorModule: true } }),
-    },
-    '../stores/useSideNavLayoutStore': {
-      SIDEBAR_ENTRY_LIMITS,
-      useSideNavLayoutStore: (selector: (state: { mode: SideNavLayoutMode }) => unknown) => selector({ mode }),
     },
     '../stores/usePlatformLayoutStore': {
       API_RELAY_LAYOUT_ENTRY_ID: API_RELAY_ENTRY_ID,
@@ -224,54 +224,57 @@ function sidebarCheckboxes(tree: any) {
   return findCheckboxes(tree).filter((item) => item.labelText === 'platformLayout.sidebarToggle');
 }
 
-for (const [mode, limit] of [['classic', 6], ['original', 3]] as const) {
-  test(`${mode} sidebar bulk selection fills ${limit} slots, counting group shortcuts and relay`, () => {
-    const { h, tree, events, orderedEntryIds, storeState } = renderLayoutModal(mode, [GROUP_ENTRY_ID]);
-    const [bulkCheckbox] = sidebarCheckboxes(tree);
-    assert.equal(bulkCheckbox.inBulkHeader, true);
-    assert.equal(bulkCheckbox.element.props.checked, false);
-    assert.match(elementText(tree), new RegExp(`sidebarSelected\\(1/${limit}\\)`));
+test('sidebar bulk selection enables every entry past the former 3 / 6 caps', () => {
+  const { h, tree, events, orderedEntryIds, storeState } = renderLayoutModal([GROUP_ENTRY_ID]);
+  const [bulkCheckbox] = sidebarCheckboxes(tree);
+  assert.equal(bulkCheckbox.inBulkHeader, true);
+  assert.equal(bulkCheckbox.element.props.checked, false);
+  assert.match(elementText(tree), /sidebarSelectedUnlimited\(1\)/);
+  assert.doesNotMatch(elementText(tree), /\d+\/\d+/, 'summary must not render count/max any more');
 
-    bulkCheckbox.element.props.onChange();
-    const expectedEvents = [
-      ...orderedEntryIds.slice(0, API_RELAY_ORDER).map((id) => ['sidebar', id, true]),
-      ['apiRelay', true],
-      ...orderedEntryIds.slice(API_RELAY_ORDER).map((id) => ['sidebar', id, true]),
-    ].filter((event) => event[1] !== GROUP_ENTRY_ID).slice(0, limit - 1);
-    assert.deepEqual(events, expectedEvents);
-    assert.ok(storeState.sidebarEntryIds.includes(GROUP_ENTRY_ID));
+  bulkCheckbox.element.props.onChange();
+  const expectedEvents = [
+    ...orderedEntryIds.slice(0, API_RELAY_ORDER).map((id) => ['sidebar', id, true]),
+    ['apiRelay', true],
+    ...orderedEntryIds.slice(API_RELAY_ORDER).map((id) => ['sidebar', id, true]),
+  ].filter((event) => event[1] !== GROUP_ENTRY_ID);
+  assert.deepEqual(events, expectedEvents);
+  assert.ok(events.length > 6, 'the former caps (original 3 / classic 6) must not truncate the sweep');
+  assert.ok(storeState.sidebarEntryIds.includes(GROUP_ENTRY_ID));
 
-    const fullTree = h.flush();
-    const expandGroup = (element: any) => {
-      if (element.type === 'button' && element.props.className === 'platform-layout-expand-trigger' && !element.props.disabled) {
-        element.props.onClick({ stopPropagation() {} });
-      }
-    };
-    walkTree(fullTree, expandGroup);
-    const expandedTree = h.flush();
-    const [checkedBulk, group, ...platforms] = sidebarCheckboxes(expandedTree);
-    assert.equal(checkedBulk.element.props.checked, true);
-    assert.match(elementText(expandedTree), new RegExp(`sidebarSelected\\(${limit}/${limit}\\)`));
-    assert.equal(group.element.props.disabled, false);
-    assert.equal(platforms.length, orderedEntryIds.length + GROUP_PLATFORM_IDS.length);
-    assert.ok(platforms.some(({ element }) => element.props.disabled));
+  const fullTree = h.flush();
+  const expandGroup = (element: any) => {
+    if (element.type === 'button' && element.props.className === 'platform-layout-expand-trigger' && !element.props.disabled) {
+      element.props.onClick({ stopPropagation() {} });
+    }
+  };
+  walkTree(fullTree, expandGroup);
+  const expandedTree = h.flush();
+  const [checkedBulk, group, ...platforms] = sidebarCheckboxes(expandedTree);
+  assert.equal(checkedBulk.element.props.checked, true);
+  assert.match(elementText(expandedTree), /sidebarSelectedUnlimited\(\d+\)/);
+  assert.doesNotMatch(elementText(expandedTree), /\d+\/\d+/);
+  assert.equal(group.element.props.checked, true);
+  assert.equal(platforms.length, orderedEntryIds.length + GROUP_PLATFORM_IDS.length);
+  // No entry is capped by the selection count any more, so nothing gets disabled.
+  assert.ok(platforms.every(({ element }) => !element.props.disabled));
+  assert.equal(group.element.props.disabled, undefined);
 
-    const [fullBulk] = sidebarCheckboxes(h.flush());
-    fullBulk.element.props.onChange();
-    assert.deepEqual(storeState.sidebarEntryIds, []);
-    assert.equal(storeState.apiRelaySidebarVisible, false);
-    h.unmount();
-  });
-}
+  const [fullBulk] = sidebarCheckboxes(h.flush());
+  fullBulk.element.props.onChange();
+  assert.deepEqual(storeState.sidebarEntryIds, []);
+  assert.equal(storeState.apiRelaySidebarVisible, false);
+  h.unmount();
+});
 
-test('saved selections over the current limit can still be removed', () => {
+test('saved selections beyond the former caps stay removable', () => {
   const previouslySelected = PLATFORM_IDS.slice(0, 7).map((id) => `platform:${id}`);
-  const { h, tree, storeState } = renderLayoutModal('classic', previouslySelected);
+  const { h, tree, storeState } = renderLayoutModal(previouslySelected);
+  assert.match(elementText(tree), /sidebarSelectedUnlimited\(7\)/);
   const [, ...rows] = sidebarCheckboxes(tree);
   const selectedRow = rows.find(({ element }) => element.props.checked);
   assert.ok(selectedRow);
-  assert.equal(selectedRow.element.props.disabled, false);
-  assert.ok(rows.every(({ element }) => element.props.checked || element.props.disabled));
+  assert.ok(rows.every(({ element }) => !element.props.disabled));
   selectedRow.element.props.onChange({ target: { checked: false } });
   assert.equal(storeState.sidebarEntryIds.length, 6);
   h.unmount();

@@ -62,7 +62,18 @@ impl Account {
         self.last_used = chrono::Utc::now().timestamp();
     }
 
-    pub fn update_quota(&mut self, quota: QuotaData) {
+    pub fn update_quota(&mut self, mut quota: QuotaData) {
+        let is_known_tier = |tier: &String| {
+            let tier = tier.trim();
+            !tier.is_empty() && !tier.eq_ignore_ascii_case("unknown")
+        };
+        quota.subscription_tier = quota.subscription_tier.filter(is_known_tier).or_else(|| {
+            self.quota
+                .as_ref()?
+                .subscription_tier
+                .clone()
+                .filter(is_known_tier)
+        });
         self.quota = Some(quota);
     }
 

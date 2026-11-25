@@ -42,7 +42,11 @@ fn opencode_go_catalog_upgrade_adds_vision_once_and_respects_explicit_settings()
                 .filter(|model| model.model_id != "gpt-6.1-terra"
                     && !crate::modules::codex_model_catalog::GPT_6_2_MODELS.contains(&model.model_id.as_str()))
                 .collect::<Vec<_>>();
-            previous[0].context_window = Some(800_000);
+            previous
+                .iter_mut()
+                .find(|model| model.model_id == "gpt-6.1-sol")
+                .unwrap()
+                .context_window = Some(800_000);
             let old_config = serde_json::json!({
                 "version": super::EXPERIMENTAL_MODEL_CATALOG_CONFIG_VERSION,
                 "models": previous,
@@ -54,7 +58,12 @@ fn opencode_go_catalog_upgrade_adds_vision_once_and_respects_explicit_settings()
             fs::write(&path, serde_json::to_vec(&old_config).unwrap()).unwrap();
             let upgraded = super::read_experimental_model_definitions(&dir);
             assert_eq!(upgraded.iter().filter(|model| model.model_id == "gpt-6.1-terra").count(), 1);
-            assert_eq!(upgraded[0].model_id, "gpt-6.2-sol");
+            for model_id in crate::modules::codex_model_catalog::GPT_6_2_MODELS {
+                assert_eq!(
+                    upgraded.iter().filter(|model| model.model_id == *model_id).count(),
+                    1
+                );
+            }
             assert_eq!(upgraded.iter().find(|model| model.model_id == "gpt-6.1-sol").unwrap().context_window, Some(800_000));
             let old_ids = previous.iter().map(|model| model.model_id.clone()).collect::<Vec<_>>();
             let catalog_path = super::experimental_model_catalog_path(&dir);
@@ -2707,4 +2716,63 @@ multi_agent = true
             .parse::<toml_edit::Document>().unwrap();
         super::apply_experimental_model_catalog_to_doc(dir.path(), &mut doc, Some(false)).unwrap();
         assert!(doc.get("model_catalog_json").is_none());
+    }
+
+    #[test]
+    fn local_access_runtime_provider_declares_standalone_web_search() {
+        let base_dir = make_temp_dir("codex-local-access-web-search");
+        let config_path = base_dir.join("config.toml");
+        let provider_config = resolve_api_provider_config(
+            Some("http://127.0.0.1:49199/v1"),
+            Some(CodexApiProviderMode::Custom),
+            Some(CODEX_RUNTIME_MODEL_PROVIDER_ID),
+            Some("Codex API Service"),
+        )
+        .expect("resolve local access provider config");
+
+        write_api_key_bearer_provider_override_to_config_toml(
+            &base_dir,
+            &provider_config,
+            "sk-fixture",
+            false,
+            false,
+            true,
+            "responses",
+        )
+        .expect("write config");
+
+        let content = fs::read_to_string(&config_path).expect("read config");
+        assert!(content.contains("supports_standalone_web_search = true"));
+    }
+
+    #[test]
+    fn custom_remote_provider_does_not_declare_standalone_web_search() {
+        let base_dir = tempfile::tempdir().unwrap();
+        let config_path = base_dir.path().join("config.toml");
+        fs::write(
+            &config_path,
+            "[model_providers.codex_local_access]\nbase_url = \"http://127.0.0.1:49199/v1\"\nsupports_standalone_web_search = true\n",
+        )
+        .unwrap();
+        let provider_config = resolve_api_provider_config(
+            Some("https://relay.example.com/v1"),
+            Some(CodexApiProviderMode::Custom),
+            Some("relay"),
+            Some("Relay"),
+        )
+        .expect("resolve custom provider config");
+
+        write_api_key_bearer_provider_override_to_config_toml(
+            base_dir.path(),
+            &provider_config,
+            "sk-fixture",
+            false,
+            false,
+            true,
+            "responses",
+        )
+        .expect("write config");
+
+        let content = fs::read_to_string(&config_path).expect("read config");
+        assert!(!content.contains("supports_standalone_web_search"));
     }

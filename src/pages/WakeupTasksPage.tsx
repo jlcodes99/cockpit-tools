@@ -40,6 +40,7 @@ import { useEscClose } from '../hooks/useEscClose';
 import { OverviewTabsHeader } from '../components/OverviewTabsHeader';
 import { useAntigravityRuntimeTarget } from '../hooks/useAntigravityRuntimeTarget';
 import {
+  getDefaultWakeupTransportMode,
   loadAntigravityWakeupState,
   saveAntigravityWakeupState,
   WAKEUP_TASKS_UPDATED,
@@ -663,7 +664,8 @@ export function WakeupTasksPage({ onNavigate }: WakeupPageProps) {
   const [formIntervalStart, setFormIntervalStart] = useState('07:00');
   const [formIntervalEnd, setFormIntervalEnd] = useState('22:00');
   const [formSelectedModels, setFormSelectedModels] = useState<string[]>([]);
-  const [formTransportMode, setFormTransportMode] = useState<WakeupTransportMode>('language_server');
+  const [defaultTransportMode, setDefaultTransportMode] = useState<WakeupTransportMode>();
+  const [formTransportMode, setFormTransportMode] = useState<WakeupTransportMode>();
   const [formSelectedAccounts, setFormSelectedAccounts] = useState<string[]>([]);
   const [formCustomPrompt, setFormCustomPrompt] = useState('');
   const [formMaxOutputTokens, setFormMaxOutputTokens] = useState(0);
@@ -690,7 +692,7 @@ export function WakeupTasksPage({ onNavigate }: WakeupPageProps) {
   const [customWeeklyTime, setCustomWeeklyTime] = useState('');
   const [customFallbackTime, setCustomFallbackTime] = useState('');
   const [testSelectedModels, setTestSelectedModels] = useState<string[]>([]);
-  const [testTransportMode, setTestTransportMode] = useState<WakeupTransportMode>('language_server');
+  const [testTransportMode, setTestTransportMode] = useState<WakeupTransportMode>();
   const [testSelectedAccounts, setTestSelectedAccounts] = useState<string[]>([]);
   const [testCustomPrompt, setTestCustomPrompt] = useState('');
   const [testMaxOutputTokens, setTestMaxOutputTokens] = useState(0);
@@ -705,6 +707,17 @@ export function WakeupTasksPage({ onNavigate }: WakeupPageProps) {
   const [formGroupFilter, setFormGroupFilter] = useState<string[]>([]);
 
   const tasksRef = useRef(tasks);
+
+  useEffect(() => {
+    let active = true;
+    // The lookup controls the displayed selection only. Unset modes are resolved by Rust.
+    void getDefaultWakeupTransportMode().then((mode) => {
+      if (active) setDefaultTransportMode(mode);
+    }).catch((error: unknown) => {
+      console.warn('[WakeupTasks] Default transport lookup failed:', error);
+    });
+    return () => { active = false; };
+  }, []);
 
   const applyRules = useCallback((loaded: AntigravityWakeupState) => {
     const current = rulesRef.current;
@@ -1538,7 +1551,7 @@ export function WakeupTasksPage({ onNavigate }: WakeupPageProps) {
   };
 
   const openCreateModal = () => {
-    setFormTransportMode('language_server');
+    setFormTransportMode(undefined);
     setEditingTaskId(null);
     setFormName(t('wakeup.newTaskName'));
     setFormEnabled(true);
@@ -1580,7 +1593,7 @@ export function WakeupTasksPage({ onNavigate }: WakeupPageProps) {
     const schedule = normalizeSchedule({ ...DEFAULT_SCHEDULE, ...task.schedule });
     const triggerMode = getTriggerMode(task);
 
-    setFormTransportMode(schedule.transportMode ?? 'language_server');
+    setFormTransportMode(schedule.transportMode);
     setEditingTaskId(task.id);
     setFormName(task.name);
     setFormEnabled(task.enabled);
@@ -2064,7 +2077,7 @@ export function WakeupTasksPage({ onNavigate }: WakeupPageProps) {
   };
 
   const renderWakeupTransport = (
-    mode: WakeupTransportMode,
+    mode: WakeupTransportMode | undefined,
     setMode: (mode: WakeupTransportMode) => void,
     disabled: boolean,
   ) => (
@@ -2094,7 +2107,7 @@ export function WakeupTasksPage({ onNavigate }: WakeupPageProps) {
   );
 
   const openTestModal = () => {
-    setTestTransportMode('language_server');
+    setTestTransportMode(undefined);
     setTestAccountSearchQuery('');
     setTestTypeFilter([]);
     setTestTagFilter([]);
@@ -2343,7 +2356,7 @@ export function WakeupTasksPage({ onNavigate }: WakeupPageProps) {
               </button>
             </div>
             <div className="modal-body">
-              {renderWakeupTransport(testTransportMode, (mode) => {
+              {renderWakeupTransport(testTransportMode ?? defaultTransportMode, (mode) => {
                 clearTestModalError();
                 setTestTransportMode(mode);
               }, testing)}
@@ -2627,7 +2640,7 @@ export function WakeupTasksPage({ onNavigate }: WakeupPageProps) {
               </button>
             </div>
             <div className="modal-body">
-              {renderWakeupTransport(formTransportMode, (mode) => {
+              {renderWakeupTransport(formTransportMode ?? defaultTransportMode, (mode) => {
                 clearFormError();
                 setFormTransportMode(mode);
               }, savingTask)}

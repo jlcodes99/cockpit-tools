@@ -12,6 +12,7 @@ pub mod minimax_code;
 pub mod qoder;
 pub mod quota;
 pub mod ssh_server;
+pub mod t3code;
 pub mod token;
 pub mod trae;
 pub mod windsurf;

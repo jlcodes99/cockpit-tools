@@ -91,7 +91,7 @@ impl PoolPoller {
     }
 }
 
-fn read_count(data_dir: &Path, gateway: &ProfileGatewayConfig) -> Option<i64> {
+pub(super) fn read_count(data_dir: &Path, gateway: &ProfileGatewayConfig) -> Option<i64> {
     let url = reqwest::Url::parse(&gateway.base_url).ok()?;
     if !matches!(url.scheme(), "http" | "https")
         || !url.username().is_empty()

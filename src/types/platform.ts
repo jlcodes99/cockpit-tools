@@ -16,6 +16,7 @@ export type PlatformId =
   | 'codebuddy_cn'
   | 'qoder'
   | 'zcode'
+  | 't3code'
   | 'trae'
   | 'trae_solo'
   | 'trae_cn'
@@ -30,6 +31,7 @@ export const ALL_PLATFORM_IDS: PlatformId[] = [
   'codex_api_service',
   'antigravity',
   'antigravity_ide',
+  't3code',
   'zed',
   'github-copilot',
   'windsurf',
@@ -82,6 +84,7 @@ export const PLATFORM_PAGE_MAP: Record<PlatformId, Page> = {
   codebuddy_cn: 'codebuddy-cn',
   qoder: 'qoder',
   zcode: 'zcode',
+  t3code: 't3code',
   trae: 'trae',
   trae_solo: 'trae-solo',
   trae_cn: 'trae-cn',

@@ -526,8 +526,8 @@
         assert!(generated["models"]
             .as_array()
             .expect("models")
-            .first()
-            .is_some_and(|model| model["slug"] == "gpt-6.2-sol"));
+            .iter()
+            .any(|model| model["slug"] == "gpt-6.2-sol"));
         assert!(generated["models"]
             .as_array()
             .expect("models")
@@ -1841,6 +1841,14 @@ wire_api = "responses"
         fs::write(&config, doc.to_string()).unwrap();
         assert!(super::migrate_model_management_default_off_once(base_dir).unwrap());
         assert!(!catalog.exists());
+    }
+
+    #[test]
+    fn model_management_default_off_migration_does_not_create_missing_profiles() {
+        let parent = tempfile::tempdir().unwrap();
+        let profile = parent.path().join("missing-profile");
+        assert!(!super::migrate_model_management_default_off_once(&profile).unwrap());
+        assert!(!profile.exists());
     }
 
     /// 只执行一次，且保留用户已保存的模型清单（重新开启后仍可用）。

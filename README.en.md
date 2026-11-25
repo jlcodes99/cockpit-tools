@@ -15,6 +15,8 @@ A **universal AI IDE account management tool**, currently supporting **Antigravi
 
 **WorkBuddy AI** (macOS and Windows) supports browser sign-in, import from the desktop app or JSON, credit balance, and desktop account switching.
 
+**T3 Code** offers one overview for linked provider accounts. Add, remove, or set a default account and check its subscription and available quota. When T3 Code is running, the composer can show the current account's quota.
+
 **Languages**: Supports 18 languages
 
 🇺🇸 English · 🇨🇳 简体中文 · 繁體中文 · 🇯🇵 日本語 · 🇩🇪 Deutsch · 🇪🇸 Español · 🇫🇷 Français · 🇮🇹 Italiano · 🇰🇷 한국어 · 🇧🇷 Português · 🇷🇺 Русский · 🇹🇷 Türkçe · 🇵🇱 Polski · 🇨🇿 Čeština · 🇸🇦 العربية · 🇻🇳 Tiếng Việt · 🇮🇩 Bahasa Indonesia
@@ -474,17 +476,32 @@ cargo run --locked --package cockpit-cli -- switch codex "your-account-id" --jso
 cargo run --locked --package cockpit-cli -- switch cursor "your-account-id" --json
 ```
 
+#### Account automation
+
+Run these commands as the same user on the machine running a Cockpit Tools desktop app with a matching automation protocol version. If you use a development profile or custom data directory, point the CLI at that same configuration. The Codex API Service can stay off.
+
+```bash
+cockpit-cli account platforms --json
+cockpit-cli account list codex --json
+cockpit-cli account quota codex "account-id" --json
+cockpit-cli account quota codex "account-id" --refresh --json
+cockpit-cli account switch cursor "account-id" --json
+cockpit-cli api-service members --json
+cockpit-cli api-service add "codex-account-id" --json
+cockpit-cli api-service remove "service-member-account-id" --json
+```
+
+- `account platforms` lists all platform IDs. `account list` returns account IDs, display details, original plan names, and tags. Use an exact account ID from the selected platform for quota and switching.
+- `account quota` reads saved quota data. Use `--refresh` for accounts that support live refresh. The response has a `quota.status` of `available`, `stale`, `failed`, or `unavailable`. The fields in `quota.data` depend on the platform.
+- `account switch` runs the platform's default-client switch, which may start or restart that client. For Codex and Antigravity Desktop, the automation command applies credentials without launching. Grok returns `account_profile_prepared` when it prepares an isolated account directory. Check `warnings` or the error code for issues with follow-up operations.
+- `api-service members` returns the global member list with member and source IDs, routing mode, and paused status. `add` adds saved Codex accounts under the existing local access rules and reports added IDs and skip reasons. `remove` takes the member's `accountId`, reports the IDs it removed, and keeps the saved accounts.
+- The new commands write JSON to stdout. Use `--json` for compact, single-line output. Failures use a nonzero exit code and stderr. The original top-level `list` and `switch` retain their existing standalone platform support.
+
 ---
 
 ## Star History
 
 [![Star History Chart](https://api.star-history.com/svg?repos=jlcodes99/cockpit-tools&type=Date)](https://star-history.com/#jlcodes99/cockpit-tools&Date)
-
----
-
-## Community
-
-Newly created Telegram chat group: [Join the group](https://t.me/+Y8gMv4SlZUU2MWY1)
 
 ---
 

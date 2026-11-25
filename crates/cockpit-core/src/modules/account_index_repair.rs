@@ -2,7 +2,7 @@ use chrono::Utc;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-fn collect_account_file_ids(accounts_dir: &Path) -> Result<Vec<String>, String> {
+pub(super) fn collect_account_file_ids(accounts_dir: &Path) -> Result<Vec<String>, String> {
     let entries = fs::read_dir(accounts_dir).map_err(|e| {
         format!(
             "读取账号详情目录失败: path={}, error={}",

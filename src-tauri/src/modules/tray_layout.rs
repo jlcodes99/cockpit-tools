@@ -457,6 +457,8 @@ pub fn is_platform_enabled(platform_id: &str) -> bool {
     let normalize = |id: &str| match id.trim() {
         "antigravity_ide" => Some("antigravity_ide"),
         "codex_api_service" => Some("codex_api_service"),
+        "workbuddy_ai" => Some("workbuddy_ai"),
+        "t3code" => Some("t3code"),
         "claude" => Some(PLATFORM_CLAUDE_MANAGER),
         "github_copilot" => Some(PLATFORM_GITHUB_COPILOT),
         id => normalize_platform_id(id),

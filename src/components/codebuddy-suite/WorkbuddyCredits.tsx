@@ -21,6 +21,7 @@ import {
 } from '../../utils/workbuddyCredits';
 import { parseDateTimeToEpoch, parseNumeric } from '../../utils/codebuddy-suite/parser';
 import { ModalErrorMessage } from '../ModalErrorMessage';
+import { WorkbuddyExpiringCreditsBadge } from './WorkbuddyExpiringCreditsBadge';
 
 type Credits = ReturnType<typeof getWorkbuddyCredits>;
 const groupKey = (kind: WorkbuddyCreditGroup) => `workbuddy.credits.${kind}` as const;
@@ -37,12 +38,14 @@ function useCreditFormat() {
 
 export function WorkbuddyCreditsSummary({
   credits,
+  account,
   onGroup,
   onDetails,
   international = false,
   showBreakdown = false,
 }: {
   credits: Credits;
+  account?: WorkbuddyAccount;
   onDetails?: () => void;
   international?: boolean;
   showBreakdown?: boolean;
@@ -53,17 +56,31 @@ export function WorkbuddyCreditsSummary({
   return (
     <div className={`workbuddy-credits-summary${onDetails ? ' workbuddy-credits-compact' : ''}`}>
       {credits.left != null && (
-        <div className="workbuddy-credit-balance">
-          <div className="workbuddy-credit-balance-value">
-            <span>{t('workbuddy.credits.total')}</span>
-            <strong>{number.format(credits.left)}</strong>
+        <>
+          <div className="workbuddy-credit-balance">
+            <div className="workbuddy-credit-balance-value">
+              <span>{t('workbuddy.credits.total')}</span>
+              <div className="workbuddy-credit-balance-amount">
+                <strong>{number.format(credits.left)}</strong>
+                {account && (
+                  <WorkbuddyExpiringCreditsBadge
+                    account={account}
+                    international={international}
+                    onClick={onDetails}
+                  />
+                )}
+              </div>
+            </div>
           </div>
+          {/* 明细入口固定在数字下一行：数字右侧留给后续扩展，且不受到期标签宽度影响 */}
           {onDetails && (
-            <button type="button" className="btn btn-sm workbuddy-credit-link" onClick={onDetails}>
-              {t('workbuddy.credits.details')} <ChevronRight size={13} aria-hidden="true" />
-            </button>
+            <div className="workbuddy-credit-details-row">
+              <button type="button" className="btn btn-sm workbuddy-credit-link" onClick={onDetails}>
+                {t('workbuddy.credits.details')} <ChevronRight size={13} aria-hidden="true" />
+              </button>
+            </div>
           )}
-        </div>
+        </>
       )}
       {showBreakdown && credits.left != null && (
         <div className="workbuddy-credit-muted workbuddy-credit-breakdown">

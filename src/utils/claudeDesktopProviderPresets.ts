@@ -757,6 +757,51 @@ export const CLAUDE_DESKTOP_GATEWAY_PROVIDER_PRESETS: readonly ClaudeDesktopGate
     apiKeyUrl: 'https://code.pipellm.ai/login?ref=uvw650za',
     modelMappings: directRoutes(),
   },
+  {
+    id: 'aigrow',
+    name: 'AIGROW',
+    baseUrls: ['https://aigrow.gg'],
+    authScheme: 'bearer',
+    connectionMode: 'local_mapping',
+    website: 'https://aigrow.gg/ai-api',
+    apiKeyUrl: 'https://aigrow.gg/dashboard/api',
+    modelMappings: roleMappedRoutes(
+      'claude-sonnet-5.5',
+      'claude-opus-5.5',
+      'claude-haiku-5.5',
+      { supports1m: true },
+    ),
+  },
+  {
+    id: 'lazu',
+    name: 'Lazu',
+    baseUrls: ['https://api.lazu.ai'],
+    authScheme: 'bearer',
+    connectionMode: 'local_mapping',
+    website: 'https://lazu.ai',
+    apiKeyUrl: 'https://lazu.ai/console/token',
+    modelMappings: roleMappedRoutes(
+      'claude-sonnet-5-5',
+      'claude-opus-5-5',
+      'claude-haiku-5-5',
+      { supports1m: true },
+    ),
+  },
+  {
+    id: 'worldrouter',
+    name: 'WorldRouter',
+    baseUrls: ['https://inference-api.worldrouter.ai'],
+    authScheme: 'bearer',
+    connectionMode: 'local_mapping',
+    website: 'https://www.worldrouter.ai',
+    apiKeyUrl: 'https://www.worldrouter.ai/dashboard/api-keys',
+    modelMappings: roleMappedRoutes(
+      'claude-sonnet-5-5',
+      'claude-opus-5-5',
+      'claude-haiku-5-5',
+      { supports1m: true },
+    ),
+  },
 ];
 
 export function getDefaultClaudeDesktopGatewayProviderPresetId(): string {

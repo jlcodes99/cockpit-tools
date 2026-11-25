@@ -18,6 +18,7 @@ pub mod codex_proxy_engine;
 pub mod codex_unified_proxy;
 pub mod codex_pelican;
 pub mod codex_instance;
+pub mod codex_session_usage;
 mod codex_instance_app_exit;
 pub(crate) mod codex_instance_gateway_watchdog;
 mod codex_instance_gateway_watchdog_state;
@@ -45,6 +46,8 @@ pub mod qoder_instance;
 pub mod remote_config;
 pub mod ssh_server;
 pub mod system;
+pub mod t3code;
+pub mod t3code_instance;
 pub mod trae;
 pub mod trae_instance;
 pub mod update;
@@ -66,3 +69,5 @@ pub mod codex_client_proxy;
 pub mod codex_capability_fallback;
 
 pub mod codex_multi_agent;
+
+pub mod codex_proxy_country;

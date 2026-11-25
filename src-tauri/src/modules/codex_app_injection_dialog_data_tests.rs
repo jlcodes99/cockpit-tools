@@ -578,13 +578,15 @@ fn display_name_matches_api_service_name_and_preserves_actual_attempt_account() 
 }
 
 #[test]
-fn missing_names_use_logged_email_but_never_generated_identifiers() {
+fn missing_names_use_logged_email_or_a_stable_opaque_account_reference() {
     let dir = display_fixture_dir();
     let mut output = json!({"requests":{"rows":[
         {"accountId":"codex_old","accountEmail":"person@example.test"},
         {"accountId":"codex_apikey_old","accountEmail":"api-key-1234ABCD"},
         {"accountId":"codex_internal","accountEmail":"codex_internal"},
-        {"accountId":"chatgpt_plan_missing","accountEmail":null}
+        {"accountId":"chatgpt_plan_missing","accountEmail":null},
+        {"accountId":"codex_apikey_old","accountEmail":null},
+        {"accountId":"","accountEmail":null}
     ]}});
     enrich_account_display_names(&dir, &mut output);
     assert_eq!(
@@ -599,6 +601,14 @@ fn missing_names_use_logged_email_but_never_generated_identifiers() {
     {
         assert!(row["accountDisplayName"].is_null());
     }
+    let rows = output["requests"]["rows"].as_array().unwrap();
+    let reference = rows[1]["accountReference"].as_str().unwrap();
+    assert_eq!(reference.len(), 8);
+    assert!(reference.bytes().all(|byte| byte.is_ascii_hexdigit()));
+    assert_eq!(rows[4]["accountReference"], reference);
+    assert_ne!(rows[2]["accountReference"], reference);
+    assert!(rows[0]["accountReference"].is_null());
+    assert!(rows[5]["accountReference"].is_null());
     std::fs::remove_dir_all(dir).unwrap();
 }
 

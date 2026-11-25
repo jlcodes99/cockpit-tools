@@ -1,4 +1,4 @@
-import { isLaunchPathApp, readMissingLaunchPathApp } from '../utils/appLaunchPath';
+import { isLaunchPathApp, readInvalidWorkbuddyPath, readMissingLaunchPathApp } from '../utils/appLaunchPath';
 import { useDurableUiSetting } from '../hooks/useDurableUiSetting';
 import { previewDurableUiSetting } from '../utils/durableUiSettings';
 import { isCodexLaunchCancelled } from '../utils/codexLaunchCancellation';
@@ -31,6 +31,7 @@ import {
   ArrowDownWideNarrow,
   RefreshCw,
   ExternalLink,
+  Link2,
   Eye,
   EyeOff,
   ArrowDown,
@@ -213,7 +214,8 @@ interface InstancesManagerProps<TAccount extends AccountLike> {
     | "trae_solo_cn"
     | "workbuddy"
     | "minimax_code"
-    | "zcode";
+    | "zcode"
+    | "t3code";
   onLaunchRequest?: (instance: InstanceProfile) => void;
   onInstanceStarted?: (instance: InstanceProfile) => void | Promise<void>;
   onBeforeStart?: (instance: InstanceProfile) => boolean | Promise<boolean>;
@@ -227,6 +229,7 @@ interface InstancesManagerProps<TAccount extends AccountLike> {
     launchMode: InstanceLaunchMode,
   ) => boolean;
   toolbarExtraActions?: ReactNode;
+  onManageInstanceProviders?: (instance: InstanceProfile) => void;
 }
 
 const INSTANCE_AUTO_REFRESH_INTERVAL_MS = 10_000;
@@ -636,6 +639,7 @@ export function InstancesManager<TAccount extends AccountLike>({
   resolveStartSuccessMessage,
   isAccountAllowedForLaunchMode,
   toolbarExtraActions,
+  onManageInstanceProviders,
 }: InstancesManagerProps<TAccount>) {
   const { t, i18n } = useTranslation();
   const copyTimeoutDuration = useMemo(
@@ -1710,7 +1714,8 @@ export function InstancesManager<TAccount extends AccountLike>({
   const handleMissingPathError = (error: unknown, instanceId?: string) => {
     if (isCodexApp && isCodexLaunchCancelled(error)) return true;
     const message = String(error ?? "");
-    const app = message === 'APP_PATH_NOT_FOUND:antigravity_legacy'
+    const invalidWorkbuddyPath = readInvalidWorkbuddyPath(error);
+    const app = invalidWorkbuddyPath ? 'workbuddy' : message === 'APP_PATH_NOT_FOUND:antigravity_legacy'
       ? 'antigravity'
       : message.startsWith('CLAUDE_MULTI_INSTANCE_REQUIRES_EXE:')
         ? 'claude'
@@ -1728,7 +1733,7 @@ export function InstancesManager<TAccount extends AccountLike>({
       ? { kind: "instance" as const, instanceId, runtimeTarget }
       : { kind: "default" as const, runtimeTarget };
     window.dispatchEvent(
-      new CustomEvent("app-path-missing", { detail: { app, pathRuntimeTarget, retry } }),
+      new CustomEvent("app-path-missing", { detail: { app, pathRuntimeTarget, retry, invalidWorkbuddyPath } }),
     );
     return true;
   };
@@ -2915,6 +2920,18 @@ export function InstancesManager<TAccount extends AccountLike>({
                 </div>
 
                 <div className="instance-actions">
+                  {onManageInstanceProviders && (
+                    <button
+                      className="icon-button"
+                      title={t("t3code.providerWorkspace.linkTab")}
+                      onClick={() => onManageInstanceProviders(instance)}
+                      disabled={
+                        isInstanceBusy || restartingAll || bulkActionLoading
+                      }
+                    >
+                      <Link2 size={16} />
+                    </button>
+                  )}
                   <button
                     className="icon-button"
                     title={floatingCardActionTitle}

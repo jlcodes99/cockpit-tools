@@ -47,7 +47,7 @@ pub(super) async fn send(
                 "The selected account does not support the original native Chat request",
             ));
         }
-        return Box::pin(send_inner(
+        return Box::pin(send_bounded(
             state,
             prepared,
             tracker,
@@ -59,7 +59,7 @@ pub(super) async fn send(
     }
     // Keep the retry state machine off callers' stacks. HTTP and WebSocket
     // bridging both wrap it in their own execution deadlines.
-    Box::pin(send_inner(state, prepared, tracker, compact, policy, None)).await
+    Box::pin(send_bounded(state, prepared, tracker, compact, policy, None)).await
 }
 
 pub(super) async fn send_native_chat(
@@ -70,7 +70,7 @@ pub(super) async fn send_native_chat(
     body: &Value,
     endpoint: &str,
 ) -> Result<reqwest::Response, ServiceError> {
-    Box::pin(send_inner(
+    Box::pin(send_bounded(
         state,
         prepared,
         tracker,
@@ -79,6 +79,23 @@ pub(super) async fn send_native_chat(
         Some((body, endpoint)),
     ))
     .await
+}
+
+async fn send_bounded(
+    state: &Arc<AppState>,
+    prepared: &mut Prepared,
+    tracker: &mut RequestTracker,
+    compact: bool,
+    policy: &ExecutionPolicy,
+    raw: Option<(&Value, &str)>,
+) -> Result<reqwest::Response, ServiceError> {
+    let recovery = tracker.network_recovery.clone();
+    recovery.check()?;
+    tokio::select! {
+        biased;
+        result = Box::pin(send_inner(state, prepared, tracker, compact, policy, raw)) => result,
+        _ = recovery.wait() => Err(recovery.error()),
+    }
 }
 
 fn mixed_provider_responses(prepared: &Prepared) -> bool {
@@ -153,6 +170,7 @@ async fn send_inner(
         .min(tracker.deadline(policy.total_timeout));
     let mut previous_open_deadline = None;
     loop {
+        tracker.network_recovery.check()?;
         let deadline = tracker.overload.deadline(deadline);
         let compact = compact
             || (prepared.route.wire_api == WireApi::Anthropic && super::anthropic_compact::triggered(&prepared.body))
@@ -504,7 +522,10 @@ async fn send_inner(
             }
         };
         let mut response = match result {
-            Ok(Ok(value)) => value,
+            Ok(Ok(value)) => {
+                tracker.network_recovery.recovered();
+                value
+            },
             Ok(Err(error)) => return Err(error),
             Err(error) => {
                 if connect_failed {
@@ -524,6 +545,8 @@ async fn send_inner(
                 if state.stop.stopped() || tokio::time::Instant::now() >= deadline {
                     return Err(error);
                 }
+                tracker.network_recovery.observe(&error, policy);
+                tracker.network_recovery.check()?;
                 // A sent official or mixed-provider turn may have executed
                 // before headers timed out or the connection dropped.
                 if !connect_failed

@@ -177,6 +177,14 @@ pub async fn inject_github_copilot_to_vscode(
     app: AppHandle,
     account_id: String,
 ) -> Result<String, String> {
+    switch_github_copilot(app, account_id, false).await
+}
+
+pub(crate) async fn switch_github_copilot(
+    app: AppHandle,
+    account_id: String,
+    write_without_launch: bool,
+) -> Result<String, String> {
     logger::log_info(&format!("开始切换 GitHub Copilot 账号: {}", account_id));
     let account = github_copilot_account::load_account(&account_id)
         .ok_or_else(|| format!("GitHub Copilot account not found: {}", account_id))?;
@@ -185,12 +193,27 @@ pub async fn inject_github_copilot_to_vscode(
         account.github_login, account.id
     ));
 
+    let user_config = config::get_user_config();
+    if write_without_launch && !user_config.ghcp_launch_on_switch {
+        let target_id = account_id.clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            let dir = crate::modules::github_copilot_instance::get_default_vscode_user_data_dir()?;
+            super::github_copilot_instance::inject_bound_account_for_instance_start(
+                &dir.to_string_lossy(),
+                Some(&target_id),
+            )
+        }).await.map_err(|error| error.to_string())??;
+    }
+
     // 同步更新 VS Code 默认实例绑定账号，确保后续走默认实例启动链路时注入目标明确。
     if let Err(e) = crate::modules::github_copilot_instance::update_default_settings(
         Some(Some(account_id.clone())),
         None,
         Some(false),
     ) {
+        if write_without_launch {
+            return Err(e);
+        }
         logger::log_warn(&format!("更新 GitHub Copilot 默认实例绑定账号失败: {}", e));
     } else {
         logger::log_info(&format!(
@@ -203,7 +226,6 @@ pub async fn inject_github_copilot_to_vscode(
         Some(account_id.as_str()),
     )?;
 
-    let user_config = config::get_user_config();
     let mut opencode_updated = false;
     if user_config.ghcp_opencode_auth_overwrite_on_switch {
         match opencode_auth::replace_github_copilot_entry_from_account(&account) {

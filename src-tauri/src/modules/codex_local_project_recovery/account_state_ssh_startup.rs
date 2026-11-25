@@ -127,10 +127,10 @@ pub(super) fn prepare(home: &Path, state: &Value) -> Result<bool, String> {
     let journal_path = home.join(OWNERSHIP);
     let config_before = snapshot(&config_path)?;
     let journal_before = snapshot(&journal_path)?;
-    let desired: BTreeSet<_> = identity::aliases(state)
+    let desired = identity::aliases(state)
         .into_iter()
         .map(|(_, alias)| alias)
-        .collect();
+        .collect::<BTreeSet<_>>();
     if desired.is_empty() && journal_before.is_none() {
         return Ok(false);
     }

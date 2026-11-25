@@ -4,7 +4,7 @@ use crate::modules::codebuddy_cn_oauth;
 use tauri::{AppHandle, Emitter};
 
 use crate::models::workbuddy::{WorkbuddyAccount, WorkbuddyOAuthStartResponse};
-use crate::modules::{logger, workbuddy_account, workbuddy_oauth};
+use crate::modules::{config, logger, process, workbuddy_account, workbuddy_oauth};
 
 async fn refresh_workbuddy_account_after_login(account: WorkbuddyAccount) -> WorkbuddyAccount {
     let account_id = account.id.clone();
@@ -313,21 +313,28 @@ pub async fn inject_workbuddy_to_vscode(
     let account = workbuddy_account::load_account(&account_id)
         .ok_or_else(|| format!("WorkBuddy account not found: {}", account_id))?;
 
-
-    if let Err(err) = crate::modules::workbuddy_instance::update_default_settings(
-        Some(Some(account_id.clone())),
-        None,
-        Some(false),
-    ) {
-        logger::log_warn(&format!("更新 WorkBuddy 默认实例绑定账号失败：{}", err));
-    }
-    let launch_warning = match crate::commands::workbuddy_instance::workbuddy_start_instance(
-        "__default__".to_string(),
+    let launch_warning = match super::workbuddy_instance::start_workbuddy_instance_with_account(
+        "__default__",
+        Some(&account_id),
     )
     .await
     {
         Ok(_) => None,
         Err(err) => {
+            if let Some(path) = err.strip_prefix(process::WORKBUDDY_NODE_PATH_PREFIX) {
+                let _ = app.emit(
+                    "app:path_missing",
+                    serde_json::json!({
+                        "app": "workbuddy",
+                        "invalidWorkbuddyPath": path,
+                        "retry": { "kind": "switchAccount", "accountId": account_id }
+                    }),
+                );
+                return Err(process::format_workbuddy_app_path_error(
+                    err,
+                    &config::get_user_config().language,
+                ));
+            }
             if err.starts_with("APP_PATH_NOT_FOUND:") || err.contains("启动 WorkBuddy 失败") {
                 logger::log_warn(&format!("WorkBuddy 默认实例启动失败：{}", err));
                 // 保持既有行为：即使应用路径异常，认证切换仍然落盘。由于此时无法
@@ -352,6 +359,13 @@ pub async fn inject_workbuddy_to_vscode(
         }
     };
 
+    if let Err(err) = crate::modules::workbuddy_instance::update_default_settings(
+        Some(Some(account_id.clone())),
+        None,
+        Some(false),
+    ) {
+        logger::log_warn(&format!("更新 WorkBuddy 默认实例绑定账号失败：{}", err));
+    }
     crate::modules::provider_current_state::set_current_account_id(
         "workbuddy",
         Some(account_id.as_str()),

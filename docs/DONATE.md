@@ -16,15 +16,13 @@
 
 <img src="images/wechat.png" alt="微信收款码" width="300" />
 
-### 💰 Crypto Donation
+### USDT（TRON / TRC20）
 
-- **ETH Address**: `0xc75d68fe59e4b44904b1CAa1Da4FDfEddD780aef`
+收款地址 `TQpwcnmDYCD34VuiDh1ipPvMVFJUd1mwdg`
 
-  <img src="images/donation_eth.png" width="300" />
+请通过 TRON（TRC20）网络发送 USDT。
 
-- **SOLANA Address**: `6yNHzh6e3LLbYrJZg7ayhNZyCKazQZTTYWnfz9i87Zeo`
-
-  <img src="images/donation_sol.png" width="300" />
+<img src="images/donation_usdt_tron.png" alt="USDT（TRON / TRC20）收款二维码" width="300" />
 
 ---
 

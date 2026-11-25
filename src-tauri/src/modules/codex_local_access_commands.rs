@@ -1152,6 +1152,20 @@ pub async fn remove_deleted_accounts_from_local_access_pool(
 pub async fn remove_local_access_accounts(
     account_ids: &[String],
 ) -> Result<CodexLocalAccessState, String> {
+    remove_local_access_accounts_inner(account_ids, false).await.map(|(state, _)| state)
+}
+
+pub(crate) async fn remove_local_access_members(
+    account_ids: &[String],
+) -> Result<(CodexLocalAccessState, Vec<String>), String> {
+    remove_local_access_accounts_inner(account_ids, true).await
+}
+
+async fn remove_local_access_accounts_inner(
+    account_ids: &[String],
+    only_members: bool,
+) -> Result<(CodexLocalAccessState, Vec<String>), String> {
+    let update_guard = image_configuration_update_lock().lock().await;
     ensure_runtime_loaded_without_start().await?;
 
     let maybe_collection = {
@@ -1160,17 +1174,23 @@ pub async fn remove_local_access_accounts(
     };
 
     let Some(mut collection) = maybe_collection else {
-        return snapshot_state().await;
+        drop(update_guard);
+        return Ok((snapshot_state().await?, Vec::new()));
     };
 
-    let remove_ids = account_ids
+    let mut remove_ids = account_ids
         .iter()
         .map(|id| id.trim())
         .filter(|id| !id.is_empty())
         .map(str::to_string)
         .collect::<HashSet<_>>();
+    if only_members {
+        let member_ids: HashSet<&str> = collection.account_ids.iter().map(String::as_str).collect();
+        remove_ids.retain(|id| member_ids.contains(id.as_str()));
+    }
     if remove_ids.is_empty() {
-        return snapshot_state().await;
+        drop(update_guard);
+        return Ok((snapshot_state().await?, Vec::new()));
     }
 
     let removed_account_ids = collection
@@ -1187,8 +1207,13 @@ pub async fn remove_local_access_accounts(
     let refs_changed = remove_account_refs_from_collection(&mut collection, &remove_ids);
     let (changed, _) = sanitize_collection(&mut collection)?;
     if !refs_changed && !changed {
-        return snapshot_state().await;
+        drop(update_guard);
+        return Ok((snapshot_state().await?, Vec::new()));
     }
+    collection.chatgpt_plan_service_revision = collection
+        .chatgpt_plan_service_revision
+        .checked_add(1)
+        .ok_or("CHATGPT_PLAN_SERVICE_CHANGED")?;
     collection.updated_at = now_ms();
     save_collection_to_disk(&collection)?;
 
@@ -1197,8 +1222,9 @@ pub async fn remove_local_access_accounts(
         sync_runtime_collection(&mut runtime, collection);
     }
 
+    drop(update_guard);
     ensure_gateway_matches_runtime().await?;
-    snapshot_state().await
+    Ok((snapshot_state().await?, removed_account_ids))
 }
 
 pub async fn rotate_local_access_api_key() -> Result<CodexLocalAccessState, String> {
@@ -1581,9 +1607,45 @@ pub async fn update_local_access_bound_oauth_account(
 
 pub async fn clear_local_access_stats() -> Result<CodexLocalAccessState, String> {
     ensure_runtime_loaded().await?;
-    tauri::async_runtime::spawn_blocking(clear_local_access_usage_events_db)
-        .await
-        .map_err(|error| format!("清空 API 服务请求日志任务失败: {error}"))??;
+    let identity_store = {
+        let runtime = gateway_runtime().lock().await;
+        runtime
+            .native_handle
+            .as_ref()
+            .map(native_api::Handle::identity_store)
+    };
+    let identity_path = native_global_identity_path().ok();
+    tauri::async_runtime::spawn_blocking(move || {
+        clear_local_access_usage_events_db()?;
+        let compact_result = if let Some(store) = identity_store {
+            store.clear_archived_history_and_compact().map(Some)
+        } else if let Some(path) = identity_path {
+            native_api::identity::IdentityStore::compact_path_if_exists(&path)
+        } else {
+            Ok(None)
+        };
+        match compact_result {
+            Ok(Some(report)) => {
+                logger::log_info(&format!(
+                    "[API服务] 清空统计并压缩 identity.sqlite 完成: history={}, partial={}, checkpoints={}, items={}, vacuumed={}",
+                    report.deleted_history_rows,
+                    report.deleted_partial_rows,
+                    report.deleted_checkpoint_rows,
+                    report.deleted_item_rows,
+                    report.vacuumed,
+                ));
+            }
+            Ok(None) => {}
+            Err(error) => {
+                logger::log_warn(&format!(
+                    "[API服务] 压缩 identity.sqlite 失败（已清空统计日志）: {error}"
+                ));
+            }
+        }
+        Ok::<(), String>(())
+    })
+    .await
+    .map_err(|error| format!("清空 API 服务请求日志任务失败: {error}"))??;
 
     let cleared = empty_stats_snapshot();
     {

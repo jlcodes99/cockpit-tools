@@ -21,6 +21,7 @@
             value_text: *const c_char,
             remaining_percent: i32,
             enabled: i32,
+            stacked: i32,
             status_item_ptr: *mut c_void,
         );
     }

@@ -24,7 +24,7 @@ export function CodexProxyConnectionSummary({ account, status, failed, onSwitch,
   const saved = binding.summary;
   // Cards and preview use the same leaf/measurement selection, including merged channels.
   const { nodes } = codexProxyCardPresentation(account, status);
-  const sourceKey = account.egress_proxy_error ? 'codex.proxy.modeStale' : account.egress_proxy_disabled ? 'codex.proxy.modeDisabled' : binding.source === 'account' ? 'codex.proxy.modeIndependent' : binding.source === 'unified'
+  const sourceKey = account.egress_proxy_client_defaults ? 'codex.proxy.modeClient' : account.egress_proxy_error ? 'codex.proxy.modeStale' : account.egress_proxy_disabled ? 'codex.proxy.modeDisabled' : binding.source === 'account' ? 'codex.proxy.modeIndependent' : binding.source === 'unified'
     ? 'codex.proxy.modeUnified' : binding.source === 'unknown'
       ? failed ? 'codex.proxy.runtimeUnavailable' : 'codex.proxy.runtimeLoading' : 'codex.proxy.filter_unbound';
   return <section className="codex-proxy-preview-connection" aria-label={t('codex.proxy.connectionTitle')}>
@@ -33,15 +33,15 @@ export function CodexProxyConnectionSummary({ account, status, failed, onSwitch,
         <span className={`codex-proxy-preview-badge${saved ? ' is-bound' : ''}`}>{t(sourceKey)}</span>
         <CodexAccountPlanBadge account={account} />
       </div>
-      <h3>{account.egress_proxy_disabled ? t('codex.proxy.modeDisabled') : saved?.name || (saved ? proxySummary(saved) : t(binding.source === 'none' ? 'codex.proxy.unboundHint' : sourceKey))}</h3>
+      <h3>{account.egress_proxy_client_defaults ? t('codex.proxy.modeClient') : account.egress_proxy_disabled ? t('codex.proxy.modeDisabled') : saved?.name || (saved ? proxySummary(saved) : t(binding.source === 'none' ? 'codex.proxy.unboundHint' : sourceKey))}</h3>
       <div className="codex-proxy-preview-metadata">
         {saved?.sourceName && <span>{t('codex.proxy.catalog.sources')}<strong>{saved.sourceName}</strong></span>}
         {saved && !['catalog', 'resource'].includes(saved.protocol.toLowerCase()) && <span>{t('codex.proxy.protocol')}<strong>{saved.protocol.toUpperCase()}</strong></span>}
         {saved?.server && <span>{t('codex.proxy.host')}<strong>{saved.server}{saved.port ? `:${saved.port}` : ''}</strong></span>}
       </div>
       {account.egress_proxy_disabled && <p>{t('codex.proxy.disabledHint')}</p>}
-      {!account.egress_proxy_disabled && binding.source === 'unified' && <p>{t('codex.proxy.modeUnifiedHint')}</p>}
-      {!account.egress_proxy_disabled && binding.source === 'none' && <p>{t('codex.proxy.managementHint')}</p>}
+      {!account.egress_proxy_disabled && !account.egress_proxy_client_defaults && binding.source === 'unified' && <p>{t('codex.proxy.modeUnifiedHint')}</p>}
+      {!account.egress_proxy_disabled && !account.egress_proxy_client_defaults && binding.source === 'none' && <p>{t('codex.proxy.managementHint')}</p>}
     </div>
     <div className="codex-proxy-preview-current">
       <div className="codex-proxy-preview-current-content">
@@ -69,7 +69,7 @@ export function CodexProxyConnectionSummary({ account, status, failed, onSwitch,
         {onSwitch && <button ref={switchButtonRef} type="button" className="btn btn-secondary" disabled={measuring} aria-haspopup="dialog" onClick={onSwitch}>
           <ArrowLeftRight size={14} />{t(account.egress_proxy ? 'codex.proxy.quickSwitch' : 'codex.proxy.setIndependent')}
         </button>}
-        {onFollow && (account.egress_proxy || account.egress_proxy_disabled) && <button type="button" className="btn btn-secondary" disabled={measuring} aria-haspopup="dialog" onClick={onFollow}>{t('codex.proxy.managerAccounts.follow')}</button>}
+        {onFollow && (account.egress_proxy || account.egress_proxy_disabled || account.egress_proxy_client_defaults) && <button type="button" className="btn btn-secondary" disabled={measuring} aria-haspopup="dialog" onClick={onFollow}>{t('codex.proxy.managerAccounts.follow')}</button>}
         {onDisable && !account.egress_proxy_disabled && <button type="button" className="btn btn-secondary" disabled={measuring} aria-haspopup="dialog" onClick={onDisable}>{t('codex.proxy.disableAction')}</button>}
       </div>
     </div>

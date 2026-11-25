@@ -1220,29 +1220,10 @@ fn build_quota_data_from_response(
     project_id: Option<String>,
 ) -> QuotaData {
     let mut quota_data = QuotaData::new();
-    quota_data.quota_summary_stale = !quota_summary
+    quota_data.quota_summary_groups = quota_summary
         .as_ref()
-        .and_then(|summary| summary.get("groups"))
-        .and_then(Value::as_array)
-        .is_some_and(|groups| {
-            groups.iter().all(|group| {
-                group
-                    .get("buckets")
-                    .and_then(Value::as_array)
-                    .is_some_and(|buckets| {
-                        buckets.iter().all(|bucket| {
-                            bucket
-                                .get("bucketId")
-                                .and_then(Value::as_str)
-                                .is_some_and(|id| !id.is_empty())
-                                && bucket
-                                    .get("remainingFraction")
-                                    .and_then(Value::as_f64)
-                                    .is_some()
-                        })
-                    })
-            })
-        });
+        .and_then(crate::models::quota::QuotaSummaryGroup::parse);
+    quota_data.quota_summary_stale = quota_data.quota_summary_groups.is_none();
     if !quota_data.quota_summary_stale {
         quota_data.quota_summary_updated_at = Some(quota_data.last_updated);
     }
@@ -1635,6 +1616,7 @@ async fn fetch_quota_with_project_metadata(
                     if quota_data.models.is_empty() {
                         quota_data.quota_summary_stale = true;
                         quota_data.quota_summary_updated_at = None;
+                        quota_data.quota_summary_groups = None;
                     }
                 }
                 return Ok(QuotaFetchResult {

@@ -168,6 +168,62 @@ use super::*;
     }
 
     #[test]
+    fn quick_repair_skips_missing_rollouts() {
+        let data_dir = make_temp_dir("codex-session-missing-rollout-test");
+        let plain_path = write_quick_repair_rollout_reference(
+            &data_dir,
+            "plain",
+            Path::new("sessions/rollout-plain.jsonl"),
+            b"{\"type\":\"session_meta\",\"payload\":{\"id\":\"plain\"}}\n",
+        );
+        let compressed_path = data_dir.join("sessions/rollout-compressed.jsonl.zst");
+        let compressed = zstd::stream::encode_all(
+            &b"{\"type\":\"session_meta\",\"payload\":{\"id\":\"compressed\"}}\n"[..],
+            1,
+        )
+        .expect("compress rollout");
+        fs::write(&compressed_path, &compressed).expect("write compressed rollout");
+        let connection = Connection::open(data_dir.join(STATE_DB_FILE)).expect("open sqlite");
+        for (id, path) in [
+            ("missing", "sessions/rollout-missing.jsonl"),
+            ("compressed", "sessions/rollout-compressed.jsonl"),
+        ] {
+            connection
+                .execute(
+                    "INSERT INTO threads (id, rollout_path, model_provider, has_user_event, first_user_message, thread_source)
+                     VALUES (?1, ?2, 'openai', 0, 'hello', '')",
+                    (id, path),
+                )
+                .expect("insert thread");
+        }
+        drop(connection);
+
+        let options = repair_options(CodexSessionVisibilityRepairMode::Quick);
+        let scan = count_sqlite_rows_to_update_for_options(
+            &data_dir,
+            "relay",
+            options,
+            &RepairTargetSelection::default(),
+        )
+        .expect("scan quick repair");
+        assert_eq!(scan.rows_to_update, 2);
+
+        let summary =
+            repair_session_visibility_quick_for_instance("instance", "Instance", &data_dir, false)
+                .expect("quick repair");
+        assert_eq!(summary.updated_sqlite_row_count, 2);
+        assert_eq!(read_thread_provider(&data_dir, "missing"), "openai");
+        assert_eq!(read_thread_provider(&data_dir, "plain"), "relay");
+        assert_eq!(read_thread_provider(&data_dir, "compressed"), "relay");
+        assert!(plain_path.is_file());
+        assert_eq!(
+            fs::read(compressed_path).expect("read compressed rollout"),
+            compressed
+        );
+        fs::remove_dir_all(&data_dir).expect("cleanup temp dir");
+    }
+
+    #[test]
     fn quick_repair_skips_compressed_referenced_rollout() {
         let data_dir = make_temp_dir("codex-session-compressed-reference-test");
         let rollout_bytes = [0x28, 0xb5, 0x2f, 0xfd, 0xff, 0x00];
@@ -468,6 +524,11 @@ use super::*;
             )
             .expect("insert rows");
         drop(connection);
+
+        fs::create_dir_all(data_dir.join("sessions")).expect("create sessions directory");
+        for name in ["visible", "preview"] {
+            fs::write(data_dir.join(format!("sessions/{name}.jsonl")), "").expect("write rollout");
+        }
 
         let options = repair_options(CodexSessionVisibilityRepairMode::Quick);
         let selection = RepairTargetSelection::default();

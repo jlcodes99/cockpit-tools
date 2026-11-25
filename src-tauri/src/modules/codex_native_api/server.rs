@@ -176,9 +176,13 @@ pub struct Handle {
     stop: watch::Sender<bool>,
     activity: Arc<Activity>,
     task: Option<JoinHandle<Result<(), std::io::Error>>>,
+    maintenance_task: Option<JoinHandle<()>>,
 }
 
 impl Handle {
+    pub fn identity_store(&self) -> Arc<IdentityStore> {
+        Arc::clone(&self.identity)
+    }
     pub fn set_session_identity_mapping_enabled(&self, enabled: bool) {
         self.identity.set_session_identity_mapping_enabled(enabled);
     }
@@ -207,6 +211,9 @@ impl Handle {
 
     pub async fn shutdown(&mut self, grace: Duration) -> Result<(), String> {
         self.stop.send_replace(true);
+        if let Some(task) = self.maintenance_task.take() {
+            task.abort();
+        }
         let deadline = tokio::time::Instant::now() + grace;
         if let Some(mut task) = self.task.take() {
             match tokio::time::timeout_at(deadline, &mut task).await {
@@ -236,6 +243,9 @@ impl Handle {
 impl Drop for Handle {
     fn drop(&mut self) {
         self.stop.send_replace(true);
+        if let Some(task) = self.maintenance_task.take() {
+            task.abort();
+        }
         if let Some(task) = self.task.take() {
             task.abort();
         }
@@ -445,6 +455,11 @@ pub async fn start(
         .layer(axum::middleware::from_fn_with_state(state.clone(), super::http_compression::response))
         .layer(axum::middleware::from_fn(cors))
         .with_state(state);
+    let maintenance_task = spawn_identity_maintenance_loop(
+        Arc::clone(&identity),
+        Arc::clone(&activity),
+        StopSignal(receiver.clone()),
+    );
     let task = tokio::spawn(async move {
         axum::serve(
             listener,
@@ -462,6 +477,85 @@ pub async fn start(
         stop,
         activity,
         task: Some(task),
+        maintenance_task: Some(maintenance_task),
+    })
+}
+
+fn spawn_identity_maintenance_loop(
+    identity: Arc<IdentityStore>,
+    activity: Arc<Activity>,
+    mut stop: StopSignal,
+) -> JoinHandle<()> {
+    const INITIAL_DELAY: Duration = Duration::from_secs(30);
+    const INTERVAL: Duration = Duration::from_secs(10 * 60);
+    const BATCH_PAUSE: Duration = Duration::from_millis(25);
+    const MAX_BATCHES_PER_CYCLE: usize = 64;
+
+    tokio::spawn(async move {
+        tokio::select! {
+            _ = stop.wait() => return,
+            _ = tokio::time::sleep(INITIAL_DELAY) => {}
+        }
+        loop {
+            if stop.stopped() {
+                return;
+            }
+            if let Some(_guard) = identity.try_acquire_maintenance_guard() {
+                let policy = super::identity::maintenance::MaintenancePolicy::default();
+                let mut total = super::identity::maintenance::MaintenanceReport::default();
+                for _ in 0..MAX_BATCHES_PER_CYCLE {
+                    if stop.stopped() {
+                        return;
+                    }
+                    let allow_full_vacuum = activity.count.load(Ordering::Acquire) == 0;
+                    let store = Arc::clone(&identity);
+                    let now_secs = chrono::Utc::now().timestamp();
+                    let batch = tokio::task::spawn_blocking(move || {
+                        store.prune_archive_batch(now_secs, &policy, allow_full_vacuum)
+                    })
+                    .await;
+                    match batch {
+                        Ok(Ok(report)) => {
+                            let has_more = report.has_more;
+                            total.merge(report);
+                            if !has_more {
+                                break;
+                            }
+                        }
+                        Ok(Err(error)) => {
+                            crate::modules::logger::log_warn(&format!(
+                                "[NativeAPI][maintenance] identity.sqlite 后台清理失败: {error}"
+                            ));
+                            break;
+                        }
+                        Err(error) => {
+                            crate::modules::logger::log_warn(&format!(
+                                "[NativeAPI][maintenance] identity.sqlite 后台任务异常: {error}"
+                            ));
+                            break;
+                        }
+                    }
+                    tokio::select! {
+                        _ = stop.wait() => return,
+                        _ = tokio::time::sleep(BATCH_PAUSE) => {}
+                    }
+                }
+                if total.any_deleted() || total.vacuumed {
+                    crate::modules::logger::log_info(&format!(
+                        "[NativeAPI][maintenance] identity.sqlite 已清理: history={}, partial={}, checkpoints={}, items={}, vacuumed={}",
+                        total.deleted_history_rows,
+                        total.deleted_partial_rows,
+                        total.deleted_checkpoint_rows,
+                        total.deleted_item_rows,
+                        total.vacuumed,
+                    ));
+                }
+            }
+            tokio::select! {
+                _ = stop.wait() => return,
+                _ = tokio::time::sleep(INTERVAL) => {}
+            }
+        }
     })
 }
 
@@ -553,6 +647,9 @@ impl IntoResponse for ServiceError {
     fn into_response(self) -> Response {
         let status = StatusCode::from_u16(self.status).unwrap_or(StatusCode::BAD_GATEWAY);
         let mut response = (status, Json(super::output_error::json_error(&self))).into_response();
+        if self.code == super::network_recovery::CODE {
+            response.headers_mut().insert("x-should-retry", HeaderValue::from_static("false"));
+        }
         if let Some(delay) = self.retry_after {
             let seconds = delay
                 .as_secs()
@@ -729,6 +826,7 @@ mod shutdown_handoff_tests {
             stop,
             activity: activity.clone(),
             task: Some(tokio::spawn(async { Ok(()) })),
+            maintenance_task: None,
         };
         assert!(handle.shutdown(Duration::from_millis(5)).await.is_err());
         assert!(
@@ -824,6 +922,7 @@ mod shutdown_handoff_tests {
                 stop,
                 activity: activity.clone(),
                 task: Some(tokio::spawn(async { Ok(()) })),
+                maintenance_task: None,
             };
             assert_eq!(activity.tasks.load(Ordering::SeqCst), 1);
             assert!(handle.shutdown(Duration::from_millis(10)).await.is_err());

@@ -37,6 +37,7 @@ fn load_instance_store_by_platform(platform: &str) -> Result<InstanceStore, Stri
         "codebuddy_cn" => modules::codebuddy_cn_instance::load_instance_store(),
         "qoder" => modules::qoder_instance::load_instance_store(),
         "zcode" => modules::zcode_instance::load_instance_store(),
+        "t3code" => modules::t3code_instance::load_instance_store(),
         "trae" => modules::trae_instance::load_instance_store(),
         "workbuddy" => modules::workbuddy_instance::load_instance_store(),
         "minimaxcode" | "minimax_code" => modules::minimax_code_instance::load_instance_store(),
@@ -58,6 +59,7 @@ fn save_instance_store_by_platform(platform: &str, store: &InstanceStore) -> Res
         "codebuddy_cn" => ("codebuddy_cn_instances.json", modules::codebuddy_cn_instance::save_instance_store),
         "qoder" => ("qoder_instances.json", modules::qoder_instance::save_instance_store),
         "zcode" => ("zcode_instances.json", modules::zcode_instance::save_instance_store),
+        "t3code" => ("t3code_instances.json", modules::t3code_instance::save_instance_store),
         "trae" => ("trae_instances.json", modules::trae_instance::save_instance_store),
         "workbuddy" => ("workbuddy_instances.json", modules::workbuddy_instance::save_instance_store),
         "minimaxcode" | "minimax_code" => ("minimax_code_instances.json", modules::minimax_code_instance::save_instance_store),
@@ -102,8 +104,6 @@ pub fn data_transfer_apply_user_config(
     let mut language_changed = false;
     let mut tray_visibility_changed = false;
     #[cfg(target_os = "macos")]
-    let mut hide_dock_icon_changed = false;
-    #[cfg(target_os = "macos")]
     let mut tray_icon_style_changed = false;
 
     let patch_result = config::patch_user_config(|current| {
@@ -130,8 +130,6 @@ pub fn data_transfer_apply_user_config(
         tray_visibility_changed = current.show_tray_icon != next_config.show_tray_icon;
         #[cfg(target_os = "macos")]
         {
-            hide_dock_icon_changed =
-                crate::should_hide_dock_icon(current) != crate::should_hide_dock_icon(&next_config);
             tray_icon_style_changed = current.tray_icon_style != next_config.tray_icon_style;
         }
         *current = next_config.clone();
@@ -159,9 +157,7 @@ pub fn data_transfer_apply_user_config(
     }
 
     #[cfg(target_os = "macos")]
-    if hide_dock_icon_changed && !tray_visibility_changed {
-        crate::apply_macos_activation_policy(&app);
-    }
+    modules::app_presence::apply_configured_policy(&app);
 
     #[cfg(target_os = "macos")]
     if tray_icon_style_changed {

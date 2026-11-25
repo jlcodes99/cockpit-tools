@@ -350,6 +350,79 @@
   min-width: 0;
 }
 
+.settings-menu-bar-quota-previews {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(145px, 100%), 1fr));
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.settings-menu-bar-quota-preview {
+  position: relative;
+  margin: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--bg-secondary);
+  cursor: pointer;
+}
+
+.settings-menu-bar-quota-preview.is-selected {
+  border-color: var(--primary);
+}
+
+.settings-menu-bar-quota-preview:focus-within {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.settings-menu-bar-quota-preview input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.settings-menu-bar-quota-preview-icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  background: currentColor;
+  mask: url('../../../src-tauri/icons/tray/status-template.png') center / contain no-repeat;
+  -webkit-mask: url('../../../src-tauri/icons/tray/status-template.png') center / contain no-repeat;
+}
+
+.settings-menu-bar-quota-preview-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 24px;
+  color: var(--text-primary);
+}
+
+.settings-menu-bar-quota-preview-values {
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.settings-menu-bar-quota-preview-values.stacked {
+  display: flex;
+  flex-direction: column;
+  font-size: 10px;
+  line-height: 11px;
+}
+
+.settings-menu-bar-quota-preview-values.stacked .settings-menu-bar-quota-preview-window {
+  display: flex;
+  justify-content: space-between;
+  gap: 4px;
+}
+
 /* Controls */
 .settings-select {
   padding: 6px 12px;

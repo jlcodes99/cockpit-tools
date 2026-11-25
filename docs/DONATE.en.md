@@ -6,15 +6,13 @@ Your support is greatly appreciated! ❤️
 
 ---
 
-## 💰 Crypto Donation
+## USDT (TRON / TRC20)
 
-- **ETH Address**: `0xc75d68fe59e4b44904b1CAa1Da4FDfEddD780aef`
+Receiving address `TQpwcnmDYCD34VuiDh1ipPvMVFJUd1mwdg`
 
-  <img src="images/donation_eth.png" width="200" />
+Send USDT over the TRON (TRC20) network.
 
-- **SOLANA Address**: `6yNHzh6e3LLbYrJZg7ayhNZyCKazQZTTYWnfz9i87Zeo`
-
-  <img src="images/donation_sol.png" width="200" />
+<img src="images/donation_usdt_tron.png" alt="USDT (TRON / TRC20) receiving QR code" width="300" />
 
 ---
 

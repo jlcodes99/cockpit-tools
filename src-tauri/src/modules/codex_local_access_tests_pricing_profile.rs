@@ -1663,6 +1663,34 @@ wire_api = "responses"
     }
 
     #[test]
+    fn takeover_backup_restore_restores_standalone_web_search_capability() {
+        let current = r#"model_provider = "codex_local_access"
+[model_providers.codex_local_access]
+base_url = "http://localhost:14998/v1"
+supports_standalone_web_search = true
+"#;
+        let backup = r#"model_provider = "codex_local_access"
+[model_providers.codex_local_access]
+base_url = "https://relay.example.com/v1"
+"#;
+        for (backup, expected) in [
+            (backup.to_owned(), None),
+            (format!("{backup}supports_standalone_web_search = false\n"), Some(false)),
+        ] {
+            let restored = restore_config_toml_from_takeover_backup(Some(current), Some(&backup))
+                .unwrap()
+                .unwrap()
+                .parse::<toml_edit::Document>()
+                .unwrap();
+            let provider = restored["model_providers"]["codex_local_access"].as_table().unwrap();
+            assert_eq!(
+                provider.get("supports_standalone_web_search").and_then(|item| item.as_bool()),
+                expected
+            );
+        }
+    }
+
+    #[test]
     fn takeover_backup_restore_drops_stale_local_access_catalog() {
         let current = r#"model_provider = "codex_local_access"
 model_catalog_json = "cockpit-local-access-model-catalog.json"

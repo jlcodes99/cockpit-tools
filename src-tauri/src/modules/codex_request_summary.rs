@@ -117,6 +117,7 @@ struct Attempt {
     #[serde(default)]
     transport: String,
     status: Option<u16>,
+    error_category: Option<String>,
     failure_phase: Option<String>,
 }
 
@@ -232,6 +233,13 @@ pub(crate) fn display_row(row: &rusqlite::Row<'_>) -> Result<Value, String> {
                     .and_then(|value| text(Some(value)))
             });
         let success = row.get::<_, i64>("success")? == 1;
+        let http_status = numeric(row, "http_status", true)?;
+        let mut error_category = text(row.get("error_category")?);
+        if !success && error_category.is_none() {
+            error_category = actual
+                .filter(|attempt| attempt.status.map(i64::from) == http_status)
+                .and_then(|attempt| text(attempt.error_category.clone()));
+        }
         let route = actual
             .and_then(|attempt| authorization_route(attempt.authorization_route.clone()))
             .or(authorization_route(row.get("authorization_route")?));
@@ -256,8 +264,8 @@ pub(crate) fn display_row(row: &rusqlite::Row<'_>) -> Result<Value, String> {
             "serviceTierAdaptation": adaptation,
             "transport": actual.and_then(|attempt| text(Some(attempt.transport.clone()))),
             "authorizationRoute": route, "success": success,
-            "httpStatus": numeric(row,"http_status",true)?,
-            "errorCategory": text(row.get("error_category")?),
+            "httpStatus": http_status,
+            "errorCategory": error_category,
             "errorMessage": null,
             "inputTokens": numeric(row,"input_tokens",false)?,
             "outputTokens": numeric(row,"output_tokens",false)?,

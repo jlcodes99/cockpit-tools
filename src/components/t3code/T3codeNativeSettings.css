@@ -1,0 +1,24 @@
+.settings-dropdown.t3-native-settings-select {
+  max-inline-size: min(18rem, 52vw);
+}
+
+.qs-dropdown.t3-native-settings-select {
+  max-inline-size: 11.5rem;
+}
+
+.t3-native-settings-feedback {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.t3-native-settings-feedback.settings-row {
+  padding-block: 8px;
+}
+
+.t3-native-settings-feedback.is-error {
+  color: var(--text-negative);
+}

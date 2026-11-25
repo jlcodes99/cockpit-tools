@@ -974,13 +974,31 @@ pub(crate) fn model_reasoning_efforts_for_profile(
     models: &[CodexExperimentalModelDefinition],
 ) -> HashMap<String, Vec<String>> {
     let mut result = model_reasoning_efforts(models);
+    // Validation also runs while migrating the catalog. Inspect the saved input
+    // directly so this lookup cannot start the migration again.
+    let saved_definitions = read_experimental_model_catalog_config(base_dir)
+        .map(|config| config.models)
+        .unwrap_or_default();
     let catalog = fs::read_to_string(experimental_model_catalog_path(base_dir))
         .ok()
         .and_then(|content| serde_json::from_str::<serde_json::Value>(&content).ok());
     for model in models {
+        if let Ok(Some(explicit)) = normalize_reasoning_efforts(model.reasoning_efforts.clone()) {
+            result.insert(model.model_id.clone(), explicit);
+            continue;
+        }
         // Official GPT metadata comes from the bundled source, rather than a previously
-        // narrowed user override. Supplier/namespaced models use the actual profile template.
-        if model.model_id.to_ascii_lowercase().starts_with("gpt-") {
+        // narrowed user override. Skip disk catalog if this model previously saved custom
+        // reasoning efforts so switching back to "follow official" never locks in stale levels.
+        if model.model_id.to_ascii_lowercase().starts_with("gpt-")
+            || saved_definitions.iter().any(|saved| {
+                saved.model_id.eq_ignore_ascii_case(&model.model_id)
+                    && saved
+                        .reasoning_efforts
+                        .as_ref()
+                        .is_some_and(|efforts| !efforts.is_empty())
+            })
+        {
             continue;
         }
         let entry = catalog
@@ -1001,12 +1019,6 @@ pub(crate) fn model_reasoning_efforts_for_profile(
             .into_iter()
             .flatten()
             .filter_map(|level| level["effort"].as_str().map(str::to_owned))
-            .filter(|effort| {
-                model
-                    .reasoning_efforts
-                    .as_ref()
-                    .is_none_or(|efforts| efforts.contains(effort))
-            })
             .collect::<Vec<_>>();
         if !efforts.is_empty() {
             result.insert(model.model_id.clone(), efforts);
@@ -1150,15 +1162,7 @@ pub(crate) fn normalize_experimental_model_definitions_with_template(
                 .into_iter()
                 .flatten()
                 .map(|effort| effort.trim().to_ascii_lowercase())
-                .filter(|effort| {
-                    template["supported_reasoning_levels"]
-                        .as_array()
-                        .is_some_and(|levels| {
-                            levels
-                                .iter()
-                                .any(|level| level["effort"].as_str() == Some(effort.as_str()))
-                        })
-                })
+                .filter(|effort| CODEX_REASONING_EFFORTS.contains(&effort.as_str()))
                 .collect::<Vec<_>>();
             if !template["default_reasoning_level"]
                 .as_str()
@@ -1460,11 +1464,14 @@ fn apply_model_reasoning_config_to_catalog(
             let selected = CODEX_REASONING_EFFORTS
                 .iter()
                 .filter(|effort| efforts.iter().any(|value| value == **effort))
-                .filter_map(|effort| {
+                .map(|effort| {
                     levels
                         .iter()
                         .find(|level| level["effort"].as_str() == Some(effort))
                         .cloned()
+                        .unwrap_or_else(|| {
+                            crate::modules::codex_protocol::canonical_reasoning_level_entry(effort)
+                        })
                 })
                 .collect::<Vec<_>>();
             if !selected.is_empty() {
@@ -1930,6 +1937,7 @@ fn apply_experimental_model_catalog_to_doc(
         .map_err(|_| "EXPERIMENTAL_MODEL_CATALOG_SERIALIZE_FAILED".to_string())?;
     crate::modules::codex_local_access::apply_attached_catalog_route_capabilities(doc, &mut catalog)?;
     apply_model_context_config_to_catalog(&mut catalog, &experimental_models);
+    apply_model_reasoning_config_to_catalog(&mut catalog, &experimental_models)?;
     crate::modules::codex_model_catalog_capabilities::supplement(&mut catalog)?;
     let content = serde_json::to_string_pretty(&catalog)
         .map_err(|_| "EXPERIMENTAL_MODEL_CATALOG_SERIALIZE_FAILED".to_string())?;
@@ -1989,7 +1997,7 @@ const CODEX_MODEL_MANAGEMENT_DEFAULT_OFF_MARKER_FILE: &str =
 /// 只在首次执行时生效（成功后写入标记文件），用户之后自己再开启模型管理不再被干预；
 /// 已保存的模型清单文件会保留，用户重新开启时仍能看到自己的清单。
 pub fn migrate_model_management_default_off_once(base_dir: &Path) -> Result<bool, String> {
-    if base_dir.as_os_str().is_empty() {
+    if base_dir.as_os_str().is_empty() || !base_dir.is_dir() {
         return Ok(false);
     }
     migrate_retired_chatgpt_default_for_dir(base_dir)?;
@@ -3462,6 +3470,7 @@ fn rebuild_managed_catalog_from_existing(catalog_path: &Path) -> Result<(), Stri
                 crate::modules::codex_local_access::apply_attached_catalog_route_capabilities(&doc, &mut rebuilt)?;
                 if experimental_model_policy_enabled(profile) {
                     apply_model_context_config_to_catalog(&mut rebuilt, &configured);
+                    apply_model_reasoning_config_to_catalog(&mut rebuilt, &configured)?;
                 }
             }
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
@@ -3711,6 +3720,9 @@ fn write_api_key_bearer_provider_override_to_config_toml(
     let provider_table = model_providers[CODEX_RUNTIME_MODEL_PROVIDER_ID]
         .as_table_mut()
         .ok_or("config.toml 中目标 provider 不是合法表结构")?;
+    let was_loopback = is_loopback_http_base_url(
+        provider_table.get("base_url").and_then(toml_edit::Item::as_str),
+    );
     provider_table["name"] = value(provider_name);
     provider_table["base_url"] = value(base_url);
     provider_table["wire_api"] = value(wire_api);
@@ -3723,6 +3735,17 @@ fn write_api_key_bearer_provider_override_to_config_toml(
     let is_local_access_loopback = provider_config.provider_id.as_deref()
         == Some(CODEX_RUNTIME_MODEL_PROVIDER_ID)
         && is_loopback_http_base_url(Some(base_url));
+    if is_local_access_loopback {
+        // The local gateway routes the hosted web search per model: official
+        // upstreams keep the native `web_search` tool (the managed catalog
+        // marks those models `web_search_provider = "standalone"`), while
+        // third-party upstreams already have hosted web tools stripped at
+        // request time. Declaring the capability on the generated provider
+        // makes the Codex client advertise the native web search tool again.
+        provider_table["supports_standalone_web_search"] = value(true);
+    } else if was_loopback {
+        provider_table.remove("supports_standalone_web_search");
+    }
     if supports_image_generation {
         set_imagegen_headers(provider_table, is_local_access_loopback);
     } else {

@@ -1,3 +1,4 @@
+import { PlatformLaunchPathField } from '../components/PlatformLaunchPathField';
 import { LaunchPathSettingsButton } from '../components/LaunchPathSettingsButton';
 import { MenuBarLeftClickSetting } from '../components/MenuBarLeftClickSetting';
 import { invoke } from '@tauri-apps/api/core';
@@ -16,6 +17,7 @@ import { ThemeColorSetting } from './settings/ThemeColorSetting';
 import { AppBackgroundSettings } from './settings/AppBackgroundSettings';
 import { DataDirectorySetting } from './settings/DataDirectorySetting';
 import { SettingsCodexPlatformPanel } from "./SettingsCodexPlatformPanel";
+import { SettingsT3codePlatformPanel } from "./settings/SettingsT3codePlatformPanel";
 import { PlatformSettingsSection } from "./settings/PlatformSettingsSection";
 import {
   SettingsDropdown,
@@ -25,12 +27,12 @@ import {
 import { useUiConfigStore } from "../stores/useUiConfigStore";
 
 
+export type SettingsGeneralPanelProps = SettingsPageViewProps;
+
 /** 渲染 SettingsPageView 的 activeTab === 'general' 业务面板。 */
 export function SettingsGeneralPanel(props: SettingsPageViewProps) {
   const {
     antigravityAccountGroups,
-    antigravityAppPath,
-    antigravityLegacyAppPath,
     antigravityDualSwitchNoRestartEnabled,
     antigravityLaunchOnSwitch,
     antigravityScopeAccounts,
@@ -73,11 +75,9 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
     claudeShareCodeSessionsOnSwitch,
     setClaudeShareCodeSessionsOnSwitch,
     closeBehavior,
-    codebuddyAppPath,
     codebuddyAutoRefresh,
     codebuddyAutoRefreshCustomMode,
     codebuddyAutoRefreshIsPreset,
-    codebuddyCnAppPath,
     codebuddyCnAutoRefresh,
     codebuddyCnAutoRefreshCustomMode,
     codebuddyCnAutoRefreshIsPreset,
@@ -178,8 +178,6 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
     renderTraeVariantSettingsGroup,
     sanitizeNumberInput,
     saveGrokCliPath,
-    setAntigravityAppPath,
-    setAntigravityLegacyAppPath,
     setAntigravityDualSwitchNoRestartEnabled,
     setAntigravityLaunchOnSwitch,
     setAppAutoLaunchEnabled,
@@ -208,10 +206,8 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
     setClaudeQuotaAlertThresholdCustomMode,
     setClaudeQuotaDisplayRemaining,
     setCloseBehavior,
-    setCodebuddyAppPath,
     setCodebuddyAutoRefresh,
     setCodebuddyAutoRefreshCustomMode,
-    setCodebuddyCnAppPath,
     setCodebuddyCnAutoRefresh,
     setCodebuddyCnAutoRefreshCustomMode,
     setCodebuddyCnQuotaAlertEnabled,
@@ -727,8 +723,7 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                     </div>
                     <div className="row-control">
                       <SettingsDropdown
-                        value={showTrayIcon && hideDockIcon ? 'true' : 'false'}
-                        disabled={!showTrayIcon}
+                        value={hideDockIcon ? 'true' : 'false'}
                         options={[
                           { value: 'false', label: t('settings.general.hideDockIconOff', '否（显示Dock图标）') },
                           { value: 'true', label: t('settings.general.hideDockIconOn', '是（隐藏Dock图标）') },
@@ -782,7 +777,7 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                         {showTrayIcon && menuBarQuotaEnabled
                           ? t(
                               'settings.general.menuBarQuotaEnabledDesc',
-                              '已启用 · {{platform}} · 显示该平台当前账号剩余额度（多条取最低）',
+                              '已启用 · {{platform}} · 显示该平台当前账号的可用额度',
                               {
                                 platform:
                                   menuBarQuotaPlatformOptions.find(
@@ -1110,7 +1105,7 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
               <PlatformSettingsSection platformId={'antigravity'} order={platformSettingsOrder.antigravity}>
                 <div className="group-title">{t('settings.general.antigravitySettingsTitle', 'Antigravity IDE 设置')}</div>
                 <div className="settings-group">
-                  <div className="settings-row"><LaunchPathSettingsButton app="antigravity_cli" /></div>
+                  <div className="settings-row"><PlatformLaunchPathField target="antigravity_cli" /></div>
               <div className="settings-row">
                 <div className="row-label">
                   <div className="row-title">{t('settings.general.autoRefresh')}</div>
@@ -1205,45 +1200,8 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                 </div>
               </div>
 
-              {([
-                ['antigravity_legacy', 'Antigravity', antigravityLegacyAppPath, setAntigravityLegacyAppPath],
-                ['antigravity', 'Antigravity IDE', antigravityAppPath, setAntigravityAppPath],
-              ] as const).map(([target, appName, path, setPath]) => (
-                <div className="settings-row" key={target}>
-                  <div className="row-label">
-                    <div className="row-title">{t('settings.general.antigravityAppPath', { appName })}</div>
-                    <div className="row-desc">{t('settings.general.codexAppPathDesc', '留空则使用默认路径')}</div>
-                  </div>
-                  <div className="row-control row-control--grow">
-                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flex: 1 }}>
-                      <input
-                        type="text"
-                        className="settings-input settings-input--path"
-                        value={path}
-                        placeholder={t('settings.general.codexAppPathPlaceholder', '默认路径')}
-                        onChange={(e) => setPath(e.target.value)}
-                      />
-                      <button
-                        className="btn btn-secondary"
-                        onClick={() => handlePickAppPath(target)}
-                        disabled={isAppPathResetDetecting(target)}
-                      >
-                        {t('settings.general.codexPathSelect', '选择')}
-                      </button>
-                      <button
-                        className="btn btn-secondary"
-                        onClick={() => handleResetAppPath(target)}
-                        disabled={isAppPathResetDetecting(target)}
-                      >
-                        <RefreshCw size={16} className={isAppPathResetDetecting(target) ? 'spin' : undefined} />
-                        {isAppPathResetDetecting(target)
-                          ? t('common.loading', '加载中...')
-                          : getResetLabelByTarget(target)}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
+              <div className="settings-row"><PlatformLaunchPathField target="antigravity_legacy" /></div>
+              <div className="settings-row"><PlatformLaunchPathField target="antigravity" /></div>
 
               {antigravitySeamlessSwitchUnlocked && (
                 <div className="settings-row">
@@ -1539,7 +1497,7 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                   {t('settings.general.claudeSettingsTitle', 'Claude 设置')}
                 </div>
                 <div className="settings-group">
-                  <div className="settings-row"><LaunchPathSettingsButton app="claude_cli" /></div>
+                  <div className="settings-row"><PlatformLaunchPathField target="claude_cli" /></div>
                   {renderPlatformAutoRefreshRow({
                     title: t(
                       'settings.general.claudeAutoRefresh',
@@ -2151,7 +2109,7 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
               <PlatformSettingsSection platformId={'codebuddy'} order={platformSettingsOrder.codebuddy}>
                 <div className="group-title">{t('settings.general.codebuddySettingsTitle', 'CodeBuddy 设置')}</div>
                 <div className="settings-group">
-                  <div className="settings-row"><LaunchPathSettingsButton app="codebuddy_cli" /></div>
+                  <div className="settings-row"><PlatformLaunchPathField target="codebuddy_cli" /></div>
               <div className="settings-row">
                 <div className="row-label">
                   <div className="row-title">{t('settings.general.codebuddyAutoRefresh', 'CodeBuddy 自动刷新配额')}</div>
@@ -2223,40 +2181,7 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                 </div>
               </div>
 
-              <div className="settings-row">
-                <div className="row-label">
-                  <div className="row-title">{t('settings.general.codebuddyAppPath', 'CodeBuddy 启动路径')}</div>
-                  <div className="row-desc">{t('settings.general.codebuddyAppPathDesc', '留空则使用默认路径')}</div>
-                </div>
-                <div className="row-control row-control--grow">
-                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flex: 1 }}>
-                    <input
-                      type="text"
-                      className="settings-input settings-input--path"
-                      value={codebuddyAppPath}
-                      placeholder={t('settings.general.codebuddyAppPathPlaceholder', '默认路径')}
-                      onChange={(e) => setCodebuddyAppPath(e.target.value)}
-                    />
-                    <button
-                      className="btn btn-secondary"
-                      onClick={() => handlePickAppPath('codebuddy')}
-                      disabled={isAppPathResetDetecting('codebuddy')}
-                    >
-                      {t('settings.general.codebuddyPathSelect', '选择')}
-                    </button>
-                    <button
-                      className="btn btn-secondary"
-                      onClick={() => handleResetAppPath('codebuddy')}
-                      disabled={isAppPathResetDetecting('codebuddy')}
-                    >
-                      <RefreshCw size={16} className={isAppPathResetDetecting('codebuddy') ? 'spin' : undefined} />
-                      {isAppPathResetDetecting('codebuddy')
-                        ? t('common.loading', '加载中...')
-                        : getResetLabelByTarget('codebuddy')}
-                    </button>
-                  </div>
-                </div>
-              </div>
+              <div className="settings-row"><PlatformLaunchPathField target="codebuddy" /></div>
 
               <div className="settings-row">
                 <div className="row-label">
@@ -2326,7 +2251,7 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
               <PlatformSettingsSection platformId={'codebuddy_cn'} order={platformSettingsOrder.codebuddy_cn}>
                 <div className="group-title">{t('settings.general.codebuddyCnSettingsTitle', 'CodeBuddy CN 设置')}</div>
                 <div className="settings-group">
-                  <div className="settings-row"><LaunchPathSettingsButton app="codebuddy_cli" /></div>
+                  <div className="settings-row"><PlatformLaunchPathField target="codebuddy_cli" /></div>
                   <div className="settings-row">
                     <div className="row-label">
                       <div className="row-title">{t('settings.general.codebuddyCnAutoRefresh', 'CodeBuddy CN 自动刷新配额')}</div>
@@ -2383,40 +2308,7 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                     true,
                   )}
 
-                  <div className="settings-row">
-                    <div className="row-label">
-                      <div className="row-title">{t('settings.general.codebuddyCnAppPath', 'CodeBuddy CN 启动路径')}</div>
-                      <div className="row-desc">{t('settings.general.codebuddyCnAppPathDesc', '留空则使用默认路径')}</div>
-                    </div>
-                    <div className="row-control row-control--grow">
-                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flex: 1 }}>
-                        <input
-                          type="text"
-                          className="settings-input settings-input--path"
-                          value={codebuddyCnAppPath}
-                          placeholder={t('settings.general.codebuddyCnAppPathPlaceholder', '默认路径')}
-                          onChange={(e) => setCodebuddyCnAppPath(e.target.value)}
-                        />
-                        <button
-                          className="btn btn-secondary"
-                          onClick={() => handlePickAppPath('codebuddy_cn')}
-                          disabled={isAppPathResetDetecting('codebuddy_cn')}
-                        >
-                          {t('settings.general.codebuddyCnPathSelect', '选择')}
-                        </button>
-                        <button
-                          className="btn btn-secondary"
-                          onClick={() => handleResetAppPath('codebuddy_cn')}
-                          disabled={isAppPathResetDetecting('codebuddy_cn')}
-                        >
-                          <RefreshCw size={16} className={isAppPathResetDetecting('codebuddy_cn') ? 'spin' : undefined} />
-                          {isAppPathResetDetecting('codebuddy_cn')
-                            ? t('common.loading', '加载中...')
-                            : getResetLabelByTarget('codebuddy_cn')}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
+                  <div className="settings-row"><PlatformLaunchPathField target="codebuddy_cn" /></div>
 
                   <div className="settings-row">
                     <div className="row-label">
@@ -2732,6 +2624,8 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                   </div>
                 </div>
               </PlatformSettingsSection>
+
+              <SettingsT3codePlatformPanel {...props} />
 
               <PlatformSettingsSection platformId={'trae'} order={platformSettingsOrder.trae}>
                 <div className="group-title">{t('quickSettings.trae.title', 'Trae 设置')}</div>

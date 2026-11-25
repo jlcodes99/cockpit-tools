@@ -5,6 +5,7 @@
   const root = typeof window === "object" ? window : globalThis;
   const N = "[A-Za-z_$][\\w$]*";
   const fast = "globalThis.__cockpitNativeFast";
+  const blobPolicyBlocked = "blob-scripts-blocked-by-csp";
   const pattern = source => new RegExp(source, "g");
   const escape = value => value.replace(/\$/g, "\\$");
   function speedCandidates(reader, state) {
@@ -60,7 +61,8 @@
   }
 
   function speedQueue(source) {
-    const queued = one(source, pattern(String.raw`async\(\)=>\{if\("local"===(?<manager>${N})\.getHostId\(\)&&await ${N}\.isUsingCopilotInference\(\)\)return!1;let (?<account>${N})=await \k<manager>\.getAccount\(\{priority:"critical"\}\);return (?<native>\k<account>\.account\?\.type==="chatgpt"\|\|\k<account>\.account\?\.type==="amazonBedrock")(?=\}\)\},async writeServiceTier\()`), "speed-saved-request-contract", true);
+    // Current desktop builds pass the thread's model provider after the eligibility callback.
+    const queued = one(source, pattern(String.raw`async\(\)=>\{if\("local"===(?<manager>${N})\.getHostId\(\)&&await ${N}\.isUsingCopilotInference\(\)\)return!1;let (?<account>${N})=await \k<manager>\.getAccount\(\{priority:"critical"\}\);return (?<native>\k<account>\.account\?\.type==="chatgpt"\|\|\k<account>\.account\?\.type==="amazonBedrock")(?=\}(?:,\k<manager>\.getThreadModelProvider\(${N}\))?\)\},async writeServiceTier\()`), "speed-saved-request-contract", true);
     if (!queued) return null;
     const { manager, account, native } = queued.groups;
     source = edit(source, queued, queued[0].replace(native, () => `(${native}||${fast}.allow(${manager}.getHostId(),${account}.account?.type))`));
@@ -79,6 +81,16 @@
       && (state.apiKeyAuthVerified === true || state.apiService === true);
   }
 
+  function allowsBlobScripts(document) {
+    const policies = document.querySelectorAll('meta[http-equiv="Content-Security-Policy" i]');
+    return Array.from(policies).every(meta => {
+      const directives = meta.content.toLowerCase().split(';').map(value => value.trim().split(/\s+/));
+      const find = name => directives.find(([directive]) => directive === name);
+      const script = find('script-src-elem') ?? find('script-src') ?? find('default-src');
+      return !script || script.includes('blob:');
+    });
+  }
+
   async function verifyRequestedDocument() {
     const state = root.__cockpitEnhancements;
     const wantSpeed = state?.nativeFast === true;
@@ -95,6 +107,7 @@
       return source;
     };
     try {
+      if (!allowsBlobScripts(root.document)) return { ok: false, reason: blobPolicyBlocked };
       const roots = new Map(await Promise.all(entries.map(async url => [url, await read(url)])));
       const html = entries.map(url => '<script src="' + url + '"></script>').join("");
       const rspack = root.__cockpitPredictionRspack;
@@ -155,9 +168,11 @@
     readChunk.has = reader.has;
     const wantSpeed = state?.nativeFast === true;
     const wantPredictions = wantsPredictions(state);
+    const blobAllowed = allowsBlobScripts(new root.DOMParser().parseFromString(html, 'text/html'));
     const modules = new Map();
     const prepare = (enabled, build) => {
       if (!enabled) return { ok: false, reason: "disabled" };
+      if (!blobAllowed) return { ok: false, reason: blobPolicyBlocked };
       try {
         const batch = build();
         for (const module of batch) modules.set(module.url, module);

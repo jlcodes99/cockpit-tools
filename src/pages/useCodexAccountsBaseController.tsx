@@ -20,7 +20,7 @@ import * as codexService from "../services/codexService";
 import { codexResetCreditDetails } from "../services/codexResetCreditService";
 import * as codexInstanceService from "../services/codexInstanceService";
 import * as codexLocalAccessService from "../services/codexLocalAccessService";
-import { maskJsonPreviewContent } from "../components/ExportJsonModal";
+import { ExportJsonPreview } from "../components/ExportJsonModal";
 import { useModalErrorState } from "../components/ModalErrorMessage";
 import { type CodexAccountGroup, assignAccountsToCodexGroup, getCodexAccountGroups, invalidateCodexGroupCache } from "../services/codexAccountGroupService";
 import { formatCodexResetTime, formatCodexResetTimeAbsolute, isCodexAgentIdentityAccount, isCodexApiKeyAccount, isCodexChatgptPlanAccount, isCodexOpaqueAccessTokenOnlyAccount, isCodexPendingOAuthAccount, isCodexWebSessionAccount, type CodexBatchDeleteJobStatus, type CodexResetCredit, type CodexResetCreditsSnapshot } from "../types/codex";
@@ -1643,15 +1643,10 @@ export function useCodexAccountsBaseController() {
                   </div>
                 </div>
 
-                <textarea
+                <ExportJsonPreview
                   className="export-json-textarea export-json-card-textarea"
-                  readOnly
-                  spellCheck={false}
-                  value={
-                    exportJsonHidden
-                      ? maskJsonPreviewContent(document.jsonContent)
-                      : document.jsonContent
-                  }
+                  jsonContent={document.jsonContent}
+                  hidden={exportJsonHidden}
                 />
               </div>
             ))}

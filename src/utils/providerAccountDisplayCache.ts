@@ -2,10 +2,11 @@ import { isClaudeDesktopOAuthAccount, type ClaudeAccount } from '../types/claude
 import { getTraeAccountDisplayName, getTraeAccountPlatformId, type TraeAccount } from '../types/trae';
 import type { PlatformId } from '../types/platform';
 
-const REQUIRED_EMPTY_FIELDS = ['access_token', 'github_access_token', 'copilot_token', 'zcode_jwt_token'];
+const REQUIRED_EMPTY_FIELDS = ['access_token', 'github_access_token', 'copilot_token', 'zcode_jwt_token', 'clerk_client_jwt'];
 const PRIVATE_FIELDS = [
   'refresh_token', 'id_token', 'api_key', 'auth_raw', 'windsurf_api_key', 'windsurf_auth_token',
   'devin_auth1_token', 'devin_session_token', 'api_extra_env', 'claude_config_raw', 'claude_credentials_raw',
+  'clerk_session_token',
 ];
 
 function selectScalars(value: unknown, keys: string[]): Record<string, unknown> | undefined {
@@ -38,6 +39,10 @@ export function toProviderAccountDisplayCache<T extends { id: string }>(account:
     cached.windsurf_auth_status_raw = selectScalars(cached.windsurf_auth_status_raw, ['email']);
   } else if (platform === 'claude_manager' && isClaudeDesktopOAuthAccount(account as T & ClaudeAccount)) {
     cached.auth_mode = 'desktop_oauth';
+  } else if (platform === 't3code') {
+    delete cached.clerk_jwt;
+    delete cached.clerk_tokens_raw;
+    delete cached.settings_snapshot_raw;
   } else if (platform === 'trae') {
     const trae = account as T & TraeAccount;
     cached.trae_auth_raw = { platformId: getTraeAccountPlatformId(trae) };

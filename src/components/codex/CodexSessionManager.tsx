@@ -1664,7 +1664,10 @@ export function CodexSessionManager() {
   return (
     <section className="codex-session-manager">
       {sessionView === 'usage' ? (
-        <CodexSessionUsagePanel onBack={() => setSessionView('list')} />
+        <CodexSessionUsagePanel
+          onBack={() => setSessionView('list')}
+          sessionNames={new Map(sessions.map((session) => [session.sessionId, session.title]))}
+        />
       ) : null}
       {sessionView === 'list' ? (
       <>

@@ -7,6 +7,7 @@ pub mod error;
 mod models;
 mod modules;
 mod utils;
+mod frontend_smoke;
 
 #[cfg(test)]
 mod dependency_tls_tests;
@@ -57,8 +58,6 @@ pub fn try_run_codex_cli_resume() -> Option<i32> {
 use modules::config::CloseWindowBehavior;
 use modules::logger;
 use std::sync::OnceLock;
-#[cfg(target_os = "macos")]
-use tauri::ActivationPolicy;
 use tauri::RunEvent;
 use tauri::WindowEvent;
 use tauri::{Emitter, Manager};
@@ -136,6 +135,16 @@ mod tests {
     }
 
     #[test]
+    fn startup_minimized_hides_even_without_tray_when_dock_icon_is_hidden() {
+        let mut config = UserConfig::default();
+        config.startup_minimized = true;
+        config.hide_dock_icon = true;
+        config.show_tray_icon = false;
+
+        assert!(should_hide_startup_minimized_window(&config, true));
+    }
+
+    #[test]
     fn startup_minimized_does_not_wait_before_hiding_window() {
         let source = include_str!("lib.rs");
         let delayed_startup_hide = concat!(
@@ -177,6 +186,7 @@ mod tests {
         config.minimax_code_auto_refresh_minutes = -1;
         config.qoder_auto_refresh_minutes = -1;
         config.zcode_auto_refresh_minutes = -1;
+        config.t3code_auto_refresh_minutes = -1;
         config.trae_auto_refresh_minutes = -1;
         config.trae_solo_auto_refresh_minutes = -1;
         config.trae_cn_auto_refresh_minutes = -1;
@@ -272,11 +282,7 @@ fn should_hide_startup_minimized_window(
     config: &modules::config::UserConfig,
     is_macos: bool,
 ) -> bool {
-    config.startup_minimized && is_macos && should_hide_dock_icon(config)
-}
-
-fn should_hide_dock_icon(config: &modules::config::UserConfig) -> bool {
-    config.show_tray_icon && config.hide_dock_icon
+    config.startup_minimized && is_macos && config.hide_dock_icon
 }
 
 fn should_preserve_main_window_for_menu_bar_refresh(
@@ -302,6 +308,7 @@ fn has_enabled_periodic_account_refresh(config: &modules::config::UserConfig) ->
         config.minimax_code_auto_refresh_minutes,
         config.qoder_auto_refresh_minutes,
         config.zcode_auto_refresh_minutes,
+        config.t3code_auto_refresh_minutes,
         config.trae_auto_refresh_minutes,
         config.trae_solo_auto_refresh_minutes,
         config.trae_cn_auto_refresh_minutes,
@@ -345,50 +352,8 @@ fn apply_startup_minimized(app: &tauri::AppHandle) {
     }
 }
 
-#[cfg(target_os = "macos")]
-fn apply_macos_activation_policy(app: &tauri::AppHandle) {
-    let config = modules::config::get_user_config();
-    if let Err(err) = set_macos_dock_policy(app, should_hide_dock_icon(&config)) {
-        logger::log_warn(&format!("[Window] 应用 macOS Dock 图标策略失败: {}", err));
-    }
-}
-
-#[cfg(target_os = "macos")]
-fn set_macos_dock_policy(app: &tauri::AppHandle, hide_dock_icon: bool) -> tauri::Result<()> {
-    let (policy, dock_visible, policy_label) = if hide_dock_icon {
-        (ActivationPolicy::Accessory, false, "hidden")
-    } else {
-        (ActivationPolicy::Regular, true, "visible")
-    };
-
-    app.set_activation_policy(policy)?;
-    app.set_dock_visibility(dock_visible)?;
-
-    if dock_visible {
-        let _ = app.show();
-        if let Some(window) = app.get_webview_window("main") {
-            let _ = window.show();
-        }
-    }
-
-    info!("[Window] 已应用 macOS Dock 图标策略: {}", policy_label);
-    Ok(())
-}
-
 fn apply_tray_visibility(app: &tauri::AppHandle, visible: bool) -> Result<(), String> {
-    #[cfg(target_os = "macos")]
-    if !visible {
-        set_macos_dock_policy(app, false).map_err(|err| err.to_string())?;
-    }
-    modules::tray::set_tray_visibility(app, visible)?;
-    #[cfg(target_os = "macos")]
-    if visible {
-        let config = modules::config::get_user_config();
-        if should_hide_dock_icon(&config) {
-            set_macos_dock_policy(app, true).map_err(|err| err.to_string())?;
-        }
-    }
-    Ok(())
+    modules::tray::set_tray_visibility(app, visible)
 }
 
 fn handle_zcode_oauth_deep_links(args: &[String]) -> bool {
@@ -428,8 +393,16 @@ fn configure_main_window_decorations(config: &mut tauri::Config, is_linux: bool)
     }
 }
 
+fn create_app_context() -> tauri::Context<tauri::Wry> {
+    // A single expansion embeds the macOS Info.plist symbol once.
+    tauri::generate_context!()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    if frontend_smoke::try_run() {
+        return;
+    }
     if let Some(code) = modules::codex_continuity_worker::try_run() {
         std::process::exit(code);
     }
@@ -449,8 +422,15 @@ pub fn run() {
     }
 
     // Tauri and the tray's window recreation both read this configuration.
-    let mut context = tauri::generate_context!();
+    let mut context = create_app_context();
     configure_main_window_decorations(context.config_mut(), cfg!(target_os = "linux"));
+    let startup_main_window_state = context
+        .config_mut()
+        .app
+        .windows
+        .iter_mut()
+        .find(|window| window.label == "main")
+        .and_then(modules::main_window_state::apply_state_to_window_config);
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
@@ -481,7 +461,7 @@ pub fn run() {
                 logger::log_warn(&format!("[Window] 单实例唤起恢复主窗口失败: {}", err));
             }
         }))
-        .setup(|app| {
+        .setup(move |app| {
             info!("Cockpit Tools 启动...");
             let current_exe = std::env::current_exe()
                 .map(|path| path.display().to_string())
@@ -715,7 +695,7 @@ pub fn run() {
             }
 
             #[cfg(target_os = "macos")]
-            apply_macos_activation_policy(&app.handle());
+            modules::app_presence::apply_configured_policy(&app.handle());
 
             #[cfg(any(windows, target_os = "linux"))]
             {
@@ -824,9 +804,11 @@ pub fn run() {
                 startup_external_import_handled
             ));
 
-            // Restore last main-window size/position before optional startup minimize (#948 / #1132).
-            if let Some(main) = app.get_webview_window("main") {
-                modules::main_window_state::restore_to_window(&main);
+            // The initial size is already in the config. Restore placement before startup minimize.
+            if let (Some(main), Some(state)) =
+                (app.get_webview_window("main"), startup_main_window_state)
+            {
+                modules::main_window_state::restore_saved_placement(&main, state);
             }
 
             apply_startup_minimized(&app.handle());
@@ -959,7 +941,6 @@ pub fn run() {
             commands::account::refresh_current_quota,
             commands::account::switch_account,
             commands::account::antigravity_launch_current,
-            commands::account::cli_launch::get_antigravity_client_launch_path,
             commands::account::cli_launch::switch_antigravity_cli,
             commands::account::cli_launch::launch_antigravity_cli,
             commands::account::cli_launch::antigravity_cli_launch_command,
@@ -1105,6 +1086,8 @@ pub fn run() {
             commands::system::save_tray_platform_layout,
             commands::system::set_app_path,
             commands::cli_launch_path::inspect_cli_launch_path,
+            commands::cli_launch_path::get_platform_launch_path,
+            commands::cli_launch_path::scan_platform_launch_paths,
             commands::cli_launch_path::save_cli_launch_path,
             commands::system::launch_opencode_current,
             commands::system::validate_codex_app_path,
@@ -1147,6 +1130,7 @@ pub fn run() {
             commands::logs::logs_get_snapshot,
             commands::logs::logs_open_log_directory,
             // Wakeup Commands
+            commands::wakeup::wakeup_get_default_transport_mode,
             commands::wakeup::wakeup_ensure_runtime_ready,
             commands::wakeup::trigger_wakeup,
             commands::wakeup::fetch_available_models,
@@ -1298,8 +1282,16 @@ pub fn run() {
             commands::codex::add_codex_account_with_token,
             commands::codex::add_codex_account_with_api_key,
             commands::codex::add_codex_account_from_grok,
+            commands::codex::add_codex_account_from_zcode,
             commands::codex::update_codex_account_name,
             commands::codex::update_codex_account_egress_proxy,
+            commands::codex::use_codex_client_proxy_defaults,
+            commands::codex_proxy_country::get_codex_proxy_country_policy,
+            commands::codex_proxy_country::set_codex_proxy_country_policy,
+            commands::codex_proxy_country::get_codex_proxy_env,
+            commands::codex_proxy_country::set_codex_proxy_env,
+            commands::codex_proxy_country::get_codex_proxy_country_checks,
+            commands::codex_proxy_country::check_codex_proxy_country,
             commands::codex::test_codex_account_egress_proxy,
             commands::codex::cancel_codex_account_egress_proxy,
             commands::codex::get_codex_account_proxy_status,
@@ -1751,6 +1743,44 @@ pub fn run() {
             commands::zcode_instance::zcode_stop_instance,
             commands::zcode_instance::zcode_open_instance_window,
             commands::zcode_instance::zcode_close_all_instances,
+            // T3 Code Commands
+            commands::t3code::list_t3code_accounts,
+            commands::t3code::delete_t3code_account,
+            commands::t3code::delete_t3code_accounts,
+            commands::t3code::import_t3code_from_json,
+            commands::t3code::import_t3code_from_file,
+            commands::t3code::import_t3code_from_local,
+            commands::t3code::import_t3code_token,
+            commands::t3code::export_t3code_accounts,
+            commands::t3code::refresh_t3code_account,
+            commands::t3code::refresh_all_t3code_accounts,
+            commands::t3code::inject_t3code_account,
+            commands::t3code::t3code_launch_current,
+            commands::t3code::update_t3code_account_tags,
+            commands::t3code::get_t3code_current_account_id,
+            commands::t3code::get_t3code_accounts_index_path,
+            commands::t3code::get_t3code_native_settings,
+            commands::t3code::update_t3code_native_settings,
+            commands::t3code::get_t3code_provider_workspace,
+            commands::t3code::t3code_sync_provider_launch_paths,
+            commands::t3code::t3code_install_antigravity_runtime,
+            commands::t3code::get_t3code_provider_runtime_status,
+            commands::t3code::bind_t3code_provider_instance_account,
+            commands::t3code::switch_t3code_provider_instance_account,
+            commands::t3code::promote_t3code_provider_account,
+            commands::t3code::upsert_t3code_provider_instance,
+            commands::t3code::remove_t3code_provider_instance,
+            commands::t3code::refresh_t3code_provider_account_quota,
+            // T3 Code Instance Commands
+            commands::t3code_instance::t3code_get_instance_defaults,
+            commands::t3code_instance::t3code_list_instances,
+            commands::t3code_instance::t3code_create_instance,
+            commands::t3code_instance::t3code_update_instance,
+            commands::t3code_instance::t3code_delete_instance,
+            commands::t3code_instance::t3code_start_instance,
+            commands::t3code_instance::t3code_stop_instance,
+            commands::t3code_instance::t3code_open_instance_window,
+            commands::t3code_instance::t3code_close_all_instances,
             // Qoder Instance Commands
             commands::qoder_instance::qoder_get_instance_defaults,
             commands::qoder_instance::qoder_list_instances,
@@ -1897,6 +1927,7 @@ pub fn run() {
             commands::codex_instance::codex_list_sessions_across_instances,
             commands::codex_instance::codex_get_session_token_stats_across_instances,
             commands::codex_instance::codex_query_session_usage,
+            commands::codex_session_usage::codex_query_session_usage_requests,
             commands::codex_instance::codex_sync_session_usage,
             commands::codex_instance::codex_move_sessions_to_trash_across_instances,
             commands::codex_instance::codex_list_trashed_sessions_across_instances,
@@ -2000,6 +2031,7 @@ pub fn run() {
                         commands::codex_instance::restore_mixed_model_profiles_for_app_exit();
                     }
                     modules::codex_app_injection::stop_all();
+                    modules::t3code_app_injection::stop_all();
                     modules::codex_proxy_engine::shutdown_all();
                     let app_to_exit = app_handle.clone();
                     tauri::async_runtime::spawn(async move {
@@ -2027,6 +2059,7 @@ pub fn run() {
                     commands::codex_instance::restore_mixed_model_profiles_for_app_exit();
                 }
                 modules::codex_app_injection::stop_all();
+                modules::t3code_app_injection::stop_all();
                 modules::codex_proxy_engine::shutdown_all();
                 tauri::async_runtime::spawn(async {
                     modules::codex_local_access::shutdown_local_access_gateway_for_app_exit().await;

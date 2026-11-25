@@ -111,7 +111,15 @@ let socket;
 
  const expandedBefore=await state();
  const groupIndex=expandedBefore.order.indexOf('group:fixture-sort-group');
- await ev(`document.querySelector('[data-sortable-id="group:fixture-sort-group"]').scrollIntoView({block:'center'})`);await wait(100);
+ check(groupIndex > 0, 'Fixture group has no preceding row');
+ await ev(`(() => {
+   const body = document.querySelector('.platform-layout-modal-body');
+   const group = document.querySelector('[data-sortable-id="group:fixture-sort-group"]');
+   const preceding = group.previousElementSibling.querySelector('.platform-layout-row');
+   body.scrollTop += preceding.getBoundingClientRect().top
+     - body.getBoundingClientRect().top - body.clientHeight * .3;
+ })()`);
+ await wait(100);
  await start('[data-sortable-id="group:fixture-sort-group"] > .platform-layout-row .platform-layout-drag-trigger');
  const above=await rect('.platform-layout-list > [data-sortable-id]:nth-child('+groupIndex+') > .platform-layout-row');
  await mouse('mouseMoved',above,{button:'left',buttons:1});await wait(120);await end(above);
@@ -122,8 +130,8 @@ let socket;
    window.fixture.setSidebarEntry('platform:cursor', true)`);
  await ev(`document.querySelector('[data-sortable-id="group:codex-suite"] .platform-layout-expand-trigger').click()`);
  const childPin = `[data-sortable-id="codex_api_service"] .platform-layout-toggle:nth-child(2) input`;
- check(await ev(`document.querySelector(${JSON.stringify(childPin)}).disabled`),
-   'Unselected child shortcut did not respect the existing sidebar capacity');
+ check(await ev(`!document.querySelector(${JSON.stringify(childPin)}).disabled`),
+   'Unselected child shortcut was disabled after selecting other sidebar entries');
  await send('Emulation.setDeviceMetricsOverride', { width: 640, height: 768, deviceScaleFactor: 1, mobile: false });
  check(await ev(`(() => {
    const grid = document.querySelector('[data-sortable-id="codex_api_service"] .is-child-grid');
@@ -133,8 +141,6 @@ let socket;
    });
  })()`), 'Child settings labels overlap at a narrow viewport');
  await send('Emulation.clearDeviceMetricsOverride');
- await ev(`window.fixture.setSidebarEntry('platform:zed', false);
-   window.fixture.setSidebarEntry('platform:cursor', false)`);
  check(await ev(`(() => {
    const input = document.querySelector(${JSON.stringify(childPin)});
    if (!input || input.checked || input.disabled) return false;

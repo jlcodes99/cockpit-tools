@@ -48,7 +48,12 @@ export function applyCodexProxyAccountSnapshot(account: CodexAccount) {
   if (isCodexProxyTarget(account)) acceptCodexProxyTarget(account);
   else useCodexAccountStore.getState().applyAccountSnapshot(account);
 }
-export async function updateCodexProxyAccount(accountId: string, disabled = false): Promise<CodexAccount> {
+export async function updateCodexProxyAccount(accountId: string, disabled = false, clientDefaults = false): Promise<CodexAccount> {
+  if (clientDefaults) {
+    const account = await invoke<CodexAccount>('use_codex_client_proxy_defaults', { accountId });
+    applyCodexProxyAccountSnapshot(account);
+    return account;
+  }
   if (accountId === CODEX_API_SERVICE_PROXY_TARGET || useCodexAccountStore.getState().accounts.some((account) => account.id === accountId && isCodexProxyTarget(account))) {
     const account = await updateCodexAccountEgressProxy(accountId, null, disabled);
     acceptCodexProxyTarget(account);

@@ -70,6 +70,9 @@ test('only Codex and its API service are grouped by default and explicit layouts
     };
     const independent = await hydrate(null);
     assertDefaultGrouping(independent);
+    assert.deepEqual(independent.orderedEntryIds.slice(2, 5), [
+      'platform:antigravity', 'platform:t3code', 'platform:zed',
+    ]);
     assert.deepEqual(independent.orderedEntryIds, MENU_VISIBLE_PLATFORM_IDS.filter((id) => id !== 'codex_api_service')
       .map((id) => id === 'codex' ? 'group:codex-suite' : `platform:${id}`));
     assert.equal(independent.independentPlatformsMigrated, true);

@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import type { TFunction } from 'i18next';
 import type { Account, ModelQuota } from '../types/account';
 import { AntigravityQuotaSection } from '../components/AntigravityQuotaSection';
+import { buildAccountTierCounts, buildAccountTierFilterOptions } from '../utils/accountFilters';
 import {
   buildAntigravityAccountPresentation,
   buildQuotaPreviewLines,
@@ -29,6 +30,28 @@ function account(models: ModelQuota[], stale = false): Account {
   };
 }
 const model = (name: string, percentage: number): ModelQuota => ({ name, percentage, reset_time: futureReset });
+
+test('missing Antigravity plans use the neutral badge and remain filterable', () => {
+  for (const subscriptionTier of [undefined, ' ', ' UNKNOWN ']) {
+    const fixture = account([]);
+    fixture.quota!.subscription_tier = subscriptionTier;
+    const presentation = buildAntigravityAccountPresentation(fixture, [], t);
+    assert.equal(presentation.planLabel, '—');
+    assert.equal(presentation.planClass, 'unknown');
+    const counts = buildAccountTierCounts([fixture], {});
+    assert.equal(counts.UNKNOWN, 1);
+    assert.equal(counts.FREE, 0);
+    const filter = buildAccountTierFilterOptions((key) => key === 'common.unknown' ? '未知' : key, counts)
+      .find(({ value }) => value === 'UNKNOWN');
+    assert.equal(filter?.label, '未知 (1)');
+  }
+
+  const fixture = account([]);
+  fixture.quota!.subscription_tier = 'g1-pro-tier';
+  const presentation = buildAntigravityAccountPresentation(fixture, [], t);
+  assert.equal(presentation.planLabel, 'g1-pro-tier');
+  assert.equal(presentation.planClass, 'pro');
+});
 
 test('list disclosure shows each real model and keeps account-wide windows separate', () => {
   const fixture = account([

@@ -27,6 +27,7 @@ import {
 import { getMiniMaxCodeQuotaGroups } from "../utils/minimaxCode/parser";
 import type { ZedAccount } from "../types/zed";
 import type { ZcodeAccount } from "../types/zcode";
+import type { T3CodeAccount } from "../types/t3code";
 import {
   formatResetTimeDisplay,
   getAntigravityTierBadge,
@@ -150,6 +151,13 @@ import {
   getZcodeQuotaGroups,
   getZcodeUsage,
 } from "../types/zcode";
+import {
+  getT3codeAccountDisplayEmail,
+  getT3codePlanBadge,
+  getT3codeQuotaGroups,
+  getT3codeUsage,
+  hasT3codeResolvedIdentity,
+} from "../types/t3code";
 import type { DisplayGroup } from "../services/groupService";
 import type { OfficialQuotaModel } from "../types/codebuddy-suite";
 import { getQuotaCategoryGroups } from "../utils/codebuddy-suite";
@@ -886,14 +894,9 @@ export function buildCodexAccountPresentation(
   // Verified bindings borrow original account display data only. Endpoint
   // credentials, eligibility and runtime health never consume this copy.
   account = getCodexServiceAccountDisplay(account);
-  const plan = account.plan_type?.toLowerCase() ?? "";
-  const workspaceName = account.account_name?.trim();
-  let displayName = account.email;
-  if (isCodexApiKeyAccount(account)) {
-    displayName = resolveCodexAccountDisplayName(account, t("common.apiKeyAccount"));
-  } else if ((plan.includes("team") || plan.includes("business")) && workspaceName && workspaceName !== account.email) {
-    displayName = account.email ? `${workspaceName} (${account.email})` : workspaceName;
-  }
+  const displayName = isCodexApiKeyAccount(account)
+    ? resolveCodexAccountDisplayName(account, t("common.apiKeyAccount"))
+    : account.email;
   const effectiveQuota = getCodexEffectiveQuotaPercentages(account.quota);
   const weeklyBlocksHourlyHint = effectiveQuota.weeklyBlocksHourly
     ? t("codex.quota.weeklyBlocksHourly", "周额度为 0，5小时额度已不可用")
@@ -1645,6 +1648,62 @@ export function buildZcodeAccountPresentation(
       t,
       "zcode.usageNormal",
       "zcode.usageAbnormal",
+    ),
+  };
+}
+
+export function buildT3codeAccountPresentation(
+  account: T3CodeAccount,
+  t: Translate,
+): UnifiedAccountPresentation {
+  const planLabel = getT3codePlanBadge(account, t("t3code.planUnlinked"));
+  const usage = getT3codeUsage(account);
+  const quotaItems: UnifiedQuotaMetric[] = [];
+
+  getT3codeQuotaGroups(account, t).forEach((group) => {
+    group.items.forEach((resource, index) => {
+      const remainPercent =
+        resource.remainPercent ??
+        (resource.total > 0 ? (resource.remain / resource.total) * 100 : null);
+      quotaItems.push({
+        key: `${group.key}_${resource.packageCode || index}`,
+        label: resource.packageName || group.label,
+        percentage: clampPercent(resource.usedPercent),
+        progressPercent: clampPercent(resource.usedPercent),
+        quotaClass: getRemainingQuotaClass(remainPercent ?? 0),
+        valueText: t("t3code.quota.usedOfTotal", {
+          used: formatQuotaNumber(resource.used),
+          total: formatQuotaNumber(resource.total),
+          defaultValue: "{{used}} / {{total}}",
+        }),
+        resetText: resolveResourceTimeText(
+          resource,
+          t,
+          "t3code.quota.updatedAt",
+          "t3code.quota.expireAt",
+        ),
+        resetAt: resource.refreshAt ?? resource.expireAt,
+        used: resource.used,
+        total: resource.total,
+        left: resource.remain,
+        showProgress: true,
+      });
+    });
+  });
+
+  return {
+    id: account.id,
+    displayName: hasT3codeResolvedIdentity(account)
+      ? getT3codeAccountDisplayEmail(account)
+      : t("t3code.pendingSyncIdentity"),
+    planLabel,
+    planClass: resolveSimplePlanClass(planLabel),
+    quotaItems,
+    ...buildUsageStatusSubline(
+      usage.isNormal,
+      t,
+      "t3code.usageNormal",
+      quotaItems.length || account.quota_query_last_error ? "t3code.usageAbnormal" : "t3code.usagePending",
     ),
   };
 }

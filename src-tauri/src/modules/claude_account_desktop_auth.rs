@@ -613,7 +613,7 @@ pub fn sync_cli_account_from_config_dir_if_same(
     sync_cli_account_from_config_dir(
         account_id,
         config_dir,
-        false,
+        CliCredentialSource::Explicit,
         read_claude_code_credentials_for_sync,
     )
 }
@@ -621,7 +621,7 @@ pub fn sync_cli_account_from_config_dir_if_same(
 fn sync_cli_account_from_config_dir(
     account_id: &str,
     config_dir: &Path,
-    require_bound: bool,
+    source: CliCredentialSource,
     read_credentials: impl FnOnce(&Path) -> Result<Value, String>,
 ) -> Result<Option<ClaudeAccount>, String> {
     let existing = load_account(account_id).ok_or_else(|| "Claude 账号不存在".to_string())?;
@@ -632,12 +632,12 @@ fn sync_cli_account_from_config_dir(
         return Ok(None);
     }
 
-    let bound_config = if require_bound {
+    let verified_config = if source != CliCredentialSource::Explicit {
         let config_path = get_claude_code_global_config_path(config_dir)?;
         let Some(config) = read_config_file(&config_path)? else {
             return Ok(None);
         };
-        if !cli_config_matches_account(&existing, &config) {
+        if !source.matches_account(&existing, &config) {
             return Ok(None);
         }
         Some(config)
@@ -668,9 +668,9 @@ fn sync_cli_account_from_config_dir(
         return Ok(None);
     };
     if config_oauth_account(&config_raw).is_none()
-        || bound_config.as_ref().is_some_and(|before| {
+        || verified_config.as_ref().is_some_and(|before| {
             config_oauth_account(before) != config_oauth_account(&config_raw)
-                || !cli_config_matches_account(&existing, &config_raw)
+                || !source.matches_account(&existing, &config_raw)
         })
     {
         return Ok(None);
@@ -693,7 +693,7 @@ fn sync_cli_account_from_config_dir(
         return Ok(Some(existing));
     }
 
-    if require_bound
+    if source == CliCredentialSource::BoundInstance
         && !bound_cli_config_dirs(
             &crate::modules::claude_instance::load_instance_store()?,
             account_id,
@@ -710,6 +710,14 @@ fn sync_cli_account_from_config_dir(
         config_dir.display()
     ));
     update_oauth_account_if_current(account_id, &existing.claude_credentials_raw, |current| {
+        if source == CliCredentialSource::DefaultCli
+            && !incoming
+                .claude_config_raw
+                .as_ref()
+                .is_some_and(|config| source.matches_account(current, config))
+        {
+            return Ok(());
+        }
         *current = derive_account_from_snapshots(
             incoming.claude_credentials_raw.clone().unwrap_or(Value::Null),
             incoming.claude_config_raw.clone().unwrap_or(Value::Null),
@@ -2618,6 +2626,42 @@ fn managed_env_keys_for_settings(settings_path: &Path) -> BTreeSet<String> {
     keys
 }
 
+pub(super) struct ClaudeCodeProfileAuthSnapshot {
+    managed_env_keys: BTreeSet<String>,
+    #[cfg(target_os = "macos")]
+    keychain: Option<Option<Value>>,
+}
+
+impl ClaudeCodeProfileAuthSnapshot {
+    pub(super) fn capture(config_dir: &Path, _writes_oauth: bool) -> Result<Self, String> {
+        let settings_path = get_claude_code_settings_path(config_dir);
+        let managed_env_keys = read_settings_managed_env_keys()
+            .remove(&managed_env_store_key(&settings_path))
+            .unwrap_or_default().into_iter().collect();
+        Ok(Self {
+            managed_env_keys,
+            #[cfg(target_os = "macos")]
+            keychain: _writes_oauth.then(|| read_claude_code_keychain_credentials(config_dir)).transpose()?,
+        })
+    }
+
+    pub(super) fn restore(self, config_dir: &Path) -> Result<(), String> {
+        #[cfg(target_os = "macos")]
+        if let Some(saved) = self.keychain {
+            match saved {
+                Some(credentials) => write_claude_code_keychain_credentials(config_dir, &credentials)?,
+                None => {
+                    delete_claude_code_keychain_credentials(config_dir);
+                    if read_claude_code_keychain_credentials(config_dir)?.is_some() {
+                        return Err("Claude Code profile keychain rollback failed".into());
+                    }
+                }
+            }
+        }
+        record_settings_managed_env_keys(&get_claude_code_settings_path(config_dir), self.managed_env_keys)
+    }
+}
+
 fn clear_api_key_env_from_claude_code_settings(config_dir: &Path) -> Result<(), String> {
     let settings_path = get_claude_code_settings_path(config_dir);
     let recorded_keys = read_settings_managed_env_keys();
@@ -3430,7 +3474,7 @@ pub async fn refresh_account_quota(account_id: &str) -> Result<ClaudeAccount, St
             .as_ref()
             .is_some_and(token_is_expired)
     {
-        account = read_bound_cli_oauth_before_refresh(account_id).await?;
+        account = read_cli_oauth_before_refresh(account_id).await?;
         if account.auth_mode != ClaudeAuthMode::OAuth {
             return Ok(account);
         }
@@ -3446,7 +3490,7 @@ pub async fn refresh_account_quota(account_id: &str) -> Result<ClaudeAccount, St
         if account.auth_mode == ClaudeAuthMode::OAuth
             && result.as_ref().is_err_and(|error| error.contains("\"invalid_grant\""))
         {
-            account = read_bound_cli_oauth_before_refresh(account_id).await?;
+            account = read_cli_oauth_before_refresh(account_id).await?;
             if account.auth_mode != ClaudeAuthMode::OAuth {
                 return Ok(account);
             }
@@ -3454,12 +3498,14 @@ pub async fn refresh_account_quota(account_id: &str) -> Result<ClaudeAccount, St
                 return Ok(account);
             };
             if *newer != credentials {
+                let refresh_token_changed =
+                    credentials_refresh_token(newer) != credentials_refresh_token(&credentials);
                 credentials = newer.clone();
-                result = if token_is_expired(&credentials) {
-                    refresh_oauth_credentials(&credentials).await
-                } else {
-                    Ok(None)
-                };
+                if !token_is_expired(&credentials) {
+                    result = Ok(None);
+                } else if refresh_token_changed {
+                    result = refresh_oauth_credentials(&credentials).await;
+                }
             }
         }
         match result {

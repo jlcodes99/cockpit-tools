@@ -374,7 +374,7 @@ export function CodexProxyOverviewSection() {
     () => new Set(unifiedFollowingIds(accounts, (entry) => entry.egress_proxy ?? null, unified)),
     [accounts, unified],
   );
-  const mode = resolveExitMode(editor.savedBinding, { catalog, loading: catalogLoading, failed: Boolean(catalogError) }, following.has(selectedId), editor.proxyDisabled);
+  const mode = resolveExitMode(editor.savedBinding, { catalog, loading: catalogLoading, failed: Boolean(catalogError) }, following.has(selectedId), editor.proxyDisabled, editor.clientDefaults);
   const boundSourceId = editor.savedBinding?.sourceId ?? '';
   const boundSource = useMemo(() => catalog.sources.find((entry) => entry.id === boundSourceId), [catalog, boundSourceId]);
   const account = accounts.find((entry) => entry.id === selectedId);

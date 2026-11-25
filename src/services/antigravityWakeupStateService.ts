@@ -6,6 +6,10 @@ import { DEFAULT_ANTIGRAVITY_WAKEUP_MODEL_ID } from '../utils/antigravityModels'
 export type RepeatMode = 'daily' | 'weekly' | 'interval';
 export type WakeupTransportMode = 'language_server' | 'clientless';
 
+export function getDefaultWakeupTransportMode(): Promise<WakeupTransportMode> {
+  return invoke<WakeupTransportMode>('wakeup_get_default_transport_mode');
+}
+
 export interface ScheduleConfig {
   repeatMode: RepeatMode;
   dailyTimes: string[];

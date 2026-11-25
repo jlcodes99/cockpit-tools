@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   getCodexPlanBadgePresentation,
   getCodexPlanFilterKey,
+  getCodexSubscriptionPresentationForAccount,
 } from "./codex.ts";
 import type { CodexAccount } from "./codex.ts";
 
@@ -21,6 +22,26 @@ function account(partial: Partial<CodexAccount>): CodexAccount {
     ...partial,
   };
 }
+
+test("a failed subscription refresh labels the saved expiry instead of showing a countdown", () => {
+  const expiry = new Date(Date.now() + 2 * 60 * 60 * 1000);
+  const cached = account({
+    subscription_active_until: expiry.toISOString(),
+    subscription_query_last_error: "upstream unavailable",
+  });
+  const translate = (key: string) => key;
+  const stale = getCodexSubscriptionPresentationForAccount(cached, translate);
+  const refreshed = getCodexSubscriptionPresentationForAccount(
+    { ...cached, subscription_query_last_error: undefined },
+    translate,
+  );
+
+  assert.equal(stale.valueText, "codex.subscription.expiryUnconfirmed");
+  assert.equal(stale.titleText, "codex.subscription.titleWithUnconfirmedDate");
+  assert.equal(stale.timestampMs, expiry.getTime());
+  assert.equal(stale.detailText, refreshed.detailText);
+  assert.equal(refreshed.valueText, "codex.subscription.hoursLeft");
+});
 
 test("expired paid subscriptions are presented and grouped as free", () => {
   const expiredPlus = account({

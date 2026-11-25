@@ -97,6 +97,22 @@ test('token plan card uses remaining quota for width and color', () => {
   }
 });
 
+test('a multi-window token plan shows each recorded percentage and formats its reset time', () => {
+  const html = renderSummary({
+    mode: 'token_plan', unit: '%', quotaRemaining: 0,
+    details: [
+      { key: 'intervalRemainingPercent', label: 'Interval', value: '85' },
+      { key: 'weeklyRemainingPercent', label: 'Weekly', value: '0' },
+      { key: 'monthlyRemainingPercent', label: 'Monthly', value: '40' },
+      { key: 'weeklyExpiresAt', label: 'Weekly reset', value: '1795500000' },
+    ],
+  });
+  for (const percent of [85, 0, 40]) {
+    assert.match(html, new RegExp(`codex-quota-mini-bar [^"]+" style="width:${percent}%"`));
+  }
+  assert.match(html, /codex-quota-mini-reset">1795500000000</);
+});
+
 test('token plan table keeps remaining quota text without a second progress bar', () => {
   const html = renderSummary({
     mode: 'token_plan', unit: '%', remaining: 99, quotaLimit: 100, quotaUsed: 1,

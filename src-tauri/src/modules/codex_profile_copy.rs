@@ -134,9 +134,9 @@ pub(crate) fn copy_profile_with_timeout(
         phase = "迁移实例索引";
         relocate_metadata(&source, &source_alias, &absolute_target, &staging, &budget)?;
         phase = "校验分页历史";
-        validate_lineage(&staging, &budget)?;
+        let lineage = validate_lineage(&staging, &budget)?;
         phase = "校验会话投影";
-        validate_projection_cursors(&staging, &absolute_target, &budget)?;
+        validate_projection_cursors(&staging, &absolute_target, &lineage, &budget)?;
         budget.check()?;
         phase = "发布副本";
         // Preserve the existing target's mode when replacing its directory.
@@ -722,12 +722,16 @@ fn rollout_boundaries(
     }).collect()
 }
 
-fn validate_lineage(root: &Path, budget: &CopyBudget<'_>) -> Result<(), String> {
+fn validate_lineage(
+    root: &Path,
+    budget: &CopyBudget<'_>,
+) -> Result<HashMap<String, Rollout>, String> {
     let mut files = HashMap::new();
     for dir in ["sessions", "archived_sessions"] {
         collect_rollouts(&root.join(dir), &mut files, budget)?;
     }
     let mut checked = std::collections::HashSet::new();
+    let mut participants = std::collections::HashSet::new();
     let mut parents = HashMap::<&Path, Vec<(u64, &str)>>::new();
     for (id, rollout) in &files {
         budget.check()?;
@@ -741,6 +745,8 @@ fn validate_lineage(root: &Path, budget: &CopyBudget<'_>) -> Result<(), String> 
         let parent = files
             .get(parent_id)
             .ok_or_else(|| format!("分页历史 {id} 缺少来源文件 {parent_id}"))?;
+        participants.insert(id.clone());
+        participants.insert(parent_id.to_owned());
         let offset = base
             .get("end_byte_offset")
             .and_then(Value::as_u64)
@@ -775,7 +781,8 @@ fn validate_lineage(root: &Path, budget: &CopyBudget<'_>) -> Result<(), String> 
             }
         }
     }
-    Ok(())
+    files.retain(|id, _| participants.contains(id));
+    Ok(files)
 }
 
 // Derived thread-history caches are validated/recovered only inside the private staging copy.

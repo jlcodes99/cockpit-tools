@@ -38,6 +38,7 @@ pub(crate) const REGISTRIES: &[&str] = &[
     "windsurf_instances.json",
     "workbuddy_instances.json",
     "zcode_instances.json",
+    "t3code_instances.json",
 ];
 
 #[derive(Debug, Default)]

@@ -11,6 +11,7 @@ use chrono::{Local, TimeZone};
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 
 use super::recent_account::{open_gateway_logs, read_small_file, RequestScope};
 
@@ -27,7 +28,7 @@ const ATTEMPTS: &str = "CASE WHEN length(CAST(d.attempts_json AS BLOB))<=65536 \
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(super) struct DialogQuery {
+pub(in crate::modules) struct DialogQuery {
     pub request_token: String,
     pub thread_id: Option<String>,
     pub scope: String,
@@ -47,7 +48,7 @@ struct Cursor {
     binding: String,
 }
 
-pub(super) fn parse_query(value: &Value) -> Option<DialogQuery> {
+pub(in crate::modules) fn parse_query(value: &Value) -> Option<DialogQuery> {
     let mut query: DialogQuery = serde_json::from_value(value.clone()).ok()?;
     if query.request_token.is_empty()
         || query.request_token.len() > 128
@@ -105,8 +106,8 @@ pub(super) fn read_dialog_data(profile: &Path, query: &DialogQuery) -> Result<Va
     {
         return Err("invalid dialog query".into());
     }
-    if let Some(endpoint)=super::remote_view::endpoint(profile)? {
-        return super::remote_view::dialog(profile,&endpoint,query);
+    if let Some(endpoint) = super::remote_view::dialog_endpoint(profile)? {
+        return super::remote_view::dialog(profile, &endpoint, query);
     }
     if query.view == "openLogs" {
         open_request_logs(query)?;
@@ -389,6 +390,7 @@ fn read_data(
         })
         .map_err(|e| e.to_string())?;
     if query.view == "logs" {
+        output["remote"] = json!(false);
         output["requests"] = if fast {
             summaries::read_page(&tx, scope, query, snapshot_id, PAGE_SIZE, started)?
         } else {
@@ -910,11 +912,17 @@ fn enrich_account_display_names(data_dir: &Path, output: &mut Value) {
             .or_insert_with(|| read_display_identity(data_dir, id));
     }
     for row in rows {
-        let name = row["accountId"]
-            .as_str()
+        let account_id = row["accountId"].as_str();
+        let name = account_id
             .and_then(|id| names.get(id))
             .and_then(Clone::clone)
             .or_else(|| safe_display_name(row["accountEmail"].as_str().map(str::to_owned)));
+        if name.is_none() {
+            if let Some(id) = account_id.filter(|id| safe_account_filename(id)) {
+                let digest = format!("{:x}", Sha256::digest(id.as_bytes()));
+                row["accountReference"] = json!(&digest[..8]);
+            }
+        }
         row["accountDisplayName"] = json!(name);
     }
 }

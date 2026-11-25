@@ -57,6 +57,13 @@ fn service_member_snapshot(
         .collect()
 }
 
+pub(crate) async fn configured_service_members(
+) -> Result<Vec<crate::models::codex_local_access::CodexLocalAccessServiceMember>, String> {
+    ensure_runtime_loaded_without_start().await?;
+    Ok(gateway_runtime().lock().await.collection.as_ref()
+        .map(service_member_snapshot).unwrap_or_default())
+}
+
 /// Blocking, display-only migration. Never adds an account or grants a scope.
 pub(crate) fn remember_chatgpt_plan_service_origin(id: &str, source: &str) -> Result<(), String> {
     let projection = codex_account::chatgpt_plan_projection_id(id)?;

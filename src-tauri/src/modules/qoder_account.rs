@@ -142,28 +142,8 @@ pub fn accounts_index_path_string() -> Result<String, String> {
     )
 }
 
-fn normalize_account_id(account_id: &str) -> Result<String, String> {
-    let trimmed = account_id.trim();
-    if trimmed.is_empty() {
-        return Err("账号 ID 不能为空".to_string());
-    }
-
-    if trimmed.contains('/') || trimmed.contains('\\') || trimmed.contains("..") {
-        return Err("账号 ID 非法，包含路径字符".to_string());
-    }
-
-    let valid = trimmed
-        .chars()
-        .all(|ch| ch.is_ascii_alphanumeric() || ch == '_' || ch == '-' || ch == '.');
-    if !valid {
-        return Err("账号 ID 非法，仅允许字母/数字/._-".to_string());
-    }
-
-    Ok(trimmed.to_string())
-}
-
 fn resolve_account_file_path(account_id: &str) -> Result<PathBuf, String> {
-    let normalized = normalize_account_id(account_id)?;
+    let normalized = qoder_identity::normalize_account_id(account_id)?;
     Ok(get_accounts_dir()?.join(format!("{}.json", normalized)))
 }
 
@@ -200,6 +180,7 @@ pub fn load_account(account_id: &str) -> Option<QoderAccount> {
 }
 
 fn save_account_file(account: &QoderAccount) -> Result<(), String> {
+    super::qoder_channel::ide_source(account)?;
     let path = resolve_account_file_path(account.id.as_str())?;
     crate::modules::secure_account_storage::write_account_preserving_switch_time(
         &path, "qoder", account,
@@ -1252,6 +1233,7 @@ pub fn inject_to_qoder_for_user_data_dir(
 pub fn inject_to_qoder_at_path(db_path: &Path, account_id: &str) -> Result<(), String> {
     let account =
         load_account(account_id).ok_or_else(|| format!("Qoder 账号不存在: {}", account_id))?;
+    super::qoder_channel::ide_source(&account)?;
     let access_token =
         crate::modules::qoder_oauth::access_token_from_info(account.auth_user_info_raw.as_ref())
             .ok_or("QODER_REAUTH_REQUIRED")?;

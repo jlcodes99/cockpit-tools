@@ -8,7 +8,7 @@ fn audit_instance_test_guard_lock_order(source: &str) -> (usize, Vec<String>) {
 #[test]
 fn instance_test_data_guards_hold_shared_lock_through_cleanup() {
     let (checked, violations) =
-        audit_instance_test_guard_lock_order(include_str!("codex_instance.rs"));
+        audit_instance_test_guard_lock_order(include_str!("codex_instance_tests.rs"));
     assert_eq!(
         checked, 13,
         "audit must cover every current data guard fixture"

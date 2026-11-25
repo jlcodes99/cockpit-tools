@@ -45,6 +45,8 @@ pub struct ServerStatus {
     /// 当前进程 WebSocket 会话鉴权 token（高危操作必填，#1104）
     #[serde(default)]
     pub auth_token: String,
+    #[serde(default)]
+    pub automation_version: u32,
 }
 
 /// 用户配置（持久化存储）
@@ -181,6 +183,12 @@ pub struct UserConfig {
     /// ZCode 自动刷新间隔（分钟），-1 表示禁用
     #[serde(default = "default_zcode_auto_refresh")]
     pub zcode_auto_refresh_minutes: i32,
+    /// T3 Code 自动刷新间隔（分钟），-1 表示禁用
+    #[serde(default = "default_t3code_auto_refresh")]
+    pub t3code_auto_refresh_minutes: i32,
+    /// 是否启用 T3 Code 聊天底部 Composer 栏常驻额度胶囊注入
+    #[serde(default = "default_t3code_app_ui_injection_enabled")]
+    pub t3code_app_ui_injection_enabled: bool,
     /// Trae 自动刷新间隔（分钟），-1 表示禁用
     #[serde(default = "default_trae_auto_refresh")]
     pub trae_auto_refresh_minutes: i32,
@@ -209,6 +217,9 @@ pub struct UserConfig {
     /// 是否在 macOS 菜单栏图标旁显示当前账号剩余额度
     #[serde(default = "default_menu_bar_quota_enabled")]
     pub menu_bar_quota_enabled: bool,
+    /// macOS 菜单栏额度布局：horizontal（默认）或 stacked（紧凑双行）。
+    #[serde(default = "default_menu_bar_quota_layout")]
+    pub menu_bar_quota_layout: String,
     /// 是否在 macOS 菜单栏额度前显示账号标识前 4 位
     #[serde(default = "default_menu_bar_show_account_prefix")]
     pub menu_bar_show_account_prefix: bool,
@@ -387,6 +398,9 @@ pub struct UserConfig {
     /// ZCode 启动路径（为空则使用默认路径）
     #[serde(default = "default_zcode_app_path")]
     pub zcode_app_path: String,
+    /// T3 Code 启动路径（为空则使用默认路径）
+    #[serde(default = "default_t3code_app_path")]
+    pub t3code_app_path: String,
     /// Trae 启动路径（为空则使用默认路径）
     #[serde(default = "default_trae_app_path")]
     pub trae_app_path: String,
@@ -848,6 +862,12 @@ fn default_qoder_auto_refresh() -> i32 {
 fn default_zcode_auto_refresh() -> i32 {
     10
 }
+fn default_t3code_auto_refresh() -> i32 {
+    10
+}
+fn default_t3code_app_ui_injection_enabled() -> bool {
+    true
+}
 fn default_trae_auto_refresh() -> i32 {
     10
 }
@@ -869,6 +889,9 @@ fn default_tray_icon_style() -> TrayIconStyle {
 }
 fn default_menu_bar_quota_enabled() -> bool {
     false
+}
+fn default_menu_bar_quota_layout() -> String {
+    "horizontal".to_string()
 }
 fn default_menu_bar_show_account_prefix() -> bool {
     true
@@ -927,6 +950,7 @@ pub fn normalize_startup_page(value: &str) -> String {
         "codebuddy-cn",
         "qoder",
         "zcode",
+        "t3code",
         "trae",
         "trae-solo",
         "trae-cn",
@@ -1080,6 +1104,9 @@ fn default_qoder_app_path() -> String {
     String::new()
 }
 fn default_zcode_app_path() -> String {
+    String::new()
+}
+fn default_t3code_app_path() -> String {
     String::new()
 }
 fn default_trae_app_path() -> String {
@@ -1344,6 +1371,8 @@ impl Default for UserConfig {
             minimax_code_auto_refresh_minutes: default_minimax_code_auto_refresh(),
             qoder_auto_refresh_minutes: default_qoder_auto_refresh(),
             zcode_auto_refresh_minutes: default_zcode_auto_refresh(),
+            t3code_auto_refresh_minutes: default_t3code_auto_refresh(),
+            t3code_app_ui_injection_enabled: default_t3code_app_ui_injection_enabled(),
             trae_auto_refresh_minutes: default_trae_auto_refresh(),
             trae_solo_auto_refresh_minutes: default_trae_auto_refresh(),
             trae_cn_auto_refresh_minutes: default_trae_auto_refresh(),
@@ -1355,6 +1384,7 @@ impl Default for UserConfig {
             tray_icon_style: default_tray_icon_style(),
             menu_bar_left_click_opens_main_window: false,
             menu_bar_quota_enabled: default_menu_bar_quota_enabled(),
+            menu_bar_quota_layout: default_menu_bar_quota_layout(),
             menu_bar_show_account_prefix: default_menu_bar_show_account_prefix(),
             menu_bar_quota_platform: default_menu_bar_quota_platform(),
             menu_bar_antigravity_metric: String::new(),
@@ -1419,6 +1449,7 @@ impl Default for UserConfig {
             codebuddy_cn_share_sessions_on_switch: default_codebuddy_cn_share_sessions_on_switch(),
             qoder_app_path: default_qoder_app_path(),
             zcode_app_path: default_zcode_app_path(),
+            t3code_app_path: default_t3code_app_path(),
             trae_app_path: default_trae_app_path(),
             trae_solo_app_path: default_trae_app_path(),
             trae_cn_app_path: default_trae_app_path(),
@@ -1869,18 +1900,6 @@ pub fn load_user_config() -> Result<UserConfig, String> {
             if !obj.contains_key(key) {
                 obj.insert(key.to_string(), json!(inherited_trae_refresh));
             }
-        }
-
-        if !obj.contains_key("hide_dock_icon") {
-            let inherited_hide_dock_icon = obj
-                .get("minimize_behavior")
-                .and_then(|v| v.as_str())
-                .map(|v| v == "tray_only")
-                .unwrap_or_else(default_hide_dock_icon);
-            obj.insert(
-                "hide_dock_icon".to_string(),
-                json!(inherited_hide_dock_icon),
-            );
         }
 
         if !obj.contains_key("tray_icon_style") {
@@ -2761,7 +2780,7 @@ pub fn save_server_status(status: &ServerStatus) -> Result<(), String> {
     let json =
         serde_json::to_string_pretty(status).map_err(|e| format!("序列化状态失败: {}", e))?;
 
-    crate::modules::atomic_write::write_string_atomic(&status_path, &json)
+    crate::modules::atomic_write::write_secret_string_atomic(&status_path, &json)
         .map_err(|e| format!("写入状态文件失败: {}", e))?;
 
     crate::modules::logger::log_info(&format!(
@@ -2785,6 +2804,7 @@ pub fn init_server_status(actual_port: u16, auth_token: String) -> Result<(), St
         pid: std::process::id(),
         started_at: chrono::Utc::now().timestamp(),
         auth_token,
+        automation_version: super::automation_protocol::VERSION,
     };
 
     save_server_status(&status)?;

@@ -33,7 +33,7 @@ pub(crate) fn codex_desktop_supports_dynamic_models() -> bool {
         .is_some_and(|output| supports_codex_catalog_url_version(&output))
 }
 
-fn supports_codex_catalog_url_version(output: &str) -> bool {
+pub(crate) fn supports_codex_catalog_url_version(output: &str) -> bool {
     let Some(version) = output.trim().strip_prefix("codex-cli ") else { return false };
     let version = version.split('+').next().unwrap_or(version);
     let (numbers, prerelease) = version.split_once('-').unwrap_or((version, ""));
@@ -52,6 +52,7 @@ fn codex_model_catalog_desktop_version_includes_compatible_prereleases() {
     assert!(!supports_codex_catalog_url_version("codex-cli 0.155.0"));
     assert!(!supports_codex_catalog_url_version("codex-cli 0.166.0-alpha.1"));
 }
+
 #[cfg(any(test, target_os = "macos", target_os = "linux"))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct CodexProcessTreeEntry {

@@ -708,7 +708,7 @@ pub async fn import_from_json_logic(json_content: String) -> Result<Vec<models::
                 let Some(email) = simple.email.clone().filter(|value| value.contains('@')) else {
                     continue;
                 };
-                match modules::account::create_pending_oauth_account(
+                match modules::account::create_pending_oauth_account_with_tags(
                     email,
                     modules::account::AccountNoteUpdate {
                         note: simple.notes,
@@ -718,6 +718,7 @@ pub async fn import_from_json_logic(json_content: String) -> Result<Vec<models::
                         mail_url: simple.mail_url,
                         aux_email: simple.aux_email,
                     },
+                    simple.tags,
                 ) {
                     Ok(account) => imported.push(account),
                     Err(error) => {
@@ -980,8 +981,24 @@ pub async fn import_from_files_logic(file_paths: Vec<String>) -> Result<FileImpo
             );
         }
 
+        let Some(refresh_token) = entry.refresh_token else {
+            let email = entry.email.unwrap_or_default();
+            match modules::account::create_pending_oauth_account_with_tags(
+                email.clone(),
+                entry.note_update,
+                entry.tags,
+            ) {
+                Ok(account) => imported.push(account),
+                Err(error) => {
+                    modules::logger::log_error(&format!("保存待授权账号失败 {}: {}", email, error));
+                    failed.push(FileImportFailure { email, error });
+                }
+            }
+            continue;
+        };
+
         // 使用 refresh_token 获取 access_token
-        match modules::oauth::refresh_access_token(&entry.refresh_token).await {
+        match modules::oauth::refresh_access_token(&refresh_token).await {
             Ok(token_response) => {
                 // 尝试获取用户信息以确定 email
                 let email = if let Some(ref e) = entry.email {
@@ -1001,7 +1018,7 @@ pub async fn import_from_files_logic(file_paths: Vec<String>) -> Result<FileImpo
 
                 let token = models::TokenData::new(
                     token_response.access_token,
-                    token_response.refresh_token.unwrap_or(entry.refresh_token),
+                    token_response.refresh_token.unwrap_or(refresh_token),
                     token_response.expires_in,
                     Some(email.clone()),
                     None,
@@ -1020,14 +1037,7 @@ pub async fn import_from_files_logic(file_paths: Vec<String>) -> Result<FileImpo
                         }
                         match modules::account::update_account_note(
                             &new_account.id,
-                            modules::account::AccountNoteUpdate {
-                                note: entry.notes,
-                                two_factor_secret: entry.two_factor_secret,
-                                account_password: entry.account_password,
-                                phone_number: entry.phone_number,
-                                mail_url: entry.mail_url,
-                                aux_email: entry.aux_email,
-                            },
+                            entry.note_update,
                         ) {
                             Ok(acc) => new_account = acc,
                             Err(error) => {
@@ -1074,14 +1084,9 @@ pub async fn import_from_files_logic(file_paths: Vec<String>) -> Result<FileImpo
 
 struct ImportEntry {
     email: Option<String>,
-    refresh_token: String,
+    refresh_token: Option<String>,
     tags: Vec<String>,
-    notes: Option<String>,
-    two_factor_secret: Option<String>,
-    account_password: Option<String>,
-    phone_number: Option<String>,
-    mail_url: Option<String>,
-    aux_email: Option<String>,
+    note_update: modules::account::AccountNoteUpdate,
 }
 
 /// 从 JSON 值中提取 ImportEntry
@@ -1090,6 +1095,12 @@ fn extract_import_entry(
     fallback_email: &Option<String>,
 ) -> Option<ImportEntry> {
     let obj = value.as_object()?;
+
+    let pending_oauth = obj
+        .get("pending_oauth")
+        .or_else(|| obj.get("pendingOAuth"))
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false);
 
     // 提取 refresh_token：顶层 或 token.refresh_token
     let refresh_token = obj
@@ -1101,7 +1112,12 @@ fn extract_import_entry(
                 .and_then(|v| v.as_str())
         })
         .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())?;
+        .filter(|s| !s.is_empty());
+    let refresh_token = if pending_oauth {
+        None
+    } else {
+        Some(refresh_token?)
+    };
 
     // 提取 email：顶层
     let email = obj
@@ -1163,12 +1179,14 @@ fn extract_import_entry(
         email,
         refresh_token,
         tags,
-        notes,
-        two_factor_secret,
-        account_password,
-        phone_number,
-        mail_url,
-        aux_email,
+        note_update: modules::account::AccountNoteUpdate {
+            note: notes,
+            two_factor_secret,
+            account_password,
+            phone_number,
+            mail_url,
+            aux_email,
+        },
     })
 }
 
@@ -1333,7 +1351,7 @@ mod account_note_import_tests {
     }
 
     #[test]
-    fn import_pending_oauth_json_preserves_sensitive_notes() {
+    fn import_pending_oauth_json_preserves_tags_and_notes() {
         with_test_data_dir("antigravity-pending-json-import-test", || {
             let runtime = tokio::runtime::Runtime::new().expect("create runtime");
             let accounts = runtime
@@ -1341,6 +1359,7 @@ mod account_note_import_tests {
                     r#"{
                       "email": "pending-json@example.com",
                       "pending_oauth": true,
+                      "tags": ["test", "work"],
                       "notes": "delivery note",
                       "account_password": "password-1",
                       "two_factor_secret": "JBSWY3DPEHPK3PXP",
@@ -1353,6 +1372,8 @@ mod account_note_import_tests {
             assert_eq!(accounts.len(), 1);
             let account = &accounts[0];
             assert!(account.pending_oauth);
+            assert_eq!(account.tags, ["test", "work"]);
+            assert_eq!(account.notes.as_deref(), Some("delivery note"));
             assert_eq!(account.account_password.as_deref(), Some("password-1"));
             assert_eq!(
                 account.two_factor_secret.as_deref(),
@@ -1363,6 +1384,40 @@ mod account_note_import_tests {
                 account.mail_url.as_deref(),
                 Some("https://mail.example.test/inbox")
             );
+        });
+    }
+
+    #[test]
+    fn pending_oauth_file_round_trip_preserves_tags_and_notes() {
+        with_test_data_dir("antigravity-pending-file-import-test", || {
+            let data_dir = std::env::var_os("COCKPIT_TOOLS_TEST_DATA_DIR").unwrap();
+            let data_dir = std::path::Path::new(&data_dir);
+            let source = modules::account::create_pending_oauth_account_with_tags(
+                "pending-file@example.test".to_string(),
+                modules::account::AccountNoteUpdate {
+                    note: Some("delivery note".to_string()),
+                    ..Default::default()
+                },
+                vec!["work".to_string()],
+            )
+            .expect("create source account");
+            let runtime = tokio::runtime::Runtime::new().expect("create runtime");
+            let json = runtime
+                .block_on(crate::commands::import::export_accounts(vec![source.id]))
+                .expect("export source account");
+            let path = data_dir.join("accounts_export.json");
+            fs::write(&path, json).expect("write account export");
+
+            std::env::set_var("COCKPIT_TOOLS_TEST_DATA_DIR", data_dir.join("restored"));
+            let result = runtime
+                .block_on(import_from_files_logic(vec![path.to_string_lossy().into_owned()]))
+                .expect("import account file");
+            assert!(result.failed.is_empty(), "{}", serde_json::json!(result.failed));
+            assert_eq!(result.imported.len(), 1);
+            let account = modules::account::load_account(&result.imported[0].id).unwrap();
+            assert!(account.pending_oauth);
+            assert_eq!(account.tags, ["work"]);
+            assert_eq!(account.notes.as_deref(), Some("delivery note"));
         });
     }
 
