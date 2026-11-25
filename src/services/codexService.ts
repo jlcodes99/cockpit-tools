@@ -717,6 +717,16 @@ export async function addCodexAccountFromGrok(
   });
 }
 
+export async function addCodexAccountFromWorkbuddy(
+  workbuddyAccountId: string,
+  accountName?: string | null,
+): Promise<CodexAccount> {
+  return await invoke('add_codex_account_from_workbuddy', {
+    workbuddyAccountId,
+    accountName: accountName ?? null,
+  });
+}
+
 export async function addCodexAccountFromZcode(
   zcodeAccountId: string,
   accountName?: string | null,
