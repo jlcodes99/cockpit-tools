@@ -7,7 +7,11 @@
 //! `native_opaque_v1`, `native_rebuild_active_v1`, `native_rebuild_refs_v1`,
 //! `native_rebuild_blobs_v1`, `native_rebuild_portable_v1`) are preserved.
 use super::*;
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::TryLockError,
+    time::Instant,
+};
 
 pub(crate) const ARCHIVE_RETENTION_SECS: i64 = 7 * 24 * 60 * 60;
 pub(crate) const ACTIVE_CONVERSATION_GRACE_SECS: i64 = 60 * 60;
@@ -30,6 +34,8 @@ pub struct MaintenancePolicy {
     pub vacuum_freelist_threshold_bytes: i64,
     pub batch_size: usize,
     pub item_gc_batch_size: usize,
+    /// Cooperative SQLite budget while holding the shared connection.
+    pub max_batch_duration: Duration,
 }
 
 impl Default for MaintenancePolicy {
@@ -43,6 +49,7 @@ impl Default for MaintenancePolicy {
             vacuum_freelist_threshold_bytes: VACUUM_FREELIST_THRESHOLD_BYTES,
             batch_size: PRUNE_BATCH_SIZE,
             item_gc_batch_size: ITEM_GC_BATCH_SIZE,
+            max_batch_duration: Duration::from_millis(250),
         }
     }
 }
@@ -103,10 +110,7 @@ fn read_db_size_metrics(connection: &Connection) -> Result<DbSizeMetrics, String
     })
 }
 
-pub(super) fn ensure_created_column(
-    connection: &Connection,
-    table: &str,
-) -> rusqlite::Result<()> {
+pub(super) fn ensure_created_column(connection: &Connection, table: &str) -> rusqlite::Result<()> {
     let has_created = connection
         .prepare(&format!("PRAGMA table_info({table})"))?
         .query_map([], |row| row.get::<_, String>(1))?
@@ -130,6 +134,44 @@ pub(super) fn enable_incremental_auto_vacuum_if_empty(
         connection.execute_batch("PRAGMA auto_vacuum = INCREMENTAL;")?;
     }
     Ok(())
+}
+
+// Scope the handler and busy timeout to background work. In particular, remove
+// the handler after the transaction has rolled back so foreground queries can
+// reuse this connection after an interrupted batch.
+fn with_batch_budget(
+    connection: &mut Connection,
+    budget: Duration,
+    operation: impl FnOnce(&mut Connection) -> Result<MaintenanceReport, String>,
+) -> Result<MaintenanceReport, String> {
+    let busy_timeout: u64 = connection
+        .query_row("PRAGMA busy_timeout", [], |row| row.get(0))
+        .map_err(|error| error.to_string())?;
+    connection
+        .busy_timeout(Duration::ZERO)
+        .map_err(|error| error.to_string())?;
+    let started = Instant::now();
+    let interrupted = Arc::new(AtomicBool::new(false));
+    let did_interrupt = Arc::clone(&interrupted);
+    connection.progress_handler(
+        1_000,
+        Some(move || {
+            // Only interrupt once, allowing the transaction's rollback to run.
+            if started.elapsed() >= budget && !did_interrupt.swap(true, Ordering::Relaxed) {
+                return true;
+            }
+            false
+        }),
+    );
+    let result = operation(connection);
+    connection.progress_handler(0, None::<fn() -> bool>);
+    connection
+        .busy_timeout(Duration::from_millis(busy_timeout))
+        .map_err(|error| error.to_string())?;
+    if interrupted.load(Ordering::Relaxed) {
+        return Err("Identity archive maintenance batch exceeded its time budget".to_string());
+    }
+    result
 }
 
 fn collect_manifest_digests(manifest_json: &str, target: &mut HashSet<String>) {
@@ -175,9 +217,13 @@ fn delete_unreferenced_candidates(
         }
         let remaining_rows: i64 = transaction
             .query_row(
-                "SELECT (SELECT COUNT(*) FROM native_rebuild_history_v1 WHERE caller=?1)
-                      + (SELECT COUNT(*) FROM native_partial_history_v1 WHERE caller=?1)",
-                params![caller],
+                "SELECT COUNT(*) FROM (
+                    SELECT 1 FROM native_rebuild_history_v1 WHERE caller=?1
+                    UNION ALL
+                    SELECT 1 FROM native_partial_history_v1 WHERE caller=?1
+                    LIMIT ?2
+                 )",
+                params![caller, INLINE_ITEM_GC_HISTORY_LIMIT + 1],
                 |row| row.get(0),
             )
             .map_err(|error| error.to_string())?;
@@ -212,9 +258,13 @@ fn select_partial_prune_candidates(
         return Ok(Vec::new());
     }
     let total: i64 = transaction
-        .query_row("SELECT COUNT(*) FROM native_partial_history_v1", [], |row| {
-            row.get(0)
-        })
+        .query_row(
+            "SELECT COUNT(*) FROM (SELECT 1 FROM native_partial_history_v1 LIMIT ?1)",
+            params![
+                i64::try_from(policy.max_partial_rows.saturating_add(limit)).unwrap_or(i64::MAX)
+            ],
+            |row| row.get(0),
+        )
         .map_err(|error| error.to_string())?;
     if total == 0 {
         return Ok(Vec::new());
@@ -319,17 +369,24 @@ fn select_history_prune_candidates(
         let mut stmt = transaction
             .prepare_cached(
                 "WITH ranked AS (
-                    SELECT rowid, caller, response, manifest, created,
+                    SELECT rowid, created,
                            ROW_NUMBER() OVER (PARTITION BY caller, thread ORDER BY created DESC, rowid DESC) AS rn
                     FROM native_rebuild_history_v1
                  )
-                 SELECT rowid, caller, response, manifest FROM ranked
-                 WHERE rn > ?1
-                 ORDER BY created ASC, rowid ASC LIMIT ?2",
+                 SELECT h.rowid, h.caller, h.response, h.manifest
+                 FROM native_rebuild_history_v1 h
+                 WHERE h.rowid IN (
+                    SELECT rowid FROM ranked WHERE rn > ?1
+                    ORDER BY created ASC, rowid ASC LIMIT ?2
+                 )
+                 ORDER BY h.created ASC, h.rowid ASC",
             )
             .map_err(|error| error.to_string())?;
         let mut rows = stmt
-            .query(params![policy.max_history_per_thread as i64, remaining as i64])
+            .query(params![
+                policy.max_history_per_thread as i64,
+                remaining as i64
+            ])
             .map_err(|error| error.to_string())?;
         while let Some(row) = rows.next().map_err(|error| error.to_string())? {
             let rowid: i64 = row.get(0).map_err(|error| error.to_string())?;
@@ -381,18 +438,23 @@ fn gc_orphan_items_batch(
         return Ok((0, false));
     }
     let total_items: i64 = transaction
-        .query_row("SELECT COUNT(*) FROM native_rebuild_items_v1", [], |row| {
-            row.get(0)
-        })
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM native_rebuild_items_v1)",
+            [],
+            |row| row.get(0),
+        )
         .map_err(|error| error.to_string())?;
     if total_items == 0 {
         return Ok((0, false));
     }
     let total_manifests: i64 = transaction
         .query_row(
-            "SELECT (SELECT COUNT(*) FROM native_rebuild_history_v1)
-                  + (SELECT COUNT(*) FROM native_partial_history_v1)",
-            [],
+            "SELECT COUNT(*) FROM (
+                SELECT 1 FROM native_rebuild_history_v1
+                UNION ALL SELECT 1 FROM native_partial_history_v1
+                LIMIT ?1
+             )",
+            params![INLINE_ITEM_GC_HISTORY_LIMIT * 4 + 1],
             |row| row.get(0),
         )
         .map_err(|error| error.to_string())?;
@@ -477,105 +539,122 @@ fn convert_and_vacuum(connection: &Connection) -> Result<(), String> {
 }
 
 impl IdentityStore {
-    /// Run a single bounded maintenance batch. Safe to call repeatedly from a
-    /// background task with yields between batches so live requests never stall.
+    /// Run one best-effort batch, yielding to foreground connection users.
+    /// Long SQL statements are interrupted at the policy's time budget.
     pub fn prune_archive_batch(
         &self,
         now_secs: i64,
         policy: &MaintenancePolicy,
         allow_full_vacuum: bool,
     ) -> Result<MaintenanceReport, String> {
-        let mut connection = self
-            .connection
-            .lock()
-            .map_err(|_| "Identity store lock poisoned".to_string())?;
-        let metrics = read_db_size_metrics(&connection)?;
-        let over_budget = metrics.live_bytes > policy.max_archive_bytes
-            || (metrics.live_bytes > policy.target_archive_bytes && metrics.freelist_bytes > 0);
-        let cutoff = now_secs.saturating_sub(policy.retention_secs.max(0));
-        let mut report = MaintenanceReport::default();
-
-        let transaction = connection
-            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
-            .map_err(|error| error.to_string())?;
-        let mut candidate_digests: HashMap<String, HashSet<String>> = HashMap::new();
-
-        let partial_rows = select_partial_prune_candidates(
-            &transaction,
-            cutoff,
-            policy,
-            over_budget,
-            policy.batch_size,
-        )?;
-        if !partial_rows.is_empty() {
-            let mut del_partial = transaction
-                .prepare_cached("DELETE FROM native_partial_history_v1 WHERE rowid=?1")
-                .map_err(|error| error.to_string())?;
-            for (rowid, caller, manifest) in &partial_rows {
-                collect_manifest_digests(manifest, candidate_digests.entry(caller.clone()).or_default());
-                report.deleted_partial_rows += del_partial
-                    .execute(params![rowid])
-                    .map_err(|error| error.to_string())?;
+        let mut connection = match self.connection.try_lock() {
+            Ok(connection) => connection,
+            Err(TryLockError::WouldBlock) => {
+                return Ok(MaintenanceReport {
+                    has_more: true,
+                    ..MaintenanceReport::default()
+                });
             }
-        }
-
-        let history_limit = policy.batch_size.saturating_sub(partial_rows.len());
-        let history_rows = select_history_prune_candidates(
-            &transaction,
-            now_secs,
-            cutoff,
-            policy,
-            over_budget,
-            history_limit,
-        )?;
-        if !history_rows.is_empty() {
-            let mut del_history = transaction
-                .prepare_cached("DELETE FROM native_rebuild_history_v1 WHERE rowid=?1")
-                .map_err(|error| error.to_string())?;
-            let mut del_hot = transaction
-                .prepare_cached(
-                    "DELETE FROM native_rebuild_checkpoints_v1 WHERE caller=?1 AND response=?2",
-                )
-                .map_err(|error| error.to_string())?;
-            for (rowid, caller, response, manifest) in &history_rows {
-                collect_manifest_digests(manifest, candidate_digests.entry(caller.clone()).or_default());
-                report.deleted_history_rows += del_history
-                    .execute(params![rowid])
-                    .map_err(|error| error.to_string())?;
-                report.deleted_checkpoint_rows += del_hot
-                    .execute(params![caller, response])
-                    .map_err(|error| error.to_string())?;
+            Err(TryLockError::Poisoned(_)) => {
+                return Err("Identity store lock poisoned".to_string());
             }
-        }
+        };
+        with_batch_budget(&mut connection, policy.max_batch_duration, |connection| {
+            let metrics = read_db_size_metrics(connection)?;
+            let over_budget = metrics.live_bytes > policy.max_archive_bytes
+                || (metrics.live_bytes > policy.target_archive_bytes && metrics.freelist_bytes > 0);
+            let cutoff = now_secs.saturating_sub(policy.retention_secs.max(0));
+            let mut report = MaintenanceReport::default();
 
-        if !candidate_digests.is_empty() {
-            report.deleted_item_rows += delete_unreferenced_candidates(&transaction, candidate_digests)?;
-        }
+            let transaction = connection
+                .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+                .map_err(|error| error.to_string())?;
+            let mut candidate_digests: HashMap<String, HashSet<String>> = HashMap::new();
 
-        let pruned_manifest_count = report.deleted_partial_rows + report.deleted_history_rows;
-        let mut more_orphans = false;
-        if pruned_manifest_count < policy.batch_size {
-            let (gc_deleted, has_more_items) =
-                gc_orphan_items_batch(&transaction, policy.item_gc_batch_size)?;
-            report.deleted_item_rows += gc_deleted;
-            more_orphans = has_more_items;
-        }
-        transaction.commit().map_err(|error| error.to_string())?;
+            let partial_rows = select_partial_prune_candidates(
+                &transaction,
+                cutoff,
+                policy,
+                over_budget,
+                policy.batch_size,
+            )?;
+            if !partial_rows.is_empty() {
+                let mut del_partial = transaction
+                    .prepare_cached("DELETE FROM native_partial_history_v1 WHERE rowid=?1")
+                    .map_err(|error| error.to_string())?;
+                for (rowid, caller, manifest) in &partial_rows {
+                    collect_manifest_digests(
+                        manifest,
+                        candidate_digests.entry(caller.clone()).or_default(),
+                    );
+                    report.deleted_partial_rows += del_partial
+                        .execute(params![rowid])
+                        .map_err(|error| error.to_string())?;
+                }
+            }
 
-        report.has_more = pruned_manifest_count >= policy.batch_size || more_orphans;
-        let after = read_db_size_metrics(&connection)?;
-        if report.any_deleted() || after.freelist_bytes > 0 {
-            reclaim_pages_incremental(&connection, after.auto_vacuum);
-        }
-        if allow_full_vacuum
-            && !report.has_more
-            && after.auto_vacuum != 2
-            && after.freelist_bytes >= policy.vacuum_freelist_threshold_bytes
-        {
-            convert_and_vacuum(&connection)?;
-            report.vacuumed = true;
-        }
-        Ok(report)
+            let history_limit = policy.batch_size.saturating_sub(partial_rows.len());
+            let history_rows = select_history_prune_candidates(
+                &transaction,
+                now_secs,
+                cutoff,
+                policy,
+                over_budget,
+                history_limit,
+            )?;
+            if !history_rows.is_empty() {
+                let mut del_history = transaction
+                    .prepare_cached("DELETE FROM native_rebuild_history_v1 WHERE rowid=?1")
+                    .map_err(|error| error.to_string())?;
+                let mut del_hot = transaction
+                    .prepare_cached(
+                        "DELETE FROM native_rebuild_checkpoints_v1 WHERE caller=?1 AND response=?2",
+                    )
+                    .map_err(|error| error.to_string())?;
+                for (rowid, caller, response, manifest) in &history_rows {
+                    collect_manifest_digests(
+                        manifest,
+                        candidate_digests.entry(caller.clone()).or_default(),
+                    );
+                    report.deleted_history_rows += del_history
+                        .execute(params![rowid])
+                        .map_err(|error| error.to_string())?;
+                    report.deleted_checkpoint_rows += del_hot
+                        .execute(params![caller, response])
+                        .map_err(|error| error.to_string())?;
+                }
+            }
+
+            if !candidate_digests.is_empty() {
+                report.deleted_item_rows +=
+                    delete_unreferenced_candidates(&transaction, candidate_digests)?;
+            }
+
+            let pruned_manifest_count = report.deleted_partial_rows + report.deleted_history_rows;
+            let mut more_orphans = false;
+            if pruned_manifest_count < policy.batch_size {
+                let (gc_deleted, has_more_items) =
+                    gc_orphan_items_batch(&transaction, policy.item_gc_batch_size)?;
+                report.deleted_item_rows += gc_deleted;
+                more_orphans = has_more_items;
+            }
+            transaction.commit().map_err(|error| error.to_string())?;
+
+            report.has_more = pruned_manifest_count >= policy.batch_size || more_orphans;
+            let after = read_db_size_metrics(&connection)?;
+            if report.any_deleted() || after.freelist_bytes > 0 {
+                reclaim_pages_incremental(&connection, after.auto_vacuum);
+            }
+            if allow_full_vacuum
+                && !report.has_more
+                && after.auto_vacuum != 2
+                && after.freelist_bytes >= policy.vacuum_freelist_threshold_bytes
+            {
+                convert_and_vacuum(&connection)?;
+                report.vacuumed = true;
+            }
+            Ok(report)
+        })
     }
 
     /// Clear cached conversation transcripts and compact the database on disk.
@@ -652,7 +731,9 @@ impl IdentityStore {
     }
 
     /// Compact an on-disk `identity.sqlite` file when no native server handle is active.
-    pub fn compact_path_if_exists(path: &std::path::Path) -> Result<Option<MaintenanceReport>, String> {
+    pub fn compact_path_if_exists(
+        path: &std::path::Path,
+    ) -> Result<Option<MaintenanceReport>, String> {
         if !path.is_file() {
             return Ok(None);
         }
@@ -661,9 +742,7 @@ impl IdentityStore {
         Ok(Some(report))
     }
 
-    pub(crate) fn try_acquire_maintenance_guard(
-        self: &Arc<Self>,
-    ) -> Option<MaintenanceGuard> {
+    pub(crate) fn try_acquire_maintenance_guard(self: &Arc<Self>) -> Option<MaintenanceGuard> {
         self.maintenance_running
             .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
             .ok()

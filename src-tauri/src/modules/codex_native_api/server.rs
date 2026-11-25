@@ -507,11 +507,15 @@ fn spawn_identity_maintenance_loop(
                     if stop.stopped() {
                         return;
                     }
-                    let allow_full_vacuum = activity.count.load(Ordering::Acquire) == 0;
+                    if activity.count.load(Ordering::Acquire) != 0 {
+                        break;
+                    }
                     let store = Arc::clone(&identity);
                     let now_secs = chrono::Utc::now().timestamp();
                     let batch = tokio::task::spawn_blocking(move || {
-                        store.prune_archive_batch(now_secs, &policy, allow_full_vacuum)
+                        // A request can arrive after the idle check. Full VACUUM
+                        // belongs to explicit compaction, not live background work.
+                        store.prune_archive_batch(now_secs, &policy, false)
                     })
                     .await;
                     match batch {
