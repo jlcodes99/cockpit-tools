@@ -6774,6 +6774,8 @@
       "instructionsBytes": "指令",
       "overloadRetry": "满载重试",
       "overloadRecovery": "恢复耗时",
+      "historyRejectionTitle": "历史结构不匹配",
+      "historyRejectionHint": "上游拒绝了请求历史的结构。仅记录数量和标记，不保存对话内容。",
       "recordPayloads": "记录请求正文",
       "recordPayloadsHint": "默认关闭。仅在本地保存有限长度的客户端和上游请求快照；关闭后停止新记录，已有正文可单独清除。",
       "privacyHint": "认证字段会脱敏，但对话正文中的敏感信息未必能识别。复制或分享前请检查。",

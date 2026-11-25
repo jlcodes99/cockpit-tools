@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { Activity, CheckCircle2, ChevronDown, CircleAlert, Clock3, Copy, FileJson, Gauge, Info, RefreshCw, Route, X, XCircle } from 'lucide-react';
-import type { CodexLocalAccessRequestDetail, CodexLocalAccessUsageEvent } from '../../types/codexLocalAccess';
+import type { CodexLocalAccessRequestDetail, CodexLocalAccessUsageEvent, CodexResponsesHistoryRejection } from '../../types/codexLocalAccess';
 import { getCodexLocalAccessRequestDetail } from '../../services/codexLocalAccessService';
 import { formatRequestDiagnosticError, formatRequestPayloadBody, hasRequestFirstResponse, recordedServiceTierAdaptation, requestAuthorizationRouteKey, requestDiagnosticErrorSource, requestDiagnosticPhaseKey, requestedServiceTierLabelKey } from '../../utils/codexRequestDiagnostics';
 import { useEscCloseTopmost } from '../../hooks/useEscClose';
@@ -20,6 +20,30 @@ import { CodexRequestIdentityHeaders } from './CodexRequestIdentityHeaders';
 import { formatTrafficBytes } from '../../utils/codexProxyTraffic';
 import './CodexRequestIdentityHeaders.css';
 import './CodexRequestDiagnostics.css';
+
+const historyShapeFields = ['inputItems', 'messages', 'toolCalls', 'toolOutputs', 'compactionItems', 'hasPreviousResponse', 'hasCompactionControl'] as const;
+const historyRejectionFlags = ['compactionRequest', 'rebuiltHistory', 'recoveredContinuation'] as const;
+
+function CodexHistoryRejectionTrace({ rejection, title, hint }: {
+  rejection: CodexResponsesHistoryRejection;
+  title: string;
+  hint: string;
+}) {
+  return <details className="codex-request-history-rejection">
+    <summary>{title}</summary>
+    <p className="codex-request-diagnostics-hint">{hint}</p>
+    {(['client', 'upstream'] as const).map((side) => <div key={side} className="codex-request-attempt-meta">
+      {historyShapeFields.map((field) => <span key={field}>
+        <code>{side}.{field}</code>: <strong>{String(rejection[side][field])}</strong>
+      </span>)}
+    </div>)}
+    <div className="codex-request-attempt-meta">
+      {historyRejectionFlags.map((flag) => <span key={flag}>
+        <code>{flag}</code>: <strong>{String(rejection[flag])}</strong>
+      </span>)}
+    </div>
+  </details>;
+}
 
 export function CodexRequestDetailModal({ event, accountDisplayNames = new Map(), maskAccountText, onOpenTimeoutSettings, onClose }: {
   event: CodexLocalAccessUsageEvent;
@@ -167,6 +191,10 @@ export function CodexRequestDetailModal({ event, accountDisplayNames = new Map()
                   {attempt.startedAtMs > 0 && <time dateTime={new Date(attempt.startedAtMs).toISOString()}>{new Date(attempt.startedAtMs).toLocaleString()}</time>}
                   {attempt.failurePhase && <p className="codex-request-attempt-error">{t(requestDiagnosticPhaseKey(attempt.failurePhase))}</p>}
                   {attempt.errorMessage && <p className="codex-request-attempt-error">{attempt.errorMessage}</p>}
+                  {attempt.responsesHistoryRejection && <CodexHistoryRejectionTrace
+                    rejection={attempt.responsesHistoryRejection}
+                    title={t('codex.requestDiagnostics.historyRejectionTitle')}
+                    hint={t('codex.requestDiagnostics.historyRejectionHint')} />}
                   {attempt.errorCategory && <p className="codex-request-diagnostics-hint"><code>{attempt.errorCategory}</code></p>}
                   {attempt.upstreamRequestId && <p className="codex-request-diagnostics-hint">{t('codex.requestDiagnostics.upstreamRequestId')}: <code>{attempt.upstreamRequestId}</code></p>}
                   {attempt.responseModel && <>

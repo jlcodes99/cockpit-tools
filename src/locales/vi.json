@@ -6529,6 +6529,8 @@
       "instructionsBytes": "Chỉ dẫn",
       "overloadRetry": "Thử lại khi quá tải",
       "overloadRecovery": "Thời gian khôi phục",
+      "historyRejectionTitle": "Lịch sử không khớp cấu trúc",
+      "historyRejectionHint": "Máy chủ đã từ chối cấu trúc lịch sử yêu cầu. Chỉ số lượng và cờ được ghi lại; không lưu nội dung hội thoại.",
       "recordPayloads": "Ghi nội dung yêu cầu",
       "recordPayloadsHint": "Mặc định tắt. Lưu cục bộ bản chụp có giới hạn của yêu cầu từ máy khách và gửi lên máy chủ. Tắt sẽ ngừng ghi mới; nội dung đã lưu có thể xóa riêng.",
       "privacyHint": "Các trường xác thực được che, nhưng bí mật trong hội thoại có thể vẫn còn. Kiểm tra trước khi sao chép hoặc chia sẻ.",

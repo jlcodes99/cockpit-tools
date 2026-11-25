@@ -3,7 +3,7 @@ import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import { loadHookModule, settlePromises } from '../../../tests/helpers/reactHookHarness';
 import * as diagnostics from '../../utils/codexRequestDiagnostics';
-import type { CodexLocalAccessRequestDetail } from '../../types/codexLocalAccess';
+import type { CodexHistoryShape, CodexLocalAccessRequestDetail } from '../../types/codexLocalAccess';
 
 const identity = loadHookModule(new URL('./CodexRequestIdentityHeaders.tsx', import.meta.url), {
   'lucide-react': { Activity: 'Activity', Copy: 'Copy' },
@@ -114,6 +114,32 @@ test('image diagnostics show the requested and sent image models, driver, and up
   assert.match(text(entries[1]), /upstreamModel.*gpt-image-2.6-flare/s);
   assert.doesNotMatch(text(entries[1]), /clientModel|imageGenerationMainModel.label/);
   assert.match(text(entries[2]), /older-chat-model/);
+  hook.unmount();
+});
+
+test('history shape rejection shows client and upstream counts and flags on the affected attempt only', async () => {
+  const shape = (overrides: Partial<CodexHistoryShape> = {}) => ({
+    inputItems: 12, messages: 3, toolCalls: 1, toolOutputs: 2, compactionItems: 0,
+    hasPreviousResponse: true, hasCompactionControl: false, ...overrides,
+  });
+  const hook = harness({}, { detail: detail({ attempts: [
+    attempt(1, { responsesHistoryRejection: {
+      client: shape(), upstream: shape({ inputItems: 9, messages: 2 }),
+      compactionRequest: true, rebuiltHistory: false, recoveredContinuation: true,
+    } }),
+    attempt(2, {}),
+  ] }) });
+  await settlePromises();
+  const list = nodes(hook.flush(), (node) => node.type === 'ol' && node.props.className === 'codex-request-attempts')[0];
+  const entries = nodes(list, (node) => node.type === 'li');
+  const content = text(entries[0]);
+  assert.match(content, /historyRejectionTitle/);
+  assert.match(content, /historyRejectionHint/);
+  for (const value of ['client.inputItems', 'client.messages', 'upstream.inputItems', 'upstream.messages',
+    'compactionRequest', 'rebuiltHistory', 'recoveredContinuation', '12', '9']) {
+    assert.ok(content.includes(value), value);
+  }
+  assert.doesNotMatch(text(entries[1]), /historyRejectionTitle|historyRejectionHint/);
   hook.unmount();
 });
 

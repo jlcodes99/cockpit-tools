@@ -6529,6 +6529,8 @@
       "instructionsBytes": "Istruzioni",
       "overloadRetry": "Tentativi per sovraccarico",
       "overloadRecovery": "Tempo di ripresa",
+      "historyRejectionTitle": "Formato della cronologia non compatibile",
+      "historyRejectionHint": "L'upstream ha rifiutato il formato della cronologia delle richieste. Vengono registrati solo conteggi e flag; il testo della conversazione non viene salvato.",
       "recordPayloads": "Registra corpi richieste",
       "recordPayloadsHint": "Disattivato per impostazione predefinita. Salva localmente copie limitate delle richieste client e upstream. Disattivarlo interrompe le nuove acquisizioni; i corpi salvati possono essere eliminati separatamente.",
       "privacyHint": "I campi di autenticazione sono oscurati, ma possono restare segreti nel testo. Controlla prima di copiare o condividere.",

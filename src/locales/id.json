@@ -6576,6 +6576,8 @@
       "instructionsBytes": "Instruksi",
       "overloadRetry": "Ulang saat penuh",
       "overloadRecovery": "Waktu pemulihan",
+      "historyRejectionTitle": "Format riwayat tidak cocok",
+      "historyRejectionHint": "Upstream menolak format riwayat permintaan. Hanya jumlah dan penanda yang disimpan; teks percakapan tidak disimpan.",
       "recordPayloads": "Rekam isi permintaan",
       "recordPayloadsHint": "Nonaktif secara bawaan. Salinan permintaan klien dan server dengan ukuran terbatas disimpan secara lokal. Menonaktifkan menghentikan rekaman baru; isi tersimpan dapat dihapus terpisah.",
       "privacyHint": "Kolom autentikasi disamarkan, tetapi rahasia dalam teks percakapan mungkin tetap ada. Periksa sebelum menyalin atau berbagi.",

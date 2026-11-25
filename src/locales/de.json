@@ -6529,6 +6529,8 @@
       "instructionsBytes": "Anweisungen",
       "overloadRetry": "Überlast-Wiederholungen",
       "overloadRecovery": "Erholungszeit",
+      "historyRejectionTitle": "Verlaufsformat nicht kompatibel",
+      "historyRejectionHint": "Der Upstream hat das Format des Anfrageverlaufs abgelehnt. Es werden nur Zähler und Flags gespeichert; kein Gesprächstext.",
       "recordPayloads": "Anfragetexte speichern",
       "recordPayloadsHint": "Standardmäßig aus. Begrenzte Kopien von Client- und Upstream-Anfragen werden lokal gespeichert. Ausschalten stoppt neue Aufzeichnungen; gespeicherte Texte lassen sich separat löschen.",
       "privacyHint": "Authentifizierungsfelder werden maskiert, Geheimnisse im Gespräch können jedoch erhalten bleiben. Vor dem Kopieren oder Teilen prüfen.",

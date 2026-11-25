@@ -6529,6 +6529,8 @@
       "instructionsBytes": "指令",
       "overloadRetry": "滿載重試",
       "overloadRecovery": "復原耗時",
+      "historyRejectionTitle": "歷史結構不符合",
+      "historyRejectionHint": "上游拒絕了請求歷史的結構。僅記錄數量與標記，不儲存對話內容。",
       "recordPayloads": "記錄請求本文",
       "recordPayloadsHint": "預設關閉。僅在本機儲存有限長度的用戶端和上游請求快照；關閉後停止新記錄，既有本文可單獨清除。",
       "privacyHint": "驗證欄位會遮蔽，但對話本文中的敏感資訊未必能辨識。複製或分享前請檢查。",

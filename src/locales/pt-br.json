@@ -6529,6 +6529,8 @@
       "instructionsBytes": "Instruções",
       "overloadRetry": "Tentativas por sobrecarga",
       "overloadRecovery": "Tempo de recuperação",
+      "historyRejectionTitle": "Formato de histórico incompatível",
+      "historyRejectionHint": "O upstream rejeitou o formato do histórico de solicitações. Apenas contagens e sinalizadores são registrados; nenhum texto da conversa é armazenado.",
       "recordPayloads": "Registrar corpos",
       "recordPayloadsHint": "Desativado por padrão. Salva localmente cópias limitadas das solicitações do cliente e do servidor. Desativar interrompe novas capturas; os corpos salvos podem ser apagados separadamente.",
       "privacyHint": "Os campos de autenticação são ocultados, mas segredos na conversa podem permanecer. Revise antes de copiar ou compartilhar.",

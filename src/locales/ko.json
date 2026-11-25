@@ -6529,6 +6529,8 @@
       "instructionsBytes": "지침",
       "overloadRetry": "혼잡 재시도",
       "overloadRecovery": "복구 시간",
+      "historyRejectionTitle": "기록 구조 불일치",
+      "historyRejectionHint": "업스트림이 요청 기록 구조를 거부했습니다. 개수와 플래그만 기록되며 대화 내용은 저장되지 않습니다.",
       "recordPayloads": "요청 본문 기록",
       "recordPayloadsHint": "기본값은 꺼짐입니다. 클라이언트와 상위 요청 스냅샷을 크기 제한 내에서 로컬 저장합니다. 끄면 새 기록만 중단하며 저장된 본문은 별도로 지울 수 있습니다.",
       "privacyHint": "인증 필드는 가리지만 대화 본문의 민감한 정보는 남을 수 있습니다. 복사하거나 공유하기 전에 확인하세요.",

@@ -6529,6 +6529,8 @@
       "instructionsBytes": "Consignes",
       "overloadRetry": "Reprises de surcharge",
       "overloadRecovery": "Temps de reprise",
+      "historyRejectionTitle": "Format d'historique incompatible",
+      "historyRejectionHint": "L'amont a rejeté le format de l'historique des requêtes. Seuls les compteurs et les indicateurs sont enregistrés ; aucun texte de conversation n'est conservé.",
       "recordPayloads": "Enregistrer les corps",
       "recordPayloadsHint": "Désactivé par défaut. Les requêtes client et amont sont conservées localement avec une taille limitée. La désactivation arrête les nouvelles captures ; les corps enregistrés peuvent être effacés séparément.",
       "privacyHint": "Les champs d’authentification sont masqués, mais des secrets peuvent subsister dans le texte. Vérifiez avant de copier ou partager.",

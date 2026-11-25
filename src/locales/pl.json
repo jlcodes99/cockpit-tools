@@ -6529,6 +6529,8 @@
       "instructionsBytes": "Instrukcje",
       "overloadRetry": "Ponowienia przy przeciążeniu",
       "overloadRecovery": "Czas odzyskiwania",
+      "historyRejectionTitle": "Niekompatybilny format historii",
+      "historyRejectionHint": "Upstream odrzucił format historii żądań. Zapisywane są tylko liczniki i flagi; treść rozmowy nie jest zapisywana.",
       "recordPayloads": "Zapisuj treść żądań",
       "recordPayloadsHint": "Domyślnie wyłączone. Ograniczone kopie żądań klienta i serwera są zapisywane lokalnie. Wyłączenie zatrzymuje nowe zapisy; zapisane treści można usunąć osobno.",
       "privacyHint": "Pola uwierzytelniania są maskowane, ale tajne dane w rozmowie mogą pozostać. Sprawdź przed kopiowaniem lub udostępnieniem.",
