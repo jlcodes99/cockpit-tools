@@ -499,6 +499,8 @@ pub struct CodexLocalAccessApiKey {
     pub label: String,
     pub key: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub native_provider: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub provider_gateway: Option<CodexLocalAccessProviderGateway>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model_routing: Option<CodexLocalAccessModelRouting>,
