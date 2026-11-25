@@ -448,10 +448,11 @@ async fn forward_with_policy(
         .total_deadline
         .min(tracker.deadline(policy.total_timeout));
     let HttpResponseStream {
-        bytes: upstream,
+        bytes: raw_upstream,
         status,
         mut headers,
         is_sse,
+        canonical,
     } = match open_response_stream(
         &state,
         &mut prepared,
@@ -469,6 +470,9 @@ async fn forward_with_policy(
             return Err(error);
         }
     };
+    let canonical_sse = canonical.as_ref().map_or(is_sse, |stream| stream.is_sse);
+    let upstream = canonical.map_or(raw_upstream, |stream| stream.bytes);
+    let is_sse = canonical_sse;
     if prepared.route.chatgpt_plan && status.is_success() && !is_sse {
         let error = ServiceError::new(502, "incomplete_upstream_stream",
             "ChatGPT plan inference requires a Responses event stream");
@@ -804,6 +808,7 @@ pub(super) struct HttpResponseStream {
     pub headers: HeaderMap,
     pub bytes: super::upstream::ByteStream,
     pub is_sse: bool,
+    pub canonical: Option<super::upstream::CanonicalStream>,
 }
 
 /// Open and normalize HTTP upstreams without consuming the request/session owner.
@@ -818,6 +823,9 @@ pub(super) async fn open_response_stream(
     policy: &ExecutionPolicy,
     deadline: Deadline,
 ) -> Result<HttpResponseStream, ServiceError> {
+    if super::workbuddy_acp::is_route(&prepared.route) {
+        return super::workbuddy_acp::open_text_stream(state, prepared, compact).await;
+    }
     let mut bootstrap_attempts = 0;
     loop {
         let response = super::retry::send(state, prepared, tracker, compact, policy).await?;
@@ -860,6 +868,7 @@ pub(super) async fn open_response_stream(
             headers,
             bytes: upstream.bytes,
             is_sse: upstream.is_sse,
+            canonical: None,
         });
     }
 }

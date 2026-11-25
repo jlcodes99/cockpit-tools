@@ -45,6 +45,7 @@ pub(crate) mod grok_thinking;
 mod grok_errors;
 mod grok_wire;
 mod http;
+mod workbuddy_acp;
 mod http_compression;
 pub mod identity;
 mod images;
