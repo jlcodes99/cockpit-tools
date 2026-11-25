@@ -650,6 +650,7 @@ experimental_bearer_token = "agt_codex_test"
             id: "provider_gateway_deepseek".to_string(),
             label: "Provider Gateway: DeepSeek".to_string(),
             key: key.clone(),
+            native_provider: None,
             provider_gateway: Some(CodexLocalAccessProviderGateway {
         auth_scheme: None,
                 base_url: "https://api.deepseek.com/v1".to_string(),
@@ -663,6 +664,7 @@ experimental_bearer_token = "agt_codex_test"
             }),
             model_routing: None,
             inherit_account_pool: Some(false),
+            account_pool_id: None,
             account_ids: vec!["deepseek-account".to_string()],
             priority_account_ids: Vec::new(),
             preferred_account_id: None,

@@ -4,7 +4,40 @@ use serde_json::{json, Value};
 mod acp;
 use acp::{looks_rate_limited, parse_acp_post_error, read_acp_reply};
 
-const WORKBUDDY_WEB_ENDPOINT: &str = "https://www.workbuddy.cn";
+pub(crate) const WORKBUDDY_WEB_ENDPOINT: &str = "https://www.workbuddy.cn";
+/// CodeBuddy CN 与 WorkBuddy 同构（额度共享），仅应用面域名不同。
+const CODEBUDDY_CN_WEB_ENDPOINT: &str = "https://www.codebuddy.cn";
+
+/// 探测所需的账号字段（WorkBuddy / CodeBuddy CN 结构一致，抽出来复用同一套流程）。
+pub(crate) struct ProbeAccount<'a> {
+    pub id: &'a str,
+    pub access_token: &'a str,
+    pub uid: Option<&'a str>,
+    pub enterprise_id: Option<&'a str>,
+    pub domain: Option<&'a str>,
+}
+
+impl<'a> ProbeAccount<'a> {
+    pub(crate) fn from_workbuddy(account: &'a crate::models::workbuddy::WorkbuddyAccount) -> Self {
+        Self {
+            id: &account.id,
+            access_token: &account.access_token,
+            uid: account.uid.as_deref(),
+            enterprise_id: account.enterprise_id.as_deref(),
+            domain: account.domain.as_deref(),
+        }
+    }
+
+    pub(crate) fn from_codebuddy(account: &'a crate::models::codebuddy::CodebuddyAccount) -> Self {
+        Self {
+            id: &account.id,
+            access_token: &account.access_token,
+            uid: account.uid.as_deref(),
+            enterprise_id: account.enterprise_id.as_deref(),
+            domain: account.domain.as_deref(),
+        }
+    }
+}
 
 fn build_client() -> Result<reqwest::Client, String> {
     reqwest::Client::builder()
@@ -48,11 +81,41 @@ pub async fn probe_model(
     model: &str,
     keep_conversation: bool,
 ) -> Result<WorkbuddyModelProbeResult, String> {
+    probe_model_for(
+        &ProbeAccount::from_workbuddy(account),
+        WORKBUDDY_WEB_ENDPOINT,
+        model,
+        keep_conversation,
+    )
+    .await
+}
+
+/// CodeBuddy CN 平台的模型探测（与 WorkBuddy 共用同一套后端契约）。
+pub async fn probe_cn_model(
+    account: &crate::models::codebuddy::CodebuddyAccount,
+    model: &str,
+    keep_conversation: bool,
+) -> Result<WorkbuddyModelProbeResult, String> {
+    probe_model_for(
+        &ProbeAccount::from_codebuddy(account),
+        CODEBUDDY_CN_WEB_ENDPOINT,
+        model,
+        keep_conversation,
+    )
+    .await
+}
+
+async fn probe_model_for(
+    account: &ProbeAccount<'_>,
+    base: &str,
+    model: &str,
+    keep_conversation: bool,
+) -> Result<WorkbuddyModelProbeResult, String> {
     let model = model.trim();
     if model.is_empty() {
         return Err("WORKBUDDY_PROBE_MODEL_REQUIRED".into());
     }
-    let key = (account.id.clone(), model.to_string());
+    let key = (account.id.to_string(), model.to_string());
     if !ACTIVE_PROBES
         .lock()
         .unwrap_or_else(|e| e.into_inner())
@@ -61,28 +124,21 @@ pub async fn probe_model(
         return Err("WORKBUDDY_PROBE_BUSY".into());
     }
     let _lease = ProbeLease(key);
-    probe_with_client(
-        &build_client()?,
-        WORKBUDDY_WEB_ENDPOINT,
-        account,
-        model,
-        keep_conversation,
-    )
-    .await
+    probe_with_client(&build_client()?, base, account, model, keep_conversation).await
 }
 
 async fn probe_with_client(
     client: &reqwest::Client,
     base: &str,
-    account: &crate::models::workbuddy::WorkbuddyAccount,
+    account: &ProbeAccount<'_>,
     model: &str,
     keep_conversation: bool,
 ) -> Result<WorkbuddyModelProbeResult, String> {
     let headers = billing_headers(
-        &account.access_token,
-        account.uid.as_deref(),
-        account.enterprise_id.as_deref(),
-        account.domain.as_deref(),
+        account.access_token,
+        account.uid,
+        account.enterprise_id,
+        account.domain,
         "en",
     )?;
     let response = client
@@ -150,16 +206,18 @@ async fn probe_with_client(
                         &token,
                         &session,
                         model,
-                        account.enterprise_id.as_deref(),
+                        "Reply with OK.",
+                        account.enterprise_id,
                         45,
                     )
                     .await;
                     match reply.error {
                         Some(error) => Err(error),
-                        None if reply.text.trim().is_empty() => {
-                            Err("WORKBUDDY_PROBE_NO_REPLY".into())
-                        }
-                        None => Ok(reply.text),
+                        // 服务端可能不推送 agent_message_chunk 文本块
+                        //（usage.outputTokens 已证明模型执行、stopReason=end_turn）。
+                        // prompt 正常结束即视为可用，回复文本有则带上。
+                        None if reply.has_prompt_result() || !reply.text.trim().is_empty() => Ok(reply.text),
+                        None => Err("WORKBUDDY_PROBE_NO_REPLY".into()),
                     }
                 }
             }
@@ -182,19 +240,20 @@ async fn probe_with_client(
             result.message = if account.access_token.is_empty() {
                 error
             } else {
-                error.replace(&account.access_token, "<redacted>")
+                error.replace(account.access_token, "<redacted>")
             };
         }
     }
-    // Cleanup is separate from probe success. A failed DELETE must stay visible.
+    // Cleanup is separate from probe success. A failed deletion must stay visible.
     if !keep_conversation {
         if let Some(id) = &result.conversation_id {
             let deleted = client
-                .delete(format!(
-                    "{base}/console/as/conversations/{}",
+                .post(format!(
+                    "{base}/console/as/conversations/{}/delete",
                     urlencoding::encode(id)
                 ))
                 .headers(headers)
+                .json(&json!({"id": id}))
                 .timeout(std::time::Duration::from_secs(10))
                 .send()
                 .await;
@@ -235,7 +294,7 @@ async fn probe_with_client(
     }
     if !account.access_token.is_empty() {
         if let Some(error) = &mut result.cleanup_error {
-            *error = error.replace(&account.access_token, "<redacted>");
+            *error = error.replace(account.access_token, "<redacted>");
         }
     }
     Ok(result)
@@ -249,18 +308,122 @@ fn truncate_chars(value: &str, max: usize) -> String {
     out
 }
 
+pub(crate) async fn read_conversation_reply(
+    client: &reqwest::Client,
+    api_url: &str,
+    session_token: &str,
+    session_id: &str,
+    model: &str,
+    prompt: &str,
+    enterprise_id: Option<&str>,
+    timeout_secs: u64,
+) -> Result<String, String> {
+    let outcome = acp::read_acp_reply(
+        client,
+        api_url,
+        session_token,
+        session_id,
+        model,
+        prompt,
+        enterprise_id,
+        timeout_secs,
+    )
+    .await;
+    if let Some(error) = outcome.error {
+        return Err(error);
+    }
+    if outcome.has_prompt_result() || !outcome.text.trim().is_empty() {
+        return Ok(outcome.text);
+    }
+    Err("WORKBUDDY_PROBE_NO_REPLY".to_string())
+}
+
+
+pub(crate) async fn create_conversation(
+    client: &reqwest::Client,
+    base: &str,
+    account: &ProbeAccount<'_>,
+    model: &str,
+    prompt: &str,
+) -> Result<String, String> {
+    let headers = billing_headers(
+        account.access_token,
+        account.uid,
+        account.enterprise_id,
+        account.domain,
+        "en",
+    )?;
+    let response = client
+        .post(format!("{base}/console/as/conversations/"))
+        .headers(headers)
+        .timeout(std::time::Duration::from_secs(15))
+        .json(&json!({"prompt": prompt, "model": model, "plugins": []}))
+        .send()
+        .await
+        .map_err(|error| error.without_url().to_string())?;
+    let status = response.status();
+    let text = response
+        .text()
+        .await
+        .map_err(|error| error.without_url().to_string())?;
+    let body = serde_json::from_str::<Value>(&text).unwrap_or(Value::Null);
+    if status.as_u16() == 429 {
+        return Err("WORKBUDDY_PROBE_RATE_LIMITED".to_string());
+    }
+    if !status.is_success() {
+        return Err(format!("HTTP {}", status.as_u16()));
+    }
+    body.pointer("/data/id")
+        .or_else(|| body.get("id"))
+        .and_then(Value::as_str)
+        .filter(|id| !id.trim().is_empty())
+        .map(str::to_string)
+        .ok_or_else(|| "WORKBUDDY_PROBE_INVALID_RESPONSE".to_string())
+}
+
+/// Delete a temporary WorkBuddy conversation. Errors are returned already redacted.
+pub(crate) async fn delete_conversation(
+    client: &reqwest::Client,
+    base: &str,
+    account: &ProbeAccount<'_>,
+    conversation_id: &str,
+) -> Result<(), String> {
+    let headers = billing_headers(
+        account.access_token,
+        account.uid,
+        account.enterprise_id,
+        account.domain,
+        "en",
+    )?;
+    let response = client
+        .post(format!(
+            "{base}/console/as/conversations/{}/delete",
+            urlencoding::encode(conversation_id)
+        ))
+        .headers(headers)
+        .timeout(std::time::Duration::from_secs(10))
+        .json(&json!({"id": conversation_id}))
+        .send()
+        .await
+        .map_err(|error| error.without_url().to_string())?;
+    if !response.status().is_success() {
+        return Err(format!("HTTP {}", response.status().as_u16()));
+    }
+    Ok(())
+}
+
 /// 取会话的沙箱地址与会话 token（对齐客户端 getSandboxInfo）。
-async fn fetch_conversation_session(
+pub(crate) async fn fetch_conversation_session(
     client: &reqwest::Client,
     base: &str,
     conversation_id: &str,
-    account: &crate::models::workbuddy::WorkbuddyAccount,
+    account: &ProbeAccount<'_>,
 ) -> Result<(String, String, String), String> {
     let headers = billing_headers(
-        &account.access_token,
-        account.uid.as_deref(),
-        account.enterprise_id.as_deref(),
-        account.domain.as_deref(),
+        account.access_token,
+        account.uid,
+        account.enterprise_id,
+        account.domain,
         "zh",
     )?;
 
@@ -333,24 +496,45 @@ pub struct WorkbuddyCloudModel {
 pub async fn fetch_cloud_models(
     account: &crate::models::workbuddy::WorkbuddyAccount,
 ) -> Result<Vec<WorkbuddyCloudModel>, String> {
+    fetch_cloud_models_for(
+        WORKBUDDY_WEB_ENDPOINT,
+        &ProbeAccount::from_workbuddy(account),
+    )
+    .await
+}
+
+/// CodeBuddy CN 平台的实时模型目录（与 WorkBuddy 同一套接口，域名不同）。
+pub async fn fetch_cn_cloud_models(
+    account: &crate::models::codebuddy::CodebuddyAccount,
+) -> Result<Vec<WorkbuddyCloudModel>, String> {
+    fetch_cloud_models_for(
+        CODEBUDDY_CN_WEB_ENDPOINT,
+        &ProbeAccount::from_codebuddy(account),
+    )
+    .await
+}
+
+async fn fetch_cloud_models_for(
+    base: &str,
+    account: &ProbeAccount<'_>,
+) -> Result<Vec<WorkbuddyCloudModel>, String> {
     let scope = account
         .enterprise_id
-        .as_deref()
         .filter(|s| !s.trim().is_empty())
         .unwrap_or("personal")
         .to_string();
     let client = build_client()?;
     let headers = billing_headers(
-        &account.access_token,
-        account.uid.as_deref(),
-        account.enterprise_id.as_deref(),
-        account.domain.as_deref(),
+        account.access_token,
+        account.uid,
+        account.enterprise_id,
+        account.domain,
         "zh",
     )?;
 
     let response = client
         .get(format!(
-            "{WORKBUDDY_WEB_ENDPOINT}/console/enterprises/{}/models",
+            "{base}/console/enterprises/{}/models",
             urlencoding::encode(&scope)
         ))
         .headers(headers)

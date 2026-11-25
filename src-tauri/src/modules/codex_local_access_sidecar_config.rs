@@ -821,6 +821,14 @@ fn validate_api_key_account_scope_update(
     account_ids: Option<&[String]>,
     inherit_account_pool: Option<bool>,
 ) -> Result<(), String> {
+    if api_key.account_pool_id.is_some() {
+        if inherit_account_pool == Some(true)
+            || account_ids.is_some_and(|ids| ids != api_key.account_ids)
+        {
+            return Err("请在关联的账号池中更改成员，或先解除关联".into());
+        }
+        return Ok(());
+    }
     if !api_key_has_fixed_account_scope(collection, api_key) {
         return Ok(());
     }
@@ -997,6 +1005,21 @@ fn api_service_window_bucket(window_minutes: Option<i64>, fallback: &str) -> (St
     (key, label, minutes)
 }
 
+/// 周窗剩余为 0 时，5h 剩余按 0 计入池合计：周窗耗尽的账号实际已不可用，
+/// 其 5h 剩余属于虚假可用容量。与前端 getCodexEffectiveQuotaPercentages
+/// 的 weeklyBlocksHourly 折算保持同一口径，菜单栏/托盘此前漏了这一步。
+pub(crate) fn effective_pool_hourly_percentage(
+    weekly_present: bool,
+    weekly_percentage: i32,
+    hourly_percentage: i32,
+) -> i32 {
+    if weekly_present && weekly_percentage <= 0 {
+        0
+    } else {
+        hourly_percentage
+    }
+}
+
 fn add_api_service_window_sum(
     windows: &mut Vec<ApiServicePoolWindowSum>,
     window_minutes: Option<i64>,
@@ -1046,12 +1069,20 @@ pub(crate) fn menu_bar_api_service_quota() -> ApiServiceMenuBarQuota {
         let has_presence_flags =
             quota.hourly_window_present.is_some() || quota.weekly_window_present.is_some();
         // 与前端 getCodexQuotaWindows 一致：按 present 决定是否纳入，标签看 window_minutes。
+        // 5h 计入前按 effective_pool_hourly_percentage 折算（weeklyBlocksHourly），
+        // 否则周窗耗尽的账号仍把 5h 剩余计入合计，菜单栏会显示虚高的池额度。
         if !has_presence_flags || quota.hourly_window_present == Some(true) {
+            let weekly_present =
+                !has_presence_flags || quota.weekly_window_present == Some(true);
             add_api_service_window_sum(
                 &mut windows,
                 quota.hourly_window_minutes,
                 "5h",
-                quota.hourly_percentage,
+                effective_pool_hourly_percentage(
+                    weekly_present,
+                    quota.weekly_percentage,
+                    quota.hourly_percentage,
+                ),
             );
         }
         if !has_presence_flags || quota.weekly_window_present == Some(true) {
@@ -2469,7 +2500,7 @@ fn prepare_sidecar_launch_config_in_dir_sync(
         } else if collection_uses_provider_gateway_account(collection, &account.id) {
             is_override_account || is_provider_gateway_eligible_account(&account)
         } else {
-            is_local_access_eligible_account(&account, collection.restrict_free_accounts)
+            is_local_access_eligible_account(&account)
         };
         if !eligible {
             continue;
@@ -2494,6 +2525,12 @@ fn prepare_sidecar_launch_config_in_dir_sync(
             expected_auth_files.insert(file_name.clone());
             manifest_accounts.push(grok_sidecar_account_manifest_value(&account, &file_name));
             continue;
+        }
+        if codex_account::is_zcode_upstream_provider(&account) {
+            return Err("ZCode Provider Gateway 仅支持 Native Rust 网关，不能写入 sidecar 配置".to_string());
+        }
+        if codex_account::is_workbuddy_upstream_provider(&account) {
+            return Err("WorkBuddy ACP Provider Gateway 仅支持 Native Rust 网关，不能写入 sidecar 配置".to_string());
         }
 
         routing_accounts.insert(account.id.clone(), account.clone());
@@ -2532,7 +2569,7 @@ fn prepare_sidecar_launch_config_in_dir_sync(
                     .collect(),
             );
             let provider_route_models = if api_service
-                && automatic_api_service_provider_route_eligible(&account, &upstream_models)
+                && automatic_api_service_provider_route_eligible(&account, || &upstream_models)
             {
                 candidate_route_models
             } else {
