@@ -1270,6 +1270,7 @@ pub fn run() {
             commands::codex::add_codex_account_with_token,
             commands::codex::add_codex_account_with_api_key,
             commands::codex::add_codex_account_from_grok,
+            commands::codex::add_codex_account_from_workbuddy,
             commands::codex::add_codex_account_from_zcode,
             commands::codex::update_codex_account_name,
             commands::codex::update_codex_account_egress_proxy,
