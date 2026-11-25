@@ -1852,6 +1852,7 @@ HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings
             id: "provider_gateway_deepseek".to_string(),
             label: "Provider Gateway: deepseek".to_string(),
             key: "agt_test".to_string(),
+            native_provider: None,
             provider_gateway: Some(deepseek_gateway.clone()),
             model_routing: None,
             inherit_account_pool: Some(false),
@@ -3851,6 +3852,7 @@ http_headers = { "x-cockpit-instance-id" = "default" }
             id: "provider_gateway_deepseek".to_string(),
             label: "Provider Gateway: DeepSeek".to_string(),
             key: "deepseek-local-key".to_string(),
+            native_provider: None,
             provider_gateway: Some(CodexLocalAccessProviderGateway {
         auth_scheme: None,
                 base_url: "https://api.deepseek.com/v1".to_string(),

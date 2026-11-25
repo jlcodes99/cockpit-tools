@@ -2,6 +2,8 @@
 mod native_grok;
 #[path = "codex_local_access_native_zcode.rs"]
 mod native_zcode;
+#[path = "codex_local_access_native_workbuddy.rs"]
+mod native_workbuddy;
 
 // Native provider selection, credentials and model catalogs. No legacy wire executor.
 
@@ -181,7 +183,7 @@ fn native_model_route_plan(
                 || route
                     .native_provider
                     .as_deref()
-                    .is_some_and(|provider| !matches!(provider, "" | "xai" | "zcode"))
+                    .is_some_and(|provider| !matches!(provider, "" | "xai" | "zcode" | "workbuddy_acp"))
             {
                 return Err(native_error(
                     400,
@@ -585,7 +587,9 @@ fn native_account_owner(account: &CodexAccount, base_url: &str) -> String {
     // replacement has no such identity proof, even when the local record is the
     // same, so it must not reuse the old key's upstream continuation state.
     // Keep only a digest; credentials must never enter the identity database.
-    let credential_scope = if codex_account::is_zcode_upstream_provider(account) {
+    let credential_scope = if codex_account::is_zcode_upstream_provider(account)
+        || codex_account::is_workbuddy_upstream_provider(account)
+    {
         format!(
             "{}:{}",
             account.api_credential_kind.as_deref().unwrap_or(""),
@@ -751,6 +755,22 @@ async fn native_account_credentials(
                 account = updated;
                 headers = auth;
                 "https://chatgpt.com/backend-api/codex".to_string()
+            } else if codex_account::is_workbuddy_upstream_provider(&account) {
+                let source = codex_account::workbuddy_upstream_account(&account)
+                    .ok_or_else(|| "WorkBuddy account is unavailable".to_string())?;
+                if source.access_token.trim().is_empty()
+                    || source
+                        .expires_at
+                        .is_some_and(|expires_at| expires_at <= chrono::Utc::now().timestamp_millis())
+                    || source.status.as_deref().is_some_and(|status| {
+                        matches!(status, "expired" | "reauth_required" | "reauthorization_required")
+                    })
+                {
+                    return Err("WorkBuddy account token is missing or expired".to_string());
+                }
+                headers = native_workbuddy::credential_headers(&source)?;
+                native_workbuddy::bind_owner(&mut account, &source);
+                codex_account::WORKBUDDY_ACP_BASE_URL.to_string()
             } else if codex_account::is_zcode_upstream_provider(&account) {
                 let source = crate::modules::zcode_account::load_account(
                     account.api_credential_ref.as_deref().unwrap_or(""),

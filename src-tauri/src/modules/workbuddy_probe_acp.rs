@@ -128,6 +128,7 @@ pub(super) async fn read_acp_reply(
     session_token: &str,
     session_id: &str,
     model: &str,
+    prompt: &str,
     enterprise_id: Option<&str>,
     timeout_secs: u64,
 ) -> AcpOutcome {
@@ -271,7 +272,7 @@ pub(super) async fn read_acp_reply(
                 PROMPT_ID,
                 serde_json::json!({
                     "sessionId": session_id,
-                    "prompt": [{ "type": "text", "text": "Reply with OK." }]
+                    "prompt": [{ "type": "text", "text": prompt }]
                 }),
             ),
         ];
@@ -561,6 +562,7 @@ mod tests {
                 "synthetic-token",
                 "probe-session",
                 "probe-model",
+                "Reply with OK.",
                 None,
                 2,
             )

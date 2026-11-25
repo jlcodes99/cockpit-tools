@@ -2529,6 +2529,9 @@ fn prepare_sidecar_launch_config_in_dir_sync(
         if codex_account::is_zcode_upstream_provider(&account) {
             return Err("ZCode Provider Gateway 仅支持 Native Rust 网关，不能写入 sidecar 配置".to_string());
         }
+        if codex_account::is_workbuddy_upstream_provider(&account) {
+            return Err("WorkBuddy ACP Provider Gateway 仅支持 Native Rust 网关，不能写入 sidecar 配置".to_string());
+        }
 
         routing_accounts.insert(account.id.clone(), account.clone());
 

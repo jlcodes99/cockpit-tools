@@ -650,6 +650,7 @@ experimental_bearer_token = "agt_codex_test"
             id: "provider_gateway_deepseek".to_string(),
             label: "Provider Gateway: DeepSeek".to_string(),
             key: key.clone(),
+            native_provider: None,
             provider_gateway: Some(CodexLocalAccessProviderGateway {
         auth_scheme: None,
                 base_url: "https://api.deepseek.com/v1".to_string(),
