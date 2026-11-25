@@ -1291,6 +1291,9 @@ fn is_provider_gateway_eligible_account(account: &CodexAccount) -> bool {
     if codex_account::is_zcode_upstream_provider(account) {
         return true;
     }
+    if codex_account::is_workbuddy_upstream_provider(account) {
+        return true;
+    }
     account.is_api_key_auth()
         && account
             .openai_api_key
@@ -1328,6 +1331,9 @@ fn native_provider_for_provider_account(account: &CodexAccount) -> Option<String
     if codex_account::is_zcode_upstream_provider(account) {
         return Some(codex_account::ZCODE_NATIVE_PROVIDER.to_string());
     }
+    if codex_account::is_workbuddy_upstream_provider(account) {
+        return Some(codex_account::WORKBUDDY_NATIVE_PROVIDER.to_string());
+    }
     None
 }
 
@@ -1336,6 +1342,46 @@ include!("codex_local_access_provider_vision.rs");
 fn provider_gateway_for_account(
     account: &CodexAccount,
 ) -> Result<CodexLocalAccessProviderGateway, String> {
+    if codex_account::is_workbuddy_upstream_provider(account) {
+        let source = codex_account::workbuddy_upstream_account(account)
+            .ok_or_else(|| "WorkBuddy 账号还不存在或已删除".to_string())?;
+        if source.access_token.trim().is_empty()
+            || source
+                .expires_at
+                .is_some_and(|expires_at| expires_at <= chrono::Utc::now().timestamp_millis())
+            || source.status.as_deref().is_some_and(|status| {
+                matches!(status, "expired" | "reauth_required" | "reauthorization_required")
+            })
+        {
+            return Err("WorkBuddy 供应商账号缺少可用访问令牌或已过期".to_string());
+        }
+        let upstream_models = provider_gateway_models_for_account(account);
+        if upstream_models.is_empty() {
+            return Err("WorkBuddy 账号还没有可用模型，请先在「模型与能力」中添加".to_string());
+        }
+        let model_capabilities = upstream_models
+            .iter()
+            .map(|model| {
+                (
+                    model.trim().to_lowercase(),
+                    CodexLocalAccessProviderGatewayModelCapability {
+                        supports_vision: false,
+                    },
+                )
+            })
+            .collect::<std::collections::HashMap<_, _>>();
+        return Ok(CodexLocalAccessProviderGateway {
+            auth_scheme: Some("workbuddy_acp".to_string()),
+            base_url: codex_account::WORKBUDDY_ACP_BASE_URL.to_string(),
+            api_key: String::new(),
+            upstream_model: upstream_models.first().cloned().unwrap_or_default(),
+            upstream_models,
+            wire_api: Some("responses".to_string()),
+            supports_vision: false,
+            model_capabilities,
+            vision_routing_model: None,
+        });
+    }
     if let Some(catalog)=remote_catalog_for_account(account) {
         let models=catalog["models"].as_array().cloned().unwrap_or_default();
         let upstream_models=models.iter().filter_map(|m|m["slug"].as_str().map(str::to_owned)).collect::<Vec<_>>();
@@ -1790,6 +1836,7 @@ fn build_mixed_model_gateway_collection_for_profile(
         id: mixed_model_routing_api_key_id(),
         label: "Mixed Model Routing".to_string(),
         key: key.clone(),
+        native_provider: None,
         provider_gateway: None,
         model_routing: Some(CodexLocalAccessModelRouting {
             default_route: "oauth".to_string(),
@@ -1922,6 +1969,7 @@ fn build_provider_gateway_collection_for_profile(
         id: provider_gateway_api_key_id(&account.id),
         label: format!("Provider Gateway: {}", account.email),
         key: key.clone(),
+        native_provider: native_provider_for_provider_account(account),
         provider_gateway: if uses_grok_upstream {
             None
         } else {
@@ -2007,6 +2055,7 @@ fn build_bound_oauth_local_gateway_collection_for_profile(
         id: provider_gateway_api_key_id(&account.id),
         label: format!("Bound OAuth Local Gateway: {}", account.email),
         key: key.clone(),
+        native_provider: None,
         provider_gateway: None,
         model_routing: None,
         inherit_account_pool: Some(false),
@@ -2197,6 +2246,7 @@ fn build_model_provider_gateway_test_collection(
         id: provider_gateway_test_api_key_id(request),
         label: provider_gateway_test_api_key_label(request),
         key: collection.api_key.clone(),
+        native_provider: None,
         provider_gateway,
         model_routing: None,
         inherit_account_pool: Some(false),

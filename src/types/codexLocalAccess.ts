@@ -107,6 +107,7 @@ export interface CodexLocalAccessApiKey {
   id: string;
   label: string;
   key: string;
+  nativeProvider?: string | null;
   providerGateway?: unknown | null;
   inheritAccountPool?: boolean;
   accountPoolId?: string;
