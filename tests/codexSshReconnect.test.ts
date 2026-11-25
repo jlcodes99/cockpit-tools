@@ -79,6 +79,7 @@ test('cold startup confirms the restarted daemon through a requested snapshot', 
   assert.deepEqual(f.calls.map(call => call.type), ['codex-app-server-restart', 'request-app-server-state']);
 
   f.emit({ ...connected, hostId: 'ssh-other', isSnapshot: true });
+  f.emit({ ...connected, state: 'connecting', isSnapshot: true });
   f.emit(connected);
   assert.equal(f.reads(), 0, 'verification needs the requested host snapshot or a full restart transition');
   f.emit({ ...connected, isSnapshot: true });
