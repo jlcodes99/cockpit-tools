@@ -154,6 +154,8 @@ mod tests {
         assert_eq!(base_url(&source), crate::modules::zcode_account::BIGMODEL_API_BASE_URL);
     }
 
+    #[test]
+    fn headers_are_sensitive_and_provider_base_url_is_selected() {
         let source: ZcodeAccount = serde_json::from_value(serde_json::json!({
             "id":"zcode-source",
             "auth_mode":"api_key",
