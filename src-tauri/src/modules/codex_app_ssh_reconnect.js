@@ -1,5 +1,5 @@
-// One-shot native reconnect. The IPC ACK means queued, so wait for a new
-// connection and a correlated account/read response before reporting success.
+// One-shot native reconnect followed by a correlated account/read on the
+// ready connection. A startup renderer can miss the intermediate states.
 (async () => {
   "use strict";
   const request = __COCKPIT_SSH_RECONNECT__;
@@ -32,6 +32,7 @@
   });
   entry.promise = new Promise(resolve => {
     let finished = false, connecting = false, connected = false, reading = false;
+    let snapshotRequested = false;
     let readId = null, readSequence = 0, retryTimer = null, lastReadError = null;
     const complete = result => {
       if (finished) return;
@@ -42,12 +43,9 @@
       if (!result.ok && operations.get(request.hostId) === entry) operations.delete(request.hostId);
       resolve(result);
     };
-    const send = message => {
-      const failed = error => complete({ ok: false, reason: !connecting
-        && /connection for host.*not found|no connection for host/i.test(String(error)) ? "not_ready" : "bridge_failed" });
-      try { Promise.resolve(window.electronBridge.sendMessageFromView(message)).catch(failed); }
-      catch (error) { failed(error); }
-    };
+    const send = async message => window.electronBridge.sendMessageFromView(message);
+    const bridgeFailed = error => complete({ ok: false, reason: !connecting
+      && /connection for host.*not found|no connection for host/i.test(String(error)) ? "not_ready" : "bridge_failed" });
     const readAccount = () => {
       retryTimer = null;
       if (finished || !connected || reading) return;
@@ -55,9 +53,14 @@
       readId = "cockpit-ssh-account:" + request.requestId + ":" + ++readSequence;
       send({ type: "mcp-request", hostId: request.hostId,
         request: { id: readId, method: "account/read", params: { refreshToken: false } },
-        priority: "critical", source: "cockpit_ssh_reconnect", coalesce: false });
+        priority: "critical", source: "cockpit_ssh_reconnect", coalesce: false }).catch(bridgeFailed);
     };
     const connectionChanged = data => {
+      if (data.isSnapshot === true) {
+        if (!snapshotRequested || connected || data.state !== "connected") return;
+        snapshotRequested = false;
+        connecting = true;
+      }
       if (data.state !== "connected") {
         connected = false;
         reading = false;
@@ -75,7 +78,7 @@
     const receive = event => {
       const data = event?.data;
       if (finished || data?.hostId !== request.hostId || event.source && event.source !== window) return;
-      if (data.type === "codex-app-server-connection-changed" && data.isSnapshot !== true) connectionChanged(data);
+      if (data.type === "codex-app-server-connection-changed") connectionChanged(data);
       if (reading && data.type === "mcp-response" && data.message?.id === readId) {
         if (data.message.error) {
           // The native bridge wraps arbitrary transport exceptions as read errors.
@@ -99,11 +102,19 @@
       Math.max(100, Math.min(30000, request.timeoutMs || 30000)));
     entry.cancel = () => complete({ ok: false, reason: "superseded" });
     window.addEventListener("message", receive);
-    // Set before dispatch: native state events may precede the bridge ACK.
+    // Native state events can arrive before the restart call returns.
     operations.set(request.hostId, entry);
     // Reconnecting the transport alone reuses a daemon with cached old auth.
     // The native restart path also recreates that host's app-server process.
-    send({ type: "codex-app-server-restart", hostId: request.hostId, intent: "restart", killCodexProcess: true });
+    send({ type: "codex-app-server-restart", hostId: request.hostId, intent: "restart", killCodexProcess: true })
+      .then(() => {
+        if (finished || connected) return;
+        // The native restart handler awaits readiness. Request its current state
+        // when this renderer missed the transition while it was attaching.
+        snapshotRequested = true;
+        send({ type: "request-app-server-state", includePendingInputs: false })
+          .catch(() => { snapshotRequested = false; });
+      }, bridgeFailed);
   });
   return entry.promise;
 })()
