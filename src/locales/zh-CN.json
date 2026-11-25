@@ -260,6 +260,7 @@
       "offline": "离线 · 显示缓存"
     },
     "networkErrors": {
+      "recoveryExhausted": "连接上游时多次失败或超时，本次自动重试已停止。请检查代理或网络后重试；此错误不代表账号额度耗尽。",
       "upstream": "上游服务",
       "proxyConnection": "通过代理“{{proxy}}”连接 {{target}} 失败，可能与代理或网络有关，请检查代理或更换节点后重试。",
       "proxyTimeout": "通过代理“{{proxy}}”连接 {{target}} 超时，可能与代理或网络有关，请检查代理或更换节点后重试。",

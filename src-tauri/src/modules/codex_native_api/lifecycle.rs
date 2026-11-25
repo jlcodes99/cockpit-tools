@@ -71,6 +71,7 @@ impl Drop for BlockingWorkGuard {
 pub(super) struct RequestTracker {
     peer_ip: Option<std::net::IpAddr>,
     pub overload: super::overload::Budget,
+    pub network_recovery: super::network_recovery::Budget,
     pub(super) quota_exhausted_accounts: std::collections::HashSet<String>,
     quota_exhausted_attempt: Option<usize>,
     pub field_compat: super::request_compat::Budget,
@@ -217,6 +218,7 @@ impl RequestTracker {
             diagnostics: None,
             capture_payloads: false,
             overload: Default::default(),
+            network_recovery: Default::default(),
             quota_exhausted_accounts: Default::default(),
             quota_exhausted_attempt: None,
             field_compat: Default::default(),
@@ -1203,7 +1205,8 @@ impl RequestTracker {
         // A later candidate may fail locally after a real upstream rejection.
         // Persist that real response under its original account, not the
         // unsent candidate or its preparation/cancellation error.
-        let (status, success, error) = if !self.dispatch_open && self.dispatch_count > 0 {
+        let network_exhausted = error.as_deref() == Some(super::network_recovery::CODE);
+        let (status, success, error) = if !network_exhausted && !self.dispatch_open && self.dispatch_count > 0 {
             self.report.as_ref().map(|report| (report.status, report.success, report.error.clone()))
                 .unwrap_or((status, success, error))
         } else {
@@ -1313,6 +1316,14 @@ impl RequestTracker {
     pub(super) async fn fail(&mut self, error: &ServiceError) {
         let dispatched = self.dispatch_open;
         self.attempt_error(error);
+        if error.code == super::network_recovery::CODE {
+            // Keep each attempt's original transport error, but expose the
+            // request-wide terminal reason without blaming a credential.
+            if let Some(report) = self.report.as_mut() {
+                report.error_message = Some(super::diagnostics::sanitize_error_text(&error.message));
+                report.credential_scope = false;
+            }
+        }
         if matches!(error.code, "blocking_capacity_timeout" | "blocking_operation_timeout") {
             tracing::warn!(target: "codex_api", request_id=%self.diagnostic_request_id(),
                 status=error.status, code=error.code, elapsed_ms=self.started.elapsed().as_millis() as u64,

@@ -211,7 +211,8 @@ fn native_soft_binding_ids<'a>(
 }
 
 fn native_soft_failure_unbinds(report: &native_contract::RequestReport) -> bool {
-    if report.success || report.account_id.is_empty() {
+    if report.success || report.account_id.is_empty()
+        || report.error.as_deref() == Some("network_recovery_exhausted") {
         return false;
     }
     // The full upstream body decides request scope. A generic credential-scope

@@ -2179,6 +2179,8 @@ fn write_local_access_profile_transport_config(
     let mut doc = crate::modules::codex_config_format::read_codex_config_doc_from_str(&content)
         .map_err(|error| format!("解析 Codex API 服务接管配置失败: {}", error))?;
     let mut changed = false;
+    let selected_local = doc.get("model_provider").and_then(|item| item.as_str())
+        == Some(CODEX_LOCAL_ACCESS_RUNTIME_PROVIDER_ID);
     if let Some(provider) = doc.get_mut("model_providers")
         .and_then(|providers| providers.get_mut(CODEX_LOCAL_ACCESS_RUNTIME_PROVIDER_ID))
         .and_then(|provider| provider.as_table_mut())
@@ -2200,6 +2202,9 @@ fn write_local_access_profile_transport_config(
             } else {
                 false
             };
+        }
+        if selected_local {
+            changed |= apply_local_access_client_retry_policy(provider);
         }
     }
     // WebRTC sideband ignores model provider.base_url by default but reuses its

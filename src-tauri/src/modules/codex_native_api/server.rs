@@ -553,6 +553,9 @@ impl IntoResponse for ServiceError {
     fn into_response(self) -> Response {
         let status = StatusCode::from_u16(self.status).unwrap_or(StatusCode::BAD_GATEWAY);
         let mut response = (status, Json(super::output_error::json_error(&self))).into_response();
+        if self.code == super::network_recovery::CODE {
+            response.headers_mut().insert("x-should-retry", HeaderValue::from_static("false"));
+        }
         if let Some(delay) = self.retry_after {
             let seconds = delay
                 .as_secs()

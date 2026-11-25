@@ -332,6 +332,7 @@ fn maintain_local_access_profile(
         .to_string();
     let next_base = build_collection_base_url(collection);
     let supports_websockets = profile_api_key_supports_websockets(collection, &collection.api_key);
+    apply_local_access_client_retry_policy(provider);
     // Preserve the existing migration for the historically mislabelled provider.
     if provider.get("name").and_then(|item| item.as_str()) == Some("OpenAI") {
         provider["name"] = value(CODEX_LOCAL_ACCESS_RUNTIME_PROVIDER_NAME);

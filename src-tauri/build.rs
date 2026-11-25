@@ -2,6 +2,7 @@
 use swift_rs::SwiftLinker;
 
 use std::path::PathBuf;
+mod build_frontend;
 
 #[cfg(target_os = "macos")]
 fn link_macos_swift_runtime_rpaths() {
@@ -34,6 +35,7 @@ fn main() {
     // 8 MiB for the Windows MSVC host application even when cross-compiling.
     // Scope the flag to the application binary, not the library or sidecars.
     let target = std::env::var("TARGET").expect("TARGET is required");
+    build_frontend::verify_production_frontend(&target);
     if target.ends_with("-windows-msvc") {
         println!("cargo:rustc-link-arg-bin=cockpit-tools=/STACK:8388608");
     }
