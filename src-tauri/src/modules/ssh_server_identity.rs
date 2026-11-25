@@ -1,10 +1,11 @@
 //! Resolve native SSH aliases to the same endpoint as a configured sync target.
 use serde_json::Value;
+use std::collections::BTreeSet;
 
 pub(super) const CONNECTIONS: &str = "codex-managed-remote-connections";
 pub(super) const AUTO_CONNECT: &str = "remote-connection-auto-connect-by-host-id";
 pub(super) const SIGNED_OUT_OWNER: &str = "signed-out";
-const RENDERER_OWNER: &str = "electron-renderer-content-owner";
+pub(super) const RENDERER_OWNER: &str = "electron-renderer-content-owner";
 
 pub(super) fn renderer_owner(state: &Value) -> Option<&str> {
     state[RENDERER_OWNER].as_str()
@@ -19,6 +20,51 @@ pub(super) fn auto_connect(state: &Value) -> &Value {
         Some(owner) => &state[scoped_auto_connect_key(owner)],
         None => &state[AUTO_CONNECT],
     }
+}
+
+pub(super) fn configured_hosts(state: &Value) -> BTreeSet<String> {
+    state[CONNECTIONS]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|entry| {
+            ["hostname", "alias"]
+                .iter()
+                .any(|key| entry[*key].as_str().is_some_and(|s| !s.trim().is_empty()))
+        })
+        .filter_map(|entry| {
+            entry["hostId"]
+                .as_str()
+                .filter(|id| !id.is_empty() && *id != "local")
+        })
+        .map(str::to_owned)
+        .collect()
+}
+
+pub(super) fn inherit_scoped_auto_connect(state: &mut Value, next_owner: &str) -> bool {
+    if renderer_owner(state).is_none_or(|owner| owner == next_owner) {
+        return false;
+    }
+    let key = scoped_auto_connect_key(next_owner);
+    let mut target = match state.get(&key) {
+        Some(Value::Object(target)) => target.clone(),
+        None => serde_json::Map::new(),
+        Some(_) => {
+            crate::modules::logger::log_warn("[Codex SSH] 目标账号的自动连接设置格式不受支持");
+            return false;
+        }
+    };
+    let current = auto_connect(state);
+    for host in configured_hosts(state) {
+        if let Some(enabled) = current[&host].as_bool() {
+            target.insert(host, Value::Bool(enabled));
+        }
+    }
+    if target.is_empty() || state[&key].as_object() == Some(&target) {
+        return false;
+    }
+    state[key] = Value::Object(target);
+    true
 }
 
 #[derive(Debug, PartialEq, Eq)]

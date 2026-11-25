@@ -2,6 +2,7 @@
 //! No new-document hooks: reconnect happens only after a verified auth write.
 use super::*;
 use crate::models::ssh_server::SshServer;
+use crate::modules::ssh_server_desktop_state as desktop_state;
 use crate::modules::ssh_server_identity as identity;
 
 #[path = "codex_app_ssh_transport.rs"]
@@ -207,9 +208,15 @@ async fn try_refresh(
     if pages.is_empty() {
         return Ok(RefreshAttempt::Waiting("desktop_page"));
     }
-    let raw = fs::read(profile.join(".codex-global-state.json"))
-        .map_err(|_| "profile_state_unavailable")?;
-    let state = serde_json::from_slice(&raw).map_err(|_| "profile_state_invalid")?;
+    let profile = profile.to_path_buf();
+    let state = match tokio::task::spawn_blocking(move || desktop_state::load(&profile))
+        .await
+        .map_err(|_| "profile_state_unavailable")?
+    {
+        Ok(state) => state,
+        Err(desktop_state::BUSY) => return Ok(RefreshAttempt::Waiting(desktop_state::BUSY)),
+        Err(error) => return Err(error.into()),
+    };
     if let Some(stage) = pending_preferences(&state, expected_owner) {
         return Ok(RefreshAttempt::Waiting(stage));
     }
