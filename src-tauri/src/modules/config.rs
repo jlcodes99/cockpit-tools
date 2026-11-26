@@ -186,6 +186,12 @@ pub struct UserConfig {
     /// ZCode 自动刷新间隔（分钟），-1 表示禁用
     #[serde(default = "default_zcode_auto_refresh")]
     pub zcode_auto_refresh_minutes: i32,
+    /// T3 Code 自动刷新间隔（分钟），-1 表示禁用
+    #[serde(default = "default_t3code_auto_refresh")]
+    pub t3code_auto_refresh_minutes: i32,
+    /// 是否启用 T3 Code 聊天底部 Composer 栏常驻额度胶囊注入
+    #[serde(default = "default_t3code_app_ui_injection_enabled")]
+    pub t3code_app_ui_injection_enabled: bool,
     /// Trae 自动刷新间隔（分钟），-1 表示禁用
     #[serde(default = "default_trae_auto_refresh")]
     pub trae_auto_refresh_minutes: i32,
@@ -398,6 +404,9 @@ pub struct UserConfig {
     /// ZCode 启动路径（为空则使用默认路径）
     #[serde(default = "default_zcode_app_path")]
     pub zcode_app_path: String,
+    /// T3 Code 启动路径（为空则使用默认路径）
+    #[serde(default = "default_t3code_app_path")]
+    pub t3code_app_path: String,
     /// Trae 启动路径（为空则使用默认路径）
     #[serde(default = "default_trae_app_path")]
     pub trae_app_path: String,
@@ -865,6 +874,12 @@ fn default_qoder_auto_refresh() -> i32 {
 fn default_zcode_auto_refresh() -> i32 {
     10
 }
+fn default_t3code_auto_refresh() -> i32 {
+    10
+}
+fn default_t3code_app_ui_injection_enabled() -> bool {
+    true
+}
 fn default_trae_auto_refresh() -> i32 {
     10
 }
@@ -948,6 +963,7 @@ pub fn normalize_startup_page(value: &str) -> String {
         "qoder",
         "qoder-cn",
         "zcode",
+        "t3code",
         "trae",
         "trae-solo",
         "trae-cn",
@@ -1104,6 +1120,9 @@ fn default_qoder_cn_app_path() -> String {
     String::new()
 }
 fn default_zcode_app_path() -> String {
+    String::new()
+}
+fn default_t3code_app_path() -> String {
     String::new()
 }
 fn default_trae_app_path() -> String {
@@ -1375,6 +1394,8 @@ impl Default for UserConfig {
             qoder_auto_refresh_minutes: default_qoder_auto_refresh(),
             qoder_cn_auto_refresh_minutes: default_qoder_auto_refresh(),
             zcode_auto_refresh_minutes: default_zcode_auto_refresh(),
+            t3code_auto_refresh_minutes: default_t3code_auto_refresh(),
+            t3code_app_ui_injection_enabled: default_t3code_app_ui_injection_enabled(),
             trae_auto_refresh_minutes: default_trae_auto_refresh(),
             trae_solo_auto_refresh_minutes: default_trae_auto_refresh(),
             trae_cn_auto_refresh_minutes: default_trae_auto_refresh(),
@@ -1452,6 +1473,7 @@ impl Default for UserConfig {
             qoder_app_path: default_qoder_app_path(),
             qoder_cn_app_path: default_qoder_cn_app_path(),
             zcode_app_path: default_zcode_app_path(),
+            t3code_app_path: default_t3code_app_path(),
             trae_app_path: default_trae_app_path(),
             trae_solo_app_path: default_trae_app_path(),
             trae_cn_app_path: default_trae_app_path(),

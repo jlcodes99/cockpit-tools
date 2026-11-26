@@ -22,7 +22,7 @@ struct InjectionDialogJob {
     generation: u64,
 }
 
-struct InjectionDialogPoller {
+pub(super) struct InjectionDialogPoller {
     profile_dir: PathBuf,
     active: Vec<String>,
     cache: HashMap<String, InjectionDialogCacheEntry>,
@@ -34,7 +34,7 @@ struct InjectionDialogPoller {
 }
 
 impl InjectionDialogPoller {
-    fn new(profile_dir: &Path) -> Self {
+    pub(super) fn new(profile_dir: &Path) -> Self {
         Self::with_reader(
             profile_dir,
             std::sync::Arc::new(dialog_data::read_dialog_data),
@@ -54,7 +54,7 @@ impl InjectionDialogPoller {
         }
     }
 
-    fn collect(&mut self) -> Value {
+    pub(super) fn collect(&mut self) -> Value {
         self.collect_completed();
         self.start_pending();
         Value::Object(
@@ -88,7 +88,7 @@ impl InjectionDialogPoller {
         value
     }
 
-    fn request(&mut self, queries: Vec<dialog_data::DialogQuery>) {
+    pub(super) fn request(&mut self, queries: Vec<dialog_data::DialogQuery>) {
         self.collect_completed();
         let mut accepted: Vec<dialog_data::DialogQuery> = Vec::new();
         let mut conflicts = HashSet::new();

@@ -182,7 +182,7 @@ async fn responses_explicit_done_after_data_line_without_completion_never_commit
         )
         .unwrap();
     assert_eq!(rows, 0);
-    for table in ["native_rebuild_checkpoints_v1", "native_rebuild_history_v1"] {
+    for table in ["native_rebuild_checkpoints_v1"] {
         let rows: i64 = connection
             .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
                 row.get(0)

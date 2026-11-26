@@ -9,13 +9,9 @@
     "initializeWaiting": "Menunggu inisialisasi Antigravity IDE. Lanjutkan secara manual jika sudah siap.",
     "initializeRetry": "Inisialisasi belum selesai. Pastikan IDE sudah terbuka, lalu coba lagi.",
     "pathLabel": "Jalur peluncuran",
-    "pathConfigured": "Dikonfigurasi",
-    "pathDetected": "Terdeteksi otomatis",
-    "pathInvalid": "Jalur yang dikonfigurasi tidak valid",
-    "pathCheckFailed": "Pemeriksaan jalur gagal",
-    "pathSaveAndRetry": "Simpan dan coba lagi",
     "switchAndCopy": "Ganti dan salin",
     "sharedInstanceStart": "Ganti akun bersama dan jalankan",
+    "ideSharedAccountHint": "Mulai Antigravity IDE 2.6, semua instans memakai satu sesi login Google. Mengganti akun di sini juga memengaruhi instans lain yang sedang terbuka.",
     "sharedInstanceHint": "Instans Antigravity lain tetap terbuka dan dapat beralih ke akun baru.",
     "sharedInstanceRestart": "Hanya instans terpilih yang akan dimulai ulang.",
     "lastSharedAccount": "Akun bersama terakhir yang dipilih",
@@ -276,6 +272,7 @@
       "offline": "Luring · data tersimpan"
     },
     "networkErrors": {
+      "recoveryExhausted": "Batas pemulihan permintaan ini terlampaui akibat kegagalan komunikasi berulang dengan layanan hulu. Percobaan ulang otomatis telah dihentikan. Periksa proksi atau jaringan sebelum mencoba lagi; kesalahan ini tidak berarti kuota akun telah habis.",
       "upstream": "layanan hulu",
       "proxyConnection": "Gagal terhubung ke {{target}} melalui proksi “{{proxy}}”. Mungkin ada masalah proksi atau jaringan. Periksa proksi atau coba simpul lain.",
       "proxyTimeout": "Koneksi ke {{target}} melalui proksi “{{proxy}}” kehabisan waktu. Mungkin ada masalah proksi atau jaringan. Periksa proksi atau coba simpul lain.",
@@ -285,6 +282,10 @@
       "directTimeout": "Koneksi ke {{target}} kehabisan waktu. Periksa jaringan dan coba lagi."
     },
     "codexUsage": {
+      "responseSpeed": "Kecepatan respons",
+      "overallSpeedWithThinking": "Kecepatan dengan penalaran",
+      "streamingSpeed": "Kecepatan streaming",
+      "contextShort": "Konteks",
       "title": "Kuota dan penggunaan",
       "session": "Chat saat ini",
       "available": "Tersedia",
@@ -728,6 +729,12 @@
         "singleToken": "Contoh tunggal (Token)",
         "singleJson": "Contoh tunggal (JSON)",
         "batchJson": "Contoh massal (JSON)"
+      },
+      "exposeToCodex": {
+        "action": "Hubungkan ke Codex",
+        "inProgress": "Menghubungkan…",
+        "success": "Terhubung ke Codex",
+        "failed": "Gagal terhubung ke Codex: {{error}}"
       }
     },
     "appName": "Cockpit Tools​",
@@ -981,6 +988,7 @@
       "restartAll": "Mulai Ulang Semua",
       "stopAll": "Hentikan Semua",
       "start": "Jalankan",
+      "restart": "Mulai Ulang",
       "stop": "Hentikan",
       "openFolder": "Buka Folder",
       "edit": "Edit​",
@@ -1677,6 +1685,13 @@
       "menuBarQuotaLayoutPreview": "Pratinjau tata letak dengan contoh kuota",
       "menuBarQuotaLayoutHorizontal": "Satu baris mendatar",
       "menuBarQuotaLayoutStacked": "Dua baris ringkas",
+      "t3codeTitle": "Pengaturan T3 Code",
+      "t3codeAppPath": "Jalur Peluncuran T3 Code",
+      "t3codeAppPathDesc": "Kosongkan untuk menggunakan jalur bawaan",
+      "t3codeAutoRefresh": "Segarkan Otomatis Kuota T3 Code",
+      "t3codeAutoRefreshDesc": "Interval penyegaran kuota di latar belakang",
+      "t3codeAppUiInjection": "Kapsul Kuota Chat T3 Code",
+      "t3codeAppUiInjectionDesc": "Saat T3 Code dibuka dari Cockpit, kolom pesan menampilkan seri model yang dipilih dan sisa kuota. Klik untuk melihat detail akun dan penggunaan.",
       "qoderCnAppPath": "Jalur peluncuran Qoder CN",
       "qoderCnAppPathDesc": "Biarkan kosong untuk deteksi otomatis. Saat berganti akun, klien desktop akan ditutup dan diluncurkan ulang.",
       "qoderCnAppPathPlaceholder": "Jalur default",
@@ -2028,6 +2043,13 @@
       "pathLabel": "Lokasi peluncuran {{app}}",
       "configurePath": "Atur lokasi",
       "configureHint": "Pilih berkas yang dapat dijalankan atau kosongkan kolom untuk deteksi otomatis.",
+      "autoDetect": "Deteksi otomatis",
+      "noInstallation": "{{app}} tidak terdeteksi.",
+      "installationGuide": "Panduan instalasi resmi",
+      "copyInstallCommand": "Salin perintah instalasi",
+      "configured": "Dikonfigurasi",
+      "detected": "Terdeteksi otomatis",
+      "checkFailed": "Pemeriksaan jalur gagal",
       "cliHint": "{{app}} tidak ditemukan. Pilih berkas program atau pasang CLI dan deteksi kembali.",
       "invalidPath": "Lokasi ini tidak menunjuk ke berkas program {{app}} yang dapat dijalankan.",
       "accountAlreadySwitched": "Akun sudah beralih. Hanya peluncuran aplikasi yang akan dicoba ulang.",
@@ -6559,6 +6581,8 @@
       "instructionsBytes": "Instruksi",
       "overloadRetry": "Ulang saat penuh",
       "overloadRecovery": "Waktu pemulihan",
+      "historyRejectionTitle": "Format riwayat tidak cocok",
+      "historyRejectionHint": "Upstream menolak format riwayat permintaan. Hanya jumlah dan penanda yang disimpan; teks percakapan tidak disimpan.",
       "recordPayloads": "Rekam isi permintaan",
       "recordPayloadsHint": "Nonaktif secara bawaan. Salinan permintaan klien dan server dengan ukuran terbatas disimpan secara lokal. Menonaktifkan menghentikan rekaman baru; isi tersimpan dapat dihapus terpisah.",
       "privacyHint": "Kolom autentikasi disamarkan, tetapi rahasia dalam teks percakapan mungkin tetap ada. Periksa sebelum menyalin atau berbagi.",
@@ -7250,6 +7274,10 @@
     "traeSoloCn": {
       "appPath": "Path TraeWork CN",
       "title": "Pengaturan TraeWork CN"
+    },
+    "t3code": {
+      "title": "Pengaturan T3 Code",
+      "appPath": "Jalur Peluncuran T3 Code"
     },
     "validation": {
       "refreshIntervalInvalid": "Masukkan bilangan bulat antara 1 dan 999, atau -1 untuk menonaktifkan penyegaran otomatis.",
@@ -7968,6 +7996,12 @@
     },
     "instances": {
       "unsupported": "Multi-instans ZCode hanya tersedia di macOS, Windows, dan Linux."
+    },
+    "exposeToCodex": {
+      "startPlan": "Muat ulang kuota ZCode untuk memastikan Z.ai Start Plan pribadi aktif.",
+      "projectKey": "Hubungkan akun BigModel API Key dengan kunci proyek Anda.",
+      "signIn": "Masuk kembali ke ZCode dan coba lagi.",
+      "title": "Terhubung melalui gateway Native Rust tanpa menyalin kunci API ZCode atau token OAuth ke konfigurasi Codex"
     }
   },
   "zed": {
@@ -8123,7 +8157,7 @@
     }
   },
   "codebuddyCli": {
-    "launchTitle": "Jalankan CodeBuddy CN",
+    "launchTitle": "Jalankan {{app}}",
     "launchDesktop": "Jalankan aplikasi desktop",
     "recheck": "Periksa lagi",
     "checking": "Memeriksa ketersediaan CodeBuddy CLI…",
@@ -8422,6 +8456,9 @@
       "until": "{{model}} dibatasi pada uji terakhir, pulih {{time}}",
       "unavailable": "{{model}} dibatasi pada uji terakhir",
       "failed": "Uji terakhir {{model}} gagal"
+    },
+    "exposeToCodex": {
+      "title": "Terhubung melalui gateway Native Rust tanpa menyalin token WorkBuddy"
     }
   },
   "minimaxCode": {
@@ -8880,7 +8917,10 @@
       "deploySuccess": "Diterapkan ke Codex: {{count}} model",
       "deployFailed": "Deployment gagal: {{error}}",
       "useKey": "Gunakan kunci",
-      "deleteConfirm": "Hapus kunci tersimpan \"{{name}}\"? Tindakan ini tidak dapat dibatalkan."
+      "deleteConfirm": "Hapus kunci tersimpan \"{{name}}\"? Tindakan ini tidak dapat dibatalkan.",
+      "addToGeminiCli": "Tambah ke Gemini CLI",
+      "geminiCliAdded": "Gemini CLI ditambahkan",
+      "addToGeminiCliFailed": "Gagal tambah ke Gemini CLI: {{error}}"
     },
     "prefill": {
       "codexReady": "Pengaturan APIKEY.FUN telah diisi. Periksa sebelum menambahkannya ke Codex.",
@@ -9745,6 +9785,196 @@
     "errors": {
       "loadFailed": "Gagal memuat pemakaian token: {{error}}",
       "syncFailed": "Gagal memindai pemakaian token: {{error}}"
+    }
+  },
+  "t3code": {
+    "accountConfig": {
+      "title": "Konfigurasi akun",
+      "providers": "Akun penyedia",
+      "codexCatalogPending": "Kunci pihak ketiga menunggu sinkronisasi model: {{count}}"
+    },
+    "nativeSettings": {
+      "defaultModel": "Model obrolan baru",
+      "reasoning": "Tingkat penalaran",
+      "notifications": "Notifikasi",
+      "desktop": "Notifikasi desktop",
+      "sound": "Bunyi",
+      "both": "Notifikasi dan bunyi",
+      "clientDefault": "Bawaan T3 Code",
+      "connectRequired": "Jalankan T3 Code melalui Cockpit untuk memuat model yang tersedia.",
+      "savedForLaunch": "Disimpan untuk peluncuran berikutnya.",
+      "saveFailed": "T3 Code gagal menyimpan pengaturan ini.",
+      "invalidModel": "Model atau opsi penalaran ini tidak lagi tersedia.",
+      "sectionTitle": "Pengaturan Klien"
+    },
+    "search": "Cari akun T3 Code...",
+    "flowNotice": {
+      "title": "Panduan Tautan Penyedia Internal T3 Code (Klik untuk buka/tutup)",
+      "desc": "Pilih akun yang tersimpan di Cockpit untuk mengatur akun bawaan dan akun paralel di T3 Code.",
+      "permission": "Cockpit memperbarui pengaturan lokal T3 Code dan folder penyedia terkelola. Status dan indikator kuota menggunakan koneksi lokal.",
+      "network": "Kuota diperbarui melalui API penyedia yang dipilih atau gateway lokal."
+    },
+    "empty": "Belum ada akun host T3 Code",
+    "addAccount": "Tambah Akun T3 Code",
+    "oauth": {
+      "desc": "Masuk melalui Clerk di T3 Code terlebih dahulu, lalu impor dari klien lokal atau tempel token Clerk.",
+      "title": "Masuk Clerk T3 Code",
+      "item1": "Membaca dan menyimpan sesi ~/.t3/userdata/clerk/clerk-tokens.json",
+      "item2": "Mengikat profil independen dan akun Provider ke multi-instans T3 Code",
+      "item3": "Menyematkan kapsul kuota dan tok/s di bilah bawah Composer",
+      "urlPlaceholder": "URL Otorisasi T3 Code",
+      "waiting": "Menunggu masuk T3 Code...",
+      "openWindow": "Buka di Peramban"
+    },
+    "token": {
+      "tab": "Token / JSON",
+      "desc": "Tempel JWT Sesi Clerk atau isi clerk-tokens.json dari T3 Code.",
+      "placeholder": "Tempel Clerk JWT (eyJ...) atau clerk-tokens.json...",
+      "add": "Simpan Akun Token"
+    },
+    "import": {
+      "localDesc": "Masuk ke T3 Connect di kiri bawah T3 Code terlebih dahulu, lalu impor kredensial lokal di bawah (email & kuota tunnel tersinkron otomatis saat T3 Code berjalan).",
+      "localClient": "Impor dari T3 Code Lokal"
+    },
+    "providerWorkspace": {
+      "switchCodexRequiresGpt": "Pengaitan ini memerlukan model obrolan GPT atau Codex.",
+      "viewAccounts": "Lihat semua ({{count}})",
+      "accountInUse": "Sedang digunakan",
+      "accountRestartPending": "Menunggu mulai ulang",
+      "switchAccount": "Ganti akun",
+      "switchingAccount": "Mengganti akun…",
+      "switchAfterReply": "Pergantian menunggu respons penyedia ini selesai.",
+      "switchActiveRunTimeout": "Respons masih berlangsung. Coba ganti akun setelah respons selesai.",
+      "switchSaved": "Tautan tersimpan. Mulai ulang T3 Code untuk menerapkannya.",
+      "switchBusy": "Perubahan penyedia sedang berlangsung pada instans T3 Code ini.",
+      "switchTargetChanged": "Penyedia atau akun telah berubah. Pilih kembali.",
+      "defaultAccountUnavailable": "Impor dahulu akun bawaan saat ini ke Cockpit agar tetap tersimpan.",
+      "defaultAccountSaved": "Akun bawaan diperbarui.",
+      "defaultSelectionSaved": "Pilihan akun bawaan disimpan.",
+      "defaultWaiting": "Menunggu penerapan",
+      "defaultApplyFailed": "Gagal menerapkan akun bawaan",
+      "accountRemoved": "Akun dilepas dari T3 Code.",
+      "removeSaved": "Pelepasan disimpan. Mulai ulang T3 Code untuk menerapkannya.",
+      "accountAlreadyAdded": "Akun ini sudah terhubung ke lingkungan T3 Code ini.",
+      "switchControlUnavailable": "Tidak dapat terhubung ke kontrol penyedia T3 Code.",
+      "switchControlRejected": "T3 Code menolak perubahan penyedia.",
+      "switchDetachTimeout": "Waktu untuk melepaskan sesi penyedia sebelumnya habis.",
+      "switchVerificationFailed": "T3 Code tidak dapat memverifikasi akun baru.",
+      "switchRollbackFailed": "Konfigurasi sebelumnya tidak dapat dipulihkan. Periksa pengaturan penyedia.",
+      "linkTab": "Penautan akun",
+      "linkAccount": "Tambahkan ke T3 Code",
+      "addAccount": "Tambah akun",
+      "unbound": "Belum ditautkan",
+      "modelsReady": "Model tersedia · {{count}}",
+      "authRequired": "Otorisasi diperlukan",
+      "runtimePending": "Menyiapkan T3 Code",
+      "runtimeNotFound": "{{app}} tidak ditemukan",
+      "runtimeError": "Lingkungan eksekusi tidak tersedia",
+      "runtimeExplicitPath": "Periksa lokasi program khusus untuk penyedia ini di pengaturan Penyedia Agen T3 Code.",
+      "runtimeInstall": "Instal lingkungan terkelola",
+      "runtimeInstallStarted": "T3 Code mulai menginstal lingkungan eksekusi di latar belakang.",
+      "platformAccount": "Akun Cockpit",
+      "replaceAccount": "Ganti akun",
+      "noAccounts": "Tidak ada akun untuk penyedia ini",
+      "saved": "Tautan disimpan",
+      "currentAccount": "Tautan saat ini",
+      "runtimeStatus": "Status runtime",
+      "linkMode": "Cara menautkan",
+      "providerInstance": "Instans penyedia",
+      "selectInstance": "Pilih instans",
+      "gatewayDisabled": "Aktifkan layanan API Codex sebelum menautkannya ke T3 Code.",
+      "claudeCodeOnly": "Gunakan akun Claude Code. Akun ini milik Claude Desktop.",
+      "title": "Pengikatan & Pergantian Akun Provider Internal T3 Code",
+      "desc": "Konfigurasi dan alihkan instans lintas platform di settings.json standar T3 Code, memisahkan kredensial Cockpit dan login mandiri CLI.",
+      "defaultInstance": "Instans Bawaan (~/.t3)",
+      "targetInstance": "Instans T3 Code Tujuan",
+      "addProviderInstance": "Instans Provider Baru",
+      "isolatedHome": "Direktori Terisolasi",
+      "sharedHome": "Lingkungan Bawaan",
+      "selectAccountPlaceholder": "Pilih akun untuk diikat & dialihkan...",
+      "quotaLabel": "Tersisa",
+      "noQuotaData": "Ikat akun untuk melihat kuota langsung",
+      "cacheHit": "Cache Hit",
+      "modalTitle": "Instans Provider Internal T3 Code Baru",
+      "driverKindLabel": "Jenis Driver Provider",
+      "instanceNameLabel": "Nama Tampilan Instans",
+      "instanceNamePlaceholder": "mis. Codex Pro #2 / Claude Work",
+      "initialAccountLabel": "Akun Terikat Awal (Opsional)",
+      "errors": {
+        "nameRequired": "Masukkan nama instans Provider"
+      },
+      "injectionConnected": "Kapsul terhubung",
+      "needsRestartNotice": "T3 Code sedang berjalan. Mulai ulang untuk menerapkan konfigurasi akun terbaru.",
+      "addProviderBtn": "Tambah penyedia",
+      "builtinTag": "Bawaan",
+      "customTag": "Kustom",
+      "sharedLegacyTag": "Konfigurasi bersama (pilih ulang untuk isolasi)",
+      "switchAndVerify": "Menautkan & memverifikasi...",
+      "toggleEnabled": "Ubah status aktif",
+      "refreshAccountQuota": "Segarkan kuota akun",
+      "renameInstance": "Ubah nama instans",
+      "deleteConfirmTitle": "Hapus Instans Penyedia",
+      "deleteConfirmDesc": "Lepas {{name}} dari T3 Code. Akun Cockpit dan riwayat chat tetap tersimpan.",
+      "verifiedReady": "Terverifikasi · {{count}} model",
+      "stagedReady": "Siap · {{count}} model (mulai ulang)",
+      "needsSyncVerify": "Perlu verifikasi",
+      "readyOnLaunch": "Dimuat saat mulai",
+      "reverifyAccount": "Sinkronkan & verifikasi ulang kredensial",
+      "accountPlatformsGroup": "Ikatan Akun Cockpit",
+      "cliPlatformsGroup": "Login Mandiri CLI / ACP",
+      "cliModeDesc": "Mendaftarkan {{platform}} sesuai standar T3 Code; autentikasi dan daftar model dikelola langsung oleh CLI atau agen ACP terkait.",
+      "cliOwnLogin": "Login Mandiri CLI",
+      "cliManagedQuota": "Kuota dikelola CLI",
+      "cliReady": "CLI Siap"
+    },
+    "usageNormal": "Baik",
+    "usageAbnormal": "Bermasalah",
+    "usageViewDetail": "Lihat Detail",
+    "usageDetailTitle": "Detail Penggunaan",
+    "usage": "Status Penggunaan",
+    "quota": {
+      "included": "Tunnel T3 Connect",
+      "models": "Kuota Model",
+      "usedOfTotal": "{{used}} / {{total}}",
+      "updatedAt": "Diperbarui: {{time}}",
+      "expireAt": "Kedaluwarsa: {{time}}"
+    },
+    "quotaQuery": {
+      "restartToApply": "Mulai ulang T3 Code untuk menerapkan",
+      "multipleModels": "Beberapa model",
+      "failedRefreshCompact": "Gagal memuat kuota",
+      "empty": "Tidak ada data kuota",
+      "sectionTitle": "Kuota"
+    },
+    "instances": {
+      "unsupported": "Multi-instans T3 Code hanya didukung di macOS, Windows, dan Linux."
+    },
+    "planUnlinked": "Belum tertaut",
+    "usagePending": "Menunggu sinkronisasi",
+    "syncUnavailable": "Kuota terowongan gagal disinkronkan. Buka T3 Code dari Cockpit Tools dan masuk ke akun ini.",
+    "pendingSyncIdentity": "Buka T3 Code untuk sinkron",
+    "overview": {
+      "setDefaultAccount": "Jadikan bawaan",
+      "removeAccount": "Lepas",
+      "actions": "Tindakan",
+      "noLinkedAccounts": "Belum ada akun tertaut",
+      "defaultAffectsExisting": "Chat yang ada tetap memakai penyedia yang sama dan menggunakan akun yang baru untuk permintaan berikutnya.",
+      "accountMismatch": "Akun tidak cocok",
+      "localGatewayBadge": "Gateway Lokal",
+      "bindAccountAction": "Tautkan Akun",
+      "openPlatformPool": "Pool {{platform}}",
+      "searchProvidersPlaceholder": "Cari instans, akun, atau platform...",
+      "sortByDefault": "Urutan Default",
+      "sortByQuota": "Menurut Sisa Kuota",
+      "sortByName": "Menurut Nama",
+      "viewCandidateAccounts": "Akun ({{count}})",
+      "viewMoreAccounts": "+{{count}} · Lihat lainnya",
+      "platformAccountsTitle": "Akun {{platform}}",
+      "mountAsParallelInstance": "Tambahkan akun paralel",
+      "manageInSourcePlatform": "Buka {{platform}}",
+      "searchAccountsPlaceholder": "Cari akun {{platform}}...",
+      "goAddSourceAccount": "Tambah di {{platform}}",
+      "emptyPoolDesc": "Tambahkan akun di halaman {{platform}} terlebih dahulu sebelum mengalihkannya ke T3 Code."
     }
   }
 }

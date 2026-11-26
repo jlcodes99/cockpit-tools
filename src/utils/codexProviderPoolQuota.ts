@@ -1,3 +1,4 @@
+import type { TFunction } from 'i18next';
 import { isCodexApiKeyAccount, isCodexChatgptPlanAccount, type CodexAccount } from '../types/codex';
 import { resolveCodexAccountDisplayName } from './codexAccountDisplayName';
 
@@ -12,6 +13,24 @@ export interface CodexProviderPoolQuota {
   unlimited: boolean;
   status: 'ready' | 'stale' | 'failed' | 'unavailable';
   observedAt: number | null;
+}
+
+export type CodexProviderQuotaDisplay = Pick<CodexProviderPoolQuota, 'remaining' | 'total' | 'unit' | 'unlimited' | 'status'>;
+
+const quotaNumberFormat = new Intl.NumberFormat(undefined, { maximumFractionDigits: 6 });
+
+export function formatCodexProviderQuota(row: CodexProviderQuotaDisplay, t: TFunction): string {
+  if (row.status === 'failed') return t('common.shared.quota.queryFailed');
+  if (row.status === 'stale') return t('codex.apiService.providerQuotaStale');
+  if (row.status === 'unavailable') return t('common.shared.quota.noData');
+  if (row.remaining == null) return t('codex.newApi.quota.unlimited');
+
+  const suffix = row.unit === '%' ? '%' : row.unit ? ` ${row.unit}` : '';
+  const remaining = quotaNumberFormat.format(row.remaining) + suffix;
+  const amount = row.total != null && !row.unlimited
+    ? `${remaining} / ${quotaNumberFormat.format(row.total) + suffix}`
+    : remaining;
+  return row.unit ? amount : `${amount} · ${t('codex.apiService.providerQuotaUnitUnknown')}`;
 }
 
 function record(value: unknown): Record<string, unknown> | undefined {

@@ -9,13 +9,9 @@
     "initializeWaiting": "Antigravity IDE wird initialisiert. Fahre anschließend manuell fort.",
     "initializeRetry": "Die Initialisierung läuft noch. Prüfe, ob die IDE geöffnet ist, und versuche es erneut.",
     "pathLabel": "Startpfad",
-    "pathConfigured": "Konfiguriert",
-    "pathDetected": "Automatisch erkannt",
-    "pathInvalid": "Konfigurierter Pfad ist ungültig",
-    "pathCheckFailed": "Pfadprüfung fehlgeschlagen",
-    "pathSaveAndRetry": "Speichern und erneut versuchen",
     "switchAndCopy": "Wechseln und kopieren",
     "sharedInstanceStart": "Gemeinsames Konto wechseln und starten",
+    "ideSharedAccountHint": "Ab Antigravity IDE 2.6 verwenden alle Instanzen dieselbe Google-Anmeldung. Ein Kontowechsel hier betrifft auch andere geöffnete Instanzen.",
     "sharedInstanceHint": "Andere Antigravity-Instanzen bleiben offen und können das neue Konto übernehmen.",
     "sharedInstanceRestart": "Nur die ausgewählte Instanz wird neu gestartet.",
     "lastSharedAccount": "Zuletzt gewechseltes gemeinsames Konto",
@@ -276,6 +272,7 @@
       "offline": "Offline · zwischengespeichert"
     },
     "networkErrors": {
+      "recoveryExhausted": "Wiederholte Übertragungsfehler zum vorgeschalteten Dienst haben das Wiederherstellungslimit dieser Anfrage überschritten. Automatische Wiederholungen wurden gestoppt. Prüfen Sie vor einem erneuten Versuch den Proxy oder das Netzwerk; dieser Fehler bedeutet nicht, dass das Kontingent des Kontos aufgebraucht ist.",
       "upstream": "dem vorgeschalteten Dienst",
       "proxyConnection": "Verbindung zu {{target}} über Proxy „{{proxy}}“ fehlgeschlagen. Mögliche Proxy- oder Netzwerkstörung. Proxy prüfen oder einen anderen Knoten versuchen.",
       "proxyTimeout": "Zeitüberschreitung bei der Verbindung zu {{target}} über Proxy „{{proxy}}“. Mögliche Proxy- oder Netzwerkstörung. Proxy prüfen oder einen anderen Knoten versuchen.",
@@ -285,6 +282,10 @@
       "directTimeout": "Zeitüberschreitung bei der Verbindung zu {{target}}. Netzwerk prüfen und erneut versuchen."
     },
     "codexUsage": {
+      "responseSpeed": "Antworttempo",
+      "overallSpeedWithThinking": "Tempo inkl. Denkphase",
+      "streamingSpeed": "Streamingtempo",
+      "contextShort": "Kontext",
       "title": "Kontingent & Nutzung",
       "session": "Aktueller Chat",
       "available": "Verfügbar",
@@ -721,6 +722,12 @@
         "singleToken": "Einzelbeispiel (Token)",
         "singleJson": "Einzelbeispiel (JSON)",
         "batchJson": "Stapelbeispiel (JSON)"
+      },
+      "exposeToCodex": {
+        "action": "Mit Codex verbinden",
+        "inProgress": "Wird verbunden…",
+        "success": "Mit Codex verbunden",
+        "failed": "Verbindung mit Codex fehlgeschlagen: {{error}}"
       }
     },
     "topRightAd": {
@@ -922,6 +929,7 @@
       "restartAll": "Alle neu starten",
       "stopAll": "Alle stoppen",
       "start": "Starten",
+      "restart": "Neustart",
       "stop": "Stoppen",
       "openFolder": "Ordner öffnen",
       "edit": "Bearbeiten",
@@ -1630,6 +1638,13 @@
       "menuBarQuotaLayoutPreview": "Layoutvorschau mit Beispielkontingenten",
       "menuBarQuotaLayoutHorizontal": "Horizontal einzeilig",
       "menuBarQuotaLayoutStacked": "Zwei kompakte Zeilen",
+      "t3codeTitle": "T3 Code-Einstellungen",
+      "t3codeAppPath": "T3 Code-Startpfad",
+      "t3codeAppPathDesc": "Leer lassen, um den Standardpfad zu verwenden",
+      "t3codeAutoRefresh": "T3 Code-Kontingent automatisch aktualisieren",
+      "t3codeAutoRefreshDesc": "Intervall für die Hintergrundaktualisierung",
+      "t3codeAppUiInjection": "Kontingentanzeige im T3 Code-Chat",
+      "t3codeAppUiInjectionDesc": "Wenn T3 Code über Cockpit gestartet wird, zeigt das Eingabefeld die ausgewählte Modellreihe und das verbleibende Kontingent. Ein Klick öffnet Konto- und Nutzungsdetails.",
       "qoderCnAppPath": "Qoder CN-Startpfad",
       "qoderCnAppPathDesc": "Leer lassen für automatische Erkennung. Beim Kontowechsel wird der Desktop-Client geschlossen und neu gestartet.",
       "qoderCnAppPathPlaceholder": "Standardpfad",
@@ -1981,6 +1996,13 @@
       "pathLabel": "Startpfad für {{app}}",
       "configurePath": "Pfad festlegen",
       "configureHint": "Wähle eine ausführbare Datei oder lass das Feld für die automatische Erkennung leer.",
+      "autoDetect": "Automatisch erkennen",
+      "noInstallation": "{{app}} wurde nicht gefunden.",
+      "installationGuide": "Offizielle Installationsanleitung",
+      "copyInstallCommand": "Installationsbefehl kopieren",
+      "configured": "Konfiguriert",
+      "detected": "Automatisch erkannt",
+      "checkFailed": "Pfadprüfung fehlgeschlagen",
       "cliHint": "{{app}} wurde nicht gefunden. Wähle die ausführbare Datei oder installiere die CLI und suche erneut.",
       "invalidPath": "Dieser Pfad verweist auf keine verwendbare ausführbare Datei für {{app}}.",
       "accountAlreadySwitched": "Das Konto wurde bereits gewechselt. Nur der Start wird erneut versucht.",
@@ -6512,6 +6534,8 @@
       "instructionsBytes": "Anweisungen",
       "overloadRetry": "Überlast-Wiederholungen",
       "overloadRecovery": "Erholungszeit",
+      "historyRejectionTitle": "Verlaufsformat nicht kompatibel",
+      "historyRejectionHint": "Der Upstream hat das Format des Anfrageverlaufs abgelehnt. Es werden nur Zähler und Flags gespeichert; kein Gesprächstext.",
       "recordPayloads": "Anfragetexte speichern",
       "recordPayloadsHint": "Standardmäßig aus. Begrenzte Kopien von Client- und Upstream-Anfragen werden lokal gespeichert. Ausschalten stoppt neue Aufzeichnungen; gespeicherte Texte lassen sich separat löschen.",
       "privacyHint": "Authentifizierungsfelder werden maskiert, Geheimnisse im Gespräch können jedoch erhalten bleiben. Vor dem Kopieren oder Teilen prüfen.",
@@ -7078,6 +7102,10 @@
     "traeSoloCn": {
       "appPath": "TraeWork CN Pfad",
       "title": "TraeWork CN-Einstellungen"
+    },
+    "t3code": {
+      "title": "T3 Code-Einstellungen",
+      "appPath": "T3 Code-Startpfad"
     },
     "validation": {
       "refreshIntervalInvalid": "Geben Sie eine ganze Zahl zwischen 1 und 999 ein oder -1, um die automatische Aktualisierung zu deaktivieren.",
@@ -7948,7 +7976,7 @@
     }
   },
   "codebuddyCli": {
-    "launchTitle": "CodeBuddy CN starten",
+    "launchTitle": "{{app}} starten",
     "launchDesktop": "Desktop-App starten",
     "recheck": "Erneut prüfen",
     "checking": "CodeBuddy CLI wird gesucht…",
@@ -8247,6 +8275,9 @@
       "until": "{{model}} beim letzten Test begrenzt, Freigabe {{time}}",
       "unavailable": "{{model}} beim letzten Test begrenzt",
       "failed": "Letzter Test von {{model}} fehlgeschlagen"
+    },
+    "exposeToCodex": {
+      "title": "Verbindet über das Native-Rust-Gateway, ohne das WorkBuddy-Token zu kopieren"
     }
   },
   "minimaxCode": {
@@ -8458,6 +8489,12 @@
     },
     "instances": {
       "unsupported": "ZCode-Mehrinstanzen sind nur unter macOS, Windows und Linux verfügbar."
+    },
+    "exposeToCodex": {
+      "startPlan": "Aktualisieren Sie das ZCode-Kontingent, um Ihren aktiven persönlichen Z.ai Start Plan zu bestätigen.",
+      "projectKey": "Verbinden Sie ein BigModel-API-Key-Konto mit Ihrem Projektschlüssel.",
+      "signIn": "Melden Sie sich erneut bei ZCode an und versuchen Sie es noch einmal.",
+      "title": "Verbindet über das Native-Rust-Gateway, ohne den ZCode-API-Schlüssel oder das OAuth-Token in die Codex-Konfiguration zu kopieren"
     }
   },
   "zed": {
@@ -8880,7 +8917,10 @@
       "deploySuccess": "In Codex bereitgestellt: {{count}} Modelle",
       "deployFailed": "Bereitstellung fehlgeschlagen: {{error}}",
       "useKey": "Schlüssel verwenden",
-      "deleteConfirm": "Gespeicherten Schlüssel \"{{name}}\" löschen? Dieser Vorgang kann nicht rückgängig gemacht werden."
+      "deleteConfirm": "Gespeicherten Schlüssel \"{{name}}\" löschen? Dieser Vorgang kann nicht rückgängig gemacht werden.",
+      "addToGeminiCli": "Zu Gemini CLI",
+      "geminiCliAdded": "Gemini CLI hinzugefügt",
+      "addToGeminiCliFailed": "Gemini-CLI-Import fehlgeschlagen: {{error}}"
     },
     "prefill": {
       "codexReady": "Die APIKEY.FUN-Einstellungen sind vorausgefüllt. Prüfen Sie sie vor dem Hinzufügen zu Codex.",
@@ -9745,6 +9785,196 @@
     "errors": {
       "loadFailed": "Token-Nutzung konnte nicht geladen werden: {{error}}",
       "syncFailed": "Scan der Token-Nutzung fehlgeschlagen: {{error}}"
+    }
+  },
+  "t3code": {
+    "accountConfig": {
+      "title": "Kontoeinrichtung",
+      "providers": "Anbieterkonten",
+      "codexCatalogPending": "Drittanbieterschlüssel warten auf Modellsync: {{count}}"
+    },
+    "nativeSettings": {
+      "defaultModel": "Modell für neue Chats",
+      "reasoning": "Denkaufwand",
+      "notifications": "Benachrichtigungen",
+      "desktop": "Desktopbenachrichtigungen",
+      "sound": "Ton",
+      "both": "Hinweise und Ton",
+      "clientDefault": "T3 Code-Standard",
+      "connectRequired": "Starte T3 Code über Cockpit, um verfügbare Modelle zu laden.",
+      "savedForLaunch": "Für den nächsten Start gespeichert.",
+      "saveFailed": "T3 Code konnte diese Einstellung nicht speichern.",
+      "invalidModel": "Dieses Modell oder diese Denkoption ist nicht mehr verfügbar.",
+      "sectionTitle": "Client-Einstellungen"
+    },
+    "search": "T3 Code-Konten durchsuchen...",
+    "flowNotice": {
+      "title": "T3 Code Anbieter-Kontoverknüpfung (Klicken zum Ein-/Ausklappen)",
+      "desc": "Wählen Sie aus den in Cockpit gespeicherten Konten das Standardkonto und parallele Konten für T3 Code.",
+      "permission": "Cockpit aktualisiert lokale T3-Code-Einstellungen und verwaltete Anbieterordner. Status und Kontingentanzeige nutzen eine lokale Verbindung.",
+      "network": "Kontingente werden über die API des gewählten Anbieters oder das lokale Gateway aktualisiert."
+    },
+    "empty": "Keine T3 Code-Hostkonten vorhanden",
+    "addAccount": "T3 Code-Konto hinzufügen",
+    "oauth": {
+      "desc": "Melden Sie sich zuerst in T3 Code über Clerk an und importieren Sie dann das lokale Konto oder fügen Sie das Token ein.",
+      "title": "T3 Code Clerk-Anmeldung",
+      "item1": "Liest und speichert Sitzungen aus ~/.t3/userdata/clerk/clerk-tokens.json",
+      "item2": "Bindet eigene Profile und Provider-Konten an T3 Code-Instanzen",
+      "item3": "Injiziert Kontingent- und tok/s-Kapsel in die untere Composer-Leiste",
+      "urlPlaceholder": "T3 Code-Autorisierungs-URL",
+      "waiting": "Warte auf T3 Code-Anmeldung...",
+      "openWindow": "Im Browser öffnen"
+    },
+    "token": {
+      "tab": "Token / JSON",
+      "desc": "Fügen Sie ein Clerk-Session-JWT oder clerk-tokens.json von T3 Code ein.",
+      "placeholder": "Clerk JWT (eyJ...) oder clerk-tokens.json einfügen...",
+      "add": "Token-Konto speichern"
+    },
+    "import": {
+      "localDesc": "Melden Sie sich zuerst unten links in T3 Code bei T3 Connect an und importieren Sie dann die lokalen Zugangsdaten (E-Mail und Tunnel-Kontingent synchronisieren beim Start).",
+      "localClient": "Aus lokalem T3 Code importieren"
+    },
+    "providerWorkspace": {
+      "switchCodexRequiresGpt": "Diese Codex-Verknüpfung benötigt ein GPT- oder Codex-Chatmodell.",
+      "viewAccounts": "Alle Konten ({{count}})",
+      "accountInUse": "In Verwendung",
+      "accountRestartPending": "Neustart ausstehend",
+      "switchAccount": "Konto wechseln",
+      "switchingAccount": "Konto wird gewechselt…",
+      "switchAfterReply": "Der Wechsel wartet auf die laufende Antwort des Anbieters.",
+      "switchActiveRunTimeout": "Die Antwort läuft noch. Versuche den Wechsel nach ihrem Abschluss erneut.",
+      "switchSaved": "Verknüpfung gespeichert. Starte T3 Code neu, um sie anzuwenden.",
+      "switchBusy": "Für diese T3-Code-Instanz läuft bereits eine Anbieteränderung.",
+      "switchTargetChanged": "Anbieter oder Konto wurde geändert. Bitte erneut auswählen.",
+      "defaultAccountUnavailable": "Importiere zuerst das aktuelle Standardkonto in Cockpit, damit es erhalten bleibt.",
+      "defaultAccountSaved": "Standardkonto aktualisiert.",
+      "defaultSelectionSaved": "Die Auswahl des Standardkontos wurde gespeichert.",
+      "defaultWaiting": "Anwendung ausstehend",
+      "defaultApplyFailed": "Standardkonto konnte nicht übernommen werden",
+      "accountRemoved": "Konto aus T3 Code entfernt.",
+      "removeSaved": "Entfernung gespeichert. Starte T3 Code neu, um sie anzuwenden.",
+      "accountAlreadyAdded": "Dieses Konto ist bereits mit dieser T3 Code-Umgebung verbunden.",
+      "switchControlUnavailable": "Die Anbietersteuerung von T3 Code ist nicht erreichbar.",
+      "switchControlRejected": "T3 Code hat die Anbieteränderung abgelehnt.",
+      "switchDetachTimeout": "Beim Trennen der vorherigen Anbietersitzung ist das Zeitlimit abgelaufen.",
+      "switchVerificationFailed": "T3 Code konnte das neue Konto nicht verifizieren.",
+      "switchRollbackFailed": "Die vorherige Konfiguration ließ sich nicht wiederherstellen. Prüfe die Anbietereinstellungen.",
+      "linkTab": "Kontoverknüpfung",
+      "linkAccount": "Zu T3 Code hinzufügen",
+      "addAccount": "Konto hinzufügen",
+      "unbound": "Nicht verknüpft",
+      "modelsReady": "Verfügbare Modelle · {{count}}",
+      "authRequired": "Autorisierung erforderlich",
+      "runtimePending": "T3 Code wird eingerichtet",
+      "runtimeNotFound": "{{app}} fehlt",
+      "runtimeError": "Laufzeit nicht verfügbar",
+      "runtimeExplicitPath": "Prüfe den benutzerdefinierten Programmpfad dieses Anbieters in den Einstellungen für Agentenanbieter in T3 Code.",
+      "runtimeInstall": "Verwaltete Laufzeit installieren",
+      "runtimeInstallStarted": "T3 Code hat die Installation der Laufzeit im Hintergrund gestartet.",
+      "platformAccount": "Cockpit-Konto",
+      "replaceAccount": "Konto ersetzen",
+      "noAccounts": "Keine Konten für diesen Anbieter verfügbar",
+      "saved": "Verknüpfung gespeichert",
+      "currentAccount": "Aktuelle Verknüpfung",
+      "runtimeStatus": "Laufzeitstatus",
+      "linkMode": "Verknüpfungsart",
+      "providerInstance": "Anbieterinstanz",
+      "selectInstance": "Instanz auswählen",
+      "gatewayDisabled": "Aktivieren Sie den Codex-API-Dienst vor dem Verknüpfen mit T3 Code.",
+      "claudeCodeOnly": "Verwenden Sie ein Claude-Code-Konto. Dieses Konto gehört zu Claude Desktop.",
+      "title": "T3 Code Interne Provider-Kontobindung & Wechsel",
+      "desc": "Multi-Plattform-Anbieter in der regulären T3-Code-settings.json konfigurieren und wechseln – getrennt nach Cockpit-Kontobindung und eigener CLI-Anmeldung.",
+      "defaultInstance": "Standardinstanz (~/.t3)",
+      "targetInstance": "Ziel-T3 Code-Instanz",
+      "addProviderInstance": "Neue Provider-Instanz",
+      "isolatedHome": "Isoliertes Verzeichnis",
+      "sharedHome": "Standardumgebung",
+      "selectAccountPlaceholder": "Konto zum Binden & Wechseln auswählen...",
+      "quotaLabel": "Verbleibend",
+      "noQuotaData": "Konto binden, um Kontingent anzuzeigen",
+      "cacheHit": "Cache-Treffer",
+      "modalTitle": "Neue interne T3 Code Provider-Instanz",
+      "driverKindLabel": "Provider-Treibertyp",
+      "instanceNameLabel": "Anzeigename der Instanz",
+      "instanceNamePlaceholder": "z. B. Codex Pro #2 / Claude Work",
+      "initialAccountLabel": "Initial gebundenes Konto (optional)",
+      "errors": {
+        "nameRequired": "Bitte einen Namen für die Provider-Instanz eingeben"
+      },
+      "injectionConnected": "Kapsel verbunden",
+      "needsRestartNotice": "T3 Code läuft. Starten Sie neu, um die geänderte Kontokonfiguration anzuwenden.",
+      "addProviderBtn": "Anbieter hinzufügen",
+      "builtinTag": "Standard",
+      "customTag": "Benutzerdefiniert",
+      "sharedLegacyTag": "Geteilte Konfiguration (zur Isolierung neu wählen)",
+      "switchAndVerify": "Verbinden & prüfen...",
+      "toggleEnabled": "Aktivierung umschalten",
+      "refreshAccountQuota": "Kontokontingent aktualisieren",
+      "renameInstance": "Instanz umbenennen",
+      "deleteConfirmTitle": "Provider-Instanz löschen",
+      "deleteConfirmDesc": "{{name}} von T3 Code trennen. Das Cockpit-Konto und der Chatverlauf bleiben erhalten.",
+      "verifiedReady": "Geprüft · {{count}} Modelle",
+      "stagedReady": "Bereit · {{count}} Modelle (Neustart)",
+      "needsSyncVerify": "Prüfung ausstehend",
+      "readyOnLaunch": "Lädt beim Start",
+      "reverifyAccount": "Zugangsdaten neu synchronisieren & prüfen",
+      "accountPlatformsGroup": "Cockpit-Kontobindung",
+      "cliPlatformsGroup": "Eigene CLI-/ACP-Anmeldung",
+      "cliModeDesc": "Registriert {{platform}} gemäß T3-Code-Standard; Anmeldung und Modelle werden direkt vom CLI- bzw. ACP-Agenten verwaltet.",
+      "cliOwnLogin": "Eigene CLI-Anmeldung",
+      "cliManagedQuota": "Kontingent per CLI",
+      "cliReady": "CLI bereit"
+    },
+    "usageNormal": "In Ordnung",
+    "usageAbnormal": "Fehler",
+    "usageViewDetail": "Details anzeigen",
+    "usageDetailTitle": "Nutzungsdetails",
+    "usage": "Nutzungsstatus",
+    "quota": {
+      "included": "T3 Connect-Tunnel",
+      "models": "Modellkontingent",
+      "usedOfTotal": "{{used}} / {{total}}",
+      "updatedAt": "Aktualisiert: {{time}}",
+      "expireAt": "Läuft ab: {{time}}"
+    },
+    "quotaQuery": {
+      "restartToApply": "T3 Code zum Anwenden neu starten",
+      "multipleModels": "Mehrere Modelle",
+      "failedRefreshCompact": "Kontingentabfrage fehlgeschlagen",
+      "empty": "Keine Kontingentdaten",
+      "sectionTitle": "Kontingent"
+    },
+    "instances": {
+      "unsupported": "T3 Code Multi-Instanz wird nur unter macOS, Windows und Linux unterstützt."
+    },
+    "planUnlinked": "Nicht verknüpft",
+    "usagePending": "Wartet auf Synchronisierung",
+    "syncUnavailable": "Das Tunnelkontingent konnte nicht synchronisiert werden. Starten Sie T3 Code über Cockpit Tools und melden Sie sich bei diesem Konto an.",
+    "pendingSyncIdentity": "T3 Code zum Sync starten",
+    "overview": {
+      "setDefaultAccount": "Als Standard setzen",
+      "removeAccount": "Entfernen",
+      "actions": "Aktionen",
+      "noLinkedAccounts": "Keine verknüpften Konten",
+      "defaultAffectsExisting": "Bestehende Chats behalten ihren Anbieter und verwenden bei weiteren Anfragen dessen aktualisiertes Konto.",
+      "accountMismatch": "Konten stimmen nicht überein",
+      "localGatewayBadge": "Lokales Gateway",
+      "bindAccountAction": "Konto binden",
+      "openPlatformPool": "{{platform}}-Pool",
+      "searchProvidersPlaceholder": "Instanzen, Konten oder Plattformen suchen...",
+      "sortByDefault": "Standardfolge",
+      "sortByQuota": "Nach Restkontingent",
+      "sortByName": "Nach Name",
+      "viewCandidateAccounts": "Konten ({{count}})",
+      "viewMoreAccounts": "+{{count}} · Mehr anzeigen",
+      "platformAccountsTitle": "{{platform}}-Konten",
+      "mountAsParallelInstance": "Paralleles Konto hinzufügen",
+      "manageInSourcePlatform": "{{platform}} öffnen",
+      "searchAccountsPlaceholder": "{{platform}}-Konten suchen...",
+      "goAddSourceAccount": "In {{platform}} hinzufügen",
+      "emptyPoolDesc": "Fügen Sie zuerst auf der Seite {{platform}} ein Konto hinzu, um es in T3 Code zu nutzen."
     }
   }
 }

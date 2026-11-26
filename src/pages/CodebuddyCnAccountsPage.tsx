@@ -154,7 +154,7 @@ export function CodebuddyCnAccountsPage() {
 
   async function launchDesktop(accountId: string) {
     try {
-      await codebuddyCnService.injectCodebuddyCnToVSCode(accountId, true);
+      await codebuddyCnService.injectCodebuddyCnToVSCode(accountId, true, true);
       store.setCurrentAccountId(accountId);
       void emitCurrentAccountChanged({ platformId: 'codebuddy_cn', accountId, reason: 'switch' });
     } finally {

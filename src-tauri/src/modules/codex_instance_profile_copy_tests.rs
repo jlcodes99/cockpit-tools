@@ -183,14 +183,15 @@ mod profile_copy_integration_tests {
         let target = env.root.join("copy");
         let profile = create_instance(params("Paginated clone", &target, "copy")).unwrap();
         assert!(load_instance_store().unwrap().instances.iter().any(|item| item.id == profile.id));
-        assert_eq!(fs::read(target.join(format!("{parent_relative}.zst"))).unwrap(), compressed);
+        let copied_parent = target.join(format!("{parent_relative}.zst"));
+        assert_eq!(fs::read(&copied_parent).unwrap(), compressed);
         assert_eq!(fs::read_to_string(target.join(&child_relative)).unwrap(), child_contents);
         let copied = Connection::open(target.join("state_5.sqlite")).unwrap();
         let saved_path: String = copied.query_row(
             "SELECT rollout_path FROM threads WHERE id = ?1",
             [parent], |row| row.get(0),
         ).unwrap();
-        assert_eq!(Path::new(&saved_path), target.join(parent_relative));
+        assert_eq!(Path::new(&saved_path), copied_parent);
     }
 
     fn params(name: &str, target: &Path, mode: &str) -> CreateInstanceParams {

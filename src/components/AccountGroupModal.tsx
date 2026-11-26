@@ -29,6 +29,7 @@ import {
   buildClaudeAccountPresentation, buildCodebuddyAccountPresentation, buildCursorAccountPresentation,
   buildGitHubCopilotAccountPresentation, buildKiroAccountPresentation, buildTraeAccountPresentation,
   buildWindsurfAccountPresentation, buildWorkbuddyAccountPresentation, buildZcodeAccountPresentation,
+  buildT3codeAccountPresentation,
 } from '../presentation/platformAccountPresentation';
 import { getQoderPlanBadge, resolveQoderPlanBadgeClass, type QoderAccount } from '../types/qoder';
 import { getGrokPlanBadge, getGrokPlanBadgeClass, type GrokAccount } from '../types/grok';
@@ -618,6 +619,7 @@ const groupAccountPresentations = {
   workbuddy_ai: (...[account, t]: Parameters<typeof buildWorkbuddyAccountPresentation>) =>
     buildWorkbuddyAccountPresentation(account, t, false, true),
   zcode: buildZcodeAccountPresentation,
+  t3code: buildT3codeAccountPresentation,
 };
 
 export function UniversalGroupAccountPickerModal({

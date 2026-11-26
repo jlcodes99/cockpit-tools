@@ -1,0 +1,577 @@
+{
+  "schemaVersion": 1,
+  "documentKind": "sanitized-upstream-submission-evidence",
+  "status": "24 application source files unchanged from accepted local source; new standalone guard and exact-EXE runner verified on 2026-11-25. Historical tests remain separately labelled.",
+  "asOfDate": "2026-11-25",
+  "intendedDeliverables": [
+    "upstream source pull request",
+    "source patch or source archive",
+    "sanitized technical explanation"
+  ],
+  "excludedDeliverables": [
+    "installer",
+    "account records",
+    "credentials",
+    "user configuration",
+    "raw production logs",
+    "private screenshots",
+    "machine-specific deployment backup"
+  ],
+  "provenance": {
+    "upstreamVersion": "v1.4.2",
+    "upstreamCommit": "586d409df963610a51a48da24256ffd30b924493",
+    "historicalNetworkRepairLocalCommit": "9ab8e71adfe38f3bb2975bb0afa393111c8b1df3",
+    "finalWorkingTreeIncludesAdditionalFrontendChanges": true,
+    "historicalLocalBaselineIsNotUpstreamHistory": true,
+    "finalPrHeadVerification": "Use the containing Git commit for revision identity. All 24 source files were byte-compared; see submission-verification.json. This is not a fresh full application rebuild or post-merge test."
+  },
+  "sourceFileCount": 24,
+  "expectedSourceFiles": [
+    "Cargo.lock",
+    "src-tauri/Cargo.toml",
+    "src-tauri/build.rs",
+    "src-tauri/build_frontend.rs",
+    "src-tauri/src/lib.rs",
+    "src-tauri/src/frontend_smoke.rs",
+    "src-tauri/src/modules/codex_local_access_native.rs",
+    "src-tauri/src/modules/codex_local_access_native_scheduler.rs",
+    "src-tauri/src/modules/codex_local_access_profile_takeover.rs",
+    "src-tauri/src/modules/codex_local_access_sidecar_runtime.rs",
+    "src-tauri/src/modules/codex_local_access_takeover_maintenance.rs",
+    "src-tauri/src/modules/codex_local_access_tests_takeover.rs",
+    "src-tauri/src/modules/codex_native_api/bootstrap_tests.rs",
+    "src-tauri/src/modules/codex_native_api/contract.rs",
+    "src-tauri/src/modules/codex_native_api/diagnostic_error.rs",
+    "src-tauri/src/modules/codex_native_api/lifecycle.rs",
+    "src-tauri/src/modules/codex_native_api/mod.rs",
+    "src-tauri/src/modules/codex_native_api/network_recovery.rs",
+    "src-tauri/src/modules/codex_native_api/network_recovery_http_tests.rs",
+    "src-tauri/src/modules/codex_native_api/retry.rs",
+    "src-tauri/src/modules/codex_native_api/server.rs",
+    "src-tauri/src/modules/native_soft_affinity_regression_tests.rs",
+    "src/locales/en.json",
+    "src/locales/zh-CN.json"
+  ],
+  "previouslyUntrackedMustInclude": [
+    "src-tauri/build_frontend.rs",
+    "src-tauri/src/frontend_smoke.rs"
+  ],
+  "coverage": [
+    {
+      "id": "transport-recovery-shared-budget",
+      "requirement": "Bound one transport-failure recovery episode across retries and account routes.",
+      "implementation": [
+        "src-tauri/src/modules/codex_native_api/network_recovery.rs",
+        "src-tauri/src/modules/codex_native_api/mod.rs",
+        "src-tauri/src/modules/codex_native_api/contract.rs",
+        "src-tauri/src/modules/codex_native_api/retry.rs",
+        "src-tauri/src/modules/codex_native_api/lifecycle.rs"
+      ],
+      "semantics": {
+        "startsAt": "First typed transport failure",
+        "ordinaryTimeoutSeconds": 120,
+        "consecutiveTransportFailureLimit": 4,
+        "termination": "Earlier of elapsed recovery deadline or failure cap",
+        "budgetSharedBy": [
+          "same-account refresh",
+          "account switching",
+          "backoff",
+          "replacement routing",
+          "waiting for response headers"
+        ],
+        "reset": "Valid HTTP response headers end the consecutive network-failure episode."
+      },
+      "tests": [
+        "network_recovery",
+        "network_recovery_stops_45_candidates_at_shared_failure_cap",
+        "network_recovery_deadline_interrupts_retry_waiting_for_headers",
+        "network_recovery_deadline_also_bounds_stalled_replacement_routing",
+        "network_recovery_can_succeed_before_exhaustion",
+        "network_recovery_new_request_gets_a_fresh_budget"
+      ],
+      "evidence": [
+        "<WORK>/IMPLEMENTATION.md",
+        "<WORK>/build-support/final-regression-summary.json"
+      ],
+      "verifiedScope": "Historical local synthetic/unit/HTTP checks on 2026-11-24.",
+      "limits": [
+        "Not a healthy first-attempt whole-request deadline.",
+        "Does not identify the unique initiating network cause.",
+        "Does not bypass real upstream quota/rate limits."
+      ]
+    },
+    {
+      "id": "http-recovery-transition-and-race",
+      "requirement": "Do not misclassify HTTP authentication, quota, or service responses as transport-budget failures, and do not fire stale timers after recovery.",
+      "implementation": [
+        "src-tauri/src/modules/codex_native_api/network_recovery.rs",
+        "src-tauri/src/modules/codex_native_api/lifecycle.rs",
+        "src-tauri/src/modules/codex_native_api/retry.rs"
+      ],
+      "tests": [
+        "network_recovery_auth_and_quota_do_not_arm_transport_budget",
+        "network_recovery_valid_auth_response_ends_previous_network_episode",
+        "network_recovery_quota_response_clears_timer_before_slow_healthy_route"
+      ],
+      "evidence": [
+        "<WORK>/build-support/final-regression-summary.json"
+      ],
+      "verifiedScope": "Synthetic HTTP response transitions and shared-state timer checks.",
+      "limits": [
+        "HTTP 401/429/503 retain their existing independent handling.",
+        "No claim of a live account exhaustion exercise."
+      ]
+    },
+    {
+      "id": "images-streams-cancellation",
+      "requirement": "Preserve legitimate longer image opening and healthy streaming while allowing cancellation to release request permits.",
+      "implementation": [
+        "src-tauri/src/modules/codex_native_api/contract.rs",
+        "src-tauri/src/modules/codex_native_api/lifecycle.rs",
+        "src-tauri/src/modules/codex_native_api/network_recovery.rs",
+        "src-tauri/src/modules/codex_native_api/server.rs"
+      ],
+      "semantics": {
+        "imageRecoveryWindow": "max(network_recovery_timeout, image_open_timeout)",
+        "responseBody": "Recovery watcher ends after headers; no added healthy-stream total deadline.",
+        "cancellation": "Existing tracker cleanup releases owned global/account slots."
+      },
+      "tests": [
+        "network_recovery_window_is_not_a_healthy_first_attempt_deadline",
+        "network_recovery_does_not_truncate_successful_long_stream",
+        "network_recovery_cancel_releases_global_and_account_slots",
+        "images::tests",
+        "images::http_tests",
+        "shutdown_cancels_stalled_sse_and_releases_account_permit"
+      ],
+      "evidence": [
+        "<WORK>/build-support/final-regression-summary.json"
+      ],
+      "verifiedScope": "Synthetic regression tests.",
+      "limits": [
+        "Already-running spawn_blocking work uses existing worker capacity protection; no immediate forced termination claim.",
+        "No live image-generation production test during submission."
+      ]
+    },
+    {
+      "id": "terminal-response-and-credential-neutrality",
+      "requirement": "Return an explicit non-retryable local network terminal result and preserve unrelated account health/affinity.",
+      "implementation": [
+        "src-tauri/src/modules/codex_native_api/retry.rs",
+        "src-tauri/src/modules/codex_native_api/lifecycle.rs",
+        "src-tauri/src/modules/codex_native_api/server.rs",
+        "src-tauri/src/modules/codex_native_api/diagnostic_error.rs",
+        "src-tauri/src/modules/codex_local_access_native.rs",
+        "src-tauri/src/modules/codex_local_access_native_scheduler.rs",
+        "src-tauri/src/modules/native_soft_affinity_regression_tests.rs",
+        "src/locales/en.json",
+        "src/locales/zh-CN.json"
+      ],
+      "semantics": {
+        "status": 504,
+        "code": "network_recovery_exhausted",
+        "retryable": false,
+        "retryHeader": {
+          "x-should-retry": "false"
+        },
+        "credentialScope": false,
+        "details": [
+          "transport_failures",
+          "last_error_code"
+        ],
+        "diagnostics": "Keep original per-attempt failures; final RequestReport uses terminal 504/code."
+      },
+      "tests": [
+        "retry::cooldown_tests",
+        "lifecycle::tests",
+        "native_soft_affinity_regression_tests",
+        "identity::continuity"
+      ],
+      "evidence": [
+        "<WORK>/IMPLEMENTATION.md",
+        "<WORK>/build-support/final-regression-summary.json"
+      ],
+      "verifiedScope": "Local synthetic account-health and diagnostic regression coverage.",
+      "limits": [
+        "No cooldown/member removal/soft-affinity clearing for this local terminal result.",
+        "Genuine quota exhaustion still applies."
+      ]
+    },
+    {
+      "id": "managed-codex-retry-policy",
+      "requirement": "Avoid multiplying bounded Cockpit recovery with outer managed-provider retries.",
+      "implementation": [
+        "src-tauri/src/modules/codex_local_access_profile_takeover.rs",
+        "src-tauri/src/modules/codex_local_access_takeover_maintenance.rs",
+        "src-tauri/src/modules/codex_local_access_sidecar_runtime.rs",
+        "src-tauri/src/modules/codex_local_access_tests_takeover.rs"
+      ],
+      "semantics": {
+        "provider": "codex_local_access",
+        "requestMaxRetries": 0,
+        "streamMaxRetries": 0,
+        "cleanup": "Restore only fields still equal to managed zero; remove if originally absent; preserve later nonzero edits/deletions.",
+        "otherProviders": "Unchanged"
+      },
+      "tests": [
+        "bounded_network_client_policy_",
+        "passive_takeover_",
+        "explicit_websocket_sync_updates_only_the_owned_oauth_profile_transport",
+        "explicit_routing_sync_repairs_owned_oauth_default_without_claiming_other_profiles",
+        "takeover_cleanup_"
+      ],
+      "evidence": [
+        "<WORK>/client-validation/VERIFIED-CURRENT-CLIENT.md",
+        "<WORK>/build-support/final-regression-summary.json",
+        "<WORK>/gui-rework/production-acceptance-20261125.json"
+      ],
+      "verifiedScope": "Synthetic configuration tests, four isolated real CLI cases, installed configuration readback.",
+      "limits": [
+        "No automatic client reconnect after partial-output failure with this managed policy.",
+        "Cleanup preservation does not mean maintenance never updates selected managed fields.",
+        "CLI evidence is not per-request desktop hot-reload verification."
+      ]
+    },
+    {
+      "id": "frontend-build-configuration-guard",
+      "requirement": "Reject a release that resolves frontendDist to a URL/absolute path or lacks real built assets.",
+      "implementation": [
+        "Cargo.lock",
+        "src-tauri/Cargo.toml",
+        "src-tauri/build.rs",
+        "src-tauri/build_frontend.rs"
+      ],
+      "semantics": {
+        "accidentalCause": "Windows absolute frontendDist in local TAURI_CONFIG parsed as URL with scheme c.",
+        "exactDependenciesProbed": {
+          "tauri-utils": "2.8.3",
+          "tauri-codegen": "2.5.5"
+        },
+        "correctFrontendDist": "../dist",
+        "validation": [
+          "Tauri-compatible platform/environment merge",
+          "reject URL and absolute directory in non-dev build",
+          "require directory and index",
+          "reject development page",
+          "check nonempty referenced local JS/CSS"
+        ]
+      },
+      "tests": [
+        "legal built local assets accepted",
+        "Windows absolute URL rejected",
+        "platform/environment merge order",
+        "missing directory/index rejected",
+        "missing or empty assets rejected",
+        "development page/no bundle rejected"
+      ],
+      "evidence": [
+        "<WORK>/gui-rework/FRONTEND-REWORK-REPORT.md",
+        "<WORK>/frontend-embed-audit/build-frontend-guard-tests.txt"
+      ],
+      "verifiedScope": "Exact dependency parsing probe, six standalone guard fixtures, production frontend build, binary static inspection.",
+      "limits": [
+        "This was a local custom-build error, not a demonstrated official-release defect.",
+        "Cargo itself can embed valid frontend configuration.",
+        "Size and strings alone do not prove rendering."
+      ]
+    },
+    {
+      "id": "same-executable-real-webview-smoke",
+      "requirement": "Check actual embedded frontend rendering before local deployment.",
+      "implementation": [
+        "src-tauri/src/lib.rs",
+        "src-tauri/src/frontend_smoke.rs"
+      ],
+      "semantics": {
+        "optInFlag": "--frontend-smoke-test",
+        "directoryMarker": {
+          "filename": "frontend-smoke.allowed",
+          "content": "cockpit-frontend-smoke-v1"
+        },
+        "isolation": [
+          "independent identifier and WebView data directory",
+          "early branch before production logger/workers",
+          "no production plugins/business handlers",
+          "reject linked test directories"
+        ],
+        "acceptance": [
+          "script_loaded",
+          "react_mounted",
+          "entry-resource responseEnd",
+          "populated visible root/app/main",
+          "applied styles",
+          "zero fatal/resource errors",
+          "at least two healthy snapshots stable for two seconds",
+          "process termination plus Passed receipt"
+        ],
+        "timeoutSeconds": 45
+      },
+      "tests": [
+        "isolated actual WebView acceptance of same executable",
+        "seven external evidence-gate fixtures"
+      ],
+      "evidence": [
+        "<WORK>/gui-rework/FRONTEND-REWORK-REPORT.md",
+        "<WORK>/gui-rework/gate-fixtures/b98997e99f51413ebc1e7cec70703b32/result.json",
+        "<WORK>/latest-release-artifact.json"
+      ],
+      "verifiedScope": "Historical real isolated WebView acceptance, separate gate fixtures, and a second real acceptance using the submitted portable runner on 2026-11-25.",
+      "limits": [
+        "App::run does not return; external runner must check receipt and process exit, not exit zero alone.",
+        "Fetch/WebSocket shims are not a comprehensive network sandbox.",
+        "Gate fixtures do not count as real UI launches."
+      ]
+    },
+    {
+      "id": "local-deployment-identity-and-normal-launch",
+      "requirement": "Ensure the accepted release was actually installed and normally loads its frontend.",
+      "implementation": [],
+      "implementationScope": "Local delivery tooling, separate from upstream application source.",
+      "tests": [
+        "23 deployment/configuration fixture checks",
+        "20 installed files size/hash verification",
+        "normal production frontend startup evidence",
+        "local listener OPTIONS response"
+      ],
+      "evidence": [
+        "<WORK>/deployment-support/latest-fixture-results.json",
+        "<WORK>/gui-rework/production-acceptance-20261125.json",
+        "<WORK>/latest-release-artifact.json"
+      ],
+      "verifiedScope": "Installed artifact identity, frontend startup, local API listener health.",
+      "limits": [
+        "Not a new real inference request.",
+        "Machine-specific deployment tooling should not be copied wholesale upstream.",
+        "No app restart or screen capture needed for submission."
+      ]
+    }
+  ],
+  "verification": {
+    "historicalBusinessRegression": {
+      "date": "2026-11-24",
+      "passed": 190,
+      "failed": 0,
+      "ignored": 0,
+      "suites": [
+        [
+          "network_recovery",
+          7
+        ],
+        [
+          "bootstrap::tests",
+          39
+        ],
+        [
+          "retry::cooldown_tests",
+          7
+        ],
+        [
+          "lifecycle::tests",
+          26
+        ],
+        [
+          "identity::continuity",
+          17
+        ],
+        [
+          "images::tests",
+          14
+        ],
+        [
+          "images::http_tests",
+          49
+        ],
+        [
+          "shutdown_cancels_stalled_sse_and_releases_account_permit",
+          1
+        ],
+        [
+          "bounded_network_client_policy_",
+          3
+        ],
+        [
+          "passive_takeover_",
+          13
+        ],
+        [
+          "explicit_websocket_sync_updates_only_the_owned_oauth_profile_transport",
+          1
+        ],
+        [
+          "explicit_routing_sync_repairs_owned_oauth_default_without_claiming_other_profiles",
+          1
+        ],
+        [
+          "takeover_cleanup_",
+          3
+        ],
+        [
+          "native_soft_affinity_regression_tests",
+          9
+        ]
+      ],
+      "newCases": {
+        "total": 22,
+        "budget": 7,
+        "http": 11,
+        "clientPolicy": 3,
+        "softAffinity": 1
+      },
+      "sourceFingerprint": "E49ECD9015950A63C0564D6DEB9F22C8BB018B3064E7B49CF227DAD5642DD4AB",
+      "testExecutableSha256": "30345641EB338808B956CB50EBDE889959083AB7106A1AC8AD45D0FC899F05C4",
+      "rerunAfterFrontendRework": false,
+      "networkModulesChangedDuringFrontendRework": false,
+      "caution": "The historical summary's old release artifact reference is rejected; use only its test results."
+    },
+    "isolatedCli": {
+      "version": "codex-cli 0.171.0-alpha.13.2",
+      "executableSha256": "6C5BB28FC2D290B649A060E4A88498511D0DF9E51321781573B685EA20835A7E",
+      "realUpstreamCalls": false,
+      "realAuthentication": false,
+      "cases": [
+        {
+          "response": "HTTP 504 + terminal hints",
+          "requestRetries": 0,
+          "streamRetries": 0,
+          "postCount": 1,
+          "elapsedMs": 402,
+          "exitCode": 1
+        },
+        {
+          "response": "HTTP 504 + terminal hints",
+          "requestRetries": 1,
+          "streamRetries": 1,
+          "postCount": 4,
+          "elapsedMs": 1033
+        },
+        {
+          "response": "SSE 200 response.failed + terminal hints",
+          "requestRetries": 0,
+          "streamRetries": 0,
+          "postCount": 1,
+          "elapsedMs": 452
+        },
+        {
+          "response": "SSE 200 response.failed + terminal hints",
+          "requestRetries": 1,
+          "streamRetries": 1,
+          "postCount": 2,
+          "elapsedMs": 583
+        }
+      ],
+      "limitation": "Final corrected harness runs only; not desktop runtime hot-reload verification."
+    },
+    "frontendBuild": {
+      "passed": true,
+      "fileCount": 158,
+      "totalBytes": 18521917,
+      "checkedEntriesIncludingIndex": 11,
+      "referencedAssets": 10,
+      "assetsIndexMarkerFound": true,
+      "tauriCliVersion": "2.10.1"
+    },
+    "standaloneBuildGuardFixtures": {
+      "passed": 6,
+      "failed": 0,
+      "ignored": 0
+    },
+    "evidenceGateFixtures": {
+      "passed": 7,
+      "realWebViewLaunches": false
+    },
+    "deploymentConfigurationFixtures": {
+      "passed": 23,
+      "applicationStartupTests": false,
+      "olderCoordinatorCasesNotAdded": 3
+    },
+    "realIsolatedWebView": {
+      "date": "2026-11-24",
+      "passed": true,
+      "url": "http://tauri.localhost/",
+      "loadStarted": true,
+      "loadFinished": true,
+      "scriptLoaded": true,
+      "reactMounted": true,
+      "visibleRootCount": 1,
+      "appVisible": true,
+      "mainVisible": true,
+      "stylesheets": 10,
+      "consecutiveSnapshots": 4,
+      "stableMs": 2997,
+      "fatalErrors": 0,
+      "resourceErrors": 0,
+      "exitCode": 0,
+      "processExitObserved": true,
+      "ownedWebViewProcessesRemained": false
+    },
+    "productionAcceptance": {
+      "date": "2026-11-25",
+      "installedFileCount": 20,
+      "allFileHashesAndSizesMatched": true,
+      "runningExecutableMatchedAcceptedHash": true,
+      "frontendEvents": [
+        "script_loaded",
+        "react_mount_start",
+        "react_mounted"
+      ],
+      "frontendStartupErrors": 0,
+      "listenerOptionsStatus": 204,
+      "managedRequestRetries": 0,
+      "managedStreamRetries": 0,
+      "liveInferenceRun": false
+    },
+    "notClaimed": [
+      "full repository test suite",
+      "Go tests",
+      "multiple operating systems",
+      "real account exhaustion",
+      "new live image generation",
+      "final PR HEAD regression run",
+      "universal future desktop-client behavior"
+    ]
+  },
+  "acceptedLocalArtifact": {
+    "bytes": 164302848,
+    "mibRounded": 156.69,
+    "sha256": "2E50122655E30479401BF5679575E63C249049540EF33EBE0273A433D88557F0",
+    "sourceFingerprint": "929D8F9ED757FF3C244D0AB58F1B6856B81A1816AA89B21E841D594079DD7096",
+    "frontendFingerprint": "41827C34E53327558DC1F414717895726B8F5789D6EA20D3E0EAE6B51A3A7DF4",
+    "buildToolFingerprint": "709AFD424B4AFC020D886338846E0C59E59069B90149DF746E0E8DEF0E13A721",
+    "redistributionRequested": false
+  },
+  "rejectedHistoricalArtifact": {
+    "bytes": 155799040,
+    "mibRounded": 148.58,
+    "sha256": "BBF719D6E90F33704CC0A8517C922D0B66DE1EE78C8E911506ABC4A3A0C4F42F",
+    "reason": "Local frontendDist URL misclassification produced no embedded frontend.",
+    "mustNotInstall": true
+  },
+  "publicationChecks": {
+    "machineUsernamesExcluded": true,
+    "absoluteMachinePathsExcluded": true,
+    "realAccountAndChatIdentifiersExcluded": true,
+    "rawLogsAndScreenshotsExcluded": true,
+    "secretsAndConfigurationBodiesExcluded": true,
+    "note": "The public evidence uses repository paths and <WORK> placeholders; raw local evidence remains private. Public submission files are scanned separately before publication."
+  },
+  "submissionVerification": "submission-verification.json",
+  "additionalLocaleFiles": [
+    "src/locales/ar.json",
+    "src/locales/cs.json",
+    "src/locales/de.json",
+    "src/locales/en-US.json",
+    "src/locales/es.json",
+    "src/locales/fr.json",
+    "src/locales/id.json",
+    "src/locales/it.json",
+    "src/locales/ja.json",
+    "src/locales/ko.json",
+    "src/locales/pl.json",
+    "src/locales/pt-br.json",
+    "src/locales/ru.json",
+    "src/locales/tr.json",
+    "src/locales/vi.json",
+    "src/locales/zh-tw.json"
+  ],
+  "totalSubmittedFiles": 49
+}

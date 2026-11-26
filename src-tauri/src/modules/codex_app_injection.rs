@@ -19,7 +19,7 @@ mod usage;
 mod output_speed;
 
 #[path = "codex_app_injection_dialog_data.rs"]
-mod dialog_data;
+pub(super) mod dialog_data;
 #[path = "codex_app_injection_remote.rs"]
 mod remote_view;
 
@@ -65,6 +65,7 @@ use crate::commands::codex::{
     DeepSeekBalanceSnapshot,
 };
 use crate::models::codex::CodexAccount;
+use crate::models::t3code::{T3CodeQuotaRemaining, T3CodeQuotaWindowView};
 use crate::modules::{
     app_lifecycle, codex_account, codex_local_access, codex_quota, config, i18n, logger,
 };
@@ -744,6 +745,10 @@ fn read_profile_gateway_config(profile_dir: &Path) -> Option<ProfileGatewayConfi
     })
 }
 
+pub(super) fn profile_uses_api_key(profile_dir: &Path, key: &str) -> bool {
+    read_profile_gateway_config(profile_dir).is_some_and(|gateway| gateway.api_key == key)
+}
+
 fn should_enable_profile_injection(profile_dir: &Path, bind_account_id: Option<&str>) -> bool {
     if should_enable_injection(bind_account_id) {
         return true;
@@ -1026,10 +1031,14 @@ async fn fetch_quota(
         let remote = crate::modules::codex_remote_service::discover(&gateway.base_url, &gateway.api_key, true).await.ok()??;
         return Some(QuotaResponse { remote: serde_json::to_value(remote).ok(), ..Default::default() });
     }
-    let url = local_quota_url(&gateway.base_url)?;
+    fetch_local_quota(client, &gateway.base_url, &gateway.api_key).await
+}
+
+async fn fetch_local_quota(client: &Client, base_url: &str, api_key: &str) -> Option<QuotaResponse> {
+    let url = local_quota_url(base_url)?;
     let response = client
         .get(url)
-        .bearer_auth(&gateway.api_key)
+        .bearer_auth(api_key)
         .timeout(CDP_CONNECT_TIMEOUT)
         .send()
         .await
@@ -1042,6 +1051,112 @@ async fn fetch_quota(
         .await
         .ok()
         .map(QuotaResponse::normalize_empty_pool)
+}
+
+pub(crate) async fn read_t3code_api_service_quota() -> Option<Vec<T3CodeQuotaWindowView>> {
+    let Some((base_url, api_key)) = codex_local_access::running_api_service_connection().await else {
+        return Some(Vec::new());
+    };
+    let client = Client::builder().no_proxy().build().ok()?;
+    let quota = fetch_local_quota(&client, &base_url, &api_key).await?;
+    Some(t3code_api_service_quota_windows(&quota))
+}
+
+fn t3code_api_service_quota_windows(quota: &QuotaResponse) -> Vec<T3CodeQuotaWindowView> {
+    [
+        ("5h", "5h", quota.five_hour_remaining_percent),
+        ("weekly", "7d", quota.weekly_remaining_percent),
+    ]
+    .into_iter()
+    .filter_map(|(id, label, remaining)| {
+        let remaining_percent = i32::try_from(remaining?).ok()?;
+        Some(T3CodeQuotaWindowView {
+            id: id.to_owned(),
+            label: label.to_owned(),
+            remaining: T3CodeQuotaRemaining::Percent { remaining_percent },
+            reset_time: None,
+        })
+    })
+    .collect()
+}
+
+fn t3code_gateway_windows(quota: &QuotaResponse) -> Value {
+    json!([
+        {"id": "5h", "label": "5h", "remainingPercent": quota.five_hour_remaining_percent,
+            "capacityPercent": quota.five_hour_capacity_percent},
+        {"id": "weekly", "label": "7d", "remainingPercent": quota.weekly_remaining_percent,
+            "capacityPercent": quota.weekly_capacity_percent},
+    ])
+}
+
+pub(super) async fn t3code_gateway_usage(
+    client: &Client,
+    profile: PathBuf,
+    model: Option<&str>,
+    locale: &str,
+) -> Option<Value> {
+    let (gateway, binding, api_count) = tokio::task::spawn_blocking({
+        let profile = profile.clone();
+        move || {
+            let binding = output_speed::binding_snapshot(&profile).ok()?;
+            let gateway = read_profile_gateway_config(&profile)?;
+            let count = recent_account::read_only_data_dir()
+                .ok()
+                .and_then(|dir| pool::read_count(&dir, &gateway));
+            Some((gateway, binding, count))
+        }
+    }).await.ok()??;
+    let origin = reqwest::Url::parse(&gateway.base_url).ok()?.origin().ascii_serialization();
+    let quota = fetch_quota(client, Some(&gateway), false).await?;
+    let kind = injection_badge_kind_for_model(model);
+    let (balance_lines, grok_lines) = match kind {
+        InjectionBadgeKind::DeepSeekBalance => (fetch_api_service_balance_lines(client).await, None),
+        InjectionBadgeKind::GrokQuota => (None, api_service_grok_quota_lines(locale).await),
+        _ => (None, None),
+    };
+    let current_binding = tokio::task::spawn_blocking(move || output_speed::binding_snapshot(&profile))
+        .await.ok()?.ok()?;
+    if binding != current_binding {
+        return None;
+    }
+    Some(json!({
+        "origin": origin,
+        "binding": binding,
+        "badgeKind": kind.as_js_str(),
+        "accountCount": quota.account_count,
+        "availableAccountCount": quota.available_account_count.or(quota.account_count),
+        "abnormalAccountCount": quota.abnormal_account_count.unwrap_or(0),
+        "cooldownAccountCount": quota.cooldown_account_count.unwrap_or(0),
+        "plans": quota.plans,
+        "gptApiKeyCount": api_count,
+        "balanceLines": balance_lines.unwrap_or_default(),
+        "grokLines": grok_lines.unwrap_or_default(),
+        "windows": t3code_gateway_windows(&quota),
+        "providerQuotas": quota.provider_quotas,
+    }))
+}
+
+pub(super) fn t3code_gateway_speed(
+    profile: &Path,
+    native_thread_id: &str,
+    model: Option<String>,
+) -> Option<Value> {
+    let selection = output_speed::OutputSpeedSelection {
+        model,
+        service_tier: None,
+    };
+    let speed = output_speed::read_output_speed_with_selection(profile, native_thread_id, &selection)
+        .result
+        .ok()??;
+    serde_json::to_value(speed).ok()
+}
+
+pub(super) async fn refresh_t3code_gateway_quota() -> bool {
+    let Some(app) = crate::get_app_handle() else { return false };
+    matches!(
+        timeout(Duration::from_secs(120), run_quota_refresh_singleflight(app)).await,
+        Ok(Ok(_))
+    )
 }
 
 /// 查询绑定账号的 DeepSeek 余额；失败时保留上一次的有效快照，不清空已显示的额度。

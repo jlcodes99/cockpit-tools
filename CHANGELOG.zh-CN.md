@@ -10,56 +10,83 @@
 
 ## [Unreleased]
 
+## [1.5.1] - 2026-11-26
+
 ### 新增
 
-- **账号自动化**：通过 CLI 列出各平台账号、查询额度、切号，并管理 Codex API 服务成员。命令可返回供脚本读取的结构化结果。
-- **Antigravity 账号**：表格列表直接显示标签和备注，待授权账号可通过 JSON 保留标签和备注。
-- **Codex 会话用量**：可按模型、实例和项目筛选请求明细，从分类统计直接查看对应请求。本机指标和官方累计用量采用独立的紧凑布局。
-- **供应商预设**：为 Codex、Claude Code 和 Claude Desktop 新增 AIGROW、Lazu 和 WorldRouter，为 Codex 新增 Atlas Cloud。 [#3223](https://github.com/jlcodes99/cockpit-tools/pull/3223) · [#3249](https://github.com/jlcodes99/cockpit-tools/pull/3249) · [#3258](https://github.com/jlcodes99/cockpit-tools/pull/3258) · [#3263](https://github.com/jlcodes99/cockpit-tools/pull/3263)
-- **macOS 菜单栏**：新增紧凑双行额度布局选项，支持在单行与双行间切换并实时预览。 [#3253](https://github.com/jlcodes99/cockpit-tools/pull/3253)
-- **侧边栏**：移除侧边栏入口数量上限，支持全选并保留任意数量的平台入口。 [#3158](https://github.com/jlcodes99/cockpit-tools/pull/3158)
-- **Codex SSH 同步**：支持通过 SSH 反向隧道同步本机 Codex API 服务与托管模型目录，切回账号时自动清理隧道并恢复远端配置。 [#3211](https://github.com/jlcodes99/cockpit-tools/pull/3211)
-- **ZCode**：支持将 ZCode API Key 账号通过原生 Provider Gateway 接入 Codex。 [#3243](https://github.com/jlcodes99/cockpit-tools/pull/3243)
-- **WorkBuddy 与 CodeBuddy CN**：账号卡片新增 24 小时内即将到期积分徽章与悬停明细，恢复卡片底部即将到期提示，并统一 CodeBuddy CN 新版积分概览卡片。 [#3247](https://github.com/jlcodes99/cockpit-tools/pull/3247) · [#3250](https://github.com/jlcodes99/cockpit-tools/pull/3250)
-- **Qoder**：提供公开版 Qoder CN 渠道隔离与独立加密存储。 [#3193](https://github.com/jlcodes99/cockpit-tools/pull/3193)
+- **中转站 → Gemini CLI**：选择已保存的密钥和它支持的 Gemini 模型，预览后即可写入本机并切换到 API Key 认证。写入时保留其他配置项和已有备份。 [#3104](https://github.com/jlcodes99/cockpit-tools/issues/3104)
+- **T3 Code** 的「添加账号」可选择 Cockpit 的 Codex API 服务。账号选择器和总览都显示账号池合计的 5 小时、每周剩余额度，多账号合计超过 100% 时显示实际数值。
+- **模型供应商**新增 TeamoRouter 预设，适用于 Codex、Claude Code 和 Claude Desktop。 [#3280](https://github.com/jlcodes99/cockpit-tools/pull/3280)
+- **ZCode → Codex**：已启用个人 Start Plan 的 Z.ai OAuth 账号可接入原生网关。套餐信息缺失时会提示刷新额度，BigModel Coding / Team Plan 则提示使用项目 API Key 接入。 [#3272](https://github.com/jlcodes99/cockpit-tools/pull/3272)
+- **WorkBuddy → Codex**：可用已保存的账号发送独立的纯文本请求。网关收到完整回复后返回文本，并在请求完成或取消后尝试清理临时会话。 [#3282](https://github.com/jlcodes99/cockpit-tools/pull/3282)
+
+### 变更
+
+- **Antigravity IDE** 的切号和实例启动弹框会提示，IDE 2.6 及以上版本的所有实例共用 Google 登录。 [#3232](https://github.com/jlcodes99/cockpit-tools/issues/3232)
+- **Antigravity** 的 Gemini 4 Argon 模型改用 Gemini 共享额度，保留已有的自定义模型分组。自动切号、Antigravity 和 T3 Code 的输入栏都会忽略缓存中已停用的 Argon 额度，避免旧的 0% 影响显示或切号。 [#3271](https://github.com/jlcodes99/cockpit-tools/pull/3271)
 
 ### 修复
 
-- **Codex 批量导入**：OAuth 账号在保存前也可以检查额度。 [#3182](https://github.com/jlcodes99/cockpit-tools/pull/3182)
-- **WorkBuddy 和 CodeBuddy CN 模型探测**：兼容只通过事件流返回最终结果的后端，并恢复模型选择与结果矩阵布局。 [#3231](https://github.com/jlcodes99/cockpit-tools/pull/3231)
-- **Codex 会话快速修复**：跳过历史文件已丢失的会话，仍可修复使用压缩历史文件的会话。 [#3179](https://github.com/jlcodes99/cockpit-tools/pull/3179)
-- **账号导出**：限制大 JSON 的预览长度，减少弹框卡顿，复制和下载仍保留完整内容。 [#3192](https://github.com/jlcodes99/cockpit-tools/pull/3192)
-- **Codex 订阅有效期**：优先采用对应工作区的订阅明细。最新一次刷新未能确认到期时间时，将保留的时间标为未确认。
-- **Codex 会话用量**：扫描期间打开详情可查看已有统计，扫描完成后按当前筛选条件自动更新。
-- **Codex OAuth 绑定**：绑定窗口独立筛选账号，账号总览的分组和搜索不会隐藏绑定候选。
-- **Codex 请求记录**：额度与用量弹框正确区分本机 API 服务和远端服务，显示本机请求账号及客户端断开、上游过载等失败原因。
-- **Codex 桌面版**：额度与用量弹框的请求记录改用与 API 服务日志一致的速度短标签。
-- **Claude CLI**：刷新从本机导入的账号时，可读取官方 CLI 为同一账号和组织更新的凭据，避免继续使用已轮换的令牌。
-- **Antigravity 账号卡片**：移除重复切换时间，紧凑视图也能在时间旁查看可用 AI 积分。
-- **Codex Windows 切号**：可以用安装包身份区分同名的 ChatGPT 和 Codex 进程，避免已确认属于其他应用的进程阻断切号。
-- **Codex Chat 中转**：上下文压缩不携带空工具列表对应的工具选项，兼容校验严格的上游。
-- **Codex 供应商额度**：模型供应商卡片和 macOS 额度菜单分别显示已记录的额度窗口、剩余百分比和重置时间。
-- **WorkBuddy、CodeBuddy CN 模型探测**：已下线模型不再计入探测数量和批量任务。
-- **WorkBuddy Windows 版**在保存和检测应用路径时排除内置 Node。如果已经配置了内置 Node，切号时可在路径弹框中选择 `WorkBuddy.exe` 并重试。密钥进程退出失败时会显示实际使用的程序路径。
-- **应用多开**：修复保存过 CodeBuddy CLI 启动配置后，删除 Codex 等平台的受管实例会报错的问题。
-- **Codex 实例复制**：修复会话历史分布在原始文件和续接文件时，有效历史被误判为索引越界、导致实例无法复制的问题。 [#3260](https://github.com/jlcodes99/cockpit-tools/issues/3260)
-- **Codex 会话修复**：「修复会话索引」支持已应用官方第 9 号迁移的历史数据库。 [#3259](https://github.com/jlcodes99/cockpit-tools/issues/3259)
-- **Codex API 服务**：通过本机网关使用支持的模型时，恢复原生网页搜索。 [#3210](https://github.com/jlcodes99/cockpit-tools/issues/3210)
-- **Codex API 服务**：符合条件的 Team 和 Business 账号用完包含额度后，即使上游未返回具体积分余额，也可继续使用工作区积分。 [#3257](https://github.com/jlcodes99/cockpit-tools/issues/3257)
-- **Codex 模型管理**：启动时不会仅为迁移模型管理设置而创建不存在的 Codex 配置目录。 [#3244](https://github.com/jlcodes99/cockpit-tools/issues/3244)
-- **macOS 主窗口**：首次显示前恢复保存的窗口大小，修复在外接屏上重新启动时内容被裁切的问题。 [#3234](https://github.com/jlcodes99/cockpit-tools/issues/3234)
-- **Codex 账号卡片**：拖拽后保存自定义顺序，重启应用后仍能保留。 [#3237](https://github.com/jlcodes99/cockpit-tools/pull/3237)
-- **Antigravity 唤醒**：新任务、未指定传输方式的已有任务和手动测试会沿用已配置的默认传输方式。 [#3256](https://github.com/jlcodes99/cockpit-tools/pull/3256)
-- **Antigravity 唤醒**：使用独立版客户端内置的 Language Server 时，按目标账号启动，修复缺少认证提供方的报错。 [#3255](https://github.com/jlcodes99/cockpit-tools/issues/3255)
-- **Codex CLI 实例**：绑定 API 服务时，为支持动态模型目录的 CLI 自动配置模型目录。 [#3238](https://github.com/jlcodes99/cockpit-tools/pull/3238)
-- **Codex Windows 代理**：统一账号代理启动参数与客户端 `.env` 代理配置并支持加密恢复，新增客户端原设置 ENV 识别编辑与可选出口国家预检。 [#3171](https://github.com/jlcodes99/cockpit-tools/issues/3171) · [#3172](https://github.com/jlcodes99/cockpit-tools/pull/3172)
-- **macOS 程序坞图标**：将「隐藏程序坞图标」设为唯一激活策略来源，窗口从托盘唤醒后不再意外恢复显示 Dock 图标，且不再与托盘开关耦合。 [#3266](https://github.com/jlcodes99/cockpit-tools/pull/3266)
-- **Codex 账号展示**：Team 和 Business 账号标题直接显示登录邮箱，避免同名工作空间下难以辨认账号。 [#3230](https://github.com/jlcodes99/cockpit-tools/pull/3230)
-- **Codex 重新授权**：优先依据已保存令牌核验身份，并在目标邮箱已被其他账号占用时拒绝覆盖。 [#3217](https://github.com/jlcodes99/cockpit-tools/pull/3217)
-- **Codex API 服务**：HTTP Responses 链路遇到无原因且零用量的静默 `response.incomplete` 事件时主动中止下游流，使客户端能够自动重连。 [#3188](https://github.com/jlcodes99/cockpit-tools/issues/3188) · [#3201](https://github.com/jlcodes99/cockpit-tools/pull/3201)
-- **Linux AppImage**：不再打包 `libwayland-*`，修复 Arch / Mesa 26 下的 `EGL_BAD_PARAMETER` 崩溃。 [#3187](https://github.com/jlcodes99/cockpit-tools/issues/3187) · [#3218](https://github.com/jlcodes99/cockpit-tools/pull/3218)
-- **macOS 自动更新**：在 App Translocation 只读挂载下安装失败时，明确提示将应用移至「应用程序」目录后重试。 [#3183](https://github.com/jlcodes99/cockpit-tools/pull/3183)
-- **账号总览工具栏**：窄窗口下允许筛选与操作控件在工具栏内正常换行，避免溢出页面边界。 [#3191](https://github.com/jlcodes99/cockpit-tools/pull/3191)
+- **Codex 原生 API 服务**在新版认证（官方第三方授权）模式下完整识别 `response.failed`（含 `server_error` / `rate_limit_exceeded`）、扁平 SSE `error` 事件及 `reasoning.summary = "none"` 握手流中的 Subscription Sharing 额度耗尽错误，自动将该官方授权标记为冷却并切换到账号池中的其他可用账号，避免流中途断开与任务卡住。 [#2866](https://github.com/jlcodes99/cockpit-tools/issues/2866)
+- **Codex 原生 API 服务**将会话续接检查点收敛为有界自包含热缓存，移除会无限增长的持久拆块历史归档表；启动时若检测到超大旧版 `identity.sqlite` 会自动保留活跃身份映射与最近会话并无损瘦身重建。后台维护在有活跃请求或前台占用连接时自动让路并限制单批耗时，服务运行期间不触发整库压缩。 [#3044](https://github.com/jlcodes99/cockpit-tools/issues/3044) · [#3289](https://github.com/jlcodes99/cockpit-tools/pull/3289)
+- **WorkBuddy** 刷新未保存域名的账号时会使用官方认证端点的域名，已有企业域名仍优先使用。 [#2979](https://github.com/jlcodes99/cockpit-tools/issues/2979)
+- macOS 的 **Claude Desktop** 账号页快捷设置现可直接开启「切号时同步 Code 会话列表」，与通用设置共用同一开关。 [#3102](https://github.com/jlcodes99/cockpit-tools/issues/3102)
+- 在**「添加至 API 服务」**中，仅普通 ChatGPT 账号显示额度。API 密钥、中转站和 Grok 账号仍显示请求次数，隐藏容易误读的「5h 0%」或「共享额度 0%」。
+- **macOS 上的 Codex Desktop 26.1120** 可再次加载原生下一步预测。 [#3278](https://github.com/jlcodes99/cockpit-tools/issues/3278)
+- **Codex SSH** 能读取新版桌面端保存的连接和自动连接设置。冷启动时，即使主机已经重连，也能核验切换后的账号。 [#3286](https://github.com/jlcodes99/cockpit-tools/pull/3286)
+
+## [1.5.0] - 2026-11-25
+
+### 重磅更新 · T3 Code 账号管理
+
+- **把 Cockpit 里已保存的账号一键添加到 T3 Code。** 打开「T3 Code → 账号配置」，选择受支持的账号，点击「添加账号」即可接入本机 T3 Code。支持 Antigravity、Codex、Claude Code、Grok、WorkBuddy、WorkBuddy AI、CodeBuddy、CodeBuddy CN 和 MiniMax Code。
+- **集中管理已接入的账号。** 总览按平台展示账号、订阅和剩余额度，余额、积分和百分比按原单位显示。可添加并行账号、移除账号或设为默认。默认账号排到组内首位，相关提供方空闲时自动应用。也可以在总览里直接启动或重启 T3 Code。
+- **在聊天中查看额度和上下文占用。** Antigravity 桌面版和 T3 Code 的底栏会随所选模型显示用量。T3 Code 中的 Antigravity 会话和通过 Cockpit Codex API 服务运行的 Codex 会话可直接查看上下文占用百分比和输出速度，其他提供方显示各自额度。Antigravity 会话底栏显示正文速度，点开可查看同一回复的正文速度、含思考总速度和流式速度。
+- **在 Cockpit 配置 T3 Code。** 可设置界面语言、新对话的模型与推理强度、通知、启动路径和额度胶囊。本机 T3 Code 可使用 Cockpit 已配置的 CLI 路径，缺少运行环境时可从账号总览进入安装或路径设置。
+
+### 新增
+
+- **账号自动化**支持用 CLI 查询账号和额度、切换账号，并管理 Codex API 服务成员。脚本可直接读取结构化输出。
+- **Codex 会话用量**可按模型、实例和项目筛选，也可从分类统计跳到对应请求。本机统计和官方累计用量分开显示，扫描期间仍可查看已有统计。
+- **Codex SSH 同步**支持在远端使用本机 Codex API 服务和模型目录。切换账号时保留自动连接设置，退出同步时自动恢复远端配置。 [#3211](https://github.com/jlcodes99/cockpit-tools/pull/3211)
+- **模型供应商**新增 AIGROW、Lazu 和 WorldRouter 预设，适用于 Codex、Claude Code 和 Claude Desktop。Codex 还新增 Atlas Cloud 预设，并支持绑定已保存的 ZCode API Key。 [#3223](https://github.com/jlcodes99/cockpit-tools/pull/3223) · [#3249](https://github.com/jlcodes99/cockpit-tools/pull/3249) · [#3258](https://github.com/jlcodes99/cockpit-tools/pull/3258) · [#3263](https://github.com/jlcodes99/cockpit-tools/pull/3263) · [#3243](https://github.com/jlcodes99/cockpit-tools/pull/3243)
+- **Antigravity、CodeBuddy 和 CodeBuddy CN** 的启动预览可直接检测、选择和保存客户端路径，保存后可继续原来的启动操作。
+- **WorkBuddy 和 WorkBuddy AI** 的账号卡片会提示 24 小时内到期的积分，悬停可查看明细。CodeBuddy CN 的账号卡片可按类别查看积分。 [#3247](https://github.com/jlcodes99/cockpit-tools/pull/3247) · [#3250](https://github.com/jlcodes99/cockpit-tools/pull/3250)
+- **Qoder CN** 的账号可与国际版分开管理，凭据独立加密保存。 [#3193](https://github.com/jlcodes99/cockpit-tools/pull/3193)
+- **macOS 菜单栏**新增紧凑双行额度布局，可在设置中切换并预览。 [#3253](https://github.com/jlcodes99/cockpit-tools/pull/3253)
+
+### 变更
+
+- **账号导航和筛选**支持全选标签、在侧边栏展示全部已选平台，并在窄窗口中换行排列筛选和操作按钮。 [#3248](https://github.com/jlcodes99/cockpit-tools/issues/3248) · [#3158](https://github.com/jlcodes99/cockpit-tools/pull/3158) · [#3191](https://github.com/jlcodes99/cockpit-tools/pull/3191)
+- **大量账号导出**使用精简的 JSON 预览，复制和下载提供完整内容。 [#3192](https://github.com/jlcodes99/cockpit-tools/pull/3192)
+- **Antigravity 账号**的列表和待授权账号 JSON 导入支持标签与备注，紧凑卡片可查看可用 AI 积分。暂时刷新不到套餐时，继续显示上次确认的套餐。 [#3202](https://github.com/jlcodes99/cockpit-tools/issues/3202)
+- **Antigravity 自动切号**的「任一分组」条件按 Google 返回的实际共享额度组判断，额度分组变化会随刷新生效。
+- **Codex 账号**导入 OAuth 账号时可先查额度，绑定时可单独筛选候选。Team 和 Business 账号用登录邮箱区分，账号卡片的拖拽排序在重启后也会保留。 [#3182](https://github.com/jlcodes99/cockpit-tools/pull/3182) · [#3227](https://github.com/jlcodes99/cockpit-tools/issues/3227) · [#3252](https://github.com/jlcodes99/cockpit-tools/pull/3252) · [#3230](https://github.com/jlcodes99/cockpit-tools/pull/3230) · [#3237](https://github.com/jlcodes99/cockpit-tools/pull/3237)
+- **Codex 的双窗口套餐**可在账号卡片和 macOS 额度菜单查看 5 小时与每周剩余额度和重置时间，菜单栏状态也显示对应额度。 [#3203](https://github.com/jlcodes99/cockpit-tools/issues/3203) · [#3204](https://github.com/jlcodes99/cockpit-tools/pull/3204) · [#3219](https://github.com/jlcodes99/cockpit-tools/issues/3219) · [#3220](https://github.com/jlcodes99/cockpit-tools/pull/3220) · [#3225](https://github.com/jlcodes99/cockpit-tools/pull/3225)
+- **Codex 模型管理**支持为自定义和第三方模型选择适用的推理档位，包括兼容模型的 `max` 和 `ultra`。绑定 API 服务或刷新模型目录时会保留选择，切回「跟随官方」可恢复官方档位。兼容的 Codex CLI 在绑定 API 服务后会自动加载模型目录。 [#3254](https://github.com/jlcodes99/cockpit-tools/issues/3254) · [#3265](https://github.com/jlcodes99/cockpit-tools/issues/3265) · [#3238](https://github.com/jlcodes99/cockpit-tools/pull/3238)
+- **Codex 请求记录**区分本机与远端 API 服务，显示本机请求使用的账号和失败原因。桌面版与 API 服务使用一致的速度标签。 [#3228](https://github.com/jlcodes99/cockpit-tools/issues/3228) · [#3229](https://github.com/jlcodes99/cockpit-tools/pull/3229)
+- **Codex API 服务**支持符合条件的 Team 和 Business 账号在套餐额度用完后继续使用工作区积分。过期和冗余的会话历史会自动清理，清除统计可释放相关日志和历史占用的空间。 [#3257](https://github.com/jlcodes99/cockpit-tools/issues/3257) · [#3044](https://github.com/jlcodes99/cockpit-tools/issues/3044) · [#3246](https://github.com/jlcodes99/cockpit-tools/issues/3246)
+- **Codex 的 Windows 代理设置**可查看和编辑客户端代理环境变量，支持恢复原配置和按需检查代理的出口国家。 [#3171](https://github.com/jlcodes99/cockpit-tools/issues/3171) · [#3172](https://github.com/jlcodes99/cockpit-tools/pull/3172)
+- **从源码构建桌面安装包**时，缺少界面入口或其引用的资源会直接停止构建并提示原因。 [#3284](https://github.com/jlcodes99/cockpit-tools/pull/3284)
+
+### 修复
+
+- 修复新版 ChatGPT 桌面客户端使用 API Key 时可能卡在启动页的问题。支持的模型可在客户端打开后通过原生菜单切换标准、快速和超快。
+- Windows 同时打开 ChatGPT 和 Codex 时，修复其他应用进程误拦住 Codex 切号的问题。 [#3205](https://github.com/jlcodes99/cockpit-tools/issues/3205)
+- Codex 会按工作区订阅显示到期时间，刷新失败时会注明待确认。重新授权时会核对已有账号，保护已由其他账号使用的邮箱。 [#3217](https://github.com/jlcodes99/cockpit-tools/pull/3217)
+- Codex 能复制包含续接会话历史的实例，并修复新版客户端生成的会话索引。快速修复支持压缩历史文件，遇到已缺失的历史文件时会跳过对应会话。 [#3179](https://github.com/jlcodes99/cockpit-tools/pull/3179) · [#3260](https://github.com/jlcodes99/cockpit-tools/issues/3260) · [#3262](https://github.com/jlcodes99/cockpit-tools/pull/3262) · [#3259](https://github.com/jlcodes99/cockpit-tools/issues/3259)
+- 修复 Codex 模型管理在应用启动时意外创建未使用的 Codex 配置目录的问题。 [#3244](https://github.com/jlcodes99/cockpit-tools/issues/3244) · [#3245](https://github.com/jlcodes99/cockpit-tools/pull/3245)
+- Codex API 服务按成员优先级路由请求和搜索。支持的模型可通过本机 API 服务使用原生网页搜索。 [#3210](https://github.com/jlcodes99/cockpit-tools/issues/3210) · [#3215](https://github.com/jlcodes99/cockpit-tools/pull/3215)
+- 修复部分 Codex Chat 中转压缩上下文失败，以及部分 API 服务请求提前结束时未正确报告中断的问题。 [#3190](https://github.com/jlcodes99/cockpit-tools/issues/3190) · [#3196](https://github.com/jlcodes99/cockpit-tools/pull/3196) · [#3188](https://github.com/jlcodes99/cockpit-tools/issues/3188) · [#3201](https://github.com/jlcodes99/cockpit-tools/pull/3201)
+- **Codex API 服务**在普通请求首次发生网络错误后最多恢复 120 秒，连续失败 4 次也会结束并明确提示网络故障。Cockpit 管理的 Codex 连接由服务统一重试。回复已开始输出后若中途断开，需要手动重试。 [#3284](https://github.com/jlcodes99/cockpit-tools/pull/3284)
+- Antigravity 的唤醒任务和手动测试会使用所配置的默认传输方式。通过独立版唤醒时使用选定账号，修复缺少认证提供方的报错。 [#3256](https://github.com/jlcodes99/cockpit-tools/pull/3256) · [#3255](https://github.com/jlcodes99/cockpit-tools/issues/3255)
+- 刷新从 Claude CLI 导入的账号时，可使用官方 CLI 为同一账号和组织更新的登录凭据。 [#3226](https://github.com/jlcodes99/cockpit-tools/issues/3226)
+- WorkBuddy 和 CodeBuddy CN 的模型探测可正常展示模型选择和测试结果，批量探测会跳过已下线的模型。 [#3231](https://github.com/jlcodes99/cockpit-tools/pull/3231) · [#3213](https://github.com/jlcodes99/cockpit-tools/issues/3213) · [#3216](https://github.com/jlcodes99/cockpit-tools/pull/3216)
+- WorkBuddy 在 Windows 上识别正确的客户端启动程序。切号时可重新选择 `WorkBuddy.exe`，相关进程无法退出时会显示实际使用的程序路径。 [#3264](https://github.com/jlcodes99/cockpit-tools/pull/3264)
+- 保存过 CodeBuddy CLI 启动配置后，可以正常删除 Codex 等平台的已管理实例。
+- macOS 在外接屏重新打开应用时会恢复窗口尺寸。从托盘打开窗口也会遵循隐藏程序坞图标的设置，程序坞和托盘图标可独立设置。 [#3234](https://github.com/jlcodes99/cockpit-tools/issues/3234) · [#3235](https://github.com/jlcodes99/cockpit-tools/pull/3235) · [#3266](https://github.com/jlcodes99/cockpit-tools/pull/3266)
+- macOS 无法从临时挂载位置自动更新时，会提示把应用移到「应用程序」后重试。 [#3183](https://github.com/jlcodes99/cockpit-tools/pull/3183)
+- 修复 Arch Linux 使用 Mesa 26 时 AppImage 可能崩溃的问题。 [#3187](https://github.com/jlcodes99/cockpit-tools/issues/3187) · [#3218](https://github.com/jlcodes99/cockpit-tools/pull/3218)
 
 ## [1.4.2] - 2026-11-18
 

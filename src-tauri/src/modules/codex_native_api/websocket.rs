@@ -863,6 +863,9 @@ async fn run(
                             if super::grok_errors::applies(&prepared.route) {
                                 super::grok_errors::normalize_event(&mut event);
                             }
+                            if prepared.route.chatgpt_plan {
+                                super::official_fallback::normalize_sharing_quota_error(&mut event);
+                            }
                             super::upstream_errors::normalize_response_error(&mut event);
                             if steering.interrupt_rejected(&event, interrupt_pending.as_ref()) {
                                 if let Some((_, Some(id))) = interrupt_pending.take() {
@@ -2065,6 +2068,7 @@ fn first_event_rejection(
     if grok {
         super::grok_errors::normalize_event(&mut event);
     }
+    super::official_fallback::normalize_sharing_quota_error(&mut event);
     super::upstream_errors::normalize_response_error(&mut event);
     if !matches!(
         super::events::response_terminal_kind(&event),

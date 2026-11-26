@@ -1,3 +1,5 @@
+import { PlatformLaunchPathField } from './PlatformLaunchPathField';
+import { T3codeNativeSettingsPanel } from './t3code/T3codeNativeSettings';
 import { CodexAppEnhancementSettings } from './codex/CodexAppEnhancementSettings';
 import { resolveCodexAccountDisplayName } from "../utils/codexAccountDisplayName";
 import { CodexRefreshPlanScopeControl } from './CodexRefreshPlanScopeControl';
@@ -114,6 +116,8 @@ interface GeneralConfig {
   qoder_auto_refresh_minutes: number;
   qoder_cn_auto_refresh_minutes: number;
   zcode_auto_refresh_minutes: number;
+  t3code_auto_refresh_minutes: number;
+  t3code_app_ui_injection_enabled?: boolean;
   trae_auto_refresh_minutes: number;
   trae_solo_auto_refresh_minutes: number;
   trae_cn_auto_refresh_minutes: number;
@@ -146,6 +150,7 @@ interface GeneralConfig {
   qoder_app_path: string;
   qoder_cn_app_path: string;
   zcode_app_path: string;
+  t3code_app_path: string;
   trae_app_path: string;
   trae_solo_app_path: string;
   trae_cn_app_path: string;
@@ -211,6 +216,7 @@ interface GeneralConfig {
   claude_quota_alert_enabled: boolean;
   claude_quota_alert_threshold: number;
   claude_quota_display_remaining?: boolean;
+  claude_share_code_sessions_on_switch?: boolean;
   codebuddy_quota_alert_enabled: boolean;
   codebuddy_quota_alert_threshold: number;
   codebuddy_cn_quota_alert_enabled: boolean;
@@ -249,6 +255,7 @@ export type QuickSettingsType =
   | 'qoder'
   | 'qoder_cn'
   | 'zcode'
+  | 't3code'
   | 'trae'
   | 'trae_solo'
   | 'trae_cn'
@@ -271,6 +278,7 @@ type AppPathTarget =
   | 'qoder'
   | 'qoder_cn'
   | 'zcode'
+  | 't3code'
   | 'trae'
   | 'trae_solo'
   | 'trae_cn'
@@ -363,6 +371,8 @@ const getAppPathKeyForTarget = (target: AppPathTarget): keyof GeneralConfig => {
       return 'qoder_cn_app_path';
     case 'zcode':
       return 'zcode_app_path';
+    case 't3code':
+      return 't3code_app_path';
     case 'trae':
       return 'trae_app_path';
     case 'trae_solo':
@@ -418,6 +428,8 @@ const getCurrentAccountRefreshPlatformForType = (
       return 'qoder_cn';
     case 'zcode':
       return 'zcode';
+    case 't3code':
+      return 't3code';
     case 'trae':
       return 'trae';
     case 'trae_solo':
@@ -872,6 +884,7 @@ export function QuickSettingsPopover({
       case 'qoder': return 'qoder_auto_refresh_minutes';
       case 'qoder_cn': return 'qoder_cn_auto_refresh_minutes';
       case 'zcode': return 'zcode_auto_refresh_minutes';
+      case 't3code': return 't3code_auto_refresh_minutes';
       case 'trae': return 'trae_auto_refresh_minutes';
       case 'trae_solo': return 'trae_solo_auto_refresh_minutes';
       case 'trae_cn': return 'trae_cn_auto_refresh_minutes';
@@ -1044,6 +1057,8 @@ export function QuickSettingsPopover({
           return 'Qoder CN';
         case 'zcode':
           return 'ZCode';
+        case 't3code':
+          return 'T3 Code';
         case 'trae':
           return 'Trae';
         case 'trae_solo':
@@ -1211,6 +1226,7 @@ export function QuickSettingsPopover({
       case 'qoder_cn':
         return t('quickSettings.refreshInterval', '配额自动刷新');
       case 'zcode':
+      case 't3code':
         return t('quickSettings.refreshInterval', '配额自动刷新');
       case 'trae':
       case 'trae_solo':
@@ -1260,6 +1276,8 @@ export function QuickSettingsPopover({
         return config.qoder_cn_app_path;
       case 'zcode':
         return config.zcode_app_path || '';
+      case 't3code':
+        return config.t3code_app_path || '';
       case 'trae':
         return config.trae_app_path;
       case 'trae_solo':
@@ -1307,6 +1325,8 @@ export function QuickSettingsPopover({
         return t('settings.general.qoderCnAppPath', 'Qoder CN 启动路径');
       case 'zcode':
         return t('quickSettings.zcode.appPath', 'ZCode 启动路径');
+      case 't3code':
+        return t('settings.general.t3codeAppPath');
       case 'trae':
         return t('quickSettings.trae.appPath', 'Trae 路径');
       case 'trae_solo':
@@ -1352,6 +1372,8 @@ export function QuickSettingsPopover({
         return 'qoder_cn';
       case 'zcode':
         return 'zcode';
+      case 't3code':
+        return 't3code';
       case 'trae':
         return 'trae';
       case 'trae_solo':
@@ -2243,6 +2265,16 @@ export function QuickSettingsPopover({
               </div>
             )}
 
+            {type === 't3code' && (
+              <div className="qs-section">
+                <div className="qs-section-header">
+                  <Settings size={15} />
+                  <span>{t('t3code.nativeSettings.sectionTitle')}</span>
+                </div>
+                <T3codeNativeSettingsPanel compact />
+              </div>
+            )}
+            {type !== 't3code' && <>
             {/* ─── Refresh Interval ─── */}
             <div className="qs-section">
               <div className="qs-section-header">
@@ -2389,6 +2421,8 @@ export function QuickSettingsPopover({
               </div>
             </div>
 
+            </>}
+
             {type === 'antigravity' && config && (
               <div className="qs-section">
                 <div className="qs-row">
@@ -2426,10 +2460,12 @@ export function QuickSettingsPopover({
             {/* ─── App Path ─── */}
             {showAppPathSection && (
               <div className="qs-section">
-	                <div className="qs-section-header">
-	                  <FolderOpen size={15} />
-	                  <span>{getAppPathLabel()}</span>
-	                </div>
+                {type !== 'codebuddy' && type !== 'codebuddy_cn' && (
+                  <div className="qs-section-header">
+                    <FolderOpen size={15} />
+                    <span>{getAppPathLabel()}</span>
+                  </div>
+                )}
                 {type === 'codex' && config && (
                   <>
                     <div className="qs-row">
@@ -2487,7 +2523,17 @@ export function QuickSettingsPopover({
                     }}
                   />
                 )}
-                {config && (
+                {type === 'antigravity' ? (
+                  <>
+                    <PlatformLaunchPathField key={antigravityPathTarget} target={antigravityAppPathTarget(antigravityPathTarget)} />
+                    <PlatformLaunchPathField target="antigravity_cli" />
+                  </>
+                ) : type === 'codebuddy' || type === 'codebuddy_cn' ? (
+                  <>
+                    <PlatformLaunchPathField key={type} target={type} />
+                    <PlatformLaunchPathField target="codebuddy_cli" />
+                  </>
+                ) : config && (
 	                <div className="qs-path-control">
                   <input
                     type="text"
@@ -2513,6 +2559,19 @@ export function QuickSettingsPopover({
                         onClick={() => {
                           setAppLaunchCandidates([]);
                           saveConfig({ zcode_app_path: '' });
+                        }}
+                        disabled={pathDetecting || !getAppPath().trim()}
+                        title={t('common.clear', '清除')}
+                      >
+                        {t('common.clear', '清除')}
+                      </button>
+                    )}
+                    {type === 't3code' && (
+                      <button
+                        className="qs-btn"
+                        onClick={() => {
+                          setAppLaunchCandidates([]);
+                          saveConfig({ t3code_app_path: '' });
                         }}
                         disabled={pathDetecting || !getAppPath().trim()}
                         title={t('common.clear', '清除')}
@@ -2551,6 +2610,8 @@ export function QuickSettingsPopover({
 	                  </div>
 	                </div>
                 )}
+
+                {type === 'claude' && <PlatformLaunchPathField target="claude_cli" />}
 
 	                {isWindows && config && (
                   <>
@@ -2649,6 +2710,35 @@ export function QuickSettingsPopover({
                     )}
                   </div>
                 )}
+              </div>
+            )}
+
+            {type === 'claude' && isMacOS && (
+              <div className="qs-section">
+                <div className="qs-row qs-row--top">
+                  <div className="qs-row-label">
+                    <Zap size={15} />
+                    <span>{t('settings.general.claudeShareCodeSessionsOnSwitch')}</span>
+                  </div>
+                  <div className="qs-row-control">
+                    <label className="qs-switch">
+                      <input
+                        type="checkbox"
+                        aria-label={t('settings.general.claudeShareCodeSessionsOnSwitch')}
+                        checked={config.claude_share_code_sessions_on_switch ?? false}
+                        onChange={(event) =>
+                          saveConfig({
+                            claude_share_code_sessions_on_switch: event.target.checked,
+                          })
+                        }
+                      />
+                      <span className="qs-switch-slider"></span>
+                    </label>
+                  </div>
+                </div>
+                <div className="qs-hint">
+                  {t('settings.general.claudeShareCodeSessionsOnSwitchDesc')}
+                </div>
               </div>
             )}
 
@@ -3529,7 +3619,35 @@ export function QuickSettingsPopover({
               </div>
             )}
 
-            {type !== 'antigravity' && type !== 'zcode' && (
+            {type === 't3code' && (
+              <div className="qs-section">
+                <div className="qs-section-header">
+                  <Zap size={15} />
+                  <span>{t('settings.general.t3codeAppUiInjection')}</span>
+                </div>
+                <div className="qs-row">
+                  <div className="qs-row-label">
+                    <span>{t('common.enabled')}</span>
+                  </div>
+                  <div className="qs-row-control">
+                    <label className="qs-switch">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(config.t3code_app_ui_injection_enabled ?? true)}
+                        onChange={(e) =>
+                          saveConfig({ t3code_app_ui_injection_enabled: e.target.checked })
+                        }
+                      />
+                      <span className="qs-switch-slider" />
+                    </label>
+                  </div>
+                </div>
+                <div className="qs-hint">
+                  {t('settings.general.t3codeAppUiInjectionDesc')}
+                </div>
+              </div>
+            )}
+            {type !== 'antigravity' && type !== 'zcode' && type !== 't3code' && (
               <div className="qs-section qs-section--highlight">
                 <div className="qs-section-header">
                   <Zap size={15} />

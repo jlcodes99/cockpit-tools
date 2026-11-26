@@ -2,6 +2,7 @@
 use swift_rs::SwiftLinker;
 
 use std::path::PathBuf;
+mod build_frontend;
 
 #[cfg(target_os = "macos")]
 fn link_macos_swift_runtime_rpaths() {
@@ -37,6 +38,7 @@ fn main() {
     if target.ends_with("-windows-msvc") {
         println!("cargo:rustc-link-arg-bin=cockpit-tools=/STACK:8388608");
     }
+    build_frontend::verify_production_frontend(&target);
     println!("cargo:rustc-env=COCKPIT_RUST_TARGET={target}");
 
     // The cfg gate selects the build host. Only link Swift for a macOS target,

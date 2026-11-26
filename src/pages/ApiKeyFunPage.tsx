@@ -31,7 +31,7 @@ import {
   getApiKeyFunPrefillPage,
   type ApiKeyFunPrefillTarget,
 } from '../utils/apiKeyFunPrefill';
-import { resolveApiKeyFunGrokModel } from '../utils/apikeyFunClientConfigs';
+import { isApiKeyFunGeminiModel, resolveApiKeyFunGrokModel } from '../utils/apikeyFunClientConfigs';
 import { ApiKeyFunKeyConfigModal } from '../components/apiKeyFun/ApiKeyFunKeyConfigModal';
 import { ApiKeyFunPromotionHeader } from '../components/apiKeyFun/ApiKeyFunPromotionHeader';
 import { ModalErrorMessage, useModalErrorState } from '../components/ModalErrorMessage';
@@ -152,6 +152,7 @@ export function ApiKeyFunPage() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [configKey, setConfigKey] = useState<ManagedApiKey | null>(null);
   const [configModels, setConfigModels] = useState<string[]>([]);
+  const configRequest = useRef(0);
   const [configModelsLoading, setConfigModelsLoading] = useState(false);
   const [pendingDeleteKey, setPendingDeleteKey] = useState<ManagedApiKey | null>(null);
   const [deletingKey, setDeletingKey] = useState(false);
@@ -189,7 +190,9 @@ export function ApiKeyFunPage() {
   const canAddCurrentKeyToCodex = modelCatalogText.includes('gpt');
   const canAddCurrentKeyToClaude = apiKeyFunModelCatalog.some(isClaudeModelId);
   const canAddCurrentKeyToGrok = Boolean(resolveApiKeyFunGrokModel(apiKeyFunModelCatalog));
-  const canShowTargetActions = canAddCurrentKeyToCodex || canAddCurrentKeyToClaude || canAddCurrentKeyToGrok;
+  const geminiModels = apiKeyFunModelCatalog.filter(isApiKeyFunGeminiModel);
+  const canAddCurrentKeyToGemini = geminiModels.length > 0;
+  const canShowTargetActions = canAddCurrentKeyToCodex || canAddCurrentKeyToClaude || canAddCurrentKeyToGrok || canAddCurrentKeyToGemini;
   const canPrefillCurrentKey =
     Boolean(currentSavedKey) && !queryingModels && apiKeyFunModelCatalog.length > 0;
 
@@ -483,9 +486,14 @@ export function ApiKeyFunPage() {
     });
   }, [apiKeyFunModelCatalog, claudeBaseUrl, providerBaseUrl, setManagedKeyAction, t]);
 
-  /** 「使用密钥」：按这把 Key 真实返回的模型渲染配置弹窗（只读 + 复制）。 */
-  const handleOpenKeyConfig = useCallback(async (item: ManagedApiKey) => {
+  const handleOpenKeyConfig = useCallback(async (item: ManagedApiKey, knownModels?: string[]) => {
+    const request = ++configRequest.current;
     setConfigKey(item);
+    if (knownModels) {
+      setConfigModels(knownModels);
+      setConfigModelsLoading(false);
+      return;
+    }
     setConfigModels([]);
     setConfigModelsLoading(true);
     try {
@@ -493,11 +501,12 @@ export function ApiKeyFunPage() {
         baseUrl: providerBaseUrl,
         apiKey: item.key,
       });
+      if (request !== configRequest.current) return;
       setConfigModels([...new Set(models.map((model) => model.id.trim()).filter(Boolean))]);
     } catch {
-      setConfigModels([]);
+      if (request === configRequest.current) setConfigModels([]);
     } finally {
-      setConfigModelsLoading(false);
+      if (request === configRequest.current) setConfigModelsLoading(false);
     }
   }, [providerBaseUrl]);
 
@@ -680,6 +689,18 @@ export function ApiKeyFunPage() {
                       }}
                     >
                       <span>{t('apiKeyFun.keyManager.addToGrok', 'Add to Grok')}</span>
+                    </button>
+                  )}
+                  {canAddCurrentKeyToGemini && (
+                    <button
+                      type="button"
+                      className="btn apikey-fun-target-btn"
+                      disabled={!canPrefillCurrentKey}
+                      onClick={() => {
+                        if (currentSavedKey) void handleOpenKeyConfig(currentSavedKey, geminiModels);
+                      }}
+                    >
+                      <span>{t('apiKeyFun.keyManager.addToGeminiCli', '添加到 Gemini CLI')}</span>
                     </button>
                   )}
                   {canAddCurrentKeyToCodex && (

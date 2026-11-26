@@ -221,6 +221,14 @@ export const CODEX_API_PROVIDER_PRESETS: readonly CodexApiProviderPreset[] = [
     apiKeyUrl: "https://app.requesty.ai/api-keys",
   },
   {
+    id: "teamorouter",
+    name: "TeamoRouter",
+    baseUrls: ["https://api.teamorouter.com/v1"],
+    modelCatalog: ["gpt-6.2-astra", "gpt-6.2-sol"],
+    website: "https://teamorouter.com/",
+    apiKeyUrl: "https://teamorouter.com/dashboard?tab=api-keys",
+  },
+  {
     id: "aicodemirror",
     name: "AICodeMirror",
     baseUrls: [
@@ -431,6 +439,14 @@ export const CODEX_API_PROVIDER_PRESETS: readonly CodexApiProviderPreset[] = [
     modelCatalog: ["openai/gpt-6.1-terra", "deepseek-ai/deepseek-v4-flash"],
     website: "https://www.atlascloud.ai/",
     apiKeyUrl: "https://console.atlascloud.ai/api-keys",
+  },
+  {
+    id: "trustedrouter",
+    name: "TrustedRouter",
+    baseUrls: ["https://api.trustedrouter.com/v1"],
+    modelCatalog: ["openai/gpt-6.1-terra", "deepseek/deepseek-v4-flash"],
+    website: "https://trustedrouter.com/",
+    apiKeyUrl: "https://trustedrouter.com/console/api-keys",
   },
   {
     id: "aigrow",

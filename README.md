@@ -16,6 +16,8 @@
 
 **WorkBuddy AI 国际版**（macOS、Windows）：支持浏览器授权、本机或 JSON 导入、积分余额和桌面客户端切号。
 
+**T3 Code**：在统一列表中管理已接入的提供方账号，添加、移除或设置默认账号，并查看真实订阅与剩余额度。启动 T3 Code 后，可在聊天输入框查看当前账号的额度。
+
 **语言**：支持 18 种语言
 
 🇺🇸 English · 🇨🇳 简体中文 · 繁體中文 · 🇯🇵 日本語 · 🇩🇪 Deutsch · 🇪🇸 Español · 🇫🇷 Français · 🇮🇹 Italiano · 🇰🇷 한국어 · 🇧🇷 Português · 🇷🇺 Русский · 🇹🇷 Türkçe · 🇵🇱 Polski · 🇨🇿 Čeština · 🇸🇦 العربية · 🇻🇳 Tiếng Việt · 🇮🇩 Bahasa Indonesia
@@ -503,9 +505,7 @@ cockpit-cli api-service remove "服务成员账号ID" --json
 
 ## 💬 交流群
 
-可以通过微信联系，或加入新建的 Telegram 畅聊群。
-
-新建 Telegram 畅聊群：[点击加入](https://t.me/+Y8gMv4SlZUU2MWY1)
+可以通过微信联系。
 
 | 微信（个人） |
 | :---: |

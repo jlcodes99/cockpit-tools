@@ -79,6 +79,7 @@ import { useWorkbuddyAccountStore } from '../stores/useWorkbuddyAccountStore';
 import { useMinimaxCodeAccountStore } from '../stores/useMinimaxCodeAccountStore';
 import { useQoderAccountStore } from '../stores/useQoderAccountStore';
 import { useZcodeAccountStore } from '../stores/useZcodeAccountStore';
+import { useT3codeAccountStore } from '../stores/useT3codeAccountStore';
 import { useTraeAccountStore } from '../stores/useTraeAccountStore';
 import { useZedAccountStore } from '../stores/useZedAccountStore';
 import { getGitHubCopilotAccountDisplayEmail } from '../types/githubCopilot';
@@ -92,6 +93,7 @@ import { getWorkbuddyAccountDisplayEmail } from '../types/workbuddy';
 import { getMinimaxCodeAccountDisplayEmail } from '../types/minimaxCode';
 import { getQoderAccountDisplayEmail } from '../types/qoder';
 import { getZcodeAccountDisplayEmail } from '../types/zcode';
+import { getT3codeAccountDisplayEmail } from '../types/t3code';
 import {
   getTraeAccountDisplayEmail,
   getTraeAccountPlatformId,
@@ -203,6 +205,8 @@ interface GeneralConfig {
   qoder_app_path: string;
   qoder_cn_app_path: string;
   zcode_app_path: string;
+  t3code_app_path: string;
+  t3code_app_ui_injection_enabled?: boolean;
   trae_app_path: string;
   trae_solo_app_path: string;
   trae_cn_app_path: string;
@@ -226,6 +230,7 @@ interface GeneralConfig {
   qoder_auto_refresh_minutes: number;
   qoder_cn_auto_refresh_minutes: number;
   zcode_auto_refresh_minutes: number;
+  t3code_auto_refresh_minutes: number;
   trae_auto_refresh_minutes: number;
   trae_solo_auto_refresh_minutes: number;
   trae_cn_auto_refresh_minutes: number;
@@ -317,6 +322,7 @@ type AppPathTarget =
   | 'qoder'
   | 'qoder_cn'
   | 'zcode'
+  | 't3code'
   | 'trae'
   | 'trae_solo'
   | 'trae_cn'
@@ -363,6 +369,7 @@ const FALLBACK_PLATFORM_SETTINGS_ORDER: Record<PlatformId, number> = {
   // Fractional so the CN section sits right after Qoder without renumbering.
   qoder_cn: 12.5,
   zcode: 13,
+  t3code: 23,
   trae: 14,
   trae_solo: 15,
   trae_cn: 16,
@@ -549,6 +556,7 @@ export function useSettingsPageController() {
     { value: 'codebuddy_cn', label: 'CodeBuddy CN' },
     { value: 'qoder', label: 'Qoder' },
     { value: 'zcode', label: 'ZCode' },
+    { value: 't3code', label: 'T3 Code' },
     { value: 'trae', label: 'Trae' },
     { value: 'trae_solo', label: t('nav.traeSolo') },
     { value: 'trae_cn', label: 'Trae CN' },
@@ -638,6 +646,8 @@ export function useSettingsPageController() {
   const [qoderAppPath, setQoderAppPath] = useState('');
   const [qoderCnAppPath, setQoderCnAppPath] = useState('');
   const [zcodeAppPath, setZcodeAppPath] = useState('');
+  const [t3codeAppPath, setT3codeAppPath] = useState('');
+  const [t3codeAppUiInjectionEnabled, setT3codeAppUiInjectionEnabled] = useState(true);
   const [traeAppPath, setTraeAppPath] = useState('');
   const [traeSoloAppPath, setTraeSoloAppPath] = useState('');
   const [traeCnAppPath, setTraeCnAppPath] = useState('');
@@ -653,6 +663,7 @@ export function useSettingsPageController() {
   const [qoderAutoRefresh, setQoderAutoRefresh] = useState('10');
   const [qoderCnAutoRefresh, setQoderCnAutoRefresh] = useState('10');
   const [zcodeAutoRefresh, setZcodeAutoRefresh] = useState('10');
+  const [t3codeAutoRefresh, setT3codeAutoRefresh] = useState('10');
   const [traeAutoRefresh, setTraeAutoRefresh] = useState('10');
   const [traeSoloAutoRefresh, setTraeSoloAutoRefresh] = useState('10');
   const [traeCnAutoRefresh, setTraeCnAutoRefresh] = useState('10');
@@ -702,6 +713,7 @@ export function useSettingsPageController() {
   const [qoderAutoRefreshCustomMode, setQoderAutoRefreshCustomMode] = useState(false);
   const [qoderCnAutoRefreshCustomMode, setQoderCnAutoRefreshCustomMode] = useState(false);
   const [zcodeAutoRefreshCustomMode, setZcodeAutoRefreshCustomMode] = useState(false);
+  const [t3codeAutoRefreshCustomMode, setT3codeAutoRefreshCustomMode] = useState(false);
   const [qoderQuotaAlertThresholdCustomMode, setQoderQuotaAlertThresholdCustomMode] = useState(false);
   const [qoderCnQuotaAlertThresholdCustomMode, setQoderCnQuotaAlertThresholdCustomMode] = useState(false);
   const [traeAutoRefreshCustomMode, setTraeAutoRefreshCustomMode] = useState(false);
@@ -1088,6 +1100,7 @@ export function useSettingsPageController() {
       !qoderAutoRefresh.trim() ||
       !qoderCnAutoRefresh.trim() ||
       !zcodeAutoRefresh.trim() ||
+      !t3codeAutoRefresh.trim() ||
       !traeAutoRefresh.trim() ||
       !traeSoloAutoRefresh.trim() ||
       !traeCnAutoRefresh.trim() ||
@@ -1112,6 +1125,7 @@ export function useSettingsPageController() {
     const qoderAutoRefreshNum = parseInt(qoderAutoRefresh, 10) || -1;
     const qoderCnAutoRefreshNum = parseInt(qoderCnAutoRefresh, 10) || -1;
     const zcodeAutoRefreshNum = parseInt(zcodeAutoRefresh, 10) || -1;
+    const t3codeAutoRefreshNum = parseInt(t3codeAutoRefresh, 10) || -1;
     const traeAutoRefreshNum = parseInt(traeAutoRefresh, 10) || -1;
     const traeSoloAutoRefreshNum = parseInt(traeSoloAutoRefresh, 10) || -1;
     const traeCnAutoRefreshNum = parseInt(traeCnAutoRefresh, 10) || -1;
@@ -1169,6 +1183,8 @@ export function useSettingsPageController() {
       qoder_auto_refresh_minutes: qoderAutoRefreshNum,
       qoder_cn_auto_refresh_minutes: qoderCnAutoRefreshNum,
       zcode_auto_refresh_minutes: zcodeAutoRefreshNum,
+      t3code_auto_refresh_minutes: t3codeAutoRefreshNum,
+      t3code_app_ui_injection_enabled: t3codeAppUiInjectionEnabled,
       trae_auto_refresh_minutes: traeAutoRefreshNum,
       trae_solo_auto_refresh_minutes: traeSoloAutoRefreshNum,
       trae_cn_auto_refresh_minutes: traeCnAutoRefreshNum,
@@ -1218,6 +1234,7 @@ export function useSettingsPageController() {
       qoder_app_path: qoderAppPath,
       qoder_cn_app_path: qoderCnAppPath,
       zcode_app_path: zcodeAppPath,
+      t3code_app_path: t3codeAppPath,
       trae_app_path: traeAppPath,
       trae_solo_app_path: traeSoloAppPath,
       trae_cn_app_path: traeCnAppPath,
@@ -1426,6 +1443,8 @@ export function useSettingsPageController() {
     qoderAutoRefresh,
     qoderCnAutoRefresh,
     zcodeAutoRefresh,
+    t3codeAutoRefresh,
+    t3codeAppUiInjectionEnabled,
     cursorAutoRefresh,
     grokAutoRefresh,
     grokSyncOfficialAuthOnSwitch,
@@ -1480,6 +1499,7 @@ export function useSettingsPageController() {
     qoderAppPath,
     qoderCnAppPath,
     zcodeAppPath,
+    t3codeAppPath,
     traeAppPath,
     traeSoloAppPath,
     traeCnAppPath,
@@ -1808,6 +1828,8 @@ export function useSettingsPageController() {
       setQoderAppPath(config.qoder_app_path || '');
       setQoderCnAppPath(config.qoder_cn_app_path || '');
       setZcodeAppPath(config.zcode_app_path || '');
+      setT3codeAppPath(config.t3code_app_path || '');
+      setT3codeAppUiInjectionEnabled(Boolean(config.t3code_app_ui_injection_enabled ?? true));
       setTraeAppPath(config.trae_app_path || '');
       setTraeSoloAppPath(config.trae_solo_app_path || '');
       setTraeCnAppPath(config.trae_cn_app_path || '');
@@ -1829,6 +1851,7 @@ export function useSettingsPageController() {
       setQoderAutoRefresh(String(config.qoder_auto_refresh_minutes ?? 10));
       setQoderCnAutoRefresh(String(config.qoder_cn_auto_refresh_minutes ?? 10));
       setZcodeAutoRefresh(String(config.zcode_auto_refresh_minutes ?? 10));
+      setT3codeAutoRefresh(String(config.t3code_auto_refresh_minutes ?? 10));
       setTraeAutoRefresh(String(config.trae_auto_refresh_minutes ?? 10));
       setTraeSoloAutoRefresh(String(config.trae_solo_auto_refresh_minutes ?? 10));
       setTraeCnAutoRefresh(String(config.trae_cn_auto_refresh_minutes ?? 10));
@@ -1928,6 +1951,7 @@ export function useSettingsPageController() {
       setQoderAutoRefreshCustomMode(false);
       setQoderCnAutoRefreshCustomMode(false);
       setZcodeAutoRefreshCustomMode(false);
+      setT3codeAutoRefreshCustomMode(false);
       setTraeAutoRefreshCustomMode(false);
       setTraeSoloAutoRefreshCustomMode(false);
       setTraeCnAutoRefreshCustomMode(false);
@@ -2193,6 +2217,8 @@ export function useSettingsPageController() {
       setQoderCnAppPath(path);
     } else if (target === 'zcode') {
       setZcodeAppPath(path);
+    } else if (target === 't3code') {
+      setT3codeAppPath(path);
     } else if (isTraeAppPathTarget(target)) {
       setTraeAppPathValue(target, path);
       setTraeLaunchCandidatesTarget(target);
@@ -2234,6 +2260,8 @@ export function useSettingsPageController() {
         return 'Qoder';
       case 'zcode':
         return 'ZCode';
+      case 't3code':
+        return 'T3 Code';
       case 'trae':
       case 'trae_solo':
       case 'trae_cn':
@@ -2539,6 +2567,8 @@ export function useSettingsPageController() {
         return parseRefresh(qoderCnAutoRefresh) > 0;
       case 'zcode':
         return parseRefresh(zcodeAutoRefresh) > 0;
+      case 't3code':
+        return parseRefresh(t3codeAutoRefresh) > 0;
       case 'trae':
         return parseRefresh(traeAutoRefresh) > 0;
       case 'trae_solo':
@@ -2695,6 +2725,8 @@ export function useSettingsPageController() {
         return getProviderAccounts(useQoderAccountStore, getQoderAccountDisplayEmail);
       case 'zcode':
         return getProviderAccounts(useZcodeAccountStore, getZcodeAccountDisplayEmail);
+      case 't3code':
+        return getProviderAccounts(useT3codeAccountStore, getT3codeAccountDisplayEmail);
       case 'trae':
         return getTraeAccounts('trae');
       case 'trae_solo':
@@ -3149,6 +3181,7 @@ export function useSettingsPageController() {
   const qoderAutoRefreshIsPreset = REFRESH_PRESET_VALUES.includes(qoderAutoRefresh);
   const qoderCnAutoRefreshIsPreset = REFRESH_PRESET_VALUES.includes(qoderCnAutoRefresh);
   const zcodeAutoRefreshIsPreset = REFRESH_PRESET_VALUES.includes(zcodeAutoRefresh);
+  const t3codeAutoRefreshIsPreset = REFRESH_PRESET_VALUES.includes(t3codeAutoRefresh);
   const traeAutoRefreshIsPreset = REFRESH_PRESET_VALUES.includes(traeAutoRefresh);
   const traeSoloAutoRefreshIsPreset = REFRESH_PRESET_VALUES.includes(traeSoloAutoRefresh);
   const traeCnAutoRefreshIsPreset = REFRESH_PRESET_VALUES.includes(traeCnAutoRefresh);
@@ -3743,6 +3776,15 @@ export function useSettingsPageController() {
     setZcodeAppPath,
     setZcodeAutoRefresh,
     setZcodeAutoRefreshCustomMode,
+    setT3codeAppPath,
+    setT3codeAppUiInjectionEnabled,
+    setT3codeAutoRefresh,
+    setT3codeAutoRefreshCustomMode,
+    t3codeAppPath,
+    t3codeAppUiInjectionEnabled,
+    t3codeAutoRefresh,
+    t3codeAutoRefreshCustomMode,
+    t3codeAutoRefreshIsPreset,
     setZedAppPath,
     setZedAutoRefresh,
     setZedAutoRefreshCustomMode,

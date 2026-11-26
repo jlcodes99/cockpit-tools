@@ -1009,6 +1009,9 @@ fn build_quota_data_from_response(
     quota_summary: Option<serde_json::Value>,
 ) -> QuotaData {
     let mut quota_data = QuotaData::new();
+    quota_data.quota_summary_groups = quota_summary
+        .as_ref()
+        .and_then(crate::models::quota::QuotaSummaryGroup::parse);
 
     for (name, info) in quota_response.models {
         let display_name = info

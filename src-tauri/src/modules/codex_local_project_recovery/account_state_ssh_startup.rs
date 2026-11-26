@@ -1,6 +1,6 @@
 //! Feed enabled SSH aliases to Desktop's native startup connection command.
 //! The ownership journal records only entries we add, never credentials.
-use super::{super::read_bytes, AUTO_CONNECT, CONNECTIONS};
+use super::{super::read_bytes, identity};
 use crate::modules::atomic_write;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{json, Value};
@@ -80,23 +80,6 @@ fn native_config(raw: Option<&str>) -> Result<Value, String> {
     Ok(value)
 }
 
-fn enabled_aliases(state: &Value) -> BTreeSet<String> {
-    state[CONNECTIONS]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter(|host| {
-            host["hostId"]
-                .as_str()
-                .is_some_and(|id| state[AUTO_CONNECT][id] == true)
-        })
-        .filter_map(|host| host["alias"].as_str())
-        .map(str::trim)
-        .filter(|alias| !alias.is_empty())
-        .map(str::to_string)
-        .collect()
-}
-
 fn entry(alias: &str) -> Value {
     // Empty projects reconnect the existing host without creating bookmarks or
     // requesting directory consent; project restoration remains account_state.
@@ -144,7 +127,10 @@ pub(super) fn prepare(home: &Path, state: &Value) -> Result<bool, String> {
     let journal_path = home.join(OWNERSHIP);
     let config_before = snapshot(&config_path)?;
     let journal_before = snapshot(&journal_path)?;
-    let desired = enabled_aliases(state);
+    let desired = identity::aliases(state)
+        .into_iter()
+        .map(|(_, alias)| alias)
+        .collect::<BTreeSet<_>>();
     if desired.is_empty() && journal_before.is_none() {
         return Ok(false);
     }

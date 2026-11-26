@@ -1,0 +1,65 @@
+[data-cockpit-t3-details][data-cockpit-t3-driver="antigravity"] .badge.pro {
+  color: var(--plan-pro-color);
+  background: var(--plan-pro-bg);
+  border-color: var(--plan-pro-border);
+}
+
+[data-cockpit-t3-details][data-cockpit-t3-driver="antigravity"] .badge.ultra {
+  color: var(--plan-ultra-color);
+  background: var(--plan-ultra-bg);
+  border-color: var(--plan-ultra-border);
+}
+
+[data-cockpit-t3-details][data-cockpit-t3-driver="claudeAgent"] .badge.ultra,
+[data-cockpit-t3-details] .badge.codex-pro-max {
+  color: var(--plan-ultra-color);
+  background: var(--plan-ultra-bg);
+  border-color: var(--plan-ultra-border);
+}
+
+[data-cockpit-t3-details] .badge.codex-pro-lite,
+[data-cockpit-t3-details] .badge.codex-official-api {
+  color: var(--plan-business-color);
+  background: var(--plan-business-bg);
+  border-color: var(--plan-business-border);
+}
+
+[data-cockpit-t3-details] .badge.codex-pro-500,
+[data-cockpit-t3-details] .badge.new-api-exclusive {
+  color: var(--plan-team-color);
+  background: var(--plan-team-bg);
+  border-color: var(--plan-team-border);
+}
+
+[data-cockpit-t3-details] .badge.api-key {
+  color: var(--cockpit-muted);
+  background: var(--cockpit-soft);
+  border-color: var(--cockpit-line);
+}
+
+[data-cockpit-t3-details][data-cockpit-t3-driver="antigravity"] .badge.free {
+  color: var(--plan-free-color, var(--cockpit-muted));
+  background: var(--plan-free-bg);
+  border-color: var(--plan-free-border);
+}
+
+[data-cockpit-t3-details][data-cockpit-t3-driver="antigravity"] .badge.unknown {
+  color: var(--plan-unknown-color);
+  background: var(--plan-unknown-bg);
+  border-color: var(--plan-unknown-border);
+}
+
+[data-cockpit-t3-details] .badge.t3-plan-outline {
+  background: transparent;
+}
+
+[data-cockpit-t3-details] .badge.t3-plan-soft {
+  filter: saturate(.85);
+  opacity: .92;
+}
+
+[data-cockpit-t3-details] .badge.t3-plan-mono {
+  color: var(--cockpit-text);
+  background: var(--cockpit-soft);
+  border-color: var(--cockpit-line);
+}

@@ -130,6 +130,6 @@ export function buildAccountTierFilterOptions(
       value: 'TOS_VIOLATION',
       label: `${t('wakeup.errorUi.tosViolationTitle')} (${tierCounts.TOS_VIOLATION})`,
     },
-    { value: 'UNKNOWN', label: `UNKNOWN (${tierCounts.UNKNOWN})` },
+    { value: 'UNKNOWN', label: `${t('common.unknown')} (${tierCounts.UNKNOWN})` },
   ]
 }

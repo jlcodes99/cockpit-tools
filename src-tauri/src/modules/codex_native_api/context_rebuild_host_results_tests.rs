@@ -159,7 +159,6 @@ async fn host_results_rejections_preserve_errors_without_unlocking_cross_account
         for table in [
             "native_opaque_v1",
             "native_rebuild_checkpoints_v1",
-            "native_rebuild_history_v1",
         ] {
             let count: i64 = db
                 .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {

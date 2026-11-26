@@ -448,10 +448,11 @@ async fn forward_with_policy(
         .total_deadline
         .min(tracker.deadline(policy.total_timeout));
     let HttpResponseStream {
-        bytes: upstream,
+        bytes: raw_upstream,
         status,
         mut headers,
         is_sse,
+        canonical,
     } = match open_response_stream(
         &state,
         &mut prepared,
@@ -469,6 +470,9 @@ async fn forward_with_policy(
             return Err(error);
         }
     };
+    let canonical_sse = canonical.as_ref().map_or(is_sse, |stream| stream.is_sse);
+    let upstream = canonical.map_or(raw_upstream, |stream| stream.bytes);
+    let is_sse = canonical_sse;
     if prepared.route.chatgpt_plan && status.is_success() && !is_sse {
         let error = ServiceError::new(502, "incomplete_upstream_stream",
             "ChatGPT plan inference requires a Responses event stream");
@@ -717,7 +721,10 @@ async fn forward_with_policy(
     let mut normalized = false;
     if !compact {
         if let Some(value) = &mut value {
-            normalized = super::output_usage::normalize_usage_details(value);
+            if prepared.route.chatgpt_plan {
+                normalized |= super::official_fallback::normalize_sharing_quota_error(value);
+            }
+            normalized |= super::output_usage::normalize_usage_details(value);
             if status.is_success() { normalized |= super::replay_wire::instructions(&prepared.source_body,value); normalized |= super::response_wire::ResponseWire::default().stamp_response(value); }
         }
     }
@@ -804,6 +811,7 @@ pub(super) struct HttpResponseStream {
     pub headers: HeaderMap,
     pub bytes: super::upstream::ByteStream,
     pub is_sse: bool,
+    pub canonical: Option<super::upstream::CanonicalStream>,
 }
 
 /// Open and normalize HTTP upstreams without consuming the request/session owner.
@@ -818,6 +826,9 @@ pub(super) async fn open_response_stream(
     policy: &ExecutionPolicy,
     deadline: Deadline,
 ) -> Result<HttpResponseStream, ServiceError> {
+    if super::workbuddy_acp::is_route(&prepared.route) {
+        return super::workbuddy_acp::open_text_stream(state, prepared, compact, deadline).await;
+    }
     let mut bootstrap_attempts = 0;
     loop {
         let response = super::retry::send(state, prepared, tracker, compact, policy).await?;
@@ -860,6 +871,7 @@ pub(super) async fn open_response_stream(
             headers,
             bytes: upstream.bytes,
             is_sse: upstream.is_sse,
+            canonical: None,
         });
     }
 }
@@ -887,7 +899,21 @@ struct StreamingResponse {
 impl StreamingResponse {
     async fn observe_frames(&mut self, frames: Vec<SseFrame>) -> Result<Bytes, ServiceError> {
         let mut bytes = Vec::new();
-        for frame in frames {
+        for mut frame in frames {
+            if self.prepared.route.chatgpt_plan {
+                let mut normalized = false;
+                if let Some(event) = frame.value.as_mut() {
+                    normalized |= super::official_fallback::normalize_sharing_quota_error(event);
+                }
+                if let Some(event) = frame.identity_event.as_mut() {
+                    normalized |= super::official_fallback::normalize_sharing_quota_error(event);
+                }
+                if normalized {
+                    if let Some(event) = frame.value.as_ref() {
+                        frame.bytes = super::response_wire::rewrite_frame(&frame.bytes, event);
+                    }
+                }
+            }
             if let Some(opened)=pre_business::recover(&self.state,&mut self.prepared,&mut self.tracker,
                 &mut self.fence,&frame,self.observation.retry_after,&self.policy,self.deadline,true).await? {
                 self.recovery_generation=self.recovery_generation.saturating_add(1);
@@ -1084,7 +1110,15 @@ async fn collect_sse(
                         "Upstream response exceeds the configured size limit",
                     ));
                 }
-                for frame in decoder.push_frames(&chunk)? {
+                for mut frame in decoder.push_frames(&chunk)? {
+                    if prepared.route.chatgpt_plan {
+                        if let Some(event) = frame.value.as_mut() {
+                            super::official_fallback::normalize_sharing_quota_error(event);
+                        }
+                        if let Some(event) = frame.identity_event.as_mut() {
+                            super::official_fallback::normalize_sharing_quota_error(event);
+                        }
+                    }
                     if let Some(opened)=pre_business::recover(state,prepared,tracker,&mut fence,&frame,
                         observation.retry_after,policy,deadline,false).await? {
                         stream=opened.bytes;
@@ -1132,7 +1166,15 @@ async fn collect_sse(
                 ))
             }
             None => {
-                for frame in decoder.finish_frames()? {
+                for mut frame in decoder.finish_frames()? {
+                    if prepared.route.chatgpt_plan {
+                        if let Some(event) = frame.value.as_mut() {
+                            super::official_fallback::normalize_sharing_quota_error(event);
+                        }
+                        if let Some(event) = frame.identity_event.as_mut() {
+                            super::official_fallback::normalize_sharing_quota_error(event);
+                        }
+                    }
                     if let Some(opened)=pre_business::recover(state,prepared,tracker,&mut fence,&frame,
                         observation.retry_after,policy,deadline,false).await? {
                         stream=opened.bytes;

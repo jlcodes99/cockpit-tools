@@ -180,6 +180,7 @@ fn roots_and_defaults() -> Result<(Vec<PlatformRoot>, Vec<PathBuf>), String> {
     platform!("workbuddy", workbuddy_instance);
     platform!("minimax_code", minimax_code_instance);
     platform!("zcode", zcode_instance);
+    platform!("t3code", t3code_instance);
     platform!("grok", grok_instance);
     use modules::trae_account::TraePlatformKind;
     for (name, kind) in [
@@ -404,6 +405,8 @@ fn process_references() -> Result<Vec<String>, String> {
             "workbuddy",
             "qoder",
             "zcode",
+            "t3code",
+            "t3 code",
             "grok",
         ]
         .iter()

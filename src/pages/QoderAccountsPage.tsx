@@ -1354,9 +1354,9 @@ export function QoderAccountsPage({ region = 'global' }: { region?: QoderRegion 
 
   const resolveUpdatedText = useCallback(
     (account: QoderAccount) => {
-      // `usage_updated_at` is stamped when the quota fetch succeeds. Falling back
-      // to `last_used` made a freshly refreshed account still read "updated 3 days
-      // ago" — `last_used` only moves on import/tag/switch.
+      // `usage_updated_at` is stamped whenever a quota fetch succeeds, so it is the
+      // only field that moves when the user hits refresh. `last_used` only moves on
+      // import/tag/switch, which made a freshly refreshed card keep its old time.
       const updatedAt = account.usage_updated_at || account.last_used || account.created_at || 0;
       const secondsAgo = Math.max(0, Math.floor(Date.now() / 1000) - updatedAt);
       return t('common.shared.updated.label', '更新于 {{relative}}前', {
@@ -1557,7 +1557,7 @@ export function QoderAccountsPage({ region = 'global' }: { region?: QoderRegion 
             {renderQuotaSection(account)}
 
             <div className="card-footer">
-              <AccountLastUsed accountId={account.id} lastSwitchedAt={account.last_switched_at} createdAt={account.created_at} formatDate={formatDateTime} />
+              <AccountLastUsed accountId={account.id} lastSwitchedAt={account.last_switched_at} refreshAt={account.usage_updated_at} createdAt={account.created_at} formatDate={formatDateTime} />
               <div className="card-actions">
                 <button
                   className="card-action-btn success"
@@ -1712,7 +1712,7 @@ export function QoderAccountsPage({ region = 'global' }: { region?: QoderRegion 
               </div>
             </td>
             <td>
-              <AccountLastUsed accountId={account.id} lastSwitchedAt={account.last_switched_at} createdAt={account.created_at} formatDate={formatDateTime} />
+              <AccountLastUsed accountId={account.id} lastSwitchedAt={account.last_switched_at} refreshAt={account.usage_updated_at} createdAt={account.created_at} formatDate={formatDateTime} />
             </td>
             <td className="sticky-action-cell table-action-cell">
               <div className="action-buttons">
@@ -2017,10 +2017,24 @@ export function QoderAccountsPage({ region = 'global' }: { region?: QoderRegion 
                       />
                       <span>{t('accounts.groupByTag', '按标签分组展示')}</span>
                     </label>
-                    {tagFilter.length > 0 && (
-                      <button type="button" className="tag-filter-clear" onClick={clearTagFilter}>
-                        {t('accounts.clearTagFilter', '清空标签')}
-                      </button>
+                    {(availableTags.length > 0 || tagFilter.length > 0) && (
+                      <div className="tag-filter-actions">
+                        {availableTags.length > 0 && (
+                          <button
+                            type="button"
+                            className="tag-filter-action-btn"
+                            disabled={availableTags.every((tag) => tagFilter.includes(tag))}
+                            onClick={() => availableTags.forEach((tag) => { if (!tagFilter.includes(tag)) toggleTagFilterValue(tag); })}
+                          >
+                            {t('common.selectAll', '全选')}
+                          </button>
+                        )}
+                        {tagFilter.length > 0 && (
+                          <button type="button" className="tag-filter-clear" onClick={clearTagFilter}>
+                            {t('accounts.clearTagFilter', '清空标签')}
+                          </button>
+                        )}
+                      </div>
                     )}
                   </div>
                 )}

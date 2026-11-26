@@ -6,6 +6,7 @@ include!("system_backup_webdav.rs");
 include!("system_mfa_recovery.rs");
 include!("system_mfa_vault.rs");
 include!("system_apikey_fun_vault.rs");
+include!("system_apikey_fun_gemini_cli.rs");
 include!("system_network_general.rs");
 include!("system_app_commands.rs");
 

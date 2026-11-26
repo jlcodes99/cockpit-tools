@@ -243,11 +243,6 @@ async fn invalid_continuation_with_missing_history_preserves_error() {
             [],
         )
         .unwrap();
-        db.execute(
-            "DELETE FROM native_rebuild_history_v1 WHERE response='completed'",
-            [],
-        )
-        .unwrap();
     }
     let events = fixture.request(next(), 1).await;
     assert_eq!(events[0], error);

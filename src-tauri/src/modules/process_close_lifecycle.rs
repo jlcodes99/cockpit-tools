@@ -1422,6 +1422,13 @@ pub(crate) fn start_managed_antigravity_on_macos(
     user_data_dir: &str,
     extra_args: &[String],
 ) -> Result<u32, String> {
+    crate::modules::antigravity_composer_status::launch(user_data_dir, extra_args, |args| {
+        start_managed_antigravity_process(user_data_dir, args)
+    })
+}
+
+#[cfg(target_os = "macos")]
+fn start_managed_antigravity_process(user_data_dir: &str, extra_args: &[String]) -> Result<u32, String> {
     let executable = resolve_antigravity_legacy_launch_path()?;
     let mut cmd = Command::new(executable);
     sanitize_macos_gui_launch_env(&mut cmd);
@@ -1441,6 +1448,12 @@ pub fn start_antigravity_legacy_with_args(
     user_data_dir: &str,
     extra_args: &[String],
 ) -> Result<u32, String> {
+    crate::modules::antigravity_composer_status::launch(user_data_dir, extra_args, |args| {
+        start_antigravity_legacy_process(user_data_dir, args)
+    })
+}
+
+fn start_antigravity_legacy_process(user_data_dir: &str, extra_args: &[String]) -> Result<u32, String> {
     crate::modules::logger::log_info("正在启动 Antigravity...");
 
     let launch_path = resolve_antigravity_legacy_launch_path()?;

@@ -136,6 +136,10 @@ pub struct GeneralConfig {
     pub qoder_cn_auto_refresh_minutes: i32,
     /// ZCode 自动刷新间隔（分钟），-1 表示禁用
     pub zcode_auto_refresh_minutes: i32,
+    /// T3 Code 自动刷新间隔（分钟），-1 表示禁用
+    pub t3code_auto_refresh_minutes: i32,
+    /// 是否启用 T3 Code 聊天底部 Composer 栏常驻胶囊注入
+    pub t3code_app_ui_injection_enabled: bool,
     /// Trae 自动刷新间隔（分钟），-1 表示禁用
     pub trae_auto_refresh_minutes: i32,
     pub trae_solo_auto_refresh_minutes: i32,
@@ -227,6 +231,8 @@ pub struct GeneralConfig {
     pub qoder_cn_app_path: String,
     /// ZCode 启动路径（为空则使用默认路径）
     pub zcode_app_path: String,
+    /// T3 Code 启动路径（为空则使用默认路径）
+    pub t3code_app_path: String,
     /// Trae 启动路径（为空则使用默认路径）
     pub trae_app_path: String,
     /// Trae Windows 应用扫描范围（每行一个目录）
@@ -1277,6 +1283,8 @@ fn is_general_config_patch_field(key: &str) -> bool {
             | "qoder_auto_refresh_minutes"
             | "qoder_cn_auto_refresh_minutes"
             | "zcode_auto_refresh_minutes"
+            | "t3code_auto_refresh_minutes"
+            | "t3code_app_ui_injection_enabled"
             | "trae_auto_refresh_minutes"
             | "trae_solo_auto_refresh_minutes"
             | "trae_cn_auto_refresh_minutes"
@@ -1328,6 +1336,7 @@ fn is_general_config_patch_field(key: &str) -> bool {
             | "qoder_app_path"
             | "qoder_cn_app_path"
             | "zcode_app_path"
+            | "t3code_app_path"
             | "trae_app_path"
             | "trae_solo_app_path"
             | "trae_cn_app_path"
@@ -1541,6 +1550,7 @@ fn apply_general_config_updates(
     normalize_app_path_field!("qoder_app_path", qoder_app_path);
     normalize_app_path_field!("qoder_cn_app_path", qoder_cn_app_path);
     normalize_app_path_field!("zcode_app_path", zcode_app_path);
+    normalize_app_path_field!("t3code_app_path", t3code_app_path);
     normalize_app_path_field!("trae_app_path", trae_app_path);
     normalize_app_path_field!("trae_solo_app_path", trae_solo_app_path);
     normalize_app_path_field!("trae_cn_app_path", trae_cn_app_path);

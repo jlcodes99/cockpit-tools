@@ -15,6 +15,7 @@ const PLATFORM_IDS = [
   'codebuddy_cn',
   'qoder',
   'zcode',
+  't3code',
   'trae',
   'trae_solo',
   'trae_cn',

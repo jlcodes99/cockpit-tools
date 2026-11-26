@@ -299,12 +299,13 @@ async fn switch(app: AppHandle, platform: Platform, id: String) -> Result<Switch
                 &blocking(move || commands::grok::switch_grok_account(app, id)).await?,
             )
         }
-        Codebuddy => Box::pin(commands::codebuddy::inject_codebuddy_to_vscode(app, id)).await,
+        Codebuddy => Box::pin(commands::codebuddy::inject_codebuddy_to_vscode(app, id, None)).await,
         CodebuddyCn => {
             Box::pin(commands::codebuddy_cn::inject_codebuddy_cn_to_vscode(
                 app,
                 id,
                 Some(true),
+                None,
             ))
             .await
         }

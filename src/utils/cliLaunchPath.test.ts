@@ -77,6 +77,8 @@ test('desktop recovery recognizes real missing paths and has distinct launch-onl
   assert.equal(readMissingLaunchPathApp('APP_PATH_NOT_FOUND:zed unrelated failure'), undefined);
   assert.equal(INSTANCE_START_COMMANDS.zcode, 'zcode_start_instance');
   assert.equal(LAUNCH_ONLY_COMMANDS.zcode, 'zcode_launch_current');
+  assert.equal(INSTANCE_START_COMMANDS.t3code, 't3code_start_instance');
+  assert.equal(LAUNCH_ONLY_COMMANDS.t3code, 't3code_launch_current');
 });
 
 test('WorkBuddy desktop recovery preserves the Windows path and ignores unrelated failures', () => {

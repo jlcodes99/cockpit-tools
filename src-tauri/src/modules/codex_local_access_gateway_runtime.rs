@@ -1236,6 +1236,15 @@ pub async fn activate_local_access_for_dir(
     Ok(state)
 }
 
+pub(crate) async fn running_api_service_connection() -> Option<(String, String)> {
+    let runtime = gateway_runtime().lock().await;
+    let collection = runtime.collection.as_ref()?;
+    if !runtime.running || !collection.enabled || runtime.actual_port != Some(collection.port) {
+        return None;
+    }
+    Some((build_collection_base_url(collection), collection.api_key.clone()))
+}
+
 pub async fn prepare_local_access_for_bound_profile_dir(
     profile_dir: &Path,
 ) -> Result<bool, String> {

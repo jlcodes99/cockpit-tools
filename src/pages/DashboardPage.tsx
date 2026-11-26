@@ -1,4 +1,10 @@
-import { getRecommendedWorkbuddyAccount } from '../utils/floatingCardSelectors';
+import {
+  getRecommendedCodebuddyAccount,
+  getRecommendedCodebuddyCnAccount,
+  getRecommendedQoderAccount,
+  getRecommendedWorkbuddyAccount,
+  getRecommendedZcodeAccount,
+} from '../utils/floatingCardSelectors';
 import { useWorkbuddyAiAccountStore } from '../stores/useWorkbuddyAiAccountStore';
 import { resolveCodexAccountDisplayName } from "../utils/codexAccountDisplayName";
 import { codexWakeupResultLabel, useCodexAccountWakeupResults } from '../hooks/useCodexAccountWakeupResults';
@@ -17,6 +23,7 @@ import { useCodebuddyCnAccountStore } from '../stores/useCodebuddyCnAccountStore
 import { useQoderAccountStore } from '../stores/useQoderAccountStore';
 import { useQoderCnAccountStore } from '../stores/useQoderCnAccountStore';
 import { useZcodeAccountStore } from '../stores/useZcodeAccountStore';
+import { useT3codeAccountStore } from '../stores/useT3codeAccountStore';
 import { useTraeAccountStore } from '../stores/useTraeAccountStore';
 import { useWorkbuddyAccountStore } from '../stores/useWorkbuddyAccountStore';
 import { useMinimaxCodeAccountStore } from '../stores/useMinimaxCodeAccountStore';
@@ -39,16 +46,11 @@ import { TagEditModal } from '../components/TagEditModal';
 import { Account } from '../types/account';
 import {
   CodebuddyAccount,
-  getCodebuddyResourceSummary,
-  getCodebuddyExtraCreditSummary,
-  getCodebuddyOfficialQuotaModel,
   getCodebuddyQuotaCategoryGroups,
 } from '../types/codebuddy';
-import {
-  QoderAccount,
-  getQoderSubscriptionInfo,
-} from '../types/qoder';
+import type { QoderAccount } from '../types/qoder';
 import type { ZcodeAccount } from '../types/zcode';
+import { T3codeDashboardCard } from '../components/t3code/T3codeDashboardCard';
 import {
   TraeAccount,
   getTraeAccountPlatformId,
@@ -356,6 +358,9 @@ export function DashboardPage({
         case 'zcode':
           await useZcodeAccountStore.getState().updateAccountTags(accountId, newTags);
           break;
+        case 't3code':
+          await useT3codeAccountStore.getState().updateAccountTags(accountId, newTags);
+          break;
         case 'trae':
           await useTraeAccountStore.getState().updateAccountTags(accountId, newTags);
           break;
@@ -558,6 +563,11 @@ export function DashboardPage({
   } = useZcodeAccountStore();
 
   const {
+    accounts: t3codeAccounts,
+    fetchAccounts: fetchT3codeAccounts,
+  } = useT3codeAccountStore();
+
+  const {
     accounts: traeAccounts,
     currentAccountId: traeCurrentId,
     fetchAccounts: fetchTraeAccounts,
@@ -667,6 +677,7 @@ export function DashboardPage({
       fetchQoderAccounts,
       fetchQoderCnAccounts,
       fetchZcodeAccounts,
+      fetchT3codeAccounts,
       fetchTraeAccounts,
       fetchWorkbuddyAccounts,
       fetchWorkbuddyAiAccounts,
@@ -715,6 +726,7 @@ export function DashboardPage({
         codebuddyCnAccounts.length +
         qoderAccounts.length +
         zcodeAccounts.length +
+        t3codeAccounts.length +
         traeAccounts.length +
         workbuddyAccounts.length +
         workbuddyAiAccounts.length +
@@ -732,6 +744,7 @@ export function DashboardPage({
       qoder: qoderAccounts.length,
       qoder_cn: qoderCnAccounts.length,
       zcode: zcodeAccounts.length,
+      t3code: t3codeAccounts.length,
       trae: traeAccountsByPlatform.trae.length,
       trae_solo: traeAccountsByPlatform.trae_solo.length,
       trae_cn: traeAccountsByPlatform.trae_cn.length,
@@ -739,7 +752,7 @@ export function DashboardPage({
       workbuddy: workbuddyAccounts.length,
       minimaxcode: minimaxCodeAccounts.length,
     };
-  }, [agAccounts, codexAccounts, claudeAccounts, zedAccounts, githubCopilotAccounts, windsurfAccounts, kiroAccounts, cursorAccounts, grokAccounts, codebuddyAccounts, codebuddyCnAccounts, qoderAccounts, qoderCnAccounts, zcodeAccounts, traeAccounts, traeAccountsByPlatform, workbuddyAccounts, workbuddyAiAccounts, minimaxCodeAccounts]);
+  }, [agAccounts, codexAccounts, claudeAccounts, zedAccounts, githubCopilotAccounts, windsurfAccounts, kiroAccounts, cursorAccounts, grokAccounts, codebuddyAccounts, codebuddyCnAccounts, qoderAccounts, qoderCnAccounts, zcodeAccounts, t3codeAccounts, traeAccounts, traeAccountsByPlatform, workbuddyAccounts, workbuddyAiAccounts, minimaxCodeAccounts]);
 
   const dashboardAvailableTags = useMemo(() => {
     const tagSet = new Set<string>();
@@ -756,6 +769,7 @@ export function DashboardPage({
       ...codebuddyCnAccounts,
       ...qoderAccounts,
       ...zcodeAccounts,
+      ...t3codeAccounts,
       ...traeAccounts,
       ...workbuddyAccounts,
       ...workbuddyAiAccounts,
@@ -769,7 +783,7 @@ export function DashboardPage({
       }
     }
     return Array.from(tagSet).sort((a, b) => a.localeCompare(b));
-  }, [agAccounts, codexAccounts, claudeAccounts, zedAccounts, githubCopilotAccounts, windsurfAccounts, kiroAccounts, cursorAccounts, grokAccounts, codebuddyAccounts, codebuddyCnAccounts, qoderAccounts, zcodeAccounts, traeAccounts, workbuddyAccounts, workbuddyAiAccounts, minimaxCodeAccounts]);
+  }, [agAccounts, codexAccounts, claudeAccounts, zedAccounts, githubCopilotAccounts, windsurfAccounts, kiroAccounts, cursorAccounts, grokAccounts, codebuddyAccounts, codebuddyCnAccounts, qoderAccounts, zcodeAccounts, t3codeAccounts, traeAccounts, workbuddyAccounts, workbuddyAiAccounts, minimaxCodeAccounts]);
 
 
   // Refresh States
@@ -800,6 +814,7 @@ export function DashboardPage({
     qoder: boolean;
     qoderCn: boolean;
     zcode: boolean;
+    t3code: boolean;
     trae: boolean;
     workbuddy: boolean;
   workbuddy_ai: boolean;
@@ -818,6 +833,7 @@ export function DashboardPage({
     qoder: false,
     qoderCn: false,
     zcode: false,
+    t3code: false,
     trae: false,
     workbuddy: false,
     workbuddy_ai: false,
@@ -2037,152 +2053,35 @@ export function DashboardPage({
     });
   }, [grokAccounts, grokCurrent?.id]);
 
-  const codebuddyRecommended = useMemo(() => {
-    if (codebuddyAccounts.length <= 1) return null;
-    const currentId = codebuddyCurrent?.id;
-    const others = codebuddyAccounts.filter((a) => a.id !== currentId);
-    if (others.length === 0) return null;
+  const codebuddyRecommended = useMemo(
+    () => getRecommendedCodebuddyAccount(codebuddyAccounts, codebuddyCurrent?.id),
+    [codebuddyAccounts, codebuddyCurrent?.id],
+  );
 
-    const getScore = (account: CodebuddyAccount) => {
-      const resource = getCodebuddyResourceSummary(account);
-      const extra = getCodebuddyExtraCreditSummary(account);
-      const remain = resource?.remainPercent ?? (extra.remainPercent ?? -1);
-      return {
-        remainPercent: remain,
-        freshness: account.last_used || account.created_at || 0,
-      };
-    };
+  const codebuddyCnRecommended = useMemo(
+    () => getRecommendedCodebuddyCnAccount(codebuddyCnAccounts, codebuddyCnCurrent?.id),
+    [codebuddyCnAccounts, codebuddyCnCurrent?.id],
+  );
 
-    return others.reduce((best, candidate) => {
-      const bestScore = getScore(best);
-      const candidateScore = getScore(candidate);
-      if (candidateScore.remainPercent !== bestScore.remainPercent) {
-        return candidateScore.remainPercent > bestScore.remainPercent ? candidate : best;
-      }
-      return candidateScore.freshness > bestScore.freshness ? candidate : best;
-    });
-  }, [codebuddyAccounts, codebuddyCurrent?.id]);
+  const qoderRecommended = useMemo(
+    () => getRecommendedQoderAccount(qoderAccounts, qoderCurrent?.id),
+    [qoderAccounts, qoderCurrent?.id],
+  );
 
-
-  const codebuddyCnRecommended = useMemo(() => {
-    if (codebuddyCnAccounts.length <= 1) return null;
-    const currentId = codebuddyCnCurrent?.id;
-    const others = codebuddyCnAccounts.filter((a) => a.id !== currentId);
-    if (others.length === 0) return null;
-
-    const getScore = (account: CodebuddyAccount) => {
-      const model = getCodebuddyOfficialQuotaModel(account);
-      // 只使用基础包进行计算，不包含加量包
-      const baseResources = model.resources.filter(r => r.total > 0 || r.remain > 0);
-
-      // 计算平均剩余百分比（剩余越多越好）
-      let avgRemainPercent = -1;
-      if (baseResources.length > 0) {
-        const totalRemainPercent = baseResources.reduce((sum, r) => {
-          const pct = r.remainPercent ?? (r.total > 0 ? Math.max(0, (r.remain / r.total) * 100) : 0);
-          return sum + pct;
-        }, 0);
-        avgRemainPercent = totalRemainPercent / baseResources.length;
-      }
-
-      return {
-        remaining: avgRemainPercent, // 剩余百分比越高越好
-        freshness: account.last_used || account.created_at || 0,
-      };
-    };
-
-    return others.reduce((best, candidate) => {
-      const bestScore = getScore(best);
-      const candidateScore = getScore(candidate);
-      if (candidateScore.remaining !== bestScore.remaining) {
-        return candidateScore.remaining > bestScore.remaining ? candidate : best;
-      }
-      return candidateScore.freshness > bestScore.freshness ? candidate : best;
-    });
-  }, [codebuddyCnAccounts, codebuddyCnCurrent?.id]);
-
-  const qoderRecommended = useMemo(() => {
-    if (qoderAccounts.length <= 1) return null;
-    const currentId = qoderCurrent?.id;
-    const others = qoderAccounts.filter((a) => a.id !== currentId);
-    if (others.length === 0) return null;
-
-    const getScore = (account: QoderAccount) => {
-      const sub = getQoderSubscriptionInfo(account);
-      const usedPercent = sub.totalUsagePercentage ?? sub.userQuota.percentage ?? 101;
-      return {
-        remaining: 100 - usedPercent,
-        freshness: account.last_used || account.created_at || 0,
-      };
-    };
-
-    return others.reduce((best, candidate) => {
-      const bestScore = getScore(best);
-      const candidateScore = getScore(candidate);
-      if (candidateScore.remaining !== bestScore.remaining) {
-        return candidateScore.remaining > bestScore.remaining ? candidate : best;
-      }
-      return candidateScore.freshness > bestScore.freshness ? candidate : best;
-    });
-  }, [qoderAccounts, qoderCurrent?.id]);
+  const zcodeRecommended = useMemo(
+    () => getRecommendedZcodeAccount(zcodeAccounts, zcodeCurrent?.id),
+    [zcodeAccounts, zcodeCurrent?.id],
+  );
 
   const qoderCnCurrent = useMemo(
     () => resolveDashboardCurrentAccount(qoderCnAccounts, qoderCnCurrentId),
     [qoderCnAccounts, qoderCnCurrentId],
   );
 
-  const qoderCnRecommended = useMemo(() => {
-    if (qoderCnAccounts.length <= 1) return null;
-    const currentId = qoderCnCurrent?.id;
-    const others = qoderCnAccounts.filter((a) => a.id !== currentId);
-    if (others.length === 0) return null;
-
-    const getScore = (account: QoderAccount) => {
-      const sub = getQoderSubscriptionInfo(account);
-      const usedPercent = sub.totalUsagePercentage ?? sub.userQuota.percentage ?? 101;
-      return {
-        remaining: 100 - usedPercent,
-        freshness: account.last_used || account.created_at || 0,
-      };
-    };
-
-    return others.reduce((best, candidate) => {
-      const bestScore = getScore(best);
-      const candidateScore = getScore(candidate);
-      if (candidateScore.remaining !== bestScore.remaining) {
-        return candidateScore.remaining > bestScore.remaining ? candidate : best;
-      }
-      return candidateScore.freshness > bestScore.freshness ? candidate : best;
-    });
-  }, [qoderCnAccounts, qoderCnCurrent?.id]);
-
-  const zcodeRecommended = useMemo(() => {
-    if (zcodeAccounts.length <= 1) return null;
-    const currentId = zcodeCurrent?.id;
-    const others = zcodeAccounts.filter((account) => account.id !== currentId);
-    if (others.length === 0) return null;
-
-    const getScore = (account: ZcodeAccount) => {
-      const total = account.quota_total;
-      const remaining = account.quota_remaining;
-      return {
-        remaining:
-          typeof total === 'number' && total > 0 && typeof remaining === 'number'
-            ? (remaining / total) * 100
-            : -1,
-        freshness: account.last_used || account.created_at || 0,
-      };
-    };
-
-    return others.reduce((best, candidate) => {
-      const bestScore = getScore(best);
-      const candidateScore = getScore(candidate);
-      if (candidateScore.remaining !== bestScore.remaining) {
-        return candidateScore.remaining > bestScore.remaining ? candidate : best;
-      }
-      return candidateScore.freshness > bestScore.freshness ? candidate : best;
-    });
-  }, [zcodeAccounts, zcodeCurrent?.id]);
+  const qoderCnRecommended = useMemo(
+    () => getRecommendedQoderAccount(qoderCnAccounts, qoderCnCurrent?.id),
+    [qoderCnAccounts, qoderCnCurrent?.id],
+  );
 
   const getTraeCurrentForPlatform = (platformId: TraePlatformId): TraeAccount | null => {
     const currentId = traeCurrentIdsByPlatform[platformId] ?? (platformId === 'trae' ? traeCurrentId : null);
@@ -2906,6 +2805,7 @@ export function DashboardPage({
     qoder: stats.qoder,
     qoder_cn: stats.qoder_cn,
     zcode: stats.zcode,
+    t3code: stats.t3code,
     trae: stats.trae,
     trae_solo: stats.trae_solo,
     trae_cn: stats.trae_cn,
@@ -3660,6 +3560,17 @@ export function DashboardPage({
             {t('dashboard.viewAllAccounts', '查看所有账号')}
           </button>
         </div>
+      );
+    }
+
+    if (platformId === 't3code') {
+      return (
+        <T3codeDashboardCard
+          key={platformId}
+          maskAccountText={maskAccountText}
+          hideCardButton={renderHideCardButton(platformId)}
+          onNavigate={onNavigate}
+        />
       );
     }
 

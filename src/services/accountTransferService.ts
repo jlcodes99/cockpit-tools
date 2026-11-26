@@ -11,6 +11,7 @@ import * as codebuddyCnService from './codebuddyCnService';
 import * as qoderService from './qoderService';
 import * as qoderCnService from './qoderCnService';
 import * as zcodeService from './zcodeService';
+import * as t3codeService from './t3codeService';
 import * as traeService from './traeService';
 import * as workbuddyService from './workbuddyService';
 import * as workbuddyAiService from './workbuddyAiService';
@@ -110,6 +111,11 @@ const PLATFORM_ADAPTERS: Partial<Record<PlatformId, TransferAdapter>> = {
     listAccounts: zcodeService.listZcodeAccounts,
     exportAccounts: zcodeService.exportZcodeAccounts,
     importFromJson: zcodeService.importZcodeFromJson,
+  },
+  t3code: {
+    listAccounts: t3codeService.listT3codeAccounts,
+    exportAccounts: t3codeService.exportT3codeAccounts,
+    importFromJson: t3codeService.importT3codeFromJson,
   },
   trae: {
     listAccounts: traeService.listTraeAccounts,

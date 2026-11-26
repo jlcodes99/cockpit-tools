@@ -7,6 +7,7 @@
 //!   `total_tokens = input_tokens + output_tokens + thinking_tokens + cache_read_tokens + cache_write_tokens`
 
 use chrono::DateTime;
+use std::time::Duration;
 
 /// Maximum positive 64-bit signed integer in two's-complement varint representation.
 /// Values above this threshold represent negative `int32`/`int64` values encoded as 10-byte varints.
@@ -56,6 +57,8 @@ pub struct ParsedGenMetadataProto {
     pub model_enum_placeholder: Option<String>,
     pub response_model: Option<String>,
     pub usage: Option<ParsedUsageProto>,
+    pub time_to_first_token: Option<Duration>,
+    pub streaming_duration: Option<Duration>,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -507,12 +510,26 @@ pub fn parse_step_metadata_proto(buf: &[u8]) -> ParsedStepMetadataProto {
     }
 }
 
+fn parse_proto_duration(buf: &[u8]) -> Option<Duration> {
+    let mut seconds = 0;
+    let mut nanos = 0;
+    visit_proto_fields(buf, |number, value| match (number, value) {
+        (1, ProtoWireValue::Varint(value)) => seconds = value,
+        (2, ProtoWireValue::Varint(value)) => nanos = value,
+        _ => {}
+    });
+    (seconds <= MAX_POSITIVE_INT64 && nanos < 1_000_000_000)
+        .then(|| Duration::new(seconds, nanos as u32))
+}
+
 pub fn parse_gen_metadata_proto(buf: &[u8]) -> ParsedGenMetadataProto {
     let mut step_indices = Vec::new();
     let mut model_enum_numeric: Option<u64> = None;
     let mut model_enum_placeholder: Option<String> = None;
     let mut response_model: Option<String> = None;
     let mut usage: Option<ParsedUsageProto> = None;
+    let mut time_to_first_token = None;
+    let mut streaming_duration = None;
 
     for field in parse_proto_fields(buf) {
         match (field.field_number, field.value) {
@@ -544,6 +561,12 @@ pub fn parse_gen_metadata_proto(buf: &[u8]) -> ParsedGenMetadataProto {
                             if !u_buf.is_empty() {
                                 usage = Some(parse_usage_proto(u_buf));
                             }
+                        }
+                        (11, ProtoWireValue::Bytes(duration)) => {
+                            time_to_first_token = parse_proto_duration(duration);
+                        }
+                        (12, ProtoWireValue::Bytes(duration)) => {
+                            streaming_duration = parse_proto_duration(duration);
                         }
                         (19, ProtoWireValue::Bytes(rm_buf)) => {
                             if let Ok(s) = std::str::from_utf8(rm_buf) {
@@ -587,6 +610,8 @@ pub fn parse_gen_metadata_proto(buf: &[u8]) -> ParsedGenMetadataProto {
         model_enum_placeholder,
         response_model,
         usage,
+        time_to_first_token,
+        streaming_duration,
     }
 }
 

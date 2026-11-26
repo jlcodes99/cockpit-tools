@@ -2,6 +2,7 @@ import { CLI_PATH_LABELS, isCliPathApp, readCliLaunchPath, saveCliLaunchPath, ty
 import { APP_PATH_LABELS, INSTANCE_START_COMMANDS, LAUNCH_ONLY_COMMANDS, isLaunchPathApp, readMissingLaunchPathApp, type LaunchPathApp } from './utils/appLaunchPath';
 import { useWorkbuddyAiAccountStore } from './stores/useWorkbuddyAiAccountStore';
 import { useZcodeAccountStore } from './stores/useZcodeAccountStore';
+import { useT3codeAccountStore } from './stores/useT3codeAccountStore';
 import { hydrateDurableUiSettings } from './utils/durableUiSettings';
 import { CodexAccountServiceHost } from './components/codex/CodexAccountServiceHost';
 import { AppBackground } from './components/AppBackground';
@@ -185,6 +186,9 @@ const QoderCnAccountsPage = lazy(() =>
 const ZcodeAccountsPage = lazy(() =>
   import('./pages/ZcodeAccountsPage').then((module) => ({ default: module.ZcodeAccountsPage })),
 );
+const T3codeAccountsPage = lazy(() =>
+  import('./pages/T3codeAccountsPage').then((module) => ({ default: module.T3codeAccountsPage })),
+);
 const TraeAccountsPage = lazy(() =>
   import('./pages/TraeAccountsPage').then((module) => ({ default: module.TraeAccountsPage })),
 );
@@ -262,6 +266,7 @@ const RENDERABLE_PAGE_VALUES: readonly Page[] = [
   'qoder',
   'qoder-cn',
   'zcode',
+  't3code',
   'trae',
   'trae-solo',
   'trae-cn',
@@ -302,6 +307,7 @@ const TOP_PROMO_PAGE_PLATFORM_TARGETS: Partial<Record<Page, readonly string[]>> 
   qoder: ['qoder'],
   'qoder-cn': ['qoder-cn'],
   zcode: ['zcode'],
+  t3code: ['t3code'],
   trae: ['trae', 'trae-suite'],
   'trae-solo': ['trae-solo', 'trae-suite'],
   'trae-cn': ['trae-cn', 'trae-suite'],
@@ -437,6 +443,7 @@ interface GeneralConfig extends GeneralConfigTheme, GeneralConfigLanguage {
   minimax_code_app_path: string;
   workbuddy_ai_app_path: string;
   zcode_app_path: string;
+  t3code_app_path: string;
   minimax_code_auto_refresh_minutes: number;
   minimax_code_region: string;
   minimax_code_quota_alert_enabled: boolean;
@@ -3034,6 +3041,10 @@ function MainApp() {
         errorMessage: 'Failed to refresh ZCode:',
       },
       {
+        command: 'refresh_all_t3code_accounts',
+        errorMessage: 'Failed to refresh T3 Code:',
+      },
+      {
         command: 'refresh_all_trae_tokens',
         errorMessage: 'Failed to refresh Trae:',
       },
@@ -3223,6 +3234,7 @@ function MainApp() {
           : app === 'workbuddy_ai' ? useWorkbuddyAiAccountStore
           : app === 'minimaxcode' ? useMinimaxCodeAccountStore
           : app === 'zcode' ? useZcodeAccountStore
+          : app === 't3code' ? useT3codeAccountStore
           : app === 'qoder' ? useQoderAccountStore
           : app === 'claude' ? useClaudeAccountStore
           : app === 'zed' ? useZedAccountStore : undefined;
@@ -3853,6 +3865,9 @@ function MainApp() {
           </VisibleBootPage>
           <VisibleBootPage when={page === 'zcode'}>
             <ZcodeAccountsPage />
+          </VisibleBootPage>
+          <VisibleBootPage when={page === 't3code'}>
+            <T3codeAccountsPage onNavigate={setPage} />
           </VisibleBootPage>
           <VisibleBootPage when={page === 'trae'}>
             <TraeAccountsPage platformId="trae" />

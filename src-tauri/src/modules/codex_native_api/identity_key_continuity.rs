@@ -235,7 +235,6 @@ fn copy_checkpoint(
 ) -> Result<(), ServiceError> {
     for table in [
         "native_rebuild_checkpoints_v1",
-        "native_rebuild_history_v1",
         "native_partial_history_v1",
     ] {
         let copy = CopyRows::read(
@@ -245,38 +244,14 @@ fn copy_checkpoint(
             &[&source, &response],
         )?;
         for row in &copy.rows {
-            if let Some(i) = copy.columns.iter().position(|c| c == "manifest") {
-                let rusqlite::types::Value::Text(raw) = &row[i] else {
-                    return Err(storage("invalid history manifest"));
-                };
-                let manifest: Vec<String> = serde_json::from_str(raw).map_err(storage)?;
-                for digest in manifest {
-                    let item = CopyRows::read(
-                        connection,
-                        "native_rebuild_items_v1",
-                        "caller=? AND digest=?",
-                        &[&source, &digest],
-                    )?;
-                    if item.rows.len() != 1 {
-                        return Err(storage("missing history item"));
-                    }
-                    let rusqlite::types::Value::Blob(bytes) = &item.rows[0][2] else {
-                        return Err(storage("invalid history item"));
-                    };
-                    let raw = zstd::stream::decode_all(bytes.as_slice()).map_err(storage)?;
-                    if format!("{:x}", Sha256::digest(&raw)) != digest {
-                        return Err(storage("history item digest mismatch"));
-                    }
-                    let value: Value = serde_json::from_slice(&raw).map_err(storage)?;
-                    collect_encrypted_item(&value, references);
-                    copies.push(item);
-                }
-            } else if let Some(i) = copy.columns.iter().position(|c| c == "transcript") {
+            if let Some(i) = copy.columns.iter().position(|c| c == "transcript") {
                 let rusqlite::types::Value::Text(raw) = &row[i] else {
                     return Err(storage("invalid history transcript"));
                 };
-                let items: Value = serde_json::from_str(raw).map_err(storage)?;
-                collect_encrypted(Some(&items), references);
+                let items = rebuild::checkpoint_store::decode_transcript(raw)?;
+                for item in &items {
+                    collect_encrypted_item(item, references);
+                }
             }
         }
         copies.push(copy);

@@ -121,7 +121,7 @@ fn checkpoint(path: &Path, id: &str) -> Option<(String, String, Vec<Value>)> {
     Connection::open(path).unwrap().query_row(
         "SELECT account,generation,transcript FROM native_rebuild_checkpoints_v1 WHERE caller='caller' AND response=?1",
         [id],|row|Ok((row.get::<_,String>(0)?,row.get::<_,String>(1)?,row.get::<_,String>(2)?)),
-    ).optional().unwrap().map(|(account,generation,raw)|(account,generation,serde_json::from_str(&raw).unwrap()))
+    ).optional().unwrap().map(|(account,generation,raw)|(account,generation,checkpoint_store::decode_transcript(&raw).unwrap()))
 }
 fn rows(path: &Path, table: &str) -> i64 {
     Connection::open(path)
@@ -197,9 +197,7 @@ fn disabled_checkpoint_capture_and_missing_or_unknown_checkpoint_keep_owner_pins
     root(&store);
     Connection::open(&path)
         .unwrap()
-        .execute_batch(
-            "DELETE FROM native_rebuild_checkpoints_v1; DELETE FROM native_rebuild_history_v1;",
-        )
+        .execute_batch("DELETE FROM native_rebuild_checkpoints_v1;")
         .unwrap();
     let (context, candidate) = plan(
         &store,
@@ -465,7 +463,7 @@ fn truncated_history_declines_but_large_requests_keep_owner_and_cache_budget() {
         "large-output",
         vec![message("assistant", &"x".repeat(MAX_CHECKPOINT_BYTES))],
     );
-    assert!(checkpoint(&path, "large-output").is_none());
+    assert!(checkpoint(&path, "large-output").is_some());
     assert!(plan(
         &store,
         &continuation("large-output", vec![message("user", "next")]),
@@ -859,8 +857,8 @@ fn checkpoint_eviction_only_removes_optional_cache_not_old_response_owner_or_gen
     original["client_metadata"]["thread_id"] = json!("thread-000");
     let (context, candidate) = plan(&store, &original, true);
     assert!(
-        candidate.is_some(),
-        "cache eviction must not erase accepted history"
+        candidate.is_none(),
+        "evicted hot checkpoint cannot be replayed across accounts, while ownership remains pinned"
     );
     assert_eq!(context.state_account_id.as_deref(), Some("a"));
     assert_eq!(context.generation.as_deref(), Some(evidence.2.as_str()));
@@ -912,8 +910,8 @@ fn checkpoint_total_byte_budget_evicts_optional_history_without_erasing_ownershi
     original["client_metadata"]["thread_id"] = json!("large-thread-0");
     let (context, candidate) = plan(&store, &original, true);
     assert!(
-        candidate.is_some(),
-        "durable replay survives the hot-cache byte budget"
+        candidate.is_none(),
+        "evicted hot checkpoint leaves ownership intact without retaining unbounded history"
     );
     assert_eq!(context.state_account_id.as_deref(), Some("a"));
     assert_eq!(original["previous_response_id"], "large-response-0");

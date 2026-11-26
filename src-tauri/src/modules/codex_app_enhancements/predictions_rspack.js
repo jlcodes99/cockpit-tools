@@ -7,6 +7,7 @@
   const chunks = { initial: 559161, composer: 563813, host: 24191, settings: 572868 };
   const currentChunks = { initial: 16389, composer: 39017, host: 182735, settings: 553834 };
   const desktop261111Chunks = { initial: 538993, composer: 899469, host: 907538, settings: 184348 };
+  const desktop261120Chunks = { initial: 173367, composer: 779071, host: 49792, settings: 25051 };
   const N = "[A-Za-z_$][\\w$]*";
   const esc = value => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -30,7 +31,7 @@
           });
       } else if (kind === "composer") {
         // This dependency and component uniquely own the catch-up query.
-        const declaration = id === desktop261111Chunks.composer ? "\\)\\{let " : `=${N},`;
+        const declaration = [desktop261111Chunks.composer, desktop261120Chunks.composer].includes(id) ? "\\)\\{let " : `=${N},`;
         const pattern = new RegExp(`hostId:(${N}),pluginHostId:${N},roots:${N}\\}${declaration}(${N})=\\(0,${N}\\.${N}\\)\\(${N}\\.${N}\\),${N}=\\(0,${N}\\.${N}\\)\\(${N}\\.${N}\\),${N}=\\(0,${N}\\.${N}\\)\\(${N}\\.${N}\\),(${N})=(${N})\\.appServices\\.cumberbatch`, "g");
         const [match, duplicate] = source.matchAll(pattern);
         if (!match || duplicate || !source.includes('generationTrigger:"catch_up"')) throw Error("composer-contract");
@@ -38,7 +39,7 @@
         replace(new RegExp(esc(`${service}=${services}.appServices.cumberbatch`), "g"),
           () => `${service}=${P}.runtime.serviceFor(${scope},${host},${services}.appServices.cumberbatch)`);
       } else if (kind === "host") {
-        const modernHost = id === currentChunks.host || id === desktop261111Chunks.host;
+        const modernHost = [currentChunks.host, desktop261111Chunks.host, desktop261120Chunks.host].includes(id);
         const name = modernHost ? `(?: ${N})?` : ` ${N}`;
         const match = new RegExp(`async function${name}\\((${N}),${N},(${N}),${N}\\)\\{let (${N})=(${N})\\.appServices\\?\\.cumberbatch;`).exec(source);
         if (!match || !source.includes("Cumberbatch background prediction did not finish")) throw Error("host-contract");
@@ -50,7 +51,8 @@
         // Dgwo exports the scope-bound RPC accessor; the native preference reader
         // and factory remain authoritative, including cancellation on disable.
         if (modernHost) {
-          replace(new RegExp(`Dgwo\\((${N}),(${N}),(${N})\\)\\{(?=[^}]{1,430}\\.d\\(\\2,\\{\\},\\{V:function\\()`, "g"),
+          const factory = id === desktop261120Chunks.host ? "Dgwo:\\(function" : "Dgwo";
+          replace(new RegExp(`${factory}\\((${N}),(${N}),(${N})\\)\\{(?=[^}]{1,430}\\.d\\(\\2,\\{\\},\\{V:function\\()`, "g"),
             (signature, _module, exports, require) => signature
               + `${P}.runtime.register({managerForHost:(...args)=>${exports}.V(...args),nativeEnabled:scope=>${require}("RxZZ").CN(scope.get.bind(scope),${require}("eEqo").W().enabled)===true});`);
         } else {
@@ -76,16 +78,24 @@
       .map(match => new URL(match[2], "app://-/index.html").href)
       .filter(url => /^app:\/\/-\/assets\/\d+\.[a-f0-9]+\.js$/.test(url));
     if (!entries.length) return null;
-    const hashes = new Map();
-    for (const source of entries.map(read)) {
-      for (const [, manifest] of source.matchAll(/\.u=\w+=>"assets\/async\/"\+\w+\+"\."\+\(\{([^}]+)\}/g)) {
-        for (const [, id, hash] of manifest.matchAll(/(?:^|,)(\d+):"([a-f0-9]+)"/g)) {
-          hashes.set(id, hashes.has(id) && hashes.get(id) !== hash ? null : hash);
+    // Discover the layout from HTML before reading any scripts. The preload
+    // can then honor the document policy without paying for the manifest.
+    let manifestHashes;
+    function getManifestHashes() {
+      if (manifestHashes) return manifestHashes;
+      const hashes = new Map();
+      for (const url of entries) {
+        for (const [, manifest] of read(url).matchAll(/\.u=\w+=>"assets\/async\/"\+\w+\+"\."\+\(\{([^}]+)\}/g)) {
+          for (const [, id, hash] of manifest.matchAll(/(?:^|,)(\d+):"([a-f0-9]+)"/g)) {
+            hashes.set(id, hashes.has(id) && hashes.get(id) !== hash ? null : hash);
+          }
         }
       }
+      manifestHashes = hashes;
+      return manifestHashes;
     }
     const urlFor = id => {
-      const hash = hashes.get(String(id));
+      const hash = getManifestHashes().get(String(id));
       if (!hash) throw Error("chunk-manifest-contract");
       return "app://-/assets/async/" + id + "." + hash + ".js";
     };
@@ -97,13 +107,13 @@
       return { url, source };
     };
     readChunk.urlFor = urlFor;
-    readChunk.has = id => Boolean(hashes.get(String(id)));
+    readChunk.has = id => Boolean(getManifestHashes().get(String(id)));
     readChunk.entryScripts = entries.map(url => url.split("/").at(-1));
     return readChunk;
   }
 
   function selectLayout(readChunk) {
-    return [desktop261111Chunks, currentChunks, chunks]
+    return [desktop261120Chunks, desktop261111Chunks, currentChunks, chunks]
       .find(layout => readChunk.has(layout.initial)) ?? chunks;
   }
 
@@ -143,8 +153,7 @@
       map.type = "importmap"; map.textContent = JSON.stringify({ imports });
       container = doc.createElement("html");
       doc.appendChild(container); container.appendChild(map);
-      // The document's CSP excludes blob scripts. Populate the module map
-      // before its meta tag is parsed, including chunks imported later.
+      // Warm the redirected chunks before the native app requests them.
       preloads.forEach(preload => container.appendChild(preload));
       // Lazy chunks must retain their URLs for the lifetime of this document.
       root.addEventListener("pagehide", () => {

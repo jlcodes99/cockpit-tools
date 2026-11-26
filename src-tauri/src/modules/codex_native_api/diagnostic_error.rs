@@ -248,6 +248,7 @@ pub(crate) fn failure_phase(code: &str) -> &'static str {
         "upstream_idle_timeout" => "stream_idle",
         "image_output_missing" => "upstream_response",
         "upstream_total_timeout" => "total_timeout",
+        "network_recovery_exhausted" => "network_recovery",
         "client_cancelled" | "client_disconnected" | "client_interrupted" => "client_cancelled",
         "identity_store_unavailable" | "identity_store_full" | "unknown_upstream_state" => {
             "identity"

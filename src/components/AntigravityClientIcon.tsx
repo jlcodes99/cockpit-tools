@@ -24,8 +24,14 @@ export function AntigravityClientTabs({
   return (
     <div className="antigravity-client-tabs" role="group" aria-label={label}>
       {ANTIGRAVITY_DESKTOP_CLIENTS.map((client) => (
-        <button type="button" key={client} className={`btn ${selected === client ? 'btn-primary' : 'btn-secondary'}`}
-          aria-pressed={selected === client} disabled={disabled} onClick={() => onSelect(client)}>
+        <button
+          type="button"
+          key={client}
+          className="antigravity-client-tab"
+          aria-pressed={selected === client}
+          disabled={disabled}
+          onClick={() => onSelect(client)}
+        >
           <AntigravityClientIcon client={client} />
           <span>{ANTIGRAVITY_CLIENT_LABELS[client]}</span>
         </button>

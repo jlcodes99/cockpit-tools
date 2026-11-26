@@ -4,7 +4,7 @@ use serde_json::{json, Value};
 mod acp;
 use acp::{looks_rate_limited, parse_acp_post_error, read_acp_reply};
 
-const WORKBUDDY_WEB_ENDPOINT: &str = "https://www.workbuddy.cn";
+pub(crate) const WORKBUDDY_WEB_ENDPOINT: &str = "https://www.workbuddy.cn";
 /// CodeBuddy CN 与 WorkBuddy 同构（额度共享），仅应用面域名不同。
 const CODEBUDDY_CN_WEB_ENDPOINT: &str = "https://www.codebuddy.cn";
 
@@ -206,6 +206,7 @@ async fn probe_with_client(
                         &token,
                         &session,
                         model,
+                        "Reply with OK.",
                         account.enterprise_id,
                         45,
                     )
@@ -307,8 +308,112 @@ fn truncate_chars(value: &str, max: usize) -> String {
     out
 }
 
+pub(crate) async fn read_conversation_reply(
+    client: &reqwest::Client,
+    api_url: &str,
+    session_token: &str,
+    session_id: &str,
+    model: &str,
+    prompt: &str,
+    enterprise_id: Option<&str>,
+    timeout_secs: u64,
+) -> Result<String, String> {
+    let outcome = acp::read_acp_reply(
+        client,
+        api_url,
+        session_token,
+        session_id,
+        model,
+        prompt,
+        enterprise_id,
+        timeout_secs,
+    )
+    .await;
+    if let Some(error) = outcome.error {
+        return Err(error);
+    }
+    if outcome.has_prompt_result() || !outcome.text.trim().is_empty() {
+        return Ok(outcome.text);
+    }
+    Err("WORKBUDDY_PROBE_NO_REPLY".to_string())
+}
+
+
+pub(crate) async fn create_conversation(
+    client: &reqwest::Client,
+    base: &str,
+    account: &ProbeAccount<'_>,
+    model: &str,
+    prompt: &str,
+) -> Result<String, String> {
+    let headers = billing_headers(
+        account.access_token,
+        account.uid,
+        account.enterprise_id,
+        account.domain,
+        "en",
+    )?;
+    let response = client
+        .post(format!("{base}/console/as/conversations/"))
+        .headers(headers)
+        .timeout(std::time::Duration::from_secs(15))
+        .json(&json!({"prompt": prompt, "model": model, "plugins": []}))
+        .send()
+        .await
+        .map_err(|error| error.without_url().to_string())?;
+    let status = response.status();
+    let text = response
+        .text()
+        .await
+        .map_err(|error| error.without_url().to_string())?;
+    let body = serde_json::from_str::<Value>(&text).unwrap_or(Value::Null);
+    if status.as_u16() == 429 {
+        return Err("WORKBUDDY_PROBE_RATE_LIMITED".to_string());
+    }
+    if !status.is_success() {
+        return Err(format!("HTTP {}", status.as_u16()));
+    }
+    body.pointer("/data/id")
+        .or_else(|| body.get("id"))
+        .and_then(Value::as_str)
+        .filter(|id| !id.trim().is_empty())
+        .map(str::to_string)
+        .ok_or_else(|| "WORKBUDDY_PROBE_INVALID_RESPONSE".to_string())
+}
+
+/// Delete a temporary WorkBuddy conversation. Errors are returned already redacted.
+pub(crate) async fn delete_conversation(
+    client: &reqwest::Client,
+    base: &str,
+    account: &ProbeAccount<'_>,
+    conversation_id: &str,
+) -> Result<(), String> {
+    let headers = billing_headers(
+        account.access_token,
+        account.uid,
+        account.enterprise_id,
+        account.domain,
+        "en",
+    )?;
+    let response = client
+        .post(format!(
+            "{base}/console/as/conversations/{}/delete",
+            urlencoding::encode(conversation_id)
+        ))
+        .headers(headers)
+        .timeout(std::time::Duration::from_secs(10))
+        .json(&json!({"id": conversation_id}))
+        .send()
+        .await
+        .map_err(|error| error.without_url().to_string())?;
+    if !response.status().is_success() {
+        return Err(format!("HTTP {}", response.status().as_u16()));
+    }
+    Ok(())
+}
+
 /// 取会话的沙箱地址与会话 token（对齐客户端 getSandboxInfo）。
-async fn fetch_conversation_session(
+pub(crate) async fn fetch_conversation_session(
     client: &reqwest::Client,
     base: &str,
     conversation_id: &str,

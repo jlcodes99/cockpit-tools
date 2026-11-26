@@ -264,10 +264,6 @@ async fn native_test_cooling_continuation_roundtrip(sse_overload: bool, short_co
         .execute("DELETE FROM native_rebuild_checkpoints_v1", [])
         .unwrap();
     assert_eq!(evicted, 1);
-    let removed = connection
-        .execute("DELETE FROM native_rebuild_history_v1", [])
-        .unwrap();
-    assert_eq!(removed, 1);
     drop(connection);
     let body = json!({"model":"gpt-fixture","stream":false,"previous_response_id":"resp-fixture-1","input":[{"type":"reasoning","encrypted_content":"synthetic-owned-cipher"}]});
     let retry = send(body.clone()).await.unwrap();

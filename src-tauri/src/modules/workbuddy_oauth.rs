@@ -521,32 +521,35 @@ async fn fetch_account_info(
     ))
 }
 
+fn token_refresh_request(
+    client: &reqwest::Client,
+    access_token: &str,
+    refresh_token: &str,
+    domain: Option<&str>,
+) -> Result<reqwest::Request, String> {
+    let url = url::Url::parse(&format!("{WORKBUDDY_API_ENDPOINT}{WORKBUDDY_API_PREFIX}/auth/token/refresh"))
+        .map_err(|error| error.to_string())?;
+    // The desktop client falls back to the authentication endpoint's authority.
+    let domain = domain.map(str::trim).filter(|value| !value.is_empty())
+        .unwrap_or(url.authority());
+    client.post(url.clone())
+        .header("Authorization", format!("Bearer {access_token}"))
+        .header("X-Refresh-Token", refresh_token)
+        .header("X-Auth-Refresh-Source", "plugin")
+        .header("X-Domain", domain)
+        .json(&json!({}))
+        .build()
+        .map_err(|error| format!("构造刷新请求失败: {error}"))
+}
+
 pub async fn refresh_token(
     access_token: &str,
     refresh_token: &str,
     domain: Option<&str>,
 ) -> Result<Value, String> {
     let client = build_client()?;
-    let url = format!(
-        "{}{}/auth/token/refresh",
-        WORKBUDDY_API_ENDPOINT, WORKBUDDY_API_PREFIX
-    );
-
-    let mut req = client
-        .post(&url)
-        .header("Authorization", format!("Bearer {}", access_token))
-        .header("X-Refresh-Token", refresh_token)
-        .header("X-Auth-Refresh-Source", "plugin")
-        .json(&json!({}));
-
-    if let Some(d) = domain {
-        req = req.header("X-Domain", d);
-    }
-
-    let resp = req
-        .send()
-        .await
-        .map_err(|e| format!("刷新 token 失败:{}", e))?;
+    let request = token_refresh_request(&client, access_token, refresh_token, domain)?;
+    let resp = client.execute(request).await.map_err(|e| format!("刷新 token 失败:{}", e))?;
 
     let body: Value = resp
         .json()
@@ -1465,6 +1468,17 @@ mod tests {
             normalize_non_empty(Some(" enterprise-id ")).as_deref(),
             Some("enterprise-id")
         );
+    }
+
+    #[test]
+    fn token_refresh_uses_account_domain_or_auth_endpoint_for_legacy_accounts() {
+        let client = reqwest::Client::new();
+        for (saved, expected) in [(None, "copilot.tencent.com"), (Some(" "), "copilot.tencent.com"),
+            (Some("tenant.example.invalid"), "tenant.example.invalid")] {
+            let request = token_refresh_request(&client, "fixture", "fixture-refresh", saved).unwrap();
+            assert_eq!(request.url().host_str(), Some("copilot.tencent.com"));
+            assert_eq!(request.headers()["x-domain"], expected);
+        }
     }
 
     #[test]

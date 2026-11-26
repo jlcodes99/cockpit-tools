@@ -9,13 +9,9 @@
     "initializeWaiting": "Ожидание инициализации Antigravity IDE. После её завершения продолжите вручную.",
     "initializeRetry": "Инициализация ещё не завершена. Убедитесь, что IDE открыта, и повторите попытку.",
     "pathLabel": "Путь запуска",
-    "pathConfigured": "Настроено",
-    "pathDetected": "Обнаружено автоматически",
-    "pathInvalid": "Заданный путь недействителен",
-    "pathCheckFailed": "Не удалось проверить путь",
-    "pathSaveAndRetry": "Сохранить и повторить",
     "switchAndCopy": "Сменить и скопировать",
     "sharedInstanceStart": "Сменить общий аккаунт и запустить",
+    "ideSharedAccountHint": "Начиная с Antigravity IDE 2.6 все экземпляры используют общий сеанс Google. Смена аккаунта здесь также влияет на другие открытые экземпляры.",
     "sharedInstanceHint": "Другие экземпляры Antigravity останутся открытыми и могут перейти на новый аккаунт.",
     "sharedInstanceRestart": "Перезапустится только выбранный экземпляр.",
     "lastSharedAccount": "Последний выбранный общий аккаунт",
@@ -276,6 +272,7 @@
       "offline": "Нет связи · сохранённые данные"
     },
     "networkErrors": {
+      "recoveryExhausted": "Повторяющиеся ошибки связи с вышестоящим сервисом превысили лимит восстановления этого запроса. Автоматические повторные попытки остановлены. Перед повторной попыткой проверьте прокси или сеть; эта ошибка не означает, что квота аккаунта исчерпана.",
       "upstream": "вышестоящему сервису",
       "proxyConnection": "Не удалось подключиться к {{target}} через прокси «{{proxy}}». Возможна проблема с прокси или сетью. Проверьте прокси или попробуйте другой узел.",
       "proxyTimeout": "Истекло время подключения к {{target}} через прокси «{{proxy}}». Возможна проблема с прокси или сетью. Проверьте прокси или попробуйте другой узел.",
@@ -285,6 +282,10 @@
       "directTimeout": "Истекло время подключения к {{target}}. Проверьте сеть и повторите попытку."
     },
     "codexUsage": {
+      "responseSpeed": "Скорость ответа",
+      "overallSpeedWithThinking": "Скорость с рассуждением",
+      "streamingSpeed": "Скорость потока",
+      "contextShort": "Контекст",
       "title": "Квота и расход",
       "session": "Текущий чат",
       "available": "Доступно",
@@ -721,6 +722,12 @@
         "singleToken": "Один пример (Token)",
         "singleJson": "Один пример (JSON)",
         "batchJson": "Пакетный пример (JSON)"
+      },
+      "exposeToCodex": {
+        "action": "Подключить к Codex",
+        "inProgress": "Подключение…",
+        "success": "Подключено к Codex",
+        "failed": "Не удалось подключиться к Codex: {{error}}"
       }
     },
     "topRightAd": {
@@ -922,6 +929,7 @@
       "restartAll": "Перезапустить все",
       "stopAll": "Остановить все",
       "start": "Запустить",
+      "restart": "Перезапустить",
       "stop": "Остановить",
       "openFolder": "Открыть папку",
       "edit": "Редактировать",
@@ -1630,6 +1638,13 @@
       "menuBarQuotaLayoutPreview": "Примеры расположения с условными квотами",
       "menuBarQuotaLayoutHorizontal": "Одна горизонтальная строка",
       "menuBarQuotaLayoutStacked": "Две компактные строки",
+      "t3codeTitle": "Настройки T3 Code",
+      "t3codeAppPath": "Путь запуска T3 Code",
+      "t3codeAppPathDesc": "Оставьте пустым для использования пути по умолчанию",
+      "t3codeAutoRefresh": "Автообновление квоты T3 Code",
+      "t3codeAutoRefreshDesc": "Интервал фонового обновления квоты",
+      "t3codeAppUiInjection": "Капсула квоты в чате T3 Code",
+      "t3codeAppUiInjectionDesc": "При запуске T3 Code из Cockpit в поле ввода отображаются семейство выбранной модели и остаток квоты. Нажмите, чтобы посмотреть сведения об аккаунте и использовании.",
       "qoderCnAppPath": "Путь запуска Qoder CN",
       "qoderCnAppPathDesc": "Оставьте пустым для автоопределения. При смене аккаунта клиент закрывается и запускается заново.",
       "qoderCnAppPathPlaceholder": "Путь по умолчанию",
@@ -1981,6 +1996,13 @@
       "pathLabel": "Путь запуска {{app}}",
       "configurePath": "Настроить путь",
       "configureHint": "Выберите исполняемый файл или оставьте поле пустым для автоматического поиска.",
+      "autoDetect": "Найти автоматически",
+      "noInstallation": "{{app}} не обнаружен.",
+      "installationGuide": "Официальное руководство по установке",
+      "copyInstallCommand": "Копировать команду установки",
+      "configured": "Настроено",
+      "detected": "Обнаружено автоматически",
+      "checkFailed": "Не удалось проверить путь",
       "cliHint": "Не удалось найти {{app}}. Выберите исполняемый файл или установите CLI и повторите поиск.",
       "invalidPath": "По этому пути нет пригодного для запуска файла {{app}}.",
       "accountAlreadySwitched": "Аккаунт уже переключён. Повторится только запуск приложения.",
@@ -6512,6 +6534,8 @@
       "instructionsBytes": "Инструкции",
       "overloadRetry": "Повторы при перегрузке",
       "overloadRecovery": "Время восстановления",
+      "historyRejectionTitle": "Несовместимый формат истории",
+      "historyRejectionHint": "Upstream отклонил формат истории запросов. Сохраняются только счётчики и флаги; текст диалога не сохраняется.",
       "recordPayloads": "Запись тела запросов",
       "recordPayloadsHint": "По умолчанию выключено. Копии клиентских и исходящих запросов ограниченного размера сохраняются локально. Выключение останавливает новую запись; сохранённые тела можно удалить отдельно.",
       "privacyHint": "Поля авторизации скрываются, но секреты в тексте беседы могут остаться. Проверьте перед копированием или отправкой.",
@@ -7078,6 +7102,10 @@
     "traeSoloCn": {
       "appPath": "Путь TraeWork CN",
       "title": "Настройки TraeWork CN"
+    },
+    "t3code": {
+      "title": "Настройки T3 Code",
+      "appPath": "Путь запуска T3 Code"
     },
     "validation": {
       "refreshIntervalInvalid": "Введите целое число от 1 до 999 или -1, чтобы отключить автообновление.",
@@ -7948,7 +7976,7 @@
     }
   },
   "codebuddyCli": {
-    "launchTitle": "Запустить CodeBuddy CN",
+    "launchTitle": "Запустить {{app}}",
     "launchDesktop": "Запустить настольное приложение",
     "recheck": "Проверить ещё раз",
     "checking": "Проверка наличия CodeBuddy CLI…",
@@ -8247,6 +8275,9 @@
       "until": "{{model}} ограничена при последней проверке, сброс {{time}}",
       "unavailable": "{{model}} ограничена при последней проверке",
       "failed": "Последняя проверка {{model}} не удалась"
+    },
+    "exposeToCodex": {
+      "title": "Подключается через шлюз Native Rust без копирования токена WorkBuddy"
     }
   },
   "minimaxCode": {
@@ -8458,6 +8489,12 @@
     },
     "instances": {
       "unsupported": "Несколько экземпляров ZCode доступны только в macOS, Windows и Linux."
+    },
+    "exposeToCodex": {
+      "startPlan": "Обновите данные о квоте ZCode, чтобы проверить, активен ли личный Z.ai Start Plan.",
+      "projectKey": "Подключите аккаунт BigModel API Key с помощью ключа проекта.",
+      "signIn": "Снова войдите в ZCode и повторите попытку.",
+      "title": "Подключается через шлюз Native Rust без копирования ключа API ZCode или токена OAuth в конфигурацию Codex"
     }
   },
   "zed": {
@@ -8880,7 +8917,10 @@
       "deploySuccess": "Развёрнуто в Codex: {{count}} моделей",
       "deployFailed": "Развёртывание не удалось: {{error}}",
       "useKey": "Использовать ключ",
-      "deleteConfirm": "Удалить сохранённый ключ «{{name}}»? Это действие нельзя отменить."
+      "deleteConfirm": "Удалить сохранённый ключ «{{name}}»? Это действие нельзя отменить.",
+      "addToGeminiCli": "В Gemini CLI",
+      "geminiCliAdded": "Gemini CLI добавлен",
+      "addToGeminiCliFailed": "Не удалось добавить в Gemini CLI: {{error}}"
     },
     "prefill": {
       "codexReady": "Настройки APIKEY.FUN заполнены. Проверьте их перед добавлением в Codex.",
@@ -9745,6 +9785,196 @@
     "errors": {
       "loadFailed": "Не удалось загрузить статистику токенов: {{error}}",
       "syncFailed": "Ошибка сканирования токенов: {{error}}"
+    }
+  },
+  "t3code": {
+    "accountConfig": {
+      "title": "Настройка аккаунтов",
+      "providers": "Аккаунты провайдеров",
+      "codexCatalogPending": "Сторонние ключи ожидают синхронизации моделей: {{count}}"
+    },
+    "nativeSettings": {
+      "defaultModel": "Модель для новых чатов",
+      "reasoning": "Уровень рассуждения",
+      "notifications": "Уведомления",
+      "desktop": "Уведомления на рабочем столе",
+      "sound": "Звук",
+      "both": "Уведомления и звук",
+      "clientDefault": "По умолчанию в T3 Code",
+      "connectRequired": "Запустите T3 Code через Cockpit, чтобы загрузить доступные модели.",
+      "savedForLaunch": "Сохранено для следующего запуска.",
+      "saveFailed": "T3 Code не удалось сохранить эту настройку.",
+      "invalidModel": "Модель или вариант рассуждения больше недоступны.",
+      "sectionTitle": "Настройки клиента"
+    },
+    "search": "Поиск аккаунтов T3 Code...",
+    "flowNotice": {
+      "title": "Привязка внутренних провайдеров T3 Code (нажмите, чтобы свернуть/развернуть)",
+      "desc": "Выберите сохранённые в Cockpit аккаунты, чтобы настроить основной и параллельные аккаунты в T3 Code.",
+      "permission": "Cockpit обновляет локальные настройки T3 Code и управляемые папки провайдеров. Статус и индикатор квоты используют локальное соединение.",
+      "network": "Квоты обновляются через API выбранного провайдера или локальный шлюз."
+    },
+    "empty": "Нет хост-аккаунтов T3 Code",
+    "addAccount": "Добавить аккаунт T3 Code",
+    "oauth": {
+      "desc": "Сначала войдите через Clerk в T3 Code, затем импортируйте локальный аккаунт или вставьте токен Clerk.",
+      "title": "Вход через Clerk в T3 Code",
+      "item1": "Чтение и сохранение сессий из ~/.t3/userdata/clerk/clerk-tokens.json",
+      "item2": "Привязка отдельных профилей и провайдеров к инстансам T3 Code",
+      "item3": "Инъекция капсулы квоты и скорости tok/s в нижнюю панель Composer",
+      "urlPlaceholder": "URL авторизации T3 Code",
+      "waiting": "Ожидание входа в T3 Code...",
+      "openWindow": "Открыть в браузере"
+    },
+    "token": {
+      "tab": "Token / JSON",
+      "desc": "Вставьте Clerk Session JWT или содержимое clerk-tokens.json.",
+      "placeholder": "Вставьте Clerk JWT (eyJ...) или clerk-tokens.json...",
+      "add": "Сохранить токен-аккаунт"
+    },
+    "import": {
+      "localDesc": "Сначала войдите в T3 Connect в левом нижнем углу T3 Code, затем импортируйте локальные данные ниже (почта и туннели синхронизируются при запуске).",
+      "localClient": "Импорт из локального T3 Code"
+    },
+    "providerWorkspace": {
+      "switchCodexRequiresGpt": "Для привязки Codex требуется диалоговая модель GPT или Codex.",
+      "viewAccounts": "Все аккаунты ({{count}})",
+      "accountInUse": "Используется",
+      "accountRestartPending": "Ожидает перезапуска",
+      "switchAccount": "Сменить аккаунт",
+      "switchingAccount": "Смена аккаунта…",
+      "switchAfterReply": "Смена аккаунта начнётся после завершения текущего ответа поставщика.",
+      "switchActiveRunTimeout": "Ответ ещё формируется. Повторите смену после его завершения.",
+      "switchSaved": "Привязка сохранена. Перезапустите T3 Code, чтобы применить её.",
+      "switchBusy": "В этом экземпляре T3 Code уже выполняется изменение поставщика.",
+      "switchTargetChanged": "Поставщик или аккаунт изменился. Выберите его снова.",
+      "defaultAccountUnavailable": "Сначала импортируйте текущий основной аккаунт в Cockpit, чтобы сохранить его.",
+      "defaultAccountSaved": "Основной аккаунт обновлён.",
+      "defaultSelectionSaved": "Выбор основного аккаунта сохранён.",
+      "defaultWaiting": "Ожидает применения",
+      "defaultApplyFailed": "Не удалось применить основной аккаунт",
+      "accountRemoved": "Аккаунт удалён из T3 Code.",
+      "removeSaved": "Удаление сохранено. Перезапустите T3 Code, чтобы применить изменения.",
+      "accountAlreadyAdded": "Этот аккаунт уже подключён к данной среде T3 Code.",
+      "switchControlUnavailable": "Не удалось подключиться к управлению поставщиками в T3 Code.",
+      "switchControlRejected": "T3 Code отклонил изменение поставщика.",
+      "switchDetachTimeout": "Истекло время ожидания отсоединения предыдущей сессии поставщика.",
+      "switchVerificationFailed": "T3 Code не удалось проверить новый аккаунт.",
+      "switchRollbackFailed": "Не удалось восстановить прежнюю конфигурацию. Проверьте настройки поставщика.",
+      "linkTab": "Привязка аккаунтов",
+      "linkAccount": "Добавить в T3 Code",
+      "addAccount": "Добавить аккаунт",
+      "unbound": "Не привязан",
+      "modelsReady": "Доступные модели · {{count}}",
+      "authRequired": "Нужна авторизация",
+      "runtimePending": "Настройка T3 Code",
+      "runtimeNotFound": "{{app}} отсутствует",
+      "runtimeError": "Среда выполнения недоступна",
+      "runtimeExplicitPath": "Проверьте путь к исполняемому файлу этого поставщика в настройках поставщиков агентов T3 Code.",
+      "runtimeInstall": "Установить управляемую среду",
+      "runtimeInstallStarted": "T3 Code начал установку среды в фоновом режиме.",
+      "platformAccount": "Аккаунт Cockpit",
+      "replaceAccount": "Заменить аккаунт",
+      "noAccounts": "Нет доступных аккаунтов для этого провайдера",
+      "saved": "Привязка сохранена",
+      "currentAccount": "Текущая привязка",
+      "runtimeStatus": "Состояние выполнения",
+      "linkMode": "Способ привязки",
+      "providerInstance": "Экземпляр провайдера",
+      "selectInstance": "Выберите экземпляр",
+      "gatewayDisabled": "Включите службу Codex API перед привязкой к T3 Code.",
+      "claudeCodeOnly": "Используйте аккаунт Claude Code. Этот аккаунт относится к Claude Desktop.",
+      "title": "Привязка и переключение внутренних провайдеров T3 Code",
+      "desc": "Настройка и переключение мультиплатформенных провайдеров в штатном settings.json T3 Code с разделением привязки Cockpit и собственного входа CLI.",
+      "defaultInstance": "Инстанс по умолчанию (~/.t3)",
+      "targetInstance": "Целевой инстанс T3 Code",
+      "addProviderInstance": "Новый инстанс провайдера",
+      "isolatedHome": "Изолированный каталог",
+      "sharedHome": "Среда по умолчанию",
+      "selectAccountPlaceholder": "Выберите аккаунт для привязки...",
+      "quotaLabel": "Остаток",
+      "noQuotaData": "Привяжите аккаунт для отображения квоты",
+      "cacheHit": "Попадание в кэш",
+      "modalTitle": "Новый внутренний провайдер T3 Code",
+      "driverKindLabel": "Тип драйвера провайдера",
+      "instanceNameLabel": "Отображаемое имя инстанса",
+      "instanceNamePlaceholder": "напр., Codex Pro #2 / Claude Work",
+      "initialAccountLabel": "Начальный аккаунт (необязательно)",
+      "errors": {
+        "nameRequired": "Введите имя инстанса провайдера"
+      },
+      "injectionConnected": "Капсула подключена",
+      "needsRestartNotice": "T3 Code запущен. Перезапустите его, чтобы применить обновлённую конфигурацию аккаунта.",
+      "addProviderBtn": "Добавить провайдера",
+      "builtinTag": "По умолчанию",
+      "customTag": "Свой",
+      "sharedLegacyTag": "Общий профиль (перевыберите для изоляции)",
+      "switchAndVerify": "Привязка и проверка...",
+      "toggleEnabled": "Переключить активность",
+      "refreshAccountQuota": "Обновить квоту аккаунта",
+      "renameInstance": "Переименовать экземпляр",
+      "deleteConfirmTitle": "Удалить экземпляр провайдера",
+      "deleteConfirmDesc": "Отвязать {{name}} от T3 Code. Аккаунт в Cockpit и история чатов сохранятся.",
+      "verifiedReady": "Проверено · {{count}} мод.",
+      "stagedReady": "Готово · {{count}} мод. (перезапуск)",
+      "needsSyncVerify": "Требуется проверка",
+      "readyOnLaunch": "Загрузится при старте",
+      "reverifyAccount": "Пересинхронизировать и проверить данные",
+      "accountPlatformsGroup": "Привязка аккаунта Cockpit",
+      "cliPlatformsGroup": "Собственный вход CLI / ACP",
+      "cliModeDesc": "Регистрирует {{platform}} по стандарту T3 Code; авторизация и список моделей управляются самим CLI или ACP-агентом.",
+      "cliOwnLogin": "Вход через CLI",
+      "cliManagedQuota": "Квота на стороне CLI",
+      "cliReady": "CLI готов"
+    },
+    "usageNormal": "Норма",
+    "usageAbnormal": "Ошибка",
+    "usageViewDetail": "Подробнее",
+    "usageDetailTitle": "Подробности использования",
+    "usage": "Статус использования",
+    "quota": {
+      "included": "Туннели T3 Connect",
+      "models": "Квота моделей",
+      "usedOfTotal": "{{used}} / {{total}}",
+      "updatedAt": "Обновлено: {{time}}",
+      "expireAt": "Истекает: {{time}}"
+    },
+    "quotaQuery": {
+      "restartToApply": "Перезапустите T3 Code для применения",
+      "multipleModels": "Несколько моделей",
+      "failedRefreshCompact": "Ошибка запроса квоты",
+      "empty": "Нет данных о квоте",
+      "sectionTitle": "Квота"
+    },
+    "instances": {
+      "unsupported": "Мульти-инстансы T3 Code поддерживаются только на macOS, Windows и Linux."
+    },
+    "planUnlinked": "Не привязан",
+    "usagePending": "Ожидание синхронизации",
+    "syncUnavailable": "Не удалось синхронизировать квоту туннелей. Запустите T3 Code из Cockpit Tools и войдите в этот аккаунт.",
+    "pendingSyncIdentity": "Запустите T3 Code для синхр.",
+    "overview": {
+      "setDefaultAccount": "Сделать основным",
+      "removeAccount": "Удалить",
+      "actions": "Действия",
+      "noLinkedAccounts": "Нет связанных аккаунтов",
+      "defaultAffectsExisting": "Текущие чаты сохранят своего провайдера и будут использовать его новый аккаунт для следующих запросов.",
+      "accountMismatch": "Аккаунты не совпадают",
+      "localGatewayBadge": "Локальный шлюз",
+      "bindAccountAction": "Привязать аккаунт",
+      "openPlatformPool": "Пул {{platform}}",
+      "searchProvidersPlaceholder": "Поиск экземпляров, аккаунтов или платформ...",
+      "sortByDefault": "По умолчанию",
+      "sortByQuota": "По остатку квоты",
+      "sortByName": "По имени",
+      "viewCandidateAccounts": "Аккаунты ({{count}})",
+      "viewMoreAccounts": "+{{count}} · Показать ещё",
+      "platformAccountsTitle": "Аккаунты {{platform}}",
+      "mountAsParallelInstance": "Добавить параллельный аккаунт",
+      "manageInSourcePlatform": "Открыть {{platform}}",
+      "searchAccountsPlaceholder": "Поиск аккаунтов {{platform}}...",
+      "goAddSourceAccount": "Добавить в {{platform}}",
+      "emptyPoolDesc": "Сначала добавьте аккаунт на странице {{platform}}, чтобы подключить его к T3 Code."
     }
   }
 }

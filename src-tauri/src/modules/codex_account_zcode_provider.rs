@@ -1,19 +1,29 @@
-// Codex 账号模块：将 ZCode API Key 账号以引用方式接入本地 Provider Gateway。
+// Codex 账号模块：将 ZCode API Key/OAuth 账号以引用方式接入本地 Provider Gateway。
 //
-// 该模块只保存 ZCode 账号 ID，不把 API Key 复制到 Codex 账号或 auth.json。
+// 该模块只保存 ZCode 账号 ID，不把 API Key 或 OAuth Token 复制到 Codex 账号或 auth.json。
 // 请求真正发送前由 native_zcode 读取加密 ZCode 账号存储并在内存中组装认证头。
 
 const ZCODE_API_KEY_PROVIDER_KIND: &str = "zcode_api_key";
+const ZCODE_OAUTH_PROVIDER_KIND: &str = "zcode_oauth";
 pub(crate) const ZCODE_NATIVE_PROVIDER: &str = "zcode";
+use crate::modules::zcode_account::ZCODE_PLAN_API_BASE_URL;
 pub(crate) const ZCODE_PROVIDER_MODEL_CATALOG: &[&str] = &["GLM-5.2", "glm-5-turbo"];
 
 pub(crate) fn is_zcode_upstream_provider(account: &CodexAccount) -> bool {
     account.is_api_key_auth()
-        && account.api_credential_kind.as_deref() == Some(ZCODE_API_KEY_PROVIDER_KIND)
+        && matches!(
+            account.api_credential_kind.as_deref(),
+            Some(kind) if kind == ZCODE_API_KEY_PROVIDER_KIND || kind == ZCODE_OAUTH_PROVIDER_KIND
+        )
         && account
             .api_credential_ref
             .as_deref()
             .is_some_and(|value| !value.trim().is_empty())
+}
+
+pub(crate) fn is_zcode_oauth_upstream_provider(account: &CodexAccount) -> bool {
+    is_zcode_upstream_provider(account)
+        && account.api_credential_kind.as_deref() == Some(ZCODE_OAUTH_PROVIDER_KIND)
 }
 
 pub(crate) fn zcode_upstream_account(
@@ -49,19 +59,12 @@ pub(crate) fn upsert_zcode_provider_account(
     }
     let source = crate::modules::zcode_account::load_account(zcode_account_id)
         .ok_or_else(|| "ZCode 账号不存在，请先在 ZCode 页面登录或导入".to_string())?;
-    if source.auth_mode != crate::models::zcode::ZcodeAuthMode::ApiKey {
-        return Err("当前仅支持 ZCode API Key 账号；OAuth 适配器尚未启用".to_string());
+    let is_oauth = source.auth_mode == crate::models::zcode::ZcodeAuthMode::Oauth;
+    if is_oauth {
+        crate::modules::zcode_account::oauth_inference_session(&source)?;
+    } else if source.api_key.as_deref().is_none_or(|key| key.trim().is_empty()) {
+        return Err("ZCode 账号缺少 API Key".into());
     }
-    if source
-        .api_key
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .is_none()
-    {
-        return Err("ZCode API Key 账号缺少 API Key".to_string());
-    }
-
     let provider_id = if source.provider.eq_ignore_ascii_case("bigmodel") {
         crate::modules::zcode_account::BIGMODEL_API_KEY_PROVIDER_ID
     } else {
@@ -72,7 +75,9 @@ pub(crate) fn upsert_zcode_provider_account(
     } else {
         "Z.ai"
     };
-    let base_url = if source.provider.eq_ignore_ascii_case("bigmodel") {
+    let base_url = if is_oauth {
+        ZCODE_PLAN_API_BASE_URL
+    } else if source.provider.eq_ignore_ascii_case("bigmodel") {
         crate::modules::zcode_account::BIGMODEL_API_BASE_URL
     } else {
         crate::modules::zcode_account::ZAI_API_BASE_URL
@@ -102,12 +107,19 @@ pub(crate) fn upsert_zcode_provider_account(
         account.api_model_catalog = zcode_provider_model_catalog();
     }
     account.api_wire_api = Some("anthropic".to_string());
-    account.api_auth_scheme = Some("x-api-key".to_string());
+    account.api_auth_scheme = Some(if is_oauth { "bearer" } else { "x-api-key" }.to_string());
     account.api_supports_websockets = false;
     account.api_supports_vision = false;
     account.api_sync_model_catalog_to_codex = false;
     account.plan_type = Some(COCKPIT_API_LOGIN_PLAN_TYPE.to_string());
-    account.api_credential_kind = Some(ZCODE_API_KEY_PROVIDER_KIND.to_string());
+    account.api_credential_kind = Some(
+        if is_oauth {
+            ZCODE_OAUTH_PROVIDER_KIND
+        } else {
+            ZCODE_API_KEY_PROVIDER_KIND
+        }
+        .to_string(),
+    );
     account.api_credential_ref = Some(zcode_account_id.to_string());
     account.upstream_grok_account_id = None;
     if let Some(name) = normalize_optional_value(account_name) {
@@ -157,7 +169,26 @@ mod zcode_provider_tests {
     }
 
     #[test]
-    fn default_catalog_contains_zcode_api_key_models() {
+    fn oauth_linked_provider_is_recognized_without_secret_material() {
+        let mut account = CodexAccount::new_api_key(
+            "linked".into(),
+            "fixture@example.invalid".into(),
+            String::new(),
+            CodexApiProviderMode::Custom,
+            Some(ZCODE_PLAN_API_BASE_URL.into()),
+            Some("builtin:zai".into()),
+            Some("Z.ai".into()),
+            zcode_provider_model_catalog(),
+        );
+        account.api_credential_kind = Some(ZCODE_OAUTH_PROVIDER_KIND.to_string());
+        account.api_credential_ref = Some("zcode-source".to_string());
+        account.openai_api_key = None;
+        assert!(is_zcode_upstream_provider(&account));
+        assert!(is_zcode_oauth_upstream_provider(&account));
+    }
+
+    #[test]
+    fn default_catalog_contains_zcode_models() {
         let models = zcode_provider_model_catalog();
         assert_eq!(models, vec!["GLM-5.2", "glm-5-turbo"]);
     }

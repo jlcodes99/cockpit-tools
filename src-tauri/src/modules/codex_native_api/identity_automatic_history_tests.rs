@@ -454,8 +454,6 @@ fn cancellation_while_sqlite_is_busy_cannot_late_commit_unknown_history() {
             "native_rebuild_active_v1",
             "native_rebuild_portable_v1",
             "native_rebuild_checkpoints_v1",
-            "native_rebuild_history_v1",
-            "native_rebuild_items_v1",
             "native_opaque_v1",
         ] {
             let count: i64 = db

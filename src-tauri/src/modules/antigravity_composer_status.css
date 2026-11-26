@@ -1,0 +1,33 @@
+[data-cockpit-ag-capsule],[data-cockpit-ag-details]{
+  --color-token-text-primary:var(--foreground);
+  --color-token-text-secondary:var(--muted-foreground);
+  --color-token-main-surface-primary:var(--background);
+  --color-token-main-surface-secondary:var(--secondary);
+  --cockpit-quota-high:var(--success,var(--foreground));
+  --cockpit-quota-medium:var(--foreground);
+  --cockpit-quota-low:var(--warning,var(--foreground));
+  --cockpit-quota-critical:var(--destructive,var(--foreground));
+}
+[data-cockpit-ag-capsule][data-cockpit-quota-footer]{
+  border-color:var(--border);height:24px;z-index:30;
+}
+[data-cockpit-ag-capsule][hidden],[data-cockpit-ag-capsule] [hidden],[data-cockpit-ag-details][hidden]{display:none}
+[data-cockpit-ag-details]{
+  position:fixed;z-index:31;overflow:auto;max-width:calc(100vw - 24px);
+  width:max-content;max-height:calc(100vh - 24px);box-sizing:border-box;
+  border:1px solid var(--border);border-radius:.75rem;padding:.625rem .75rem;
+  background:var(--background);color:var(--foreground);font:inherit;font-size:12px;
+}
+[data-cockpit-ag-details] header{
+  display:flex;justify-content:space-between;align-items:center;gap:.75rem;margin-bottom:.5rem;
+}
+[data-cockpit-ag-details] button{
+  appearance:none;font:inherit;font-weight:inherit;line-height:inherit;color:var(--foreground);
+  border:1px solid var(--border);border-radius:.375rem;padding:.125rem .375rem;background:var(--background);cursor:pointer;
+}
+[data-cockpit-ag-details] button:hover{background:var(--secondary)}
+[data-cockpit-ag-details] button:disabled{opacity:.5;cursor:default}
+[data-cockpit-ag-details] button:focus-visible{outline:2px solid currentColor;outline-offset:2px}
+[data-cockpit-ag-details] dl{display:grid;grid-template-columns:minmax(0,auto) minmax(0,1fr);gap:.25rem .75rem;margin:0}
+[data-cockpit-ag-details] dt{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted-foreground)}
+[data-cockpit-ag-details] dd{margin:0;overflow-wrap:anywhere;text-align:end;font-variant-numeric:tabular-nums}

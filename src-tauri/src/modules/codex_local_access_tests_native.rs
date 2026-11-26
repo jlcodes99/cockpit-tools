@@ -1383,7 +1383,6 @@ async fn binding_oauth_profile_preserves_incremental_http_history_after_restart(
             // A legacy history can retain its owner without having replayable input.
             let store = rusqlite::Connection::open(&identity_path).unwrap();
             assert!(store.execute("DELETE FROM native_rebuild_checkpoints_v1", []).unwrap() > 0);
-            assert!(store.execute("DELETE FROM native_rebuild_history_v1", []).unwrap() > 0);
         }
     }
 

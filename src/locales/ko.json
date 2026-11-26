@@ -9,13 +9,9 @@
     "initializeWaiting": "Antigravity IDE의 초기화를 기다리는 중입니다. 준비되면 직접 계속하세요.",
     "initializeRetry": "초기화가 아직 완료되지 않았습니다. IDE가 열려 있는지 확인한 뒤 다시 시도하세요.",
     "pathLabel": "실행 경로",
-    "pathConfigured": "설정됨",
-    "pathDetected": "자동 감지",
-    "pathInvalid": "설정된 경로가 올바르지 않습니다",
-    "pathCheckFailed": "경로 확인 실패",
-    "pathSaveAndRetry": "저장 후 다시 시도",
     "switchAndCopy": "전환 후 복사",
     "sharedInstanceStart": "공유 계정 전환 후 시작",
+    "ideSharedAccountHint": "Antigravity IDE 2.6부터 모든 인스턴스가 Google 로그인 상태를 공유합니다. 여기서 계정을 전환하면 열려 있는 다른 인스턴스에도 영향을 줍니다.",
     "sharedInstanceHint": "다른 Antigravity 인스턴스는 열린 상태로 유지되며 새 계정으로 전환될 수 있습니다.",
     "sharedInstanceRestart": "선택한 인스턴스만 다시 시작합니다.",
     "lastSharedAccount": "최근 전환한 공유 계정",
@@ -276,6 +272,7 @@
       "offline": "오프라인 · 캐시"
     },
     "networkErrors": {
+      "recoveryExhausted": "상위 서비스와의 통신 실패가 반복되어 이 요청의 복구 한도를 초과했습니다. 자동 재시도가 중지되었습니다. 다시 시도하기 전에 프록시 또는 네트워크를 확인하세요. 이 오류는 계정 할당량이 소진되었다는 뜻이 아닙니다.",
       "upstream": "상위 서비스",
       "proxyConnection": "프록시 ‘{{proxy}}’를 통한 {{target}} 연결에 실패했습니다. 프록시 또는 네트워크 문제일 수 있습니다. 프록시를 확인하거나 다른 노드로 다시 시도하세요.",
       "proxyTimeout": "프록시 ‘{{proxy}}’를 통한 {{target}} 연결 시간이 초과되었습니다. 프록시 또는 네트워크를 확인하거나 다른 노드로 다시 시도하세요.",
@@ -285,6 +282,10 @@
       "directTimeout": "{{target}} 연결 시간이 초과되었습니다. 네트워크를 확인하고 다시 시도하세요."
     },
     "codexUsage": {
+      "responseSpeed": "본문 생성 속도",
+      "overallSpeedWithThinking": "추론 포함 속도",
+      "streamingSpeed": "스트리밍 속도",
+      "contextShort": "컨텍스트",
       "title": "할당량 및 사용량",
       "session": "현재 대화",
       "available": "사용 가능",
@@ -721,6 +722,12 @@
         "singleToken": "단일 예시(Token)",
         "singleJson": "단일 예시(JSON)",
         "batchJson": "일괄 예시(JSON)"
+      },
+      "exposeToCodex": {
+        "action": "Codex에 연결",
+        "inProgress": "연결 중…",
+        "success": "Codex에 연결됨",
+        "failed": "Codex에 연결하지 못했습니다: {{error}}"
       }
     },
     "topRightAd": {
@@ -922,6 +929,7 @@
       "restartAll": "모두 재시작",
       "stopAll": "모두 정지",
       "start": "시작",
+      "restart": "재시작",
       "stop": "정지",
       "openFolder": "폴더 열기",
       "edit": "편집",
@@ -1630,6 +1638,13 @@
       "menuBarQuotaLayoutPreview": "레이아웃 예시 (할당량은 예시 데이터)",
       "menuBarQuotaLayoutHorizontal": "가로 한 줄",
       "menuBarQuotaLayoutStacked": "간결한 두 줄",
+      "t3codeTitle": "T3 Code 설정",
+      "t3codeAppPath": "T3 Code 실행 경로",
+      "t3codeAppPathDesc": "비워 두면 기본 경로를 사용합니다",
+      "t3codeAutoRefresh": "T3 Code 할당량 자동 새로 고침",
+      "t3codeAutoRefreshDesc": "백그라운드 할당량 갱신 간격",
+      "t3codeAppUiInjection": "T3 Code 채팅 할당량 캡슐",
+      "t3codeAppUiInjectionDesc": "Cockpit에서 T3 Code를 시작하면 입력창 하단에 선택한 모델 계열과 남은 할당량이 표시됩니다. 클릭하면 계정 및 사용량 세부 정보를 볼 수 있습니다.",
       "qoderCnAppPath": "Qoder CN 실행 경로",
       "qoderCnAppPathDesc": "비워 두면 자동으로 감지합니다. 계정을 전환하면 데스크톱 클라이언트를 닫고 다시 시작합니다",
       "qoderCnAppPathPlaceholder": "기본 경로",
@@ -1981,6 +1996,13 @@
       "pathLabel": "{{app}} 실행 경로",
       "configurePath": "경로 설정",
       "configureHint": "실행 파일을 선택하거나 자동 감지를 사용하려면 입력란을 비워 두세요.",
+      "autoDetect": "자동 감지",
+      "noInstallation": "{{app}}을(를) 찾지 못했습니다.",
+      "installationGuide": "공식 설치 안내",
+      "copyInstallCommand": "설치 명령 복사",
+      "configured": "설정됨",
+      "detected": "자동 감지",
+      "checkFailed": "경로 확인 실패",
       "cliHint": "{{app}}을 찾을 수 없습니다. 실행 파일을 선택하거나 CLI를 설치한 뒤 다시 검색하세요.",
       "invalidPath": "이 경로에 실행 가능한 {{app}} 파일이 없습니다.",
       "accountAlreadySwitched": "계정이 이미 전환되었습니다. 앱 실행만 다시 시도합니다.",
@@ -6512,6 +6534,8 @@
       "instructionsBytes": "지침",
       "overloadRetry": "혼잡 재시도",
       "overloadRecovery": "복구 시간",
+      "historyRejectionTitle": "기록 구조 불일치",
+      "historyRejectionHint": "업스트림이 요청 기록 구조를 거부했습니다. 개수와 플래그만 기록되며 대화 내용은 저장되지 않습니다.",
       "recordPayloads": "요청 본문 기록",
       "recordPayloadsHint": "기본값은 꺼짐입니다. 클라이언트와 상위 요청 스냅샷을 크기 제한 내에서 로컬 저장합니다. 끄면 새 기록만 중단하며 저장된 본문은 별도로 지울 수 있습니다.",
       "privacyHint": "인증 필드는 가리지만 대화 본문의 민감한 정보는 남을 수 있습니다. 복사하거나 공유하기 전에 확인하세요.",
@@ -7078,6 +7102,10 @@
     "traeSoloCn": {
       "appPath": "TraeWork CN 경로",
       "title": "TraeWork CN 설정"
+    },
+    "t3code": {
+      "title": "T3 Code 설정",
+      "appPath": "T3 Code 실행 경로"
     },
     "validation": {
       "refreshIntervalInvalid": "새로고침 간격은 1~999 사이의 정수를 입력하거나 -1을 입력해 자동 새로고침을 끄세요.",
@@ -7948,7 +7976,7 @@
     }
   },
   "codebuddyCli": {
-    "launchTitle": "CodeBuddy CN 실행",
+    "launchTitle": "{{app}} 실행",
     "launchDesktop": "데스크톱 앱 실행",
     "recheck": "다시 확인",
     "checking": "CodeBuddy CLI 확인 중…",
@@ -8247,6 +8275,9 @@
       "until": "{{model}} 이전 확인 시 제한됨, 해제 {{time}}",
       "unavailable": "{{model}} 이전 확인 시 제한됨",
       "failed": "{{model}} 이전 확인 실패"
+    },
+    "exposeToCodex": {
+      "title": "WorkBuddy 토큰을 복사하지 않고 Native Rust 게이트웨이를 통해 연결합니다"
     }
   },
   "minimaxCode": {
@@ -8458,6 +8489,12 @@
     },
     "instances": {
       "unsupported": "ZCode 다중 인스턴스는 macOS, Windows, Linux에서만 지원됩니다."
+    },
+    "exposeToCodex": {
+      "startPlan": "ZCode 할당량을 새로 고쳐 개인 Z.ai Start Plan이 활성 상태인지 확인하세요.",
+      "projectKey": "프로젝트 키로 BigModel API Key 계정을 연결하세요.",
+      "signIn": "ZCode에 다시 로그인한 후 재시도하세요.",
+      "title": "ZCode API 키 또는 OAuth 토큰을 Codex 구성에 복사하지 않고 Native Rust 게이트웨이를 통해 연결합니다"
     }
   },
   "zed": {
@@ -8880,7 +8917,10 @@
       "deploySuccess": "Codex에 배포됨: 모델 {{count}}개",
       "deployFailed": "배포 실패: {{error}}",
       "useKey": "키 사용",
-      "deleteConfirm": "저장된 키 \"{{name}}\"을(를) 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다."
+      "deleteConfirm": "저장된 키 \"{{name}}\"을(를) 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.",
+      "addToGeminiCli": "Gemini CLI에 추가",
+      "geminiCliAdded": "Gemini CLI 추가됨",
+      "addToGeminiCliFailed": "Gemini CLI 추가 실패: {{error}}"
     },
     "prefill": {
       "codexReady": "APIKEY.FUN 설정을 불러왔습니다. 확인한 뒤 Codex에 추가하세요.",
@@ -9745,6 +9785,196 @@
     "errors": {
       "loadFailed": "토큰 사용량을 불러오지 못했습니다: {{error}}",
       "syncFailed": "토큰 사용량 스캔에 실패했습니다: {{error}}"
+    }
+  },
+  "t3code": {
+    "accountConfig": {
+      "title": "계정 설정",
+      "providers": "제공자 계정",
+      "codexCatalogPending": "모델 동기화를 기다리는 외부 키: {{count}}개"
+    },
+    "nativeSettings": {
+      "defaultModel": "새 대화 모델",
+      "reasoning": "추론 강도",
+      "notifications": "알림",
+      "desktop": "데스크톱 알림",
+      "sound": "알림음",
+      "both": "알림 및 소리",
+      "clientDefault": "T3 Code 기본값",
+      "connectRequired": "사용 가능한 모델을 불러오려면 Cockpit에서 T3 Code를 시작하세요.",
+      "savedForLaunch": "다음 실행에 적용하도록 저장했습니다.",
+      "saveFailed": "T3 Code에서 이 설정을 저장하지 못했습니다.",
+      "invalidModel": "이 모델 또는 추론 옵션을 더 이상 사용할 수 없습니다.",
+      "sectionTitle": "클라이언트 설정"
+    },
+    "search": "T3 Code 계정 검색...",
+    "flowNotice": {
+      "title": "T3 Code 내부 제공자 계정 연동 안내 (클릭하여 펼치기/접기)",
+      "desc": "Cockpit에 저장된 계정 중에서 T3 Code의 기본 계정과 병렬 계정을 설정할 수 있습니다.",
+      "permission": "Cockpit은 T3 Code의 로컬 설정과 관리 대상 제공자 폴더를 업데이트합니다. 상태와 할당량 표시는 로컬 연결을 사용합니다.",
+      "network": "할당량은 선택한 제공자의 API 또는 로컬 게이트웨이를 통해 업데이트됩니다."
+    },
+    "empty": "T3 Code 호스트 계정 없음",
+    "addAccount": "T3 Code 계정 추가",
+    "oauth": {
+      "desc": "먼저 T3 Code 클라이언트에서 Clerk 로그인을 완료한 뒤 \"로컬 T3 Code에서 가져오기\"를 클릭하거나 Clerk 토큰을 붙여 넣으세요.",
+      "title": "T3 Code Clerk 로그인",
+      "item1": "~/.t3/userdata/clerk/clerk-tokens.json 로그인 세션 읽기 및 저장",
+      "item2": "T3 Code 다중 인스턴스별 독립 프로필 및 Provider 계정 바인딩",
+      "item3": "채팅 하단 Composer 바에 실시간 할당량 및 tok/s 속도 캡슐 주입",
+      "urlPlaceholder": "T3 Code 인증 URL",
+      "waiting": "T3 Code 로그인 대기 중...",
+      "openWindow": "브라우저에서 열기"
+    },
+    "token": {
+      "tab": "Token / JSON",
+      "desc": "T3 Code의 Clerk Session JWT 또는 clerk-tokens.json 내용을 붙여 넣으세요. 전환 시 대상 인스턴스의 clerk-tokens.json에 기록됩니다.",
+      "placeholder": "Clerk JWT (eyJ...) 또는 clerk-tokens.json 붙여 넣기...",
+      "add": "토큰 계정 저장"
+    },
+    "import": {
+      "localDesc": "먼저 T3 Code 좌측 하단에서 T3 Connect에 로그인한 뒤 아래 버튼으로 로컬 자격 증명을 가져오세요(T3 Code 실행 시 이메일과 터널 한도가 자동 동기화됩니다).",
+      "localClient": "로컬 T3 Code에서 가져오기"
+    },
+    "providerWorkspace": {
+      "switchCodexRequiresGpt": "이 Codex 연결에는 GPT 또는 Codex 대화 모델이 필요합니다.",
+      "viewAccounts": "계정 {{count}}개 모두 보기",
+      "accountInUse": "사용 중",
+      "accountRestartPending": "재시작 대기",
+      "switchAccount": "계정 전환",
+      "switchingAccount": "계정 전환 중…",
+      "switchAfterReply": "이 제공자의 현재 응답이 끝난 뒤 계정을 전환합니다.",
+      "switchActiveRunTimeout": "응답이 진행 중입니다. 완료 후 다시 전환하세요.",
+      "switchSaved": "연결이 저장되었습니다. T3 Code를 다시 시작하면 적용됩니다.",
+      "switchBusy": "이 T3 Code 인스턴스에서 제공자 변경이 진행 중입니다.",
+      "switchTargetChanged": "제공자 또는 계정이 바뀌었습니다. 다시 선택하세요.",
+      "defaultAccountUnavailable": "현재 기본 계정을 보존하려면 먼저 Cockpit으로 가져오세요.",
+      "defaultAccountSaved": "기본 계정을 업데이트했습니다.",
+      "defaultSelectionSaved": "기본 계정 선택을 저장했습니다.",
+      "defaultWaiting": "적용 대기",
+      "defaultApplyFailed": "기본 계정을 적용하지 못했습니다",
+      "accountRemoved": "T3 Code에서 계정을 제거했습니다.",
+      "removeSaved": "제거를 저장했습니다. T3 Code를 다시 시작하면 적용됩니다.",
+      "accountAlreadyAdded": "이 계정은 이미 이 T3 Code 환경에 연결되어 있습니다.",
+      "switchControlUnavailable": "T3 Code의 제공자 제어 기능에 연결할 수 없습니다.",
+      "switchControlRejected": "T3 Code에서 제공자 변경을 거부했습니다.",
+      "switchDetachTimeout": "이전 제공자 세션을 분리하는 중 시간이 초과되었습니다.",
+      "switchVerificationFailed": "T3 Code에서 새 계정을 확인할 수 없습니다.",
+      "switchRollbackFailed": "이전 구성을 복원할 수 없습니다. 제공자 설정을 확인하세요.",
+      "linkTab": "계정 연결",
+      "linkAccount": "T3 Code에 추가",
+      "addAccount": "계정 추가",
+      "unbound": "연결되지 않음",
+      "modelsReady": "사용 가능 모델 · {{count}}",
+      "authRequired": "인증 필요",
+      "runtimePending": "T3 Code 설정 중",
+      "runtimeNotFound": "{{app}} 없음",
+      "runtimeError": "런타임 사용 불가",
+      "runtimeExplicitPath": "T3 Code의 에이전트 제공자 설정에서 이 제공자의 사용자 지정 실행 경로를 확인하세요.",
+      "runtimeInstall": "관리형 런타임 설치",
+      "runtimeInstallStarted": "T3 Code가 백그라운드에서 설치를 시작했습니다.",
+      "platformAccount": "Cockpit 계정",
+      "replaceAccount": "계정 교체",
+      "noAccounts": "이 제공자에 사용할 계정이 없습니다",
+      "saved": "연결을 저장했습니다",
+      "currentAccount": "현재 연결",
+      "runtimeStatus": "실행 상태",
+      "linkMode": "연결 방식",
+      "providerInstance": "제공자 인스턴스",
+      "selectInstance": "인스턴스 선택",
+      "gatewayDisabled": "T3 Code에 연결하기 전에 Codex API 서비스를 활성화하세요.",
+      "claudeCodeOnly": "Claude Code 계정을 사용하세요. 이 계정은 Claude Desktop용입니다.",
+      "title": "T3 Code 내부 Provider 계정 바인딩 및 전환",
+      "desc": "순정 T3 Code settings.json에서 다중 플랫폼 제공자 인스턴스를 설정·전환하며 Cockpit 격리 자격 증명과 CLI 자체 로그인을 구분합니다.",
+      "defaultInstance": "기본 인스턴스 (~/.t3)",
+      "targetInstance": "대상 T3 Code 인스턴스",
+      "addProviderInstance": "새 Provider 인스턴스",
+      "isolatedHome": "격리 디렉터리",
+      "sharedHome": "기본 환경",
+      "selectAccountPlaceholder": "바인딩하고 전환할 계정 선택...",
+      "quotaLabel": "잔여 할당량",
+      "noQuotaData": "계정 바인딩 후 실시간 할당량 표시",
+      "cacheHit": "캐시 적중",
+      "modalTitle": "새 T3 Code 내부 Provider 인스턴스",
+      "driverKindLabel": "Provider 드라이버 유형",
+      "instanceNameLabel": "인스턴스 표시 이름",
+      "instanceNamePlaceholder": "예: Codex Pro #2 / Claude Work",
+      "initialAccountLabel": "초기 바인딩 계정 (선택)",
+      "errors": {
+        "nameRequired": "Provider 인스턴스 이름을 입력하세요"
+      },
+      "injectionConnected": "캡슐 연결됨",
+      "needsRestartNotice": "T3 Code가 실행 중입니다. 변경된 계정 설정을 적용하려면 재시작하세요.",
+      "addProviderBtn": "공급자 추가",
+      "builtinTag": "기본",
+      "customTag": "사용자 지정",
+      "sharedLegacyTag": "공유 설정 (재선택으로 격리 권장)",
+      "switchAndVerify": "연결 및 검증 중...",
+      "toggleEnabled": "활성 상태 전환",
+      "refreshAccountQuota": "계정 할당량 새로고침",
+      "renameInstance": "인스턴스 이름 변경",
+      "deleteConfirmTitle": "Provider 인스턴스 삭제",
+      "deleteConfirmDesc": "T3 Code에서 {{name}} 연결을 해제합니다. Cockpit 계정과 채팅 기록은 보존됩니다.",
+      "verifiedReady": "검증됨 · {{count}}개 모델",
+      "stagedReady": "준비됨 · {{count}}개 모델 (재시작 필요)",
+      "needsSyncVerify": "동기화 검증 필요",
+      "readyOnLaunch": "시작 시 로드",
+      "reverifyAccount": "인증 정보 재동기화 및 검증",
+      "accountPlatformsGroup": "Cockpit 계정 바인딩",
+      "cliPlatformsGroup": "CLI / ACP 자체 로그인",
+      "cliModeDesc": "순정 T3 Code 규격으로 {{platform}} 항목을 등록하며, 인증과 모델 목록은 해당 CLI 또는 ACP 에이전트가 직접 관리합니다.",
+      "cliOwnLogin": "CLI 자체 로그인",
+      "cliManagedQuota": "CLI에서 할당량 관리",
+      "cliReady": "CLI 준비됨"
+    },
+    "usageNormal": "정상",
+    "usageAbnormal": "오류",
+    "usageViewDetail": "상세 보기",
+    "usageDetailTitle": "사용량 상태 상세",
+    "usage": "사용량 상태",
+    "quota": {
+      "included": "T3 Connect 터널",
+      "models": "모델 할당량",
+      "usedOfTotal": "{{used}} / {{total}}",
+      "updatedAt": "갱신: {{time}}",
+      "expireAt": "만료: {{time}}"
+    },
+    "quotaQuery": {
+      "restartToApply": "T3 Code를 다시 시작해 적용",
+      "multipleModels": "여러 모델",
+      "failedRefreshCompact": "할당량 조회 실패",
+      "empty": "할당량 데이터 없음",
+      "sectionTitle": "할당량"
+    },
+    "instances": {
+      "unsupported": "T3 Code 다중 인스턴스는 macOS, Windows, Linux에서만 지원됩니다."
+    },
+    "planUnlinked": "연결 안 됨",
+    "usagePending": "동기화 대기",
+    "syncUnavailable": "터널 한도를 동기화하지 못했습니다. Cockpit Tools에서 T3 Code를 실행하고 이 계정으로 로그인하세요.",
+    "pendingSyncIdentity": "T3 Code 실행 시 동기화",
+    "overview": {
+      "setDefaultAccount": "기본으로 설정",
+      "removeAccount": "제거",
+      "actions": "작업",
+      "noLinkedAccounts": "연결된 계정 없음",
+      "defaultAffectsExisting": "기존 채팅은 같은 제공자를 유지하고 이후 요청에는 변경된 계정을 사용합니다.",
+      "accountMismatch": "계정 불일치",
+      "localGatewayBadge": "로컬 게이트웨이",
+      "bindAccountAction": "계정 연결",
+      "openPlatformPool": "{{platform}} 풀",
+      "searchProvidersPlaceholder": "인스턴스, 계정 또는 플랫폼 검색...",
+      "sortByDefault": "기본 순서",
+      "sortByQuota": "남은 할당량순",
+      "sortByName": "이름순",
+      "viewCandidateAccounts": "후보 계정 ({{count}})",
+      "viewMoreAccounts": "+{{count}} · 더 보기",
+      "platformAccountsTitle": "{{platform}} 계정",
+      "mountAsParallelInstance": "병렬 계정 추가",
+      "manageInSourcePlatform": "{{platform}} 열기",
+      "searchAccountsPlaceholder": "{{platform}} 계정 검색...",
+      "goAddSourceAccount": "{{platform}}에서 추가",
+      "emptyPoolDesc": "먼저 {{platform}} 페이지에서 계정을 추가한 뒤 T3 Code로 전환하세요."
     }
   }
 }

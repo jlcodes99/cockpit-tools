@@ -94,7 +94,10 @@ async fn native_retry_cooldown_wait(
         else {
             continue;
         };
-        let official = native_is_chatgpt_plan_account(&account);
+        let official = native_is_chatgpt_plan_account(&account)
+            && !account
+                .id
+                .starts_with(codex_account::CHATGPT_PLAN_ACCOUNT_PREFIX);
         candidates.push((account.id, upstream, quota_wait, official));
     }
     // Quota reservation checks must run outside the cooldown mutex.

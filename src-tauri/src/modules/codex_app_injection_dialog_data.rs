@@ -28,7 +28,7 @@ const ATTEMPTS: &str = "CASE WHEN length(CAST(d.attempts_json AS BLOB))<=65536 \
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(super) struct DialogQuery {
+pub(in crate::modules) struct DialogQuery {
     pub request_token: String,
     pub thread_id: Option<String>,
     pub scope: String,
@@ -48,7 +48,7 @@ struct Cursor {
     binding: String,
 }
 
-pub(super) fn parse_query(value: &Value) -> Option<DialogQuery> {
+pub(in crate::modules) fn parse_query(value: &Value) -> Option<DialogQuery> {
     let mut query: DialogQuery = serde_json::from_value(value.clone()).ok()?;
     if query.request_token.is_empty()
         || query.request_token.len() > 128

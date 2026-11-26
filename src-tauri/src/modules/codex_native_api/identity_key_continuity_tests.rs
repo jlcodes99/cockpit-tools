@@ -123,7 +123,7 @@ fn full_client_history_with_old_ciphertext_does_not_need_server_checkpoint() {
     let c = store.connection.lock().unwrap();
     assert_eq!(
         c.query_row(
-            "SELECT count(*) FROM native_rebuild_history_v1 WHERE caller='new-key'",
+            "SELECT count(*) FROM native_rebuild_checkpoints_v1 WHERE caller='new-key'",
             [],
             |r| r.get::<_, i64>(0)
         )
@@ -198,7 +198,7 @@ fn strict_hosts_still_isolate_keys_and_missing_history_does_not_become_empty() {
         .connection
         .lock()
         .unwrap()
-        .execute("DELETE FROM native_rebuild_items_v1", [])
+        .execute("UPDATE native_rebuild_checkpoints_v1 SET transcript='zstd:corrupt'", [])
         .unwrap();
     assert!(store
         .inspect_for_forwarding("new-key", &HeaderMap::new(), &next(), true)

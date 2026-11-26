@@ -10,35 +10,6 @@ use super::super::codex_instance::terminal::{
 use crate::{models::Account, modules};
 
 #[tauri::command]
-pub(crate) async fn get_antigravity_client_launch_path(
-    client: String,
-) -> Result<modules::process::AntigravityLaunchPath, String> {
-    let task = tokio::task::spawn_blocking(move || match client.as_str() {
-        "antigravity" | "antigravity_ide" => Ok(
-            modules::process::inspect_antigravity_desktop_launch_path(client == "antigravity"),
-        ),
-        "cli" => {
-            let configured = modules::config::get_user_config().antigravity_cli_path;
-            let resolved_path = find_cli();
-            Ok(modules::process::AntigravityLaunchPath {
-                uses_configured_path: !configured.is_empty() && resolved_path.is_some(),
-                configured_path: (!configured.is_empty()).then_some(configured),
-                resolved_path,
-            })
-        },
-        _ => Err("invalid_antigravity_client".to_string()),
-    });
-    let mut status = tokio::time::timeout(Duration::from_secs(5), task)
-        .await
-        .map_err(|_| "antigravity_launch_path_timeout".to_string())?
-        .map_err(|error| error.to_string())??;
-    status.resolved_path = status.resolved_path.map(|path| {
-        PathBuf::from(modules::process::normalize_windows_user_facing_path(&path.to_string_lossy()))
-    });
-    Ok(status)
-}
-
-#[tauri::command]
 pub(crate) async fn switch_antigravity_cli(
     app: AppHandle,
     account_id: String,
@@ -136,7 +107,7 @@ fn resolve_command(
     Ok(build_command(&binary, &dir, custom_command.as_deref()))
 }
 
-fn find_cli() -> Option<PathBuf> {
+pub(crate) fn find_cli() -> Option<PathBuf> {
     let configured = modules::config::get_user_config().antigravity_cli_path;
     if configured.is_empty() {
         return detect_cli();

@@ -1732,6 +1732,7 @@ fn clear_local_access_usage_events_db() -> Result<(), String> {
         .map_err(|e| format!("清空 API 服务策略拒绝日志失败: {e}"))?;
     conn.execute_batch("COMMIT")
         .map_err(|e| format!("提交清空 API 服务请求日志失败: {}", e))?;
+    let _ = conn.execute_batch("VACUUM; PRAGMA wal_checkpoint(TRUNCATE);");
     REMOTE_ANALYTICS_REVISION.fetch_add(1,Ordering::AcqRel);
     Ok(())
 }

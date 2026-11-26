@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import { settlePromises } from './helpers/reactHookHarness';
 
-function fixture(options: {stale?:boolean; fail?:boolean; closed?:boolean; missingHost?:boolean; apiKey?:boolean; manualRead?:boolean}={}) {
+function fixture(options: {stale?:boolean; fail?:boolean; closed?:boolean; missingHost?:boolean; apiKey?:boolean; manualRead?:boolean; restartAck?:Promise<void>}={}) {
   const listeners=new Set<(event:any)=>void>();
   const calls:any[]=[];
   const timers = new Set<ReturnType<typeof setTimeout>>();
@@ -28,6 +28,7 @@ function fixture(options: {stale?:boolean; fail?:boolean; closed?:boolean; missi
       calls.push(message);
       if(options.fail)throw new Error('fixture bridge failed');
       if(options.missingHost)throw new Error('Connection for host ID fixture not found');
+      if(message.type==='codex-app-server-restart') return options.restartAck;
       if(message.type==='mcp-request'){
         reads++;
         if(options.manualRead)return;
@@ -44,14 +45,14 @@ function fixture(options: {stale?:boolean; fail?:boolean; closed?:boolean; missi
 }
 
 test('native reconnect waits for a new connected event and verifies the new account',async()=>{
-  const f=fixture();
+  const f=fixture({restartAck:new Promise<void>(()=>{})});
   let settled=false;
   const result=Promise.resolve(f.run()).then(value=>{settled=true;return value;});
   await settlePromises();
   assert.equal(f.calls[0].type,'codex-app-server-restart');
   assert.equal(f.calls[0].intent,'restart');
   assert.equal(f.calls[0].killCodexProcess,true);
-  assert.equal(settled,false,'IPC enqueue acknowledgement is not a refreshed connection');
+  assert.equal(settled,false,'dispatching the restart does not confirm the connection');
   f.emit({type:'codex-app-server-connection-changed',hostId:'ssh-other',state:'connected'});
   f.emit({type:'codex-app-server-connection-changed',hostId:'ssh-fixture',state:'connected',isSnapshot:true});
   f.emit({type:'codex-app-server-connection-changed',hostId:'ssh-fixture',state:'connected',isSnapshot:false});
@@ -62,6 +63,29 @@ test('native reconnect waits for a new connected event and verifies the new acco
   assert.equal((await result).ok,true);
   assert.equal(f.reads(),1);
   assert.equal(f.listeners.size,0);
+});
+
+test('cold startup confirms the restarted daemon through a requested snapshot', async () => {
+  let acknowledgeRestart!: () => void;
+  const restartAck = new Promise<void>(resolve => { acknowledgeRestart = resolve; });
+  const f = fixture({ restartAck });
+  const result = Promise.resolve(f.run({ timeoutMs: 1000 }));
+  const connected = { type: 'codex-app-server-connection-changed', hostId: 'ssh-fixture', state: 'connected' };
+  f.emit({ ...connected, isSnapshot: true });
+  await settlePromises();
+  assert.equal(f.reads(), 0, 'a snapshot before restart acknowledgement can be stale');
+  acknowledgeRestart();
+  await settlePromises();
+  assert.deepEqual(f.calls.map(call => call.type), ['codex-app-server-restart', 'request-app-server-state']);
+
+  f.emit({ ...connected, hostId: 'ssh-other', isSnapshot: true });
+  f.emit({ ...connected, state: 'connecting', isSnapshot: true });
+  f.emit(connected);
+  assert.equal(f.reads(), 0, 'verification needs the requested host snapshot or a full restart transition');
+  f.emit({ ...connected, isSnapshot: true });
+  assert.equal((await result).ok, true);
+  assert.equal(f.reads(), 1);
+  assert.equal(f.listeners.size, 0);
 });
 
 test('a stale account is reported even after reconnect and timeout removes listeners',async()=>{

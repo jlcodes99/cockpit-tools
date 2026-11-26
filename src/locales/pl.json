@@ -9,13 +9,9 @@
     "initializeWaiting": "Oczekiwanie na inicjalizację Antigravity IDE. Gdy będzie gotowe, kontynuuj ręcznie.",
     "initializeRetry": "Inicjalizacja nadal trwa. Sprawdź, czy IDE jest otwarte, i spróbuj ponownie.",
     "pathLabel": "Ścieżka uruchamiania",
-    "pathConfigured": "Skonfigurowano",
-    "pathDetected": "Wykryto automatycznie",
-    "pathInvalid": "Skonfigurowana ścieżka jest nieprawidłowa",
-    "pathCheckFailed": "Sprawdzenie ścieżki nie powiodło się",
-    "pathSaveAndRetry": "Zapisz i ponów",
     "switchAndCopy": "Przełącz i skopiuj",
     "sharedInstanceStart": "Zmień wspólne konto i uruchom",
+    "ideSharedAccountHint": "Od wersji 2.6 Antigravity IDE wszystkie instancje korzystają z jednej sesji Google. Zmiana konta w tym miejscu wpływa także na inne otwarte instancje.",
     "sharedInstanceHint": "Pozostałe instancje Antigravity pozostaną otwarte i mogą przejść na nowe konto.",
     "sharedInstanceRestart": "Ponownie uruchomi się tylko wybrana instancja.",
     "lastSharedAccount": "Ostatnio wybrane wspólne konto",
@@ -276,6 +272,7 @@
       "offline": "Brak połączenia · pamięć podręczna"
     },
     "networkErrors": {
+      "recoveryExhausted": "Powtarzające się błędy komunikacji z usługą docelową przekroczyły limit odzyskiwania tego żądania. Automatyczne ponawianie zostało zatrzymane. Przed ponowną próbą sprawdź proxy lub sieć; ten błąd nie oznacza wyczerpania limitu konta.",
       "upstream": "usługą docelową",
       "proxyConnection": "Nie udało się połączyć z {{target}} przez proxy „{{proxy}}”. Możliwy problem z proxy lub siecią. Sprawdź proxy lub wypróbuj inny węzeł.",
       "proxyTimeout": "Przekroczono czas połączenia z {{target}} przez proxy „{{proxy}}”. Możliwy problem z proxy lub siecią. Sprawdź proxy lub wypróbuj inny węzeł.",
@@ -285,6 +282,10 @@
       "directTimeout": "Przekroczono czas połączenia z {{target}}. Sprawdź sieć i spróbuj ponownie."
     },
     "codexUsage": {
+      "responseSpeed": "Tempo odpowiedzi",
+      "overallSpeedWithThinking": "Tempo z rozumowaniem",
+      "streamingSpeed": "Tempo strumieniowania",
+      "contextShort": "Kontekst",
       "title": "Limit i użycie",
       "session": "Bieżący czat",
       "available": "Dostępne",
@@ -716,6 +717,12 @@
         "singleToken": "Pojedynczy przykład (Token)",
         "singleJson": "Pojedynczy przykład (JSON)",
         "batchJson": "Przykład wsadowy (JSON)"
+      },
+      "exposeToCodex": {
+        "action": "Połącz z Codex",
+        "inProgress": "Łączenie…",
+        "success": "Połączono z Codex",
+        "failed": "Nie udało się połączyć z Codex: {{error}}"
       }
     },
     "sessionSharing": {
@@ -922,6 +929,7 @@
       "restartAll": "Restartuj wszystkie",
       "stopAll": "Zatrzymaj wszystkie",
       "start": "Uruchom",
+      "restart": "Uruchom ponownie",
       "stop": "Zatrzymaj",
       "openFolder": "Otwórz folder",
       "edit": "Edytuj",
@@ -1630,6 +1638,13 @@
       "menuBarQuotaLayoutPreview": "Podgląd układu z przykładowymi limitami",
       "menuBarQuotaLayoutHorizontal": "Jeden wiersz poziomy",
       "menuBarQuotaLayoutStacked": "Dwa zwarte wiersze",
+      "t3codeTitle": "Ustawienia T3 Code",
+      "t3codeAppPath": "Ścieżka uruchamiania T3 Code",
+      "t3codeAppPathDesc": "Pozostaw puste, aby użyć ścieżki domyślnej",
+      "t3codeAutoRefresh": "Automatyczne odświeżanie limitu T3 Code",
+      "t3codeAutoRefreshDesc": "Interwał odświeżania limitu w tle",
+      "t3codeAppUiInjection": "Kapsuła limitu w czacie T3 Code",
+      "t3codeAppUiInjectionDesc": "Po uruchomieniu T3 Code z Cockpitu pole wiadomości pokazuje rodzinę wybranego modelu i pozostały limit. Kliknij, aby zobaczyć konto i szczegóły użycia.",
       "qoderCnAppPath": "Ścieżka uruchamiania Qoder CN",
       "qoderCnAppPathDesc": "Pozostaw puste, aby wykryć automatycznie. Podczas przełączania konta klient pulpitu zostanie zamknięty i uruchomiony ponownie.",
       "qoderCnAppPathPlaceholder": "Domyślna ścieżka",
@@ -1981,6 +1996,13 @@
       "pathLabel": "Ścieżka uruchamiania {{app}}",
       "configurePath": "Ustaw ścieżkę",
       "configureHint": "Wybierz plik wykonywalny lub pozostaw pole puste, aby użyć automatycznego wykrywania.",
+      "autoDetect": "Wykryj automatycznie",
+      "noInstallation": "Nie wykryto {{app}}.",
+      "installationGuide": "Oficjalna instrukcja instalacji",
+      "copyInstallCommand": "Kopiuj polecenie instalacji",
+      "configured": "Skonfigurowano",
+      "detected": "Wykryto automatycznie",
+      "checkFailed": "Sprawdzenie ścieżki nie powiodło się",
       "cliHint": "Nie znaleziono {{app}}. Wybierz plik wykonywalny albo zainstaluj CLI i ponów wyszukiwanie.",
       "invalidPath": "Ta ścieżka nie wskazuje działającego pliku wykonywalnego {{app}}.",
       "accountAlreadySwitched": "Konto zostało już przełączone. Ponowiona zostanie tylko próba uruchomienia.",
@@ -6512,6 +6534,8 @@
       "instructionsBytes": "Instrukcje",
       "overloadRetry": "Ponowienia przy przeciążeniu",
       "overloadRecovery": "Czas odzyskiwania",
+      "historyRejectionTitle": "Niekompatybilny format historii",
+      "historyRejectionHint": "Upstream odrzucił format historii żądań. Zapisywane są tylko liczniki i flagi; treść rozmowy nie jest zapisywana.",
       "recordPayloads": "Zapisuj treść żądań",
       "recordPayloadsHint": "Domyślnie wyłączone. Ograniczone kopie żądań klienta i serwera są zapisywane lokalnie. Wyłączenie zatrzymuje nowe zapisy; zapisane treści można usunąć osobno.",
       "privacyHint": "Pola uwierzytelniania są maskowane, ale tajne dane w rozmowie mogą pozostać. Sprawdź przed kopiowaniem lub udostępnieniem.",
@@ -7078,6 +7102,10 @@
     "traeSoloCn": {
       "appPath": "Ścieżka TraeWork CN",
       "title": "Ustawienia TraeWork CN"
+    },
+    "t3code": {
+      "title": "Ustawienia T3 Code",
+      "appPath": "Ścieżka uruchamiania T3 Code"
     },
     "validation": {
       "refreshIntervalInvalid": "Wpisz liczbę całkowitą od 1 do 999 lub -1, aby wyłączyć automatyczne odświeżanie.",
@@ -7948,7 +7976,7 @@
     }
   },
   "codebuddyCli": {
-    "launchTitle": "Uruchom CodeBuddy CN",
+    "launchTitle": "Uruchom {{app}}",
     "launchDesktop": "Uruchom aplikację komputerową",
     "recheck": "Sprawdź ponownie",
     "checking": "Sprawdzanie dostępności CodeBuddy CLI…",
@@ -8247,6 +8275,9 @@
       "until": "{{model}} ograniczony w ostatnim teście, reset {{time}}",
       "unavailable": "{{model}} ograniczony w ostatnim teście",
       "failed": "Ostatni test {{model}} nieudany"
+    },
+    "exposeToCodex": {
+      "title": "Łączy przez bramę Native Rust bez kopiowania tokenu WorkBuddy"
     }
   },
   "minimaxCode": {
@@ -8458,6 +8489,12 @@
     },
     "instances": {
       "unsupported": "Wiele instancji ZCode jest dostępnych tylko w systemach macOS, Windows i Linux."
+    },
+    "exposeToCodex": {
+      "startPlan": "Odśwież limit ZCode, aby potwierdzić aktywny osobisty Z.ai Start Plan.",
+      "projectKey": "Połącz konto BigModel API Key za pomocą klucza projektu.",
+      "signIn": "Zaloguj się ponownie do ZCode i spróbuj jeszcze raz.",
+      "title": "Łączy przez bramę Native Rust bez kopiowania klucza API ZCode ani tokenu OAuth do konfiguracji Codex"
     }
   },
   "zed": {
@@ -8880,7 +8917,10 @@
       "deploySuccess": "Wdrożono do Codex: {{count}} modeli",
       "deployFailed": "Wdrożenie nie powiodło się: {{error}}",
       "useKey": "Użyj klucza",
-      "deleteConfirm": "Usunąć zapisany klucz „{{name}}”? Tej operacji nie można cofnąć."
+      "deleteConfirm": "Usunąć zapisany klucz „{{name}}”? Tej operacji nie można cofnąć.",
+      "addToGeminiCli": "Dodaj do Gemini CLI",
+      "geminiCliAdded": "Gemini CLI dodany",
+      "addToGeminiCliFailed": "Nie dodano do Gemini CLI: {{error}}"
     },
     "prefill": {
       "codexReady": "Uzupełniono ustawienia APIKEY.FUN. Sprawdź je przed dodaniem do Codex.",
@@ -9745,6 +9785,196 @@
     "errors": {
       "loadFailed": "Nie udało się wczytać zużycia tokenów: {{error}}",
       "syncFailed": "Skanowanie zużycia tokenów nie powiodło się: {{error}}"
+    }
+  },
+  "t3code": {
+    "accountConfig": {
+      "title": "Konfiguracja kont",
+      "providers": "Konta dostawców",
+      "codexCatalogPending": "Klucze zewnętrzne czekające na synchronizację modeli: {{count}}"
+    },
+    "nativeSettings": {
+      "defaultModel": "Model nowych czatów",
+      "reasoning": "Poziom rozumowania",
+      "notifications": "Powiadomienia",
+      "desktop": "Powiadomienia na pulpicie",
+      "sound": "Dźwięk",
+      "both": "Powiadomienia i dźwięk",
+      "clientDefault": "Domyślne T3 Code",
+      "connectRequired": "Uruchom T3 Code przez Cockpit, aby wczytać dostępne modele.",
+      "savedForLaunch": "Zapisano na następne uruchomienie.",
+      "saveFailed": "T3 Code nie mógł zapisać tego ustawienia.",
+      "invalidModel": "Ten model lub opcja rozumowania nie są już dostępne.",
+      "sectionTitle": "Ustawienia klienta"
+    },
+    "search": "Szukaj kont T3 Code...",
+    "flowNotice": {
+      "title": "Powiązanie dostawców wewnętrznych T3 Code (kliknij, aby przełączyć)",
+      "desc": "Wybierz spośród kont zapisanych w Cockpit, aby skonfigurować konto domyślne i konta równoległe w T3 Code.",
+      "permission": "Cockpit aktualizuje lokalne ustawienia T3 Code i zarządzane foldery dostawców. Stan i wskaźnik limitu korzystają z połączenia lokalnego.",
+      "network": "Limity są aktualizowane przez API wybranego dostawcy lub lokalną bramę."
+    },
+    "empty": "Brak kont hosta T3 Code",
+    "addAccount": "Dodaj konto T3 Code",
+    "oauth": {
+      "desc": "Najpierw zaloguj się przez Clerk w T3 Code, a następnie zaimportuj z lokalnego klienta lub wklej token Clerk.",
+      "title": "Logowanie Clerk w T3 Code",
+      "item1": "Odczytuje i zapisuje sesje z ~/.t3/userdata/clerk/clerk-tokens.json",
+      "item2": "Przypisuje niezależne profile i konta Providerów do instancji T3 Code",
+      "item3": "Wstrzykuje kapsułę limitu i tok/s na dolny pasek Composera",
+      "urlPlaceholder": "URL autoryzacji T3 Code",
+      "waiting": "Oczekiwanie na logowanie w T3 Code...",
+      "openWindow": "Otwórz w przeglądarce"
+    },
+    "token": {
+      "tab": "Token / JSON",
+      "desc": "Wklej JWT sesji Clerk lub zawartość pliku clerk-tokens.json.",
+      "placeholder": "Wklej Clerk JWT (eyJ...) lub clerk-tokens.json...",
+      "add": "Zapisz konto tokenu"
+    },
+    "import": {
+      "localDesc": "Najpierw zaloguj się do T3 Connect w lewym dolnym rogu T3 Code, a następnie zaimportuj lokalne dane poniżej (synchronizacja nastąpi po uruchomieniu).",
+      "localClient": "Importuj z lokalnego T3 Code"
+    },
+    "providerWorkspace": {
+      "switchCodexRequiresGpt": "To powiązanie wymaga modelu rozmów GPT lub Codex.",
+      "viewAccounts": "Wszystkie konta ({{count}})",
+      "accountInUse": "W użyciu",
+      "accountRestartPending": "Oczekuje na restart",
+      "switchAccount": "Zmień konto",
+      "switchingAccount": "Zmienianie konta…",
+      "switchAfterReply": "Zmiana nastąpi po zakończeniu bieżącej odpowiedzi tego dostawcy.",
+      "switchActiveRunTimeout": "Odpowiedź nadal trwa. Spróbuj ponownie po jej zakończeniu.",
+      "switchSaved": "Powiązanie zapisane. Uruchom ponownie T3 Code, aby je zastosować.",
+      "switchBusy": "W tej instancji T3 Code trwa już zmiana dostawcy.",
+      "switchTargetChanged": "Dostawca lub konto uległo zmianie. Wybierz ponownie.",
+      "defaultAccountUnavailable": "Najpierw zaimportuj obecne konto domyślne do Cockpit, aby je zachować.",
+      "defaultAccountSaved": "Zaktualizowano konto domyślne.",
+      "defaultSelectionSaved": "Zapisano wybór konta domyślnego.",
+      "defaultWaiting": "Oczekuje na zastosowanie",
+      "defaultApplyFailed": "Nie udało się zastosować konta domyślnego",
+      "accountRemoved": "Usunięto konto z T3 Code.",
+      "removeSaved": "Zapisano usunięcie. Uruchom ponownie T3 Code, aby zastosować zmianę.",
+      "accountAlreadyAdded": "To konto jest już połączone z tym środowiskiem T3 Code.",
+      "switchControlUnavailable": "Nie udało się połączyć ze sterowaniem dostawcami w T3 Code.",
+      "switchControlRejected": "T3 Code odrzucił zmianę dostawcy.",
+      "switchDetachTimeout": "Upłynął limit czasu odłączania poprzedniej sesji dostawcy.",
+      "switchVerificationFailed": "T3 Code nie mógł zweryfikować nowego konta.",
+      "switchRollbackFailed": "Nie udało się przywrócić poprzedniej konfiguracji. Sprawdź ustawienia dostawcy.",
+      "linkTab": "Łączenie kont",
+      "linkAccount": "Dodaj do T3 Code",
+      "addAccount": "Dodaj konto",
+      "unbound": "Niepołączone",
+      "modelsReady": "Dostępne modele · {{count}}",
+      "authRequired": "Wymagana autoryzacja",
+      "runtimePending": "Konfigurowanie T3 Code",
+      "runtimeNotFound": "Brak {{app}}",
+      "runtimeError": "Środowisko uruchomieniowe niedostępne",
+      "runtimeExplicitPath": "Sprawdź niestandardową ścieżkę tego dostawcy w ustawieniach dostawców agentów w T3 Code.",
+      "runtimeInstall": "Zainstaluj zarządzane środowisko",
+      "runtimeInstallStarted": "T3 Code rozpoczął instalację środowiska w tle.",
+      "platformAccount": "Konto Cockpit",
+      "replaceAccount": "Zastąp konto",
+      "noAccounts": "Brak kont dostępnych dla tego dostawcy",
+      "saved": "Zapisano powiązanie",
+      "currentAccount": "Bieżące powiązanie",
+      "runtimeStatus": "Stan działania",
+      "linkMode": "Sposób połączenia",
+      "providerInstance": "Instancja dostawcy",
+      "selectInstance": "Wybierz instancję",
+      "gatewayDisabled": "Włącz usługę Codex API przed połączeniem jej z T3 Code.",
+      "claudeCodeOnly": "Użyj konta Claude Code. To konto należy do Claude Desktop.",
+      "title": "Powiązanie i przełączanie wewnętrznych Providerów T3 Code",
+      "desc": "Konfiguruj i przełączaj instancje wieloplatformowe w standardowym pliku settings.json T3 Code, rozróżniając poświadczenia Cockpit i własne logowanie CLI.",
+      "defaultInstance": "Domyślna instancja (~/.t3)",
+      "targetInstance": "Docelowa instancja T3 Code",
+      "addProviderInstance": "Nowa instancja Providera",
+      "isolatedHome": "Izolowany katalog",
+      "sharedHome": "Środowisko domyślne",
+      "selectAccountPlaceholder": "Wybierz konto do przypisania...",
+      "quotaLabel": "Pozostało",
+      "noQuotaData": "Przypisz konto, aby zobaczyć limit",
+      "cacheHit": "Trafienia cache",
+      "modalTitle": "Nowa wewnętrzna instancja Providera T3 Code",
+      "driverKindLabel": "Typ sterownika Providera",
+      "instanceNameLabel": "Nazwa wyświetlana instancji",
+      "instanceNamePlaceholder": "np. Codex Pro #2 / Claude Work",
+      "initialAccountLabel": "Początkowe przypisane konto (opcjonalnie)",
+      "errors": {
+        "nameRequired": "Wprowadź nazwę instancji Providera"
+      },
+      "injectionConnected": "Kapsuła połączona",
+      "needsRestartNotice": "T3 Code działa. Uruchom ponownie, aby zastosować zaktualizowaną konfigurację konta.",
+      "addProviderBtn": "Dodaj dostawcę",
+      "builtinTag": "Domyślny",
+      "customTag": "Własny",
+      "sharedLegacyTag": "Wspólna konfiguracja (wybierz ponownie, aby odizolować)",
+      "switchAndVerify": "Łączenie i weryfikacja...",
+      "toggleEnabled": "Przełącz aktywność",
+      "refreshAccountQuota": "Odśwież limit konta",
+      "renameInstance": "Zmień nazwę instancji",
+      "deleteConfirmTitle": "Usuń instancję dostawcy",
+      "deleteConfirmDesc": "Odłącz konto {{name}} od T3 Code. Konto w Cockpit i historia rozmów zostaną zachowane.",
+      "verifiedReady": "Zweryfikowano · {{count}} modeli",
+      "stagedReady": "Gotowe · {{count}} modeli (restart)",
+      "needsSyncVerify": "Wymaga weryfikacji",
+      "readyOnLaunch": "Wczyta przy starcie",
+      "reverifyAccount": "Zsynchronizuj i zweryfikuj ponownie",
+      "accountPlatformsGroup": "Powiązanie konta Cockpit",
+      "cliPlatformsGroup": "Własne logowanie CLI / ACP",
+      "cliModeDesc": "Rejestruje {{platform}} zgodnie ze standardem T3 Code; logowanie i modele są zarządzane przez sam program CLI lub agenta ACP.",
+      "cliOwnLogin": "Własne logowanie CLI",
+      "cliManagedQuota": "Limit po stronie CLI",
+      "cliReady": "CLI gotowe"
+    },
+    "usageNormal": "Prawidłowe",
+    "usageAbnormal": "Błąd",
+    "usageViewDetail": "Szczegóły",
+    "usageDetailTitle": "Szczegóły użycia",
+    "usage": "Stan użycia",
+    "quota": {
+      "included": "Tunele T3 Connect",
+      "models": "Limit modeli",
+      "usedOfTotal": "{{used}} / {{total}}",
+      "updatedAt": "Zaktualizowano: {{time}}",
+      "expireAt": "Wygasa: {{time}}"
+    },
+    "quotaQuery": {
+      "restartToApply": "Uruchom ponownie T3 Code, aby zastosować",
+      "multipleModels": "Wiele modeli",
+      "failedRefreshCompact": "Błąd pobierania limitu",
+      "empty": "Brak danych o limicie",
+      "sectionTitle": "Limit"
+    },
+    "instances": {
+      "unsupported": "Wiele instancji T3 Code jest obsługiwane tylko w systemach macOS, Windows i Linux."
+    },
+    "planUnlinked": "Niepołączone",
+    "usagePending": "Oczekuje na synchronizację",
+    "syncUnavailable": "Nie udało się zsynchronizować limitu tuneli. Uruchom T3 Code z Cockpit Tools i zaloguj się na to konto.",
+    "pendingSyncIdentity": "Uruchom T3 Code do synch.",
+    "overview": {
+      "setDefaultAccount": "Ustaw jako domyślne",
+      "removeAccount": "Usuń",
+      "actions": "Działania",
+      "noLinkedAccounts": "Brak połączonych kont",
+      "defaultAffectsExisting": "Dotychczasowe rozmowy zachowają dostawcę i przy kolejnych żądaniach użyją jego nowego konta.",
+      "accountMismatch": "Niezgodność kont",
+      "localGatewayBadge": "Brama lokalna",
+      "bindAccountAction": "Powiąż konto",
+      "openPlatformPool": "Pula {{platform}}",
+      "searchProvidersPlaceholder": "Szukaj instancji, kont lub platform...",
+      "sortByDefault": "Domyślna kolejność",
+      "sortByQuota": "Według pozostałego limitu",
+      "sortByName": "Według nazwy",
+      "viewCandidateAccounts": "Konta ({{count}})",
+      "viewMoreAccounts": "+{{count}} · Pokaż więcej",
+      "platformAccountsTitle": "Konta {{platform}}",
+      "mountAsParallelInstance": "Dodaj konto równoległe",
+      "manageInSourcePlatform": "Otwórz {{platform}}",
+      "searchAccountsPlaceholder": "Szukaj kont {{platform}}...",
+      "goAddSourceAccount": "Dodaj w {{platform}}",
+      "emptyPoolDesc": "Najpierw dodaj konto na stronie {{platform}}, aby przełączyć je do T3 Code."
     }
   }
 }

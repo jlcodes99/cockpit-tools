@@ -14,6 +14,7 @@ import { WorkbuddyIcon } from '../icons/WorkbuddyIcon';
 import { MinimaxCodeIcon } from '../icons/MinimaxCodeIcon';
 import { ZedIcon } from '../icons/ZedIcon';
 import { ZcodeIcon } from '../icons/ZcodeIcon';
+import { T3CodeIcon } from '../icons/T3CodeIcon';
 import { ManualHelpIconButton } from '../ManualHelpIconButton';
 import { PlatformId } from '../../types/platform';
 import {
@@ -48,6 +49,7 @@ export type PlatformOverviewHeaderId =
   | 'qoder'
   | 'qoder_cn'
   | 'zcode'
+  | 't3code'
   | 'trae'
   | 'trae_solo'
   | 'trae_cn'
@@ -128,6 +130,10 @@ const CONFIGS: Record<PlatformOverviewHeaderId, PlatformOverviewConfig> = {
   zcode: {
     platformLabel: 'ZCode',
     overviewIcon: <ZcodeIcon className="tab-icon" />,
+  },
+  t3code: {
+    platformLabel: 'T3 Code',
+    overviewIcon: <T3CodeIcon className="tab-icon" />,
   },
   trae: {
     platformLabel: 'Trae',

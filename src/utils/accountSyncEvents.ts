@@ -41,6 +41,7 @@ const PROVIDER_PAGE_PLATFORM_MAP: Record<string, PlatformId> = {
   qoder_cn: 'qoder_cn',
   qodercn: 'qoder_cn',
   zcode: 'zcode',
+  t3code: 't3code',
   trae: 'trae',
   trae_solo: 'trae_solo',
   traesolo: 'trae_solo',

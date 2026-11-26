@@ -29,7 +29,8 @@ type InstancesAppType =
   | 'trae_solo_cn'
   | 'workbuddy'
   | 'minimax_code'
-  | 'zcode';
+  | 'zcode'
+  | 't3code';
 
 interface PlatformInstancesContentProps<TAccount extends AccountLike> {
   instanceStore: InstanceStoreState;
@@ -54,6 +55,7 @@ interface PlatformInstancesContentProps<TAccount extends AccountLike> {
   resolveStartSuccessMessage?: (instance: InstanceProfile) => string;
   isAccountAllowedForLaunchMode?: (account: TAccount, launchMode: InstanceLaunchMode) => boolean;
   toolbarExtraActions?: ReactNode;
+  onManageInstanceProviders?: (instance: InstanceProfile) => void;
 }
 
 export function PlatformInstancesContent<TAccount extends AccountLike>({
@@ -76,6 +78,7 @@ export function PlatformInstancesContent<TAccount extends AccountLike>({
   resolveStartSuccessMessage,
   isAccountAllowedForLaunchMode,
   toolbarExtraActions,
+  onManageInstanceProviders,
 }: PlatformInstancesContentProps<TAccount>) {
   const { t } = useTranslation();
 
@@ -111,6 +114,7 @@ export function PlatformInstancesContent<TAccount extends AccountLike>({
         resolveStartSuccessMessage={resolveStartSuccessMessage}
         isAccountAllowedForLaunchMode={isAccountAllowedForLaunchMode}
         toolbarExtraActions={toolbarExtraActions}
+        onManageInstanceProviders={onManageInstanceProviders}
       />
     </div>
   );

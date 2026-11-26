@@ -9,13 +9,9 @@
     "initializeWaiting": "正在等待 Antigravity IDE 初始化。完成後可手動繼續。",
     "initializeRetry": "初始化尚未完成。請確認 IDE 已開啟，再重試。",
     "pathLabel": "啟動路徑",
-    "pathConfigured": "已設定",
-    "pathDetected": "自動偵測",
-    "pathInvalid": "已設定的路徑無效",
-    "pathCheckFailed": "路徑偵測失敗",
-    "pathSaveAndRetry": "儲存並重試",
     "switchAndCopy": "切換並複製",
     "sharedInstanceStart": "切換共用帳號並啟動",
+    "ideSharedAccountHint": "Antigravity IDE 2.6 起，所有執行個體共用 Google 登入。在此切換帳號也會影響其他已開啟的執行個體。",
     "sharedInstanceHint": "其他已開啟的 Antigravity 執行個體會繼續運作，也可能同步至新帳號。",
     "sharedInstanceRestart": "只重新啟動選取的執行個體。",
     "lastSharedAccount": "最近切換的共用帳號",
@@ -276,6 +272,7 @@
       "offline": "離線 · 顯示快取"
     },
     "networkErrors": {
+      "recoveryExhausted": "連線至上游時多次失敗或逾時，已超過本次請求的復原限制，自動重試已停止。請檢查代理伺服器或網路後再試；此錯誤不代表帳號額度已耗盡。",
       "upstream": "上游服務",
       "proxyConnection": "透過代理「{{proxy}}」連線至 {{target}} 失敗，可能與代理或網路有關，請檢查代理或更換節點後重試。",
       "proxyTimeout": "透過代理「{{proxy}}」連線至 {{target}} 逾時，可能與代理或網路有關，請檢查代理或更換節點後重試。",
@@ -285,6 +282,10 @@
       "directTimeout": "連線至 {{target}} 逾時，請檢查網路後重試。"
     },
     "codexUsage": {
+      "responseSpeed": "正文速度",
+      "overallSpeedWithThinking": "含思考總速度",
+      "streamingSpeed": "串流速度",
+      "contextShort": "上下文",
       "title": "額度與用量",
       "session": "目前對話",
       "available": "可用",
@@ -721,6 +722,12 @@
         "singleToken": "單筆範例（Token）",
         "singleJson": "單筆範例（JSON）",
         "batchJson": "批次範例（JSON）"
+      },
+      "exposeToCodex": {
+        "action": "接入 Codex",
+        "inProgress": "接入中…",
+        "success": "已接入 Codex",
+        "failed": "接入 Codex 失败：{{error}}"
       }
     },
     "topRightAd": {
@@ -922,6 +929,7 @@
       "restartAll": "重啟全部",
       "stopAll": "停止全部",
       "start": "啟動",
+      "restart": "重新啟動",
       "stop": "停止",
       "openFolder": "打開目錄",
       "edit": "編輯",
@@ -1630,6 +1638,13 @@
       "menuBarQuotaLayoutPreview": "版面示意，額度為範例資料",
       "menuBarQuotaLayoutHorizontal": "橫向單行",
       "menuBarQuotaLayoutStacked": "緊湊雙行",
+      "t3codeTitle": "T3 Code 設定",
+      "t3codeAppPath": "T3 Code 啟動路徑",
+      "t3codeAppPathDesc": "留空則使用預設路徑",
+      "t3codeAutoRefresh": "T3 Code 配額自動重新整理",
+      "t3codeAutoRefreshDesc": "背景配額重新整理間隔",
+      "t3codeAppUiInjection": "T3 Code 聊天額度膠囊",
+      "t3codeAppUiInjectionDesc": "透過 Cockpit 啟動 T3 Code 後，輸入框底部會顯示目前的模型系列與剩餘額度。點開可查看帳號與用量詳情。",
       "qoderCnAppPath": "Qoder CN 啟動路徑",
       "qoderCnAppPathDesc": "留空則自動偵測；切換帳號時會自動關閉並重新啟動桌面端",
       "qoderCnAppPathPlaceholder": "預設路徑",
@@ -1981,6 +1996,13 @@
       "pathLabel": "{{app}} 啟動路徑",
       "configurePath": "設定路徑",
       "configureHint": "選擇執行檔，或留空以使用自動偵測。",
+      "autoDetect": "自動偵測",
+      "noInstallation": "未偵測到 {{app}}。",
+      "installationGuide": "官方安裝指南",
+      "copyInstallCommand": "複製安裝指令",
+      "configured": "已設定",
+      "detected": "自動偵測",
+      "checkFailed": "路徑偵測失敗",
       "cliHint": "找不到 {{app}}。請選擇執行檔，或安裝 CLI 後重新偵測。",
       "invalidPath": "此路徑下沒有可用的 {{app}} 執行檔。",
       "accountAlreadySwitched": "帳號已切換。儲存路徑後只會重試啟動客戶端。",
@@ -6512,6 +6534,8 @@
       "instructionsBytes": "指令",
       "overloadRetry": "滿載重試",
       "overloadRecovery": "復原耗時",
+      "historyRejectionTitle": "歷史結構不符合",
+      "historyRejectionHint": "上游拒絕了請求歷史的結構。僅記錄數量與標記，不儲存對話內容。",
       "recordPayloads": "記錄請求本文",
       "recordPayloadsHint": "預設關閉。僅在本機儲存有限長度的用戶端和上游請求快照；關閉後停止新記錄，既有本文可單獨清除。",
       "privacyHint": "驗證欄位會遮蔽，但對話本文中的敏感資訊未必能辨識。複製或分享前請檢查。",
@@ -7078,6 +7102,10 @@
     "traeSoloCn": {
       "appPath": "TraeWork CN 路徑",
       "title": "TraeWork CN 設定"
+    },
+    "t3code": {
+      "title": "T3 Code 設定",
+      "appPath": "T3 Code 啟動路徑"
     },
     "validation": {
       "refreshIntervalInvalid": "重新整理間隔需填寫 1-999 的整數，或填 -1 關閉自動重新整理。",
@@ -7948,7 +7976,7 @@
     }
   },
   "codebuddyCli": {
-    "launchTitle": "啟動 CodeBuddy CN",
+    "launchTitle": "啟動 {{app}}",
     "launchDesktop": "啟動桌面版",
     "recheck": "重新偵測",
     "checking": "正在偵測 CodeBuddy CLI…",
@@ -8247,6 +8275,9 @@
       "until": "{{model}} 上次探測受限，恢復時間 {{time}}",
       "unavailable": "{{model}} 上次探測受限",
       "failed": "{{model}} 上次探測失敗"
+    },
+    "exposeToCodex": {
+      "title": "僅透過 Native Rust 閘道接入，不會複製 WorkBuddy Token"
     }
   },
   "minimaxCode": {
@@ -8458,6 +8489,12 @@
     },
     "instances": {
       "unsupported": "ZCode 多開僅支援 macOS、Windows 與 Linux。"
+    },
+    "exposeToCodex": {
+      "startPlan": "請重新整理 ZCode 額度，確認已啟用個人 Z.ai Start Plan。",
+      "projectKey": "請透過 BigModel API Key 帳號接入專案金鑰。",
+      "signIn": "請重新登入 ZCode 後再試。",
+      "title": "僅透過 Native Rust 閘道接入，不會複製 ZCode API Key 或 OAuth Token 到 Codex 設定"
     }
   },
   "zed": {
@@ -8880,7 +8917,10 @@
       "deploySuccess": "已部署到 Codex：{{count}} 個模型",
       "deployFailed": "部署失敗：{{error}}",
       "useKey": "使用密鑰",
-      "deleteConfirm": "確定刪除已儲存的金鑰「{{name}}」嗎？此操作無法復原。"
+      "deleteConfirm": "確定刪除已儲存的金鑰「{{name}}」嗎？此操作無法復原。",
+      "addToGeminiCli": "加入 Gemini CLI",
+      "geminiCliAdded": "Gemini CLI 已加入",
+      "addToGeminiCliFailed": "加入 Gemini CLI 失敗：{{error}}"
     },
     "prefill": {
       "codexReady": "已填入 APIKEY.FUN 設定，請確認後新增至 Codex。",
@@ -9745,6 +9785,196 @@
     "errors": {
       "loadFailed": "讀取 Token 用量失敗：{{error}}",
       "syncFailed": "掃描 Token 用量失敗：{{error}}"
+    }
+  },
+  "t3code": {
+    "accountConfig": {
+      "title": "帳號設定",
+      "providers": "供應商帳號",
+      "codexCatalogPending": "第三方金鑰等待同步模型目錄：{{count}} 個"
+    },
+    "nativeSettings": {
+      "defaultModel": "新對話預設模型",
+      "reasoning": "推理強度",
+      "notifications": "通知",
+      "desktop": "桌面通知",
+      "sound": "提示音",
+      "both": "通知與提示音",
+      "clientDefault": "T3 Code 預設",
+      "connectRequired": "透過 Cockpit 啟動 T3 Code 後可讀取可用模型。",
+      "savedForLaunch": "已儲存，下次啟動時讀取。",
+      "saveFailed": "T3 Code 無法儲存這項設定。",
+      "invalidModel": "此模型或推理選項已無法使用。",
+      "sectionTitle": "用戶端設定"
+    },
+    "search": "搜尋 T3 Code 帳號...",
+    "flowNotice": {
+      "title": "T3 Code 內部提供方帳號綁定說明（點擊展開/收起）",
+      "desc": "從 Cockpit 已儲存的帳號中選擇，設定 T3 Code 的預設帳號和並行帳號。",
+      "permission": "Cockpit 更新本機 T3 Code 設定和受管理的提供者目錄。提供者狀態與額度膠囊透過本機連線同步。",
+      "network": "重新整理額度時會向所選帳號的提供者介面或本機閘道發出請求。"
+    },
+    "empty": "暫無 T3 Code 宿主帳號",
+    "addAccount": "新增 T3 Code 帳號",
+    "oauth": {
+      "desc": "請先在 T3 Code 用戶端完成 Clerk 登入，再點擊「從本機 T3 Code 匯入」或貼上 Clerk Token。",
+      "title": "T3 Code Clerk 登入",
+      "item1": "支援讀取並儲存 ~/.t3/userdata/clerk/clerk-tokens.json 登入態",
+      "item2": "支援為不同 T3 Code 多開實例綁定獨立設定與 Provider 帳號",
+      "item3": "支援聊天底部 Composer 欄常駐額度與閘道 tok/s 速率膠囊注入",
+      "urlPlaceholder": "T3 Code 授權網址",
+      "waiting": "等待 T3 Code 登入...",
+      "openWindow": "在瀏覽器中開啟"
+    },
+    "token": {
+      "tab": "Token / JSON",
+      "desc": "貼上 T3 Code 的 Clerk Session JWT 或 clerk-tokens.json 內容，切號時將真實寫入目標 T3 Code 實例的 clerk-tokens.json。",
+      "placeholder": "貼上 Clerk JWT (eyJ...) 或 clerk-tokens.json...",
+      "add": "儲存 Token 帳號"
+    },
+    "import": {
+      "localDesc": "請先在 T3 Code 左下角完成 T3 Connect 登入，再點擊下方按鈕匯入目前本機憑證（啟動 T3 Code 後將自動同步信箱與通道用量）。",
+      "localClient": "從本機 T3 Code 匯入"
+    },
+    "providerWorkspace": {
+      "switchCodexRequiresGpt": "此 Codex 綁定需要支援 GPT 或 Codex 對話模型。",
+      "viewAccounts": "查看全部 {{count}} 個帳號",
+      "accountInUse": "使用中",
+      "accountRestartPending": "待重新啟動",
+      "switchAccount": "切換帳號",
+      "switchingAccount": "正在切換帳號…",
+      "switchAfterReply": "切換會等此供應商目前的回覆結束。",
+      "switchActiveRunTimeout": "目前的回覆仍在產生，請等回覆結束後再切換。",
+      "switchSaved": "帳號綁定已儲存，重新啟動 T3 Code 後生效。",
+      "switchBusy": "此 T3 Code 執行個體正在變更供應商，請稍後再試。",
+      "switchTargetChanged": "供應商或帳號已變更，請重新選擇。",
+      "defaultAccountUnavailable": "請先將原本的預設帳號匯入 Cockpit，以便保留。",
+      "defaultAccountSaved": "預設帳號已更新。",
+      "defaultSelectionSaved": "已儲存預設帳號選擇。",
+      "defaultWaiting": "預設待生效",
+      "defaultApplyFailed": "預設帳號套用失敗",
+      "accountRemoved": "帳號已從 T3 Code 移除。",
+      "removeSaved": "已儲存移除操作，重新啟動 T3 Code 後生效。",
+      "accountAlreadyAdded": "此帳號已加入這個 T3 Code 環境。",
+      "switchControlUnavailable": "目前無法連線至 T3 Code 的供應商控制介面。",
+      "switchControlRejected": "T3 Code 拒絕了供應商設定變更。",
+      "switchDetachTimeout": "等待舊供應商工作階段解除綁定逾時。",
+      "switchVerificationFailed": "T3 Code 無法驗證新帳號。",
+      "switchRollbackFailed": "無法還原原供應商設定，請檢查供應商設定。",
+      "linkTab": "帳號連動",
+      "linkAccount": "新增至 T3 Code",
+      "addAccount": "新增帳號",
+      "unbound": "尚未綁定",
+      "modelsReady": "模型可用 · {{count}}",
+      "authRequired": "需要授權",
+      "runtimePending": "T3 Code 設定中",
+      "runtimeNotFound": "缺少 {{app}}",
+      "runtimeError": "執行環境無法使用",
+      "runtimeExplicitPath": "請到 T3 Code 的「代理程式提供者」設定檢查此提供者的自訂路徑。",
+      "runtimeInstall": "安裝受管理的執行環境",
+      "runtimeInstallStarted": "T3 Code 已開始在背景安裝。",
+      "platformAccount": "Cockpit 帳號",
+      "replaceAccount": "更換綁定帳號",
+      "noAccounts": "此平台沒有可接入的帳號",
+      "saved": "已儲存帳號綁定",
+      "currentAccount": "目前綁定",
+      "runtimeStatus": "執行狀態",
+      "linkMode": "接入方式",
+      "providerInstance": "提供者執行個體",
+      "selectInstance": "選擇目標執行個體",
+      "gatewayDisabled": "請先啟用 Codex API 服務，再綁定至 T3 Code。",
+      "claudeCodeOnly": "請使用 Claude Code 帳號。此帳號屬於 Claude Desktop。",
+      "title": "T3 Code 內部 Provider 帳號綁定與切換",
+      "desc": "在原版 T3 Code settings.json 中設定並切換多平台提供方執行個體，區分 Cockpit 憑證隔離直綁與 CLI 自有登入，啟動後同步執行狀態與額度膠囊。",
+      "defaultInstance": "預設實例 (~/.t3)",
+      "targetInstance": "目標 T3 Code 實例",
+      "addProviderInstance": "新建 Provider 實例",
+      "isolatedHome": "獨立目錄",
+      "sharedHome": "預設環境",
+      "selectAccountPlaceholder": "選擇要綁定並切入的帳號...",
+      "quotaLabel": "剩餘額度",
+      "noQuotaData": "綁定帳號後顯示即時配額",
+      "cacheHit": "快取命中",
+      "modalTitle": "新建 T3 Code 內部 Provider 實例",
+      "driverKindLabel": "Provider 驅動類型",
+      "instanceNameLabel": "實例顯示名稱",
+      "instanceNamePlaceholder": "例如：Codex Pro #2 / Claude Work",
+      "initialAccountLabel": "初始綁定帳號（選填）",
+      "errors": {
+        "nameRequired": "請輸入 Provider 實例名稱"
+      },
+      "injectionConnected": "注入已連線",
+      "needsRestartNotice": "T3 Code 正在執行中，新的帳號設定將於重新啟動後生效。",
+      "addProviderBtn": "新增提供方",
+      "builtinTag": "預設",
+      "customTag": "自訂",
+      "sharedLegacyTag": "共用設定（建議重選以隔離）",
+      "switchAndVerify": "綁定並驗證...",
+      "toggleEnabled": "切換啟用狀態",
+      "refreshAccountQuota": "重新整理帳號配額",
+      "renameInstance": "重新命名實例",
+      "deleteConfirmTitle": "刪除 Provider 實例",
+      "deleteConfirmDesc": "解除「{{name}}」與 T3 Code 的連結。Cockpit 中的帳號和對話記錄會保留。",
+      "verifiedReady": "已驗證 · {{count}} 個模型",
+      "stagedReady": "已就緒 · {{count}} 個模型（待重啟）",
+      "needsSyncVerify": "待同步驗證",
+      "readyOnLaunch": "啟動後載入",
+      "reverifyAccount": "重新同步並驗證憑證",
+      "accountPlatformsGroup": "Cockpit 帳號直綁",
+      "cliPlatformsGroup": "CLI / ACP 自有登入",
+      "cliModeDesc": "將按原版 T3 Code 規範註冊 {{platform}} 入口，登入態與可用模型由對應 CLI 或 ACP 處理程序自身管理。",
+      "cliOwnLogin": "CLI 自有登入",
+      "cliManagedQuota": "配額由 CLI 自身管理",
+      "cliReady": "CLI 已就緒"
+    },
+    "usageNormal": "正常",
+    "usageAbnormal": "異常",
+    "usageViewDetail": "查看詳情",
+    "usageDetailTitle": "用量狀態詳情",
+    "usage": "用量狀態",
+    "quota": {
+      "included": "T3 Connect 通道",
+      "models": "模型額度",
+      "usedOfTotal": "{{used}} / {{total}}",
+      "updatedAt": "更新：{{time}}",
+      "expireAt": "到期：{{time}}"
+    },
+    "quotaQuery": {
+      "restartToApply": "重新啟動 T3 Code 後生效",
+      "multipleModels": "多個模型",
+      "failedRefreshCompact": "配額查詢失敗",
+      "empty": "暫無配額資料",
+      "sectionTitle": "配額"
+    },
+    "instances": {
+      "unsupported": "T3 Code 多開實例僅支援 macOS、Windows 和 Linux 桌面端。"
+    },
+    "planUnlinked": "未連結",
+    "usagePending": "待同步",
+    "syncUnavailable": "無法同步通道配額。請從 Cockpit Tools 啟動 T3 Code 並登入此帳號。",
+    "pendingSyncIdentity": "待啟動同步身分",
+    "overview": {
+      "setDefaultAccount": "設為預設",
+      "removeAccount": "移除",
+      "actions": "操作",
+      "noLinkedAccounts": "尚無已連結帳號",
+      "defaultAffectsExisting": "舊對話仍使用原有的提供者入口，後續請求會使用該入口的新帳號。",
+      "accountMismatch": "帳號不一致",
+      "localGatewayBadge": "本機閘道",
+      "bindAccountAction": "綁定帳號",
+      "openPlatformPool": "{{platform}} 帳號池",
+      "searchProvidersPlaceholder": "搜尋實例、帳號或平台...",
+      "sortByDefault": "預設順序",
+      "sortByQuota": "依剩餘配額",
+      "sortByName": "依名稱",
+      "viewCandidateAccounts": "備選帳號 ({{count}})",
+      "viewMoreAccounts": "+{{count}} · 查看更多",
+      "platformAccountsTitle": "{{platform}} 帳號",
+      "mountAsParallelInstance": "新增並行帳號",
+      "manageInSourcePlatform": "前往 {{platform}}",
+      "searchAccountsPlaceholder": "搜尋 {{platform}} 帳號...",
+      "goAddSourceAccount": "前往 {{platform}} 新增帳號",
+      "emptyPoolDesc": "請先在 {{platform}} 頁面新增可用帳號，隨後即可一鍵切入 T3 Code。"
     }
   }
 }

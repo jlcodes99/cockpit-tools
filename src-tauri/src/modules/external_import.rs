@@ -67,6 +67,7 @@ fn resolve_provider_and_page(value: &str) -> Option<(&'static str, &'static str)
         "qoder_cn" | "qodercn" => Some(("qoder_cn", "qoder-cn")),
         "qoder" => Some(("qoder", "qoder")),
         "zcode" => Some(("zcode", "zcode")),
+        "t3code" | "t3_code" => Some(("t3code", "t3code")),
         "trae" => Some(("trae", "trae")),
         "workbuddy" => Some(("workbuddy", "workbuddy")),
         "minimaxcode" => Some(("minimaxcode", "minimaxcode")),

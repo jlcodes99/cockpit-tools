@@ -25,6 +25,7 @@ import {
   buildMiniMaxCodeAccountPresentation,
   buildQoderAccountPresentation,
   buildZcodeAccountPresentation,
+  buildT3codeAccountPresentation,
   buildTraeAccountPresentation,
   buildWindsurfAccountPresentation,
   buildWorkbuddyAccountPresentation,
@@ -62,6 +63,7 @@ import { applyReducedMotion } from '../utils/reducedMotion';
 import { useQoderAccountStore } from '../stores/useQoderAccountStore';
 import { useQoderCnAccountStore } from '../stores/useQoderCnAccountStore';
 import { useZcodeAccountStore } from '../stores/useZcodeAccountStore';
+import { useT3codeAccountStore } from '../stores/useT3codeAccountStore';
 import { useTraeAccountStore } from '../stores/useTraeAccountStore';
 import { useWindsurfAccountStore } from '../stores/useWindsurfAccountStore';
 import { useWorkbuddyAiAccountStore } from '../stores/useWorkbuddyAiAccountStore';
@@ -90,6 +92,7 @@ import { useWindsurfInstanceStore } from '../stores/useWindsurfInstanceStore';
 import { useWorkbuddyInstanceStore } from '../stores/useWorkbuddyInstanceStore';
 import { useMinimaxCodeInstanceStore } from '../stores/useMinimaxCodeInstanceStore';
 import { useZcodeInstanceStore } from '../stores/useZcodeInstanceStore';
+import { useT3codeInstanceStore } from '../stores/useT3codeInstanceStore';
 import { ALL_PLATFORM_IDS, isAccountPlatform, PLATFORM_PAGE_MAP, PlatformId } from '../types/platform';
 import type { InstanceProfile } from '../types/instance';
 import { isPrivacyModeEnabledByDefault, maskSensitiveValue } from '../utils/privacy';
@@ -107,6 +110,7 @@ import {
   getRecommendedMiniMaxCodeAccount,
   getRecommendedQoderAccount,
   getRecommendedZcodeAccount,
+  getRecommendedT3codeAccount,
   getRecommendedTraeAccount,
   getRecommendedWindsurfAccount,
   getRecommendedWorkbuddyAccount,
@@ -158,6 +162,7 @@ type FloatingCardAccount =
   | ReturnType<typeof useCodebuddyCnAccountStore.getState>['accounts'][number]
   | ReturnType<typeof useQoderAccountStore.getState>['accounts'][number]
   | ReturnType<typeof useZcodeAccountStore.getState>['accounts'][number]
+  | ReturnType<typeof useT3codeAccountStore.getState>['accounts'][number]
   | ReturnType<typeof useTraeAccountStore.getState>['accounts'][number]
   | ReturnType<typeof useWorkbuddyAccountStore.getState>['accounts'][number]
   | ReturnType<typeof useMinimaxCodeAccountStore.getState>['accounts'][number]
@@ -238,6 +243,8 @@ function resolveInstanceStoreApi(platformId: PlatformId): FloatingCardInstanceSt
       return useMinimaxCodeInstanceStore.getState();
     case 'zcode':
       return useZcodeInstanceStore.getState();
+    case 't3code':
+      return useT3codeInstanceStore.getState();
     case 'zed':
       return null;
   }
@@ -307,6 +314,10 @@ export function FloatingCardWindow() {
     accounts: zcodeAccounts,
     currentAccountId: zcodeCurrentId,
   } = useZcodeAccountStore();
+  const {
+    accounts: t3codeAccounts,
+    currentAccountId: t3codeCurrentId,
+  } = useT3codeAccountStore();
   const {
     accounts: traeAccounts,
     currentAccountId: traeCurrentId,
@@ -532,6 +543,9 @@ export function FloatingCardWindow() {
           break;
         case 'zcode':
           await useZcodeAccountStore.getState().fetchAccounts();
+          break;
+        case 't3code':
+          await useT3codeAccountStore.getState().fetchAccounts();
           break;
         case 'trae':
         case 'trae_solo':
@@ -836,6 +850,10 @@ export function FloatingCardWindow() {
     () => resolveCurrentAccountById(zcodeAccounts, zcodeCurrentId),
     [zcodeAccounts, zcodeCurrentId],
   );
+  const t3codeCurrent = useMemo(
+    () => resolveCurrentAccountById(t3codeAccounts, t3codeCurrentId),
+    [t3codeAccounts, t3codeCurrentId],
+  );
   const traeCurrent = useMemo(
     () => resolveCurrentAccountById(traeAccounts, traeCurrentId),
     [traeAccounts, traeCurrentId],
@@ -954,6 +972,11 @@ export function FloatingCardWindow() {
           accounts: zcodeAccounts,
           actualCurrentAccount: zcodeCurrent,
         };
+      case 't3code':
+        return {
+          accounts: t3codeAccounts,
+          actualCurrentAccount: t3codeCurrent,
+        };
       default:
         return {
           accounts: [],
@@ -997,6 +1020,8 @@ export function FloatingCardWindow() {
     zedCurrent,
     zcodeAccounts,
     zcodeCurrent,
+    t3codeAccounts,
+    t3codeCurrent,
   ]);
 
   const accounts = selectedState.accounts as FloatingCardAccount[];
@@ -1041,6 +1066,8 @@ export function FloatingCardWindow() {
         return getRecommendedQoderAccount(qoderCnAccounts, effectiveCurrentId);
       case 'zcode':
         return getRecommendedZcodeAccount(zcodeAccounts, effectiveCurrentId);
+      case 't3code':
+        return getRecommendedT3codeAccount(t3codeAccounts, effectiveCurrentId);
       case 'trae':
       case 'trae_solo':
       case 'trae_cn':
@@ -1078,6 +1105,7 @@ export function FloatingCardWindow() {
     workbuddyAccounts,
     zedAccounts,
     zcodeAccounts,
+    t3codeAccounts,
   ]) as FloatingCardAccount | null;
   const viewedAccountId = viewedAccountIds[selectedPlatform] ?? null;
   const viewedAccount = useMemo(() => {
@@ -1160,6 +1188,8 @@ export function FloatingCardWindow() {
         return buildZedAccountPresentation(viewedAccount as typeof zedAccounts[number], t);
       case 'zcode':
         return buildZcodeAccountPresentation(viewedAccount as typeof zcodeAccounts[number], t);
+      case 't3code':
+        return buildT3codeAccountPresentation(viewedAccount as typeof t3codeAccounts[number], t);
       default:
         return null;
     }
@@ -1187,10 +1217,11 @@ export function FloatingCardWindow() {
     workbuddyAccounts,
     zedAccounts,
     zcodeAccounts,
+    t3codeAccounts,
   ]);
 
   const isCurrentViewed = Boolean(viewedAccount?.id && viewedAccount.id === currentAccount?.id);
-  // Antigravity's independent windows (including weekly/Argon) must not be
+  // Antigravity's independent windows (including weekly/Carbon) must not be
   // truncated. WorkBuddy and CodeBuddy CN use the account page's grouped totals.
   const hideRelayBalance = relayBalanceDisabled && selectedPlatform === 'codex' && viewedAccount != null
     && isCodexNewApiAccount(viewedAccount as typeof codexAccounts[number]);
@@ -1271,6 +1302,9 @@ export function FloatingCardWindow() {
             break;
           case 'zcode':
             await useZcodeAccountStore.getState().refreshToken(viewedAccount.id);
+            break;
+          case 't3code':
+            await useT3codeAccountStore.getState().refreshToken(viewedAccount.id);
             break;
           case 'trae':
           case 'trae_solo':
@@ -1410,6 +1444,9 @@ export function FloatingCardWindow() {
             break;
           case 'zcode':
             await useZcodeAccountStore.getState().switchAccount(viewedAccount.id);
+            break;
+          case 't3code':
+            await useT3codeAccountStore.getState().switchAccount(viewedAccount.id);
             break;
           case 'trae':
           case 'trae_solo':

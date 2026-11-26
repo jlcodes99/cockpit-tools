@@ -1390,7 +1390,21 @@ export function WindsurfAccountsPage() {
                 )}
                 <div className="tag-filter-divider" />
                 <label className="tag-filter-group-toggle"><input type="checkbox" checked={groupByTag} onChange={(e) => setGroupByTag(e.target.checked)} /><span>{t('accounts.groupByTag', '按标签分组展示')}</span></label>
-                {tagFilter.length > 0 && (<button type="button" className="tag-filter-clear" onClick={clearTagFilter}>{t('accounts.clearFilter', '清空筛选')}</button>)}
+                {(availableTags.length > 0 || tagFilter.length > 0) && (
+                  <div className="tag-filter-actions">
+                    {availableTags.length > 0 && (
+                      <button
+                        type="button"
+                        className="tag-filter-action-btn"
+                        disabled={availableTags.every((tag) => tagFilter.includes(tag))}
+                        onClick={() => availableTags.forEach((tag) => { if (!tagFilter.includes(tag)) toggleTagFilterValue(tag); })}
+                      >
+                        {t('common.selectAll', '全选')}
+                      </button>
+                    )}
+                    {tagFilter.length > 0 && (<button type="button" className="tag-filter-clear" onClick={clearTagFilter}>{t('accounts.clearFilter', '清空筛选')}</button>)}
+                  </div>
+                )}
               </div>
             )}
           </div>

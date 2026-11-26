@@ -65,6 +65,7 @@ function script(kind: ScriptKind, overrides: Record<string, unknown> = {}) {
     if (key === 'usage_metrics') return readFileSync(new URL('../src-tauri/src/modules/codex_app_injection_usage.js', import.meta.url), 'utf8');
     if (key === 'dialog_renderer') return readFileSync(new URL('../src-tauri/src/modules/codex_app_injection_dialog.js', import.meta.url), 'utf8');
     if (key === 'dialog_styles') return JSON.stringify(readFileSync(new URL('../src-tauri/src/modules/codex_app_injection_dialog.css', import.meta.url), 'utf8'));
+    if (key === 'footer_styles') return JSON.stringify(readFileSync(new URL('../src-tauri/src/modules/codex_app_injection_footer.css', import.meta.url), 'utf8'));
     if (key === 'renderer') return readFileSync(new URL('../src-tauri/src/modules/codex_app_injection_statusline.js', import.meta.url), 'utf8');
     assert.ok(key && Object.hasOwn(arguments_, key), `unhandled template argument ${key}`);
     return JSON.stringify(arguments_[key!]);

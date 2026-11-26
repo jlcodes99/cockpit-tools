@@ -29,6 +29,8 @@ mod automatic_history;
 mod key_continuity;
 #[path = "identity_partial_history.rs"]
 mod partial_history;
+#[path = "identity_maintenance.rs"]
+pub mod maintenance;
 pub(crate) use partial_history::PartialHistory;
 #[cfg(test)]
 #[path = "identity_opaque_replay_tests.rs"]
@@ -48,6 +50,7 @@ pub struct IdentityStore {
     path: PathBuf,
     session_identity_mapping_enabled: AtomicBool,
     shared_continuation_references: AtomicBool,
+    maintenance_running: AtomicBool,
 }
 
 #[derive(Clone, Debug)]
@@ -375,6 +378,8 @@ impl IdentityStore {
         connection
             .busy_timeout(Duration::from_secs(2))
             .map_err(|error| error.to_string())?;
+        maintenance::enable_incremental_auto_vacuum_if_empty(&connection)
+            .map_err(|error| error.to_string())?;
         connection.execute_batch(
             "PRAGMA journal_mode=WAL;
              CREATE TABLE IF NOT EXISTS native_identity_v1 (
@@ -397,12 +402,13 @@ impl IdentityStore {
                 account TEXT NOT NULL, owner TEXT NOT NULL, completed_at INTEGER NOT NULL);"
         ).map_err(|error| error.to_string())?;
         rebuild::initialize(&connection).map_err(|error| error.to_string())?;
-        partial_history::initialize(&connection).map_err(|error| error.to_string())?;
+        let connection = maintenance::migrate_and_slim_on_open(&path, connection)?;
         Ok(Self {
             connection: Mutex::new(connection),
             path,
             session_identity_mapping_enabled: AtomicBool::new(true),
             shared_continuation_references: AtomicBool::new(false),
+            maintenance_running: AtomicBool::new(false),
         })
     }
 
@@ -919,7 +925,13 @@ impl IdentityStore {
                     && context.rebuild_input.as_ref().is_some_and(|input| {
                         super::responses_custom_results::replayable(input)
                     })));
+        let wait_started = std::time::Instant::now();
         let mut connection = self.connection.lock().map_err(storage)?;
+        let lock_wait = wait_started.elapsed();
+        if lock_wait >= Duration::from_secs(1) {
+            tracing::warn!(target: "codex_api", elapsed_ms = lock_wait.as_millis() as u64,
+                "[NativeAPI][slow_identity_rewrite_lock]");
+        }
         let transaction = connection
             .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
             .map_err(storage)?;
@@ -1025,6 +1037,7 @@ impl IdentityStore {
             }
         }
         transaction.commit().map_err(storage)?;
+        drop(connection);
         *headers = new_headers;
         *body = new_body;
         let pending_input = (generation.is_none() && !context.unregistered_blobs.is_empty())

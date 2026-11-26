@@ -10,6 +10,7 @@ import { useUiConfigStore } from '../stores/useUiConfigStore';
 import { useCodebuddyAccountStore } from '../stores/useCodebuddyAccountStore';
 import * as codebuddyService from '../services/codebuddyService';
 import { CodebuddyLaunchDialog } from '../components/codebuddy/CodebuddyLaunchDialog';
+import { emitCurrentAccountChanged } from '../utils/accountSyncEvents';
 import { TagEditModal } from '../components/TagEditModal';
 import { ExportJsonModal } from '../components/ExportJsonModal';
 import { ModalErrorMessage } from '../components/ModalErrorMessage';
@@ -174,6 +175,15 @@ export function CodebuddyAccountsPage() {
 
   const accounts = store.accounts;
   const cliAccount = accounts.find((account) => account.id === cliAccountId);
+  async function launchDesktop(accountId: string) {
+    try {
+      await codebuddyService.injectCodebuddyToVSCode(accountId, true);
+      store.setCurrentAccountId(accountId);
+      void emitCurrentAccountChanged({ platformId: 'codebuddy', accountId, reason: 'switch' });
+    } finally {
+      void store.fetchAccounts();
+    }
+  }
   const cliPlan = cliAccount ? getCodebuddyPlanBadge(cliAccount) : '';
   const loading = store.loading;
 
@@ -676,7 +686,6 @@ export function CodebuddyAccountsPage() {
                   <>
                     <div className="tag-filter-header">
                       <label className="group-toggle"><input type="checkbox" checked={groupByTag} onChange={() => setGroupByTag(!groupByTag)} /> {t('accounts.groupByTag', '按标签分组')}</label>
-                      {tagFilter.length > 0 && <button className="tag-filter-clear" onClick={clearTagFilter}>{t('common.shared.clear', '清除')}</button>}
                     </div>
                     <div className="tag-filter-list" style={page.tagFilterScrollContainerStyle}>
                       {availableTags.map((tag) => (
@@ -685,6 +694,21 @@ export function CodebuddyAccountsPage() {
                           <span>{tag}</span>
                         </label>
                       ))}
+                    </div>
+                    <div className="tag-filter-actions">
+                      <button
+                        type="button"
+                        className="tag-filter-action-btn"
+                        disabled={availableTags.every((tag) => tagFilter.includes(tag))}
+                        onClick={() => availableTags.forEach((tag) => { if (!tagFilter.includes(tag)) toggleTagFilterValue(tag); })}
+                      >
+                        {t('common.selectAll', '全选')}
+                      </button>
+                      {tagFilter.length > 0 && (
+                        <button type="button" className="tag-filter-clear" onClick={clearTagFilter}>
+                          {t('common.shared.clear', '清除')}
+                        </button>
+                      )}
                     </div>
                   </>
                 )}
@@ -1047,6 +1071,8 @@ export function CodebuddyAccountsPage() {
           accountLabel={maskAccountText(getCodebuddyAccountDisplayEmail(cliAccount))}
           plan={cliPlan}
           planClass={getCodebuddyTierBadgeClass(cliPlan)}
+          initialMode="cli"
+          onLaunchDesktop={() => launchDesktop(cliAccount.id)}
           onClose={() => setCliAccountId(null)}
         />
       )}

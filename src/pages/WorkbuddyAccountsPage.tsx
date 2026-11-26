@@ -3,7 +3,9 @@ import { ChevronRight, Crosshair, Sparkles } from 'lucide-react';
 import { PlatformOverviewTabsHeader, PlatformOverviewTab } from '../components/platform/PlatformOverviewTabsHeader';
 import { WorkbuddyInstancesContent } from './WorkbuddyInstancesPage';
 import { useWorkbuddyAccountStore } from '../stores/useWorkbuddyAccountStore';
+import * as codexService from '../services/codexService';
 import * as workbuddyService from '../services/workbuddyService';
+import { emitAccountsChanged } from '../utils/accountSyncEvents';
 import { syncWorkbuddyToCodebuddyCn } from '../services/codebuddyCnService';
 import {
   WorkbuddyAccount,
@@ -89,6 +91,7 @@ const workbuddyPlatformConfig: CodebuddySuiteAccountsPlatformConfig<WorkbuddyAcc
 export function WorkbuddyAccountsPage() {
   const [activeTab, setActiveTab] = useState<PlatformOverviewTab>('overview');
   const [creditAccountId, setCreditAccountId] = useState<string | null>(null);
+  const [codexBindingId, setCodexBindingId] = useState<string | null>(null);
   const [probeOpen, setProbeOpen] = useState(false);
   const [probeAccountId, setProbeAccountId] = useState<string | null>(null);
   const [selectedAccountIds, setSelectedAccountIds] = useState<string[]>([]);
@@ -136,6 +139,29 @@ export function WorkbuddyAccountsPage() {
     getDisplayEmail: (account) => getWorkbuddyAccountDisplayEmail(account),
   });
 
+  const handleExposeToCodex = async (account: WorkbuddyAccount) => {
+    if (codexBindingId) return;
+    setCodexBindingId(account.id);
+    try {
+      await codexService.addCodexAccountFromWorkbuddy(account.id);
+      await emitAccountsChanged({ platformId: 'codex', reason: 'import' });
+      page.setMessage({
+        text: page.t('common.shared.exposeToCodex.success', '已接入 Codex'),
+        tone: 'success',
+      });
+    } catch (error) {
+      console.error('[WorkBuddy] expose to Codex failed:', error);
+      page.setMessage({
+        text: page.t('common.shared.exposeToCodex.failed', '接入 Codex 失败：{{error}}', {
+          error: String(error).replace(/^Error:\s*/, ''),
+        }),
+        tone: 'error',
+      });
+    } finally {
+      setCodexBindingId(null);
+    }
+  };
+
   const accountsForInstances = useMemo(
     () =>
       [...store.accounts].sort((a, b) => {
@@ -169,17 +195,31 @@ export function WorkbuddyAccountsPage() {
     ),
     // 每张卡片操作栏里的探测入口：点一下直接带上该账号打开探测弹窗
     renderCardActionExtra: (account) => (
-      <button
-        type="button"
-        className="card-action-btn"
-        onClick={() => {
-          setProbeAccountId(account.id);
-          setProbeOpen(true);
-        }}
-        title={page.t('workbuddy.modelProbe.title', '探测模型可用性')}
-      >
-        <Crosshair size={14} />
-      </button>
+      <>
+        <button
+          type="button"
+          className="card-action-btn"
+          disabled={codexBindingId !== null}
+          aria-busy={codexBindingId === account.id}
+          onClick={() => { void handleExposeToCodex(account); }}
+          title={page.t('workbuddy.exposeToCodex.title', '仅在 Native Rust 网关中接入，不会复制 WorkBuddy Token')}
+        >
+          {codexBindingId === account.id
+            ? page.t('common.shared.exposeToCodex.inProgress', '接入中…')
+            : page.t('common.shared.exposeToCodex.action', '接入 Codex')}
+        </button>
+        <button
+          type="button"
+          className="card-action-btn"
+          onClick={() => {
+            setProbeAccountId(account.id);
+            setProbeOpen(true);
+          }}
+          title={page.t('workbuddy.modelProbe.title', '探测模型可用性')}
+        >
+          <Crosshair size={14} />
+        </button>
+      </>
     ),
     // 卡片底部「包含即将到期的积分」提示（24h 内已由右上角精确徽章展示时避免重复）
     renderCardFooterHint: (account) => {
@@ -204,7 +244,7 @@ export function WorkbuddyAccountsPage() {
     },
     // 卡片内的模型受限标识（切号前一眼确认）：可点 × 关闭
     renderCardNotice: (account) => <WorkbuddyProbeNotice accountId={account.id} />,
-  }), [page.t, probeVersion]);
+  }), [codexBindingId, page.t, probeVersion]);
   const creditAccount = store.accounts.find((account) => account.id === creditAccountId);
 
   return (

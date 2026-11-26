@@ -160,7 +160,7 @@ async fn restoring_a_previous_port_cannot_replace_a_new_active_route() {
 }
 
 #[tokio::test]
-async fn restored_entry_uses_current_direct_mode_and_forwards_without_client_restart() {
+async fn restored_entry_rejects_traffic_after_the_proxy_binding_is_removed() {
     let _env = crate::modules::test_support::env_lock()
         .lock()
         .unwrap_or_else(|e| e.into_inner());
@@ -203,13 +203,6 @@ async fn restored_entry_uses_current_direct_mode_and_forwards_without_client_res
         .await
         .unwrap();
     let target_port = echo.local_addr().unwrap().port();
-    let responder = tokio::spawn(async move {
-        let (mut socket, _) = echo.accept().await.unwrap();
-        let mut buf = [0; 4];
-        socket.read_exact(&mut buf).await.unwrap();
-        assert_eq!(&buf, b"ping");
-        socket.write_all(b"pong").await.unwrap();
-    });
     restore_target(&Target {
         account_id: id,
         port,
@@ -228,15 +221,13 @@ async fn restored_entry_uses_current_direct_mode_and_forwards_without_client_res
         client.write_all(&request).await.unwrap();
         let mut reply = [0; 10];
         client.read_exact(&mut reply).await.unwrap();
-        assert_eq!(reply[1], 0);
-        client.write_all(b"ping").await.unwrap();
-        let mut response = [0; 4];
-        client.read_exact(&mut response).await.unwrap();
-        assert_eq!(&response, b"pong");
-        responder.await.unwrap();
+        assert_ne!(reply[1], 0);
     })
     .await
     .unwrap();
+    assert!(tokio::time::timeout(Duration::from_millis(100), echo.accept())
+        .await
+        .is_err());
 }
 
 #[test]

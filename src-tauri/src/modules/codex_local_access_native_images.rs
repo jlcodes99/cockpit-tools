@@ -655,7 +655,9 @@ fn native_image_source_allowed(
     account: &CodexAccount,
     model: &str,
 ) -> bool {
-    if native_is_chatgpt_plan_account(account) {
+    if native_is_chatgpt_plan_account(account)
+        || codex_account::is_workbuddy_upstream_provider(account)
+    {
         return false;
     }
     let policy = collection
@@ -736,6 +738,30 @@ mod native_image_policy_tests {
             },
         )
     }
+    #[test]
+    fn workbuddy_cannot_be_enabled_as_an_image_source() {
+        let mut account = CodexAccount::new_api_key(
+            "workbuddy-image-fixture".into(),
+            "fixture@example.invalid".into(),
+            String::new(),
+            crate::models::codex::CodexApiProviderMode::Custom,
+            Some(codex_account::WORKBUDDY_ACP_BASE_URL.into()),
+            Some("workbuddy_acp".into()),
+            Some("WorkBuddy".into()),
+            vec!["gpt-image-2.5".into()],
+        );
+        account.openai_api_key = None;
+        account.api_credential_kind = Some(codex_account::WORKBUDDY_ACP_PROVIDER_KIND.into());
+        account.api_credential_ref = Some("dummy-workbuddy-source".into());
+        let mut config = collection();
+        config.image_generation_account_ids = vec![account.id.clone()];
+        config.image_generation_account_policies.insert(
+            account.id.clone(),
+            CodexLocalAccessImageGenerationPolicy::Enabled,
+        );
+        assert!(!native_image_source_allowed(&config, &account, "gpt-image-2.5"));
+    }
+
     #[test]
     fn image_limit_is_per_account_and_recovers_when_request_drops() {
         let host = NativeHostBridge::default();

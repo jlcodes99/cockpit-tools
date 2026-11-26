@@ -2,6 +2,7 @@
 //! Only projects and user threads verified in this profile's SQLite registry are
 //! shared. Remote/cloud state and account atoms stay in their original scope.
 use super::*;
+use crate::modules::{ssh_server_desktop_state as desktop_state, ssh_server_identity as identity};
 use sha2::{Digest, Sha256};
 #[path = "account_state_ssh.rs"]
 mod ssh;
@@ -463,16 +464,30 @@ fn merge_local(target: &mut Value, view: &Value) {
 /// Native Desktop clears top-level groups during its constructor, so restore the
 /// target owner *and* its globals together, before the existing quick repair.
 pub(crate) fn prepare(home: &Path, owner: Option<&str>) -> Result<bool, String> {
+    match desktop_state::prepare_sqlite_startup(home, owner) {
+        Ok(Some((state, changed))) => {
+            let startup_changed = ssh::prepare_startup(home, &state);
+            Ok(startup_changed || changed)
+        }
+        Ok(None) => prepare_legacy(home, owner),
+        Err(error) => {
+            crate::modules::logger::log_warn(&format!("[Codex SSH] 自动连接设置准备推迟: {error}"));
+            Ok(false)
+        }
+    }
+}
+
+fn prepare_legacy(home: &Path, owner: Option<&str>) -> Result<bool, String> {
     let Some(bytes) = read_bytes(&home.join(STATE))? else {
         return Ok(false);
     };
     let before = decode(Some(&bytes))?;
-    // Older/unscoped state is handled by the existing recovery path. Its
-    // top-level preferences do not identify an owner that we can archive.
-    if before.get(SCOPES).is_none() && before.get(PARKED).is_none() {
-        return Ok(ssh::prepare_startup(home, &before));
-    }
     let mut after = before.clone();
+    identity::inherit_scoped_auto_connect(&mut after, owner.unwrap_or(identity::SIGNED_OUT_OWNER));
+    // Desktop can store account-specific SSH preferences before creating a project archive.
+    if before.get(SCOPES).is_none() && before.get(PARKED).is_none() {
+        return finish_prepare(home, &bytes, &before, &after);
+    }
     let mut scopes = before
         .get(SCOPES)
         .or_else(|| before.get(PARKED))
@@ -572,11 +587,15 @@ pub(crate) fn prepare(home: &Path, owner: Option<&str>) -> Result<bool, String> 
         after.as_object_mut().unwrap().remove(SCOPES);
         after[PARKED] = scopes;
     }
+    finish_prepare(home, &bytes, &before, &after)
+}
+
+fn finish_prepare(home: &Path, bytes: &[u8], before: &Value, after: &Value) -> Result<bool, String> {
     if after == before {
-        return Ok(ssh::prepare_startup(home, &after));
+        return Ok(ssh::prepare_startup(home, after));
     }
-    let expected_hash: [u8; 32] = Sha256::digest(&bytes).into();
-    let content = serde_json::to_string(&after).map_err(|e| e.to_string())?;
+    let expected_hash: [u8; 32] = Sha256::digest(bytes).into();
+    let content = serde_json::to_string(after).map_err(|e| e.to_string())?;
     // Codex owns the adjacent .bak. Do not replace it with a temporary backup
     // or treat it as a plaintext credential backup to remove.
     if !crate::modules::atomic_write::restore_string_atomic_if_hash_matches(
@@ -586,7 +605,7 @@ pub(crate) fn prepare(home: &Path, owner: Option<&str>) -> Result<bool, String> 
     )? {
         return Err("CODEX_PROJECT_CHANGED".into());
     }
-    ssh::prepare_startup(home, &after);
+    ssh::prepare_startup(home, after);
     Ok(true)
 }
 

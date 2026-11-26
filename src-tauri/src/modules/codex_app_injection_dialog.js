@@ -12,14 +12,24 @@
     ? value <= 10 ? 'critical' : value <= 30 ? 'low' : value <= 60 ? 'medium' : 'high'
     : value >= 80 ? 'high' : value >= 40 ? 'medium' : value >= 10 ? 'low' : 'critical';
   const quotaPercentage = (value, kind = 'codex') => '<span class="quota-percent"' + (quotaTone(value,kind) ? ' data-cockpit-quota-tone="' + quotaTone(value,kind) + '"' : '') + '>' + esc(percentage(value)) + '</span>';
-  const badge = value => {
+  const badge = (value, raw = false, style = '', appearance) => {
     if (typeof value !== 'string' || !value.trim()) return '';
-    const key = value.trim().toLowerCase().replace(/^chatgpt[-_\s]?/, '').replace(/[-_\s]?plan$/, '');
+    const key = (appearance ?? value).trim().toLowerCase().replace(/^chatgpt[-_\s]?/, '').replace(/[-_\s]?plan$/, '');
     // Match API Service's known subscription categories. The user explicitly
     // requested these short labels; retain the raw source in the tooltip.
-    const known = {plus:['PLUS','plus'],team:['TEAM','team'],teams:['TEAM','team'],business:['BUSINESS','team'],pro:['PRO','pro'],free:['FREE','free'],enterprise:['ENTERPRISE','enterprise'],edu:['EDU','team'],go:['GO','plus'],api_key:['API','unknown']};
-    const [text,tone] = Object.hasOwn(known,key) ? known[key] : [value,'unknown'];
-    return '<span class="badge ' + tone + '" title="' + esc(value) + '">' + esc(text) + '</span>';
+    const known = {
+      plus: ['PLUS', 'plus'], team: ['TEAM', 'team'], teams: ['TEAM', 'team'],
+      business: ['BUSINESS', 'team'], pro: ['PRO', 'pro'], free: ['FREE', 'free'],
+      enterprise: ['ENTERPRISE', 'enterprise'], edu: ['EDU', 'team'], go: ['GO', 'plus'],
+      ultra: ['ULTRA', 'ultra'], max: ['MAX', 'pro'], 'max-5x': ['MAX 5X', 'pro'],
+      'max-20x': ['MAX 20X', 'ultra'], 'pro-100': ['PRO 100', 'codex-pro-lite'],
+      'pro-200': ['PRO 200', 'codex-pro-max'], 'pro-500': ['PRO 500', 'codex-pro-500'],
+      api_key: ['API', 'api-key'], 'api-key': ['API', 'api-key'],
+      'official-api': ['官API', 'codex-official-api'], 'cockpit-api': ['Cockpit Api', 'new-api-exclusive'],
+    };
+    const [text,tone] = Object.hasOwn(known,key) ? known[key] : [value, 'unknown'];
+    const variant = ['outline','soft','mono'].includes(style) ? ' t3-plan-' + style : '';
+    return '<span class="badge ' + tone + variant + '" title="' + esc(value) + '">' + esc(raw ? value : text) + '</span>';
   };
   const dot = tone => '<i class="dot ' + tone + '" aria-hidden="true"></i>';
   const metricValue = value => {
@@ -211,6 +221,15 @@
   }
   function quotaContent(root, input) {
     const {badgeKind:kind,formatMoney,shortProductLabel} = input;
+    if (input.direct) {
+      const {account, plan, windows, balances, resetLabel} = input.direct;
+      const accountRow = '<div class="direct-account"><span title="' + esc(account) + '">' + esc(account) + '</span>' + (input.accountBadge ?? badge(plan)) + '</div>';
+      const quotaTable = windows.length ? '<table class="resource-table direct-windows"><tbody>' + windows.map(row =>
+        '<tr><td title="' + esc(row.label) + '">' + esc(row.label) + '</td><td>' + (row.amount != null ? esc(row.amount) : quotaPercentage(row.remainingPercent))
+        + '</td><td title="' + esc(row.reset ? resetLabel + ' ' + row.reset : '') + '">' + esc(row.reset || missingLabel) + '</td></tr>').join('') + '</tbody></table>' : '';
+      const balanceTable = balances.length ? resourceTable([label('provider'), quotaOverviewLabel], balances.map(row => [row.name, row.value])) : '';
+      return accountRow + (quotaTable || balanceTable ? quotaTable + balanceTable : '<p class="empty-state">' + esc(quotaEmptyLabel) + '</p>');
+    }
     const remote = root.usageState?.__remoteService;
     if (remote?.product === 'cockpit-tools') {
       const budget = remote.budget;
@@ -262,20 +281,31 @@
   }
   function overview(root, input) {
     const s = state(root), summary = s.summary, session = s.session;
-    const sessionModel = session?.requestedModel || session?.model || missingLabel;
+    const sessionModel = session?.requestedModel || session?.model || input.direct?.model || missingLabel;
     const statsTitle = summary?.incomplete ? label('verifiedStatistics') : label('statistics');
     const statsHint = summary?.incomplete ? label('excludedHistory').replace(/\{\{\s*count\s*\}\}/g, String(summary.excludedUnknownRequests || 0)) : '';
     const successRate = summary && summary.requests > 0 && finite(summary.successRequests) ? percentage(summary.successRequests / summary.requests * 100) : missingLabel;
     const cost = usd(summary?.estimatedCostUsd);
     const dateOptions = root.usageState?.__remoteService?.product === 'cockpit-tools' ? {timeZone:'UTC'} : undefined;
     const range = summary && finite(summary.sinceMs) && finite(summary.untilMs) ? new Date(summary.sinceMs).toLocaleDateString(undefined,dateOptions) + ' — ' + new Date(Math.max(summary.sinceMs,summary.untilMs - 1)).toLocaleDateString(undefined,dateOptions) : missingLabel;
+    const responseSpeeds = input.speedDetails
+      ? '<dl class="response-speeds">' + input.speedDetails.map(([name, value]) =>
+        '<dt title="' + esc(name) + '">' + esc(name) + '</dt><dd>' + metricValue(value) + '</dd>').join('') + '</dl>'
+      : '';
+    const speedMetrics = input.speedDetails ? '' :
+      (input.latestSpeed ? metric(input.speedLabel, input.latestSpeed) : '')
+      + metric(label('averageSpeed'),input.averageSpeed || missingLabel);
+    const sessionMetrics = input.showSessionMetrics === false ? '' :
+      (input.contextDetail ? metric(input.contextLabel, input.contextDetail) : '')
+      + speedMetrics + metric(label('averageCache'),input.averageCache || missingLabel)
+      + metric(label('firstResponse'),ms(session?.firstResponseMs ?? input.direct?.firstResponseMs)) + responseSpeeds;
     return '<div class="overview-sections"><section class="business-section quota-block" data-resource-kind="' + esc(input.badgeKind) + '"><div class="business-label"><h3 class="section-title">' + dot('purple') + esc(root.usageState?.__remoteService ? label('remoteBudget') : input.badgeKind === 'deepseek' ? balanceLabel : label('quotaTitle')) + '</h3></div><div class="business-content">' + quotaContent(root,input) + '</div></section>'
       + '<section class="business-section session-block"><div class="business-label"><h3 class="section-title">' + dot('blue') + esc(label('session')) + '</h3></div><div class="business-content session-metrics"><dl class="session-metric model"><dt>' + esc(label('model')) + '</dt><dd title="' + esc(sessionModel) + '">' + esc(sessionModel) + '</dd>'
       + (session?.upstreamModel && session.upstreamModel !== sessionModel ? '<dd class="metric-sub" title="' + esc(session.upstreamModel) + '">↳ ' + esc(session.upstreamModel) + '</dd>' : '') + '<dd class="metric-sub">' + esc(session?.reasoningEffort || '') + '</dd></dl>'
-      + metric(label('averageSpeed'),input.averageSpeed || missingLabel) + metric(label('averageCache'),input.averageCache || missingLabel) + metric(label('firstResponse'),ms(session?.firstResponseMs)) + '</div></section>'
-      + '<section class="business-section stats-block"><div class="business-label"><h3 class="section-title" title="' + esc(statsHint) + '">' + dot('green') + esc(statsTitle) + '</h3>' + segmented('period',[['today','periodToday'],['week','periodWeek']],s.period) + '</div><div class="business-content"><div class="stats-grid">'
+      + sessionMetrics + '</div></section>'
+      + (input.direct ? '' : '<section class="business-section stats-block"><div class="business-label"><h3 class="section-title" title="' + esc(statsHint) + '">' + dot('green') + esc(statsTitle) + '</h3>' + segmented('period',[['today','periodToday'],['week','periodWeek']],s.period) + '</div><div class="business-content"><div class="stats-grid">'
       + '<dl><dt>' + esc(label('requestsCount')) + '</dt><dd>' + number(summary?.requests) + '</dd><dd class="stats-sub">' + esc(label('successRate')) + ' ' + esc(successRate) + '</dd></dl>'
-      + '<dl><dt>' + esc(label('totalTokens')) + '</dt><dd>' + number(summary?.totalTokens) + '</dd></dl><dl><dt>' + esc(label('estimatedValue')) + '</dt><dd class="value">' + esc(cost) + '</dd></dl><dl><dt>' + esc(label('avgLatency')) + '</dt><dd>' + metricValue(ms(summary?.averageLatencyMs)) + '</dd></dl></div><p class="stats-date">' + esc(range) + '</p></div></section></div>';
+      + '<dl><dt>' + esc(label('totalTokens')) + '</dt><dd>' + number(summary?.totalTokens) + '</dd></dl><dl><dt>' + esc(label('estimatedValue')) + '</dt><dd class="value">' + esc(cost) + '</dd></dl><dl><dt>' + esc(label('avgLatency')) + '</dt><dd>' + metricValue(ms(summary?.averageLatencyMs)) + '</dd></dl></div><p class="stats-date">' + esc(range) + '</p></div></section>') + '</div>';
   }
   function logs(root) {
     const s = state(root), busy = loading(s);
@@ -293,7 +323,7 @@
   function isRemoteLogView(root, s) {
     return s.remoteLogs ?? (root.usageState?.__remoteService?.product === 'cockpit-tools');
   }
-  function fit(details) {
+  function fit(details, availableHeight = Infinity) {
     const width = details.getBoundingClientRect().width;
     const chrome = ['.topbar','.tabs','.footer'].reduce((height, selector) => height + (details.querySelector(selector)?.getBoundingClientRect().height || 0), 2);
     const key = width + '|' + chrome + '|' + details.__cockpitOverviewHtml;
@@ -311,26 +341,36 @@
       if (!Number.isFinite(height) || height <= 0) return;
       details.__cockpitDialogSize = {key,height:Math.ceil(chrome + height)};
     }
-    details.style.height = Math.min(details.__cockpitDialogSize.height,700,window.innerHeight * 0.85,Math.max(0,window.innerHeight - 32)) + 'px';
+    details.style.height = Math.min(details.__cockpitDialogSize.height,700,window.innerHeight * 0.85,
+      Math.max(0,window.innerHeight - 32), Math.max(chrome, availableHeight)) + 'px';
+  }
+  function place(details, host, fitAbove = false) {
+    const anchor = host.getBoundingClientRect();
+    const width = Math.min(660, Math.max(0, window.innerWidth - 24));
+    details.style.width = width + 'px';
+    details.style.left = Math.max(12, Math.min(anchor.left + (anchor.width - width) / 2, window.innerWidth - width - 12)) + 'px';
+    fit(details, fitAbove ? anchor.top - 20 : Infinity);
+    const height = details.getBoundingClientRect().height;
+    details.style.top = Math.max(12, Math.min(anchor.top - height - 8, window.innerHeight - height - 12)) + 'px';
   }
   function unavailableText(s) {
     const keys = {unlinked_session:'unlinkedSession',remote_unsupported:'remoteUpgradeRequired',remote_unreachable:'dataFailed',statistics_preparing:'remotePreparing'};
     return label(keys[s.unavailableReason] || 'serviceUnavailable');
   }
   function render(root, details, input) {
-    query(root);
+    if (!input.direct) query(root);
     const s = state(root), busy = loading(s);
     const disabled = root.refreshing || root.hostAvailable === false;
     const unavailable = s.available === false ? unavailableText(s) : '';
     const error = root.refreshError ? usageLabels[root.refreshError] || label('refreshFailed') : s.error ? label('dataFailed') : unavailable;
     details.__cockpitOverviewHtml = overview(root,input);
     const html = '<header class="topbar"><span>' + esc(label('title')) + '</span><button class="close" type="button" data-cockpit-quota-close aria-label="' + esc(closeLabel) + '">×</button></header>'
-      + '<nav class="tabs" role="tablist" aria-label="' + esc(label('title')) + '">' + [['overview','overview'],['logs','requestsTitle']].map(([value,key]) => '<button class="tab" role="tab" id="cockpit-dialog-tab-' + value + '" aria-controls="cockpit-dialog-panel" aria-selected="' + (s.tab === value) + '" tabindex="' + (s.tab === value ? '0' : '-1') + '" type="button" data-cockpit-dialog-action="tab" data-value="' + value + '">' + esc(label(key)) + '</button>').join('') + '</nav>'
-      + '<div id="cockpit-dialog-panel" role="tabpanel" aria-labelledby="cockpit-dialog-tab-' + s.tab + '" class="panel modal-body cockpit-usage-body" data-view="' + s.tab + '">' + (s.tab === 'overview' ? details.__cockpitOverviewHtml : logs(root)) + '</div>'
+      + (input.direct ? '' : '<nav class="tabs" role="tablist" aria-label="' + esc(label('title')) + '">' + [['overview','overview'],['logs','requestsTitle']].map(([value,key]) => '<button class="tab" role="tab" id="cockpit-dialog-tab-' + value + '" aria-controls="cockpit-dialog-panel" aria-selected="' + (s.tab === value) + '" tabindex="' + (s.tab === value ? '0' : '-1') + '" type="button" data-cockpit-dialog-action="tab" data-value="' + value + '">' + esc(label(key)) + '</button>').join('') + '</nav>')
+      + '<div id="cockpit-dialog-panel"' + (input.direct ? '' : ' role="tabpanel" aria-labelledby="cockpit-dialog-tab-' + s.tab + '"') + ' class="panel modal-body cockpit-usage-body" data-view="' + s.tab + '">' + (s.tab === 'overview' ? details.__cockpitOverviewHtml : logs(root)) + '</div>'
       + '<footer class="footer"><div class="cockpit-usage-feedback" role="status" aria-live="polite">' + (error ? '<span role="alert" data-cockpit-quota-error>' + esc(error) + '</span>' : '')
       + (s.error || s.available === false ? '<button type="button" class="retry" data-cockpit-dialog-action="retry">' + esc(label('retry')) + '</button>' : '')
       + (root.hostAvailable === false ? '<span>' + esc(label('hostUnavailable')) + '</span>' : busy ? '<span class="feedback">' + esc(label('loading')) + '</span>' : '')
-      + '</div><button class="refresh" type="button" data-cockpit-quota-refresh' + (disabled ? ' disabled' : '') + '>' + esc(root.refreshing ? label('refreshing') : label('refreshData')) + '</button></footer>';
+      + '</div>' + (input.canRefresh === false ? '' : '<button class="refresh" type="button" data-cockpit-quota-refresh' + (disabled ? ' disabled' : '') + '>' + esc(root.refreshing ? label('refreshing') : label('refreshData')) + '</button>') + '</footer>';
     if (details.__cockpitDialogHtml !== html) {
       const body = details.querySelector('.cockpit-usage-body'), scroll = details.querySelector('.request-scroll');
       const top = body?.scrollTop || 0, listTop = scroll?.scrollTop || 0;
@@ -389,5 +429,5 @@
       };
     });
   }
-  return {render, fit, query, reset, cancel, refresh, rowSpeed, quotaTone};
+  return {render, place, query, reset, cancel, refresh, rowSpeed, quotaTone, badge};
 })()

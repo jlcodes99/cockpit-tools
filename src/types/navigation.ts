@@ -19,6 +19,7 @@ export type Page =
   | 'qoder'
   | 'qoder-cn'
   | 'zcode'
+  | 't3code'
   | 'trae'
   | 'trae-solo'
   | 'trae-cn'

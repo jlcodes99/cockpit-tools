@@ -21,7 +21,8 @@ export type ApiKeyFunClientId =
   | "codex_app"
   | "codex_cli"
   | "claude_code"
-  | "claude_desktop";
+  | "claude_desktop"
+  | "gemini_cli";
 
 export type ApiKeyFunPlatform = "macos" | "windows" | "linux";
 
@@ -62,7 +63,7 @@ export const APIKEY_FUN_FAMILIES: readonly ApiKeyFunFamilyPreset[] = [
     fallbackModel: "gemini-2.0-flash",
     contextWindow: 1048576,
     codexBaseUrl: "https://api.apikey.fan/v1",
-    clients: [],
+    clients: ["gemini_cli"],
   },
   {
     id: "grok",
@@ -130,12 +131,16 @@ export const APIKEY_FUN_FAMILIES: readonly ApiKeyFunFamilyPreset[] = [
 
 export const APIKEY_FUN_ANTHROPIC_BASE_URL = "https://api.apikey.fan";
 
+/** Gemini CLI 官方记录的 GOOGLE_GEMINI_BASE_URL（根地址，不带 /v1）。 */
+export const APIKEY_FUN_GOOGLE_GEMINI_BASE_URL = "https://api.apikey.fan";
+
 /** 客户端展示名（品牌名，不翻译）。 */
 export const APIKEY_FUN_CLIENT_LABELS: Record<ApiKeyFunClientId, string> = {
   codex_app: "Codex App",
   codex_cli: "Codex CLI",
   claude_code: "Claude Code",
   claude_desktop: "Claude Desktop",
+  gemini_cli: "Gemini CLI",
 };
 
 export function detectApiKeyFunPlatform(): ApiKeyFunPlatform {
@@ -186,6 +191,17 @@ export function resolveApiKeyFunGrokModel(models: readonly string[]): string | u
     return preset.prefixes.some((prefix) => id.startsWith(prefix));
   });
   return grokModels.length ? resolveDefaultModel(preset, grokModels) : undefined;
+}
+
+export function isApiKeyFunGeminiModel(model: string): boolean {
+  return (model.trim().toLowerCase().split('/').pop() ?? '').startsWith('gemini-');
+}
+
+export function resolveApiKeyFunGeminiModel(models: readonly string[]): string | undefined {
+  const preset = APIKEY_FUN_FAMILIES.find((family) => family.id === 'gemini');
+  if (!preset) return undefined;
+  const geminiModels = models.filter(isApiKeyFunGeminiModel);
+  return geminiModels.length ? resolveDefaultModel(preset, geminiModels) : undefined;
 }
 
 function escapeToml(value: string): string {
@@ -278,10 +294,43 @@ export function buildShellEnvCommands(
   return entries.map(([key, value]) => `export ${key}="${value}"`).join("\n");
 }
 
+function escapeEnvValue(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
+/**
+ * Gemini CLI 的 ~/.gemini/.env 内容。
+ *
+ * 与 Rust 侧 apikey_fun_gemini_cli 的 build_env 保持一致：三行
+ * `KEY="value"`，GOOGLE_GEMINI_BASE_URL 使用官方记录的根地址。
+ */
+export function buildGeminiCliEnv(input: { apiKey: string; model: string }): string {
+  return [
+    `GOOGLE_GEMINI_BASE_URL="${APIKEY_FUN_GOOGLE_GEMINI_BASE_URL}"`,
+    `GEMINI_API_KEY="${escapeEnvValue(input.apiKey)}"`,
+    `GEMINI_MODEL="${escapeEnvValue(input.model)}"`,
+  ].join("\n");
+}
+
+/** Gemini CLI 的 ~/.gemini/settings.json：把认证方式切到 API Key。 */
+export function buildGeminiCliSettingsJson(): string {
+  return JSON.stringify(
+    {
+      security: {
+        auth: {
+          selectedType: "gemini-api-key",
+        },
+      },
+    },
+    null,
+    2,
+  );
+}
+
 export interface ApiKeyFunClientPreview {
   client: ApiKeyFunClientId;
   /** 可一键落盘的写入类型；claude_desktop 没有落盘能力。 */
-  applyKind: "codex" | "claude_code" | null;
+  applyKind: "codex" | "claude_code" | "gemini_cli" | null;
   blocks: ApiKeyFunConfigBlock[];
 }
 
@@ -329,6 +378,25 @@ export function buildApiKeyFunClientPreview(input: {
           label: `${scope}/settings.json`,
           language: "json",
           text: json,
+        },
+      ],
+    };
+  }
+  if (client === "gemini_cli") {
+    const scope = platform === "windows" ? "%USERPROFILE%\\.gemini" : "~/.gemini";
+    return {
+      client,
+      applyKind: "gemini_cli",
+      blocks: [
+        {
+          label: `${scope}/.env`,
+          language: "text",
+          text: buildGeminiCliEnv({ apiKey, model }),
+        },
+        {
+          label: `${scope}/settings.json`,
+          language: "json",
+          text: buildGeminiCliSettingsJson(),
         },
       ],
     };

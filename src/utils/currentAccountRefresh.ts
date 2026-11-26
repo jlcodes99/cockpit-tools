@@ -22,6 +22,7 @@ export type CurrentAccountRefreshPlatform =
   | 'qoder'
   | 'qoder_cn'
   | 'zcode'
+  | 't3code'
   | 'trae'
   | 'trae_solo'
   | 'trae_cn'
@@ -44,6 +45,7 @@ export const CURRENT_ACCOUNT_REFRESH_PLATFORMS: CurrentAccountRefreshPlatform[] 
   'qoder',
   'qoder_cn',
   'zcode',
+  't3code',
   'trae',
   'trae_solo',
   'trae_cn',
@@ -85,6 +87,7 @@ export function buildDefaultCurrentAccountRefreshMinutesMap(): CurrentAccountRef
     qoder: DEFAULT_CURRENT_ACCOUNT_REFRESH_MINUTES,
     qoder_cn: DEFAULT_CURRENT_ACCOUNT_REFRESH_MINUTES,
     zcode: DEFAULT_CURRENT_ACCOUNT_REFRESH_MINUTES,
+    t3code: DEFAULT_CURRENT_ACCOUNT_REFRESH_MINUTES,
     trae: DEFAULT_CURRENT_ACCOUNT_REFRESH_MINUTES,
     trae_solo: DEFAULT_CURRENT_ACCOUNT_REFRESH_MINUTES,
     trae_cn: DEFAULT_CURRENT_ACCOUNT_REFRESH_MINUTES,

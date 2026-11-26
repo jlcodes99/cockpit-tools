@@ -67,7 +67,6 @@ fn partial_history_persists_without_claiming_completed_response_or_consuming_it(
     let c = reopened.connection.lock().unwrap();
     for table in [
         "native_rebuild_checkpoints_v1",
-        "native_rebuild_history_v1",
         "native_rebuild_active_v1",
         "native_rebuild_portable_v1",
     ] {
@@ -279,7 +278,7 @@ fn partial_history_corrupt_chunk_reports_error_without_erasing_original() {
         .connection
         .lock()
         .unwrap()
-        .execute("UPDATE native_rebuild_items_v1 SET body=x'010203'", [])
+        .execute("UPDATE native_partial_history_v1 SET transcript='zstd:corrupt'", [])
         .unwrap();
     assert!(store
         .expand_partial_history("caller", &HeaderMap::new(), &next(), usize::MAX)
@@ -305,7 +304,7 @@ fn partial_history_upgrade_preserves_existing_completed_history() {
         .lock()
         .unwrap()
         .query_row(
-            "SELECT COUNT(*) FROM native_rebuild_history_v1 WHERE response='completed'",
+            "SELECT COUNT(*) FROM native_rebuild_checkpoints_v1 WHERE response='completed'",
             [],
             |r| r.get(0),
         )
@@ -332,14 +331,14 @@ fn partial_history_large_input_round_trips_and_string_continuations_work() {
         .lock()
         .unwrap()
         .query_row(
-            "SELECT SUM(LENGTH(body)) FROM native_rebuild_items_v1",
+            "SELECT SUM(LENGTH(transcript)) FROM native_partial_history_v1",
             [],
             |r| r.get(0),
         )
         .unwrap();
     assert!(
         stored_bytes < 10_000,
-        "partial history must use compressed chunks"
+        "partial history must use inline compression for large transcripts"
     );
 }
 
@@ -359,7 +358,7 @@ fn partial_history_cannot_override_a_different_resource_owner() {
 #[test]
 fn partial_history_disk_failure_rolls_back_and_can_retry_without_losing_history() {
     let (_root, store, binding, _) = fixture();
-    store.connection.lock().unwrap().execute_batch("CREATE TRIGGER fail_partial_chunk BEFORE INSERT ON native_rebuild_items_v1 BEGIN SELECT RAISE(ABORT,'synthetic disk failure'); END;").unwrap();
+    store.connection.lock().unwrap().execute_batch("CREATE TRIGGER fail_partial_chunk BEFORE INSERT ON native_partial_history_v1 BEGIN SELECT RAISE(ABORT,'synthetic disk failure'); END;").unwrap();
     assert!(store.observe_event(&binding, &partial(output())).is_err());
     assert_eq!(count(&store), 0);
     let parents: i64 = store

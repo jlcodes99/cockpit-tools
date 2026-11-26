@@ -42,7 +42,11 @@ fn opencode_go_catalog_upgrade_adds_vision_once_and_respects_explicit_settings()
                 .filter(|model| model.model_id != "gpt-6.1-terra"
                     && !crate::modules::codex_model_catalog::GPT_6_2_MODELS.contains(&model.model_id.as_str()))
                 .collect::<Vec<_>>();
-            previous[0].context_window = Some(800_000);
+            previous
+                .iter_mut()
+                .find(|model| model.model_id == "gpt-6.1-sol")
+                .unwrap()
+                .context_window = Some(800_000);
             let old_config = serde_json::json!({
                 "version": super::EXPERIMENTAL_MODEL_CATALOG_CONFIG_VERSION,
                 "models": previous,
@@ -54,7 +58,12 @@ fn opencode_go_catalog_upgrade_adds_vision_once_and_respects_explicit_settings()
             fs::write(&path, serde_json::to_vec(&old_config).unwrap()).unwrap();
             let upgraded = super::read_experimental_model_definitions(&dir);
             assert_eq!(upgraded.iter().filter(|model| model.model_id == "gpt-6.1-terra").count(), 1);
-            assert_eq!(upgraded[0].model_id, "gpt-6.2-sol");
+            for model_id in crate::modules::codex_model_catalog::GPT_6_2_MODELS {
+                assert_eq!(
+                    upgraded.iter().filter(|model| model.model_id == *model_id).count(),
+                    1
+                );
+            }
             assert_eq!(upgraded.iter().find(|model| model.model_id == "gpt-6.1-sol").unwrap().context_window, Some(800_000));
             let old_ids = previous.iter().map(|model| model.model_id.clone()).collect::<Vec<_>>();
             let catalog_path = super::experimental_model_catalog_path(&dir);

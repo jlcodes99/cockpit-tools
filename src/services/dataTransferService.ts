@@ -72,6 +72,7 @@ import * as codebuddyCnService from './codebuddyCnService';
 import * as qoderCnService from './qoderCnService';
 import * as qoderService from './qoderService';
 import * as zcodeService from './zcodeService';
+import * as t3codeService from './t3codeService';
 import * as traeService from './traeService';
 import * as workbuddyService from './workbuddyService';
 import * as workbuddyAiService from './workbuddyAiService';
@@ -94,6 +95,7 @@ const INSTANCE_PLATFORMS = [
   'codebuddy_cn',
   'qoder',
   'zcode',
+  't3code',
   'trae',
   'workbuddy',
   'minimaxcode',
@@ -323,6 +325,7 @@ const ACCOUNT_LOADERS: Record<PlatformId, AccountLoader> = {
   qoder: async () => (await qoderService.listQoderAccounts()) as unknown as TransferAccountRecord[],
   qoder_cn: async () => (await qoderCnService.listQoderAccounts()) as unknown as TransferAccountRecord[],
   zcode: async () => (await zcodeService.listZcodeAccounts()) as unknown as TransferAccountRecord[],
+  t3code: async () => (await t3codeService.listT3codeAccounts()) as unknown as TransferAccountRecord[],
   trae: async () => (await traeService.listTraeAccounts()) as unknown as TransferAccountRecord[],
   trae_solo: async () => (await traeService.listTraeAccounts()) as unknown as TransferAccountRecord[],
   trae_cn: async () => (await traeService.listTraeAccounts()) as unknown as TransferAccountRecord[],
@@ -350,6 +353,7 @@ const LEGACY_IMPORTERS: Record<PlatformId, ((jsonContent: string) => Promise<unk
   qoder: qoderService.importQoderFromJson,
   qoder_cn: qoderCnService.importQoderFromJson,
   zcode: zcodeService.importZcodeFromJson,
+  t3code: t3codeService.importT3codeFromJson,
   trae: traeService.importTraeFromJson,
   trae_solo: traeService.importTraeFromJson,
   trae_cn: traeService.importTraeFromJson,
@@ -516,6 +520,7 @@ function buildAccountRef(platform: PlatformId, account: TransferAccountRecord): 
       ref.userId = normalizeString(account.user_id) ?? undefined;
       break;
     case 'zcode':
+    case 't3code':
       ref.email = normalizeString(account.email) ?? undefined;
       ref.userId = normalizeString(account.user_id) ?? undefined;
       ref.loginProvider = normalizeString(account.provider) ?? undefined;
@@ -599,6 +604,7 @@ function scoreAccountRef(ref: DataTransferAccountRef, account: TransferAccountRe
       addStringScore(ref.email, account.email, 10);
       break;
     case 'zcode':
+    case 't3code':
       if (ref.loginProvider && !stringEquals(ref.loginProvider, account.provider)) return 0;
       if (ref.userId && !stringEquals(ref.userId, account.user_id)) return 0;
       if (ref.email && !stringEquals(ref.email, account.email)) return 0;
@@ -1375,6 +1381,13 @@ function detectLegacyPlatform(value: unknown): PlatformId | null {
   if (id?.startsWith('workbuddy_')) return 'workbuddy';
   if (id?.startsWith('minimax_code_')) return 'minimaxcode';
   if (id?.startsWith('codebuddy_')) return 'codebuddy';
+  if (
+    id?.startsWith('t3code_') ||
+    'clerk_client_jwt' in sample ||
+    'clerk_session_token' in sample
+  ) {
+    return 't3code';
+  }
   if (
     id?.startsWith('zcode_') ||
     'zcode_jwt_token' in sample ||

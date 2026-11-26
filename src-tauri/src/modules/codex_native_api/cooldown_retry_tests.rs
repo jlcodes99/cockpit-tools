@@ -412,10 +412,6 @@ async fn http_retry_wait_retries_one_round_with_same_opaque_owner_and_respects_m
             .execute("DELETE FROM native_rebuild_checkpoints_v1", [])
             .unwrap();
         assert_eq!(evicted, 1);
-        rusqlite::Connection::open(temp.path().join("identity.sqlite"))
-            .unwrap()
-            .execute("DELETE FROM native_rebuild_history_v1", [])
-            .unwrap();
         let started = tokio::time::Instant::now();
         let response = client
             .post(&url)
