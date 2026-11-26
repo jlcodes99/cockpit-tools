@@ -8008,6 +8008,7 @@
   },
   "workbuddy": {
     "nativeCodex": {
+      "managedKeyRotation": "Este Key lo gestiona el puente de herramientas nativas de WorkBuddy. Para cambiarlo, revoca la configuración y crea una nueva.",
       "nativeRequired": "Primero crea y activa el servicio Native Rust en la página del servicio API. El modo no cambiará automáticamente.",
       "enterpriseUnsupported": "Esta primera versión aún no permite vincular de forma estricta un tenant empresarial; solo admite fuentes personales de WorkBuddy.",
       "revokedFilesPreserved": "El Key dedicado se ha revocado. Los archivos de configuración se han modificado o no se pueden eliminar de forma segura. Se han conservado todos los archivos modificados y los datos de las sesiones; revisa los archivos y vuelve a intentar la restauración.",

@@ -642,6 +642,8 @@ export function useCodexApiServicePageController() {
     fetchCurrentAccount,
   } = useCodexAccountStore();
   const [state, setState] = useState<CodexLocalAccessState | null>(null);
+  const latestStateRef = useRef(state);
+  latestStateRef.current = state;
   const stateRequestSeqRef = useRef(0);
   const stateReadsInFlightRef = useRef(0);
   const collection = state?.collection ?? null;
@@ -1544,6 +1546,14 @@ export function useCodexApiServicePageController() {
       return true;
     } catch (err) {
       if (propagateError) throw err;
+      const message = String(err).replace(/^Error:\s*/, "");
+      if (message === "WORKBUDDY_DELEGATE_KEY_ROTATION_UNSUPPORTED") {
+        setError(t(
+          "workbuddy.nativeCodex.managedKeyRotation",
+          "This key is managed by the WorkBuddy native bridge. To change it, revoke the profile and create a new one.",
+        ));
+        return false;
+      }
       if (
         presentWindowsOperationError({
           error: err,
@@ -2324,6 +2334,18 @@ export function useCodexApiServicePageController() {
   };
 
   const handleRotateApiKey = async (apiKeyId: string) => {
+    // An older rendered row/handler must still consult the latest rendered page state.
+    const rejectManagedRotation = () => {
+      const key = latestStateRef.current?.collection?.apiKeys.find((item) => item.id === apiKeyId);
+      if (!key?.workbuddyDelegate) return false;
+      setNotice("");
+      setError(t(
+        "workbuddy.nativeCodex.managedKeyRotation",
+        "This key is managed by the WorkBuddy native bridge. To change it, revoke the profile and create a new one.",
+      ));
+      return true;
+    };
+    if (rejectManagedRotation()) return;
     const confirmed = await confirmDialog(
       t(
         "codex.localAccess.apiKeyRotateConfirm",
@@ -2336,7 +2358,7 @@ export function useCodexApiServicePageController() {
         cancelLabel: t("common.cancel", "取消"),
       },
     );
-    if (!confirmed) return;
+    if (!confirmed || rejectManagedRotation()) return;
     await runAction(
       async () => {
         const next =

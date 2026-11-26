@@ -169,6 +169,7 @@ mod tests {
     include!("codex_local_access_tests_key_recovery.rs");
     include!("codex_local_access_tests_service_transitions.rs");
     include!("codex_local_access_tests_project_switch.rs");
+    include!("codex_local_access_tests_workbuddy_rotation.rs");
     include!("codex_local_access_tests_timeout_config.rs");
     include!("codex_local_access_tests_provider_activation.rs");
     include!("codex_local_access_tests_account_references.rs");

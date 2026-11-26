@@ -8008,6 +8008,7 @@
   },
   "workbuddy": {
     "nativeCodex": {
+      "managedKeyRotation": "Dieser Key wird von der nativen WorkBuddy-Werkzeugbrücke verwaltet. Um ihn zu ändern, widerrufe die Konfiguration und erstelle eine neue.",
       "nativeRequired": "Erstelle und aktiviere zuerst den Native-Rust-Dienst auf der Seite für den API-Dienst. Der Modus wird nicht automatisch gewechselt.",
       "enterpriseUnsupported": "Die erste Version kann noch keinen bestimmten Unternehmensmandanten zuverlässig binden. Es werden nur persönliche WorkBuddy-Quellen unterstützt.",
       "revokedFilesPreserved": "Der dedizierte Key wurde widerrufen. Die Konfigurationsdateien wurden geändert oder können nicht sicher entfernt werden. Alle geänderten Dateien und Sitzungsdaten wurden beibehalten. Prüfe die Dateien und versuche die Wiederherstellung erneut.",

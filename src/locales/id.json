@@ -8189,6 +8189,7 @@
   },
   "workbuddy": {
     "nativeCodex": {
+      "managedKeyRotation": "Key ini dikelola oleh penghubung alat native WorkBuddy. Untuk menggantinya, cabut konfigurasi ini lalu buat konfigurasi baru.",
       "nativeRequired": "Buat dan aktifkan layanan Native Rust terlebih dahulu di halaman layanan API. Mode tidak akan dialihkan secara otomatis.",
       "enterpriseUnsupported": "Versi awal belum dapat mengikat tenant perusahaan tertentu secara ketat; hanya sumber WorkBuddy pribadi yang didukung.",
       "revokedFilesPreserved": "Key khusus telah dicabut. Berkas konfigurasi telah diubah atau tidak dapat dibersihkan dengan aman. Semua berkas yang diubah dan data sesi tetap disimpan; periksa berkas tersebut, lalu coba pemulihan lagi.",

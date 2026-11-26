@@ -8008,6 +8008,7 @@
   },
   "workbuddy": {
     "nativeCodex": {
+      "managedKeyRotation": "이 Key는 WorkBuddy 네이티브 도구 브리지에서 관리합니다. 변경하려면 이 설정을 폐기한 후 새로 만드세요.",
       "nativeRequired": "먼저 API 서비스 페이지에서 Native Rust 서비스를 만들고 활성화하세요. 모드는 자동으로 전환되지 않습니다.",
       "enterpriseUnsupported": "첫 버전에서는 기업 테넌트를 확실하게 고정할 수 없어 개인 WorkBuddy 계정만 지원합니다.",
       "revokedFilesPreserved": "전용 Key가 폐기되었습니다. 설정 파일이 수정되었거나 안전하게 정리할 수 없어 수정된 파일과 세션 데이터를 모두 보존했습니다. 파일을 확인한 후 복원을 다시 시도할 수 있습니다.",

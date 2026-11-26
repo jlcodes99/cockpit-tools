@@ -8603,6 +8603,7 @@
   },
   "workbuddy": {
     "nativeCodex": {
+      "managedKeyRotation": "This key is managed by the WorkBuddy native bridge. To change it, revoke the profile and create a new one.",
       "nativeRequired": "First create and enable a Native Rust service on the API Service page. The mode will not be switched automatically.",
       "enterpriseUnsupported": "This first release cannot strictly pin an enterprise tenant; only personal WorkBuddy sources are supported.",
       "revokedFilesPreserved": "The dedicated key has been revoked. Configuration files were changed or could not be safely cleaned up. All changed files and session data have been preserved; inspect the files before retrying restore.",

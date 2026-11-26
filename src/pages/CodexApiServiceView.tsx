@@ -960,6 +960,11 @@ export function CodexApiServiceView(props: CodexApiServiceViewProps) {
             />
             <div className="codex-api-service-table">
               {(collection?.apiKeys ?? []).map((apiKey) => {
+                const managedRotationNotice = apiKey.workbuddyDelegate ? t(
+                  "workbuddy.nativeCodex.managedKeyRotation",
+                  "This key is managed by the WorkBuddy native bridge. To change it, revoke the profile and create a new one.",
+                ) : undefined;
+                const rotationNoticeId = `${codexApiKeyInspectionCardId(apiKey.id)}-rotation-policy`;
                 const labelDraft = apiKeyDrafts[apiKey.id] ?? apiKey.label;
                 const unsavedPolicy =
                   apiKeyPolicyDrafts[apiKey.id] ??
@@ -1083,8 +1088,10 @@ export function CodexApiServiceView(props: CodexApiServiceViewProps) {
                           type="button"
                           className="folder-icon-btn"
                           onClick={() => void handleRotateApiKey(apiKey.id)}
-                          disabled={busy}
-                          title={t("codex.localAccess.rotateKey")}
+                          disabled={busy || Boolean(apiKey.workbuddyDelegate)}
+                          title={managedRotationNotice ?? t("codex.localAccess.rotateKey")}
+                          aria-label={managedRotationNotice ?? t("codex.localAccess.rotateKey")}
+                          aria-describedby={managedRotationNotice ? rotationNoticeId : undefined}
                         >
                           <RefreshCw size={14} />
                         </button>
@@ -1101,6 +1108,11 @@ export function CodexApiServiceView(props: CodexApiServiceViewProps) {
                         </button>
                       </div>
                     </div>
+                    {managedRotationNotice && (
+                      <p id={rotationNoticeId} className="codex-api-service-field-hint">
+                        {managedRotationNotice}
+                      </p>
+                    )}
                     <div className="api-key-details-row">
                       <div
                         className={`api-key-routing-summary ${

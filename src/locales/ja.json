@@ -8008,6 +8008,7 @@
   },
   "workbuddy": {
     "nativeCodex": {
+      "managedKeyRotation": "この Key は WorkBuddy ネイティブツールブリッジによって管理されています。変更するには、この設定を取り消して、新しい設定を作成してください。",
       "nativeRequired": "先に API サービスページで Native Rust サービスを作成し、有効にしてください。モードは自動で切り替わりません。",
       "enterpriseUnsupported": "初期バージョンでは企業テナントを厳密に固定できないため、個人用の WorkBuddy ソースのみ対応しています。",
       "revokedFilesPreserved": "専用 Key は失効済みです。設定ファイルが変更されているか、安全に削除できないため、変更されたファイルとセッションデータはすべて保持されています。ファイルを確認してから復元を再試行できます。",

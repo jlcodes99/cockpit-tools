@@ -8008,6 +8008,7 @@
   },
   "workbuddy": {
     "nativeCodex": {
+      "managedKeyRotation": "Bu Key, WorkBuddy yerel araç köprüsü tarafından yönetilir. Değiştirmek için yapılandırmayı iptal edin ve yeni bir yapılandırma oluşturun.",
       "nativeRequired": "Önce API hizmeti sayfasında Native Rust hizmetini oluşturup etkinleştirin. Mod otomatik olarak değiştirilmez.",
       "enterpriseUnsupported": "İlk sürümde kurumsal kiracıya kesin bağlama henüz sağlanamıyor. Yalnızca kişisel WorkBuddy hesapları desteklenir.",
       "revokedFilesPreserved": "Özel Key iptal edildi. Yapılandırma dosyaları değiştirilmiş veya güvenle temizlenemiyor; değiştirilen tüm dosyalar ve oturum verileri korundu. Dosyaları kontrol ettikten sonra geri yüklemeyi yeniden deneyebilirsiniz.",

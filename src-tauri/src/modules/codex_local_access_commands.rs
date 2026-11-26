@@ -1228,6 +1228,17 @@ async fn remove_local_access_accounts_inner(
     Ok((snapshot_state().await?, removed_account_ids))
 }
 
+// Managed profiles pin the original local key in their ownership marker.
+// Generic rotation must not strand the profile before its key can be revoked.
+fn ensure_local_access_api_key_rotation_allowed(
+    api_key: &CodexLocalAccessApiKey,
+) -> Result<(), String> {
+    if api_key.workbuddy_delegate.is_some() {
+        return Err("WORKBUDDY_DELEGATE_KEY_ROTATION_UNSUPPORTED".into());
+    }
+    Ok(())
+}
+
 pub async fn rotate_local_access_api_key() -> Result<CodexLocalAccessState, String> {
     ensure_runtime_loaded_without_start().await?;
 
@@ -1254,6 +1265,7 @@ pub async fn rotate_local_access_api_key() -> Result<CodexLocalAccessState, Stri
             .iter_mut()
             .find(|item| item.id == primary_id)
         {
+            ensure_local_access_api_key_rotation_allowed(api_key)?;
             api_key.key = generate_local_api_key();
             api_key.updated_at = now;
             api_key.last_used_at = None;
@@ -1496,6 +1508,7 @@ pub async fn rotate_local_access_named_api_key(
     else {
         return Err("API Key 不存在".to_string());
     };
+    ensure_local_access_api_key_rotation_allowed(api_key)?;
     api_key.key = generate_local_api_key();
     api_key.updated_at = now_ms();
     api_key.last_used_at = None;

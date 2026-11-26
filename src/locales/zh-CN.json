@@ -8603,6 +8603,7 @@
   },
   "workbuddy": {
     "nativeCodex": {
+      "managedKeyRotation": "此 Key 由 WorkBuddy 原生工具桥管理；如需更换，请撤销该配置后重新创建。",
       "nativeRequired": "请先在 API 服务页面创建并启用 Native Rust 服务；不会自动切换模式。",
       "enterpriseUnsupported": "首版尚不能严格绑定企业租户，仅支持个人 WorkBuddy 来源。",
       "revokedFilesPreserved": "专属 Key 已撤销。配置文件已被修改或无法安全清理，所有修改文件与会话数据均已保留；可检查文件后重试恢复。",

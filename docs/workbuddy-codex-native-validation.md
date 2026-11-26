@@ -78,6 +78,22 @@ Rebased the independent feature commit onto the upstream squash merge of #3301 (
 
 The broader pre-integration failure disclosures above remain applicable; they were not silently converted into passing results.
 
+## Managed-key security follow-up on v1.5.2
+
+The initial integration results above describe the earlier #3301-based build. This follow-up merged upstream v1.5.2 (`b418133c`) into the published feature branch without rewriting its history. The single UI conflict was resolved by retaining the upstream icon action and the separate native tool-bridge action.
+
+- The new named-command regression was first executed before the backend fix. It failed because the original command succeeded instead of rejecting the managed-key reset; this was not a compile-only or source-grep test.
+- Both backend rotation entry points now reject a typed managed key before modifying or persisting its material. Six command-level tests cover enabled/disabled targets, the legacy first-enabled/first-item fallback, preservation of disk/runtime/marker state, later revocation and user-session preservation, and ordinary-key compatibility.
+- The disabled fixtures model a real previously enabled grant followed by a persisted disable. The first broad follow-up run caught an invalid fixture assumption about a first write of an already-disabled key; the fixture was corrected through real storage writes without weakening assertions or changing production revocation behavior.
+- Final WorkBuddy Rust run: **179 passed, 0 failed, 2 ignored**. The same installed-process path probe remains explicitly excluded; ignored real-client/inference checks were not invoked.
+- Final selected frontend run: **87 passed, 0 failed**, including **16 new production View/controller/shared-Modal regressions**. Both generic named-key controls and the legacy settings-modal action are protected and recheck current state after asynchronous confirmation.
+- All 18 locales contain the new explanation. Locale validation passed with **9,232 keys per locale**, no missing static references and no unintended shared-English translation values. Full TypeScript typecheck and diff checks passed.
+- Broader Local Access suite: **1,103 passed, 0 failed, 8 ignored**. Its first run hit the outer sandbox's process-inspection restriction and subsequent shared-lock poisoning; the exact suite passed after an explicitly approved retry outside that outer restriction. No production permission or Codex sandbox setting was changed.
+- Additional Native API run using the same compiled test binary: **1,438 passed, 1 failed, 8 ignored**. The image-open-budget test `exhausted_image_stream_open_budget_can_retry_an_alternate_before_output` received HTTP 503 instead of 200; its fixture has a 30 ms timeout. Three isolated reruns passed, but the complete suite is **not** counted as green, and no passing pristine-base reproduction is claimed. The image test file is unchanged from the upstream v1.5.2 base; no unrelated image/WebSocket behavior was modified to hide this result.
+- Production frontend build passed (**2,765 modules**). Existing mixed-import and bundle-size warnings remain; new test-file formatting and feature diff checks passed.
+- Independent read-only review found no additional P1/P2 issue in this change. This is not a security proof or a substitute for test execution.
+- No additional real WorkBuddy inference was performed. SHA-256, profile ownership comparisons and monotonic revocation checks were deliberately retained; alert #579 was not dismissed or declared resolved. See the [security review](workbuddy-codex-native-security.md) for the hash purposes, unavailable alert trace and remaining boundaries.
+
 ## Claims deliberately not made
 
 - No Windows installed-build, Codex desktop injection, different WorkBuddy CLI version, arbitrary model, malicious CLI containment or process-restart recovery claim.

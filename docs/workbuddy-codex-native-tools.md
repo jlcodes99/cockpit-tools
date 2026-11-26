@@ -16,7 +16,7 @@ This is an **opt-in Native API Service integration**, separate from the existing
    Keep using that independent `CODEX_HOME` for this connection. The ordinary Codex configuration is not overwritten. The profile contains only a scoped **Cockpit local key**, not the WorkBuddy access token.
 5. Start a new Codex conversation in your project. Keep Codex's own approval and sandbox settings appropriate for that project. Do not assume the WorkBuddy CLI's private working directory is an operating-system security sandbox.
 
-Each profile permits only its selected WorkBuddy source and public model. There is no account-pool fallback, automatic provider reselection, or fallback to the old text-only bridge. If the service port changes, revoke the old profile and create a new one.
+Each profile permits only its selected WorkBuddy source and public model. There is no account-pool fallback, automatic provider reselection, or fallback to the old text-only bridge. If the service port changes, revoke the old profile and create a new one. Dedicated local keys cannot be reset through the generic API Service key controls: revoke the managed profile and create a new one instead. This restriction does not prevent WorkBuddy itself from refreshing its upstream access token.
 
 ## Scope and limits
 
@@ -34,6 +34,10 @@ Each profile permits only its selected WorkBuddy source and public model. There 
 The native bridge dialog lists all managed profiles, including those whose WorkBuddy source has been removed. Use **撤销专属 Key 并恢复此配置** to revoke a profile.
 
 Revocation is permanent for that key identity: unrelated delayed settings/usage saves cannot re-enable it. Create a new profile/key to authorize a new connection. Unmodified owned configuration/authentication files are removed, while Codex sessions and other user data are preserved. If you changed the generated files, the matching key is still revoked but the changed files are retained; the dialog explains that cleanup was not completed and lets you retry after inspection.
+
+## Security review
+
+See [the hash-use and managed-key security review](workbuddy-codex-native-security.md) for the fingerprint data flows, the managed-key rotation restriction, and the remaining filesystem/CodeQL review boundaries. A successful functional test run is not a substitute for resolving a security finding with its actual data-flow evidence.
 
 ## Verification boundary
 

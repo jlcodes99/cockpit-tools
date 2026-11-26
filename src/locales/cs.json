@@ -8008,6 +8008,7 @@
   },
   "workbuddy": {
     "nativeCodex": {
+      "managedKeyRotation": "Tento klíč spravuje nativní most nástrojů WorkBuddy. Chcete-li jej změnit, zneplatněte konfiguraci a vytvořte novou.",
       "nativeRequired": "Nejprve na stránce služby API vytvořte a povolte službu Native Rust; režim se automaticky nepřepne.",
       "enterpriseUnsupported": "První verze zatím nedokáže spolehlivě navázat konkrétního firemního tenanta; podporuje pouze osobní zdroje WorkBuddy.",
       "revokedFilesPreserved": "Vyhrazený Key byl zneplatněn. Konfigurační soubory byly změněny nebo je nelze bezpečně odstranit, proto byly všechny změněné soubory i data relací zachovány. Zkontrolujte soubory a zkuste obnovení znovu.",

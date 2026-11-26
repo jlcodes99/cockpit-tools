@@ -8008,6 +8008,7 @@
   },
   "workbuddy": {
     "nativeCodex": {
+      "managedKeyRotation": "Key này do cầu nối công cụ gốc của WorkBuddy quản lý. Để thay đổi, hãy thu hồi cấu hình này rồi tạo cấu hình mới.",
       "nativeRequired": "Trước tiên, hãy tạo và bật dịch vụ Native Rust trên trang dịch vụ API. Chế độ sẽ không tự động thay đổi.",
       "enterpriseUnsupported": "Phiên bản đầu tiên chưa bảo đảm ràng buộc chính xác với bên thuê doanh nghiệp; chỉ hỗ trợ tài khoản WorkBuddy cá nhân.",
       "revokedFilesPreserved": "Key chuyên dụng đã được thu hồi. Các tệp cấu hình đã bị sửa đổi hoặc không thể dọn dẹp an toàn, nên toàn bộ tệp đã sửa và dữ liệu phiên đều được giữ lại. Bạn có thể kiểm tra tệp rồi thử khôi phục lại.",

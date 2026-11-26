@@ -247,6 +247,11 @@ interface CodexLocalAccessModalProps {
 
 type CopyableField = "apiPortUrl" | "baseUrl" | "apiKey" | "modelId";
 
+function isManagedWorkbuddyRotationTarget(collection: CodexLocalAccessState["collection"]) {
+  const target = collection?.apiKeys.find((key) => key.enabled) ?? collection?.apiKeys[0];
+  return Boolean(target?.workbuddyDelegate);
+}
+
 export function CodexLocalAccessModal({
   isOpen,
   mode,
@@ -291,6 +296,12 @@ export function CodexLocalAccessModal({
   const { t } = useTranslation();
   const saving = externalSaving;
   const collection = state?.collection ?? null;
+  const latestRotationCollectionRef = useRef(collection);
+  latestRotationCollectionRef.current = collection;
+  const managedRotationNotice = isManagedWorkbuddyRotationTarget(collection) ? t(
+    "workbuddy.nativeCodex.managedKeyRotation",
+    "This key is managed by the WorkBuddy native bridge. To change it, revoke the profile and create a new one.",
+  ) : undefined;
   const localAccessStatus = resolveCodexLocalAccessRuntimeStatus(state?.collection, state);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -1339,7 +1350,11 @@ export function CodexLocalAccessModal({
       const completed = await task();
       if (completed !== false) setNotice(successText);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      const message = err instanceof Error ? err.message : String(err);
+      setError(message.replace(/^Error:\s*/, "") === "WORKBUDDY_DELEGATE_KEY_ROTATION_UNSUPPORTED" ? t(
+        "workbuddy.nativeCodex.managedKeyRotation",
+        "This key is managed by the WorkBuddy native bridge. To change it, revoke the profile and create a new one.",
+      ) : message);
     }
   };
 
@@ -1786,6 +1801,16 @@ export function CodexLocalAccessModal({
   };
 
   const handleResetKey = async () => {
+    const rejectManagedRotation = () => {
+      if (!isManagedWorkbuddyRotationTarget(latestRotationCollectionRef.current)) return false;
+      setNotice("");
+      setError(t(
+        "workbuddy.nativeCodex.managedKeyRotation",
+        "This key is managed by the WorkBuddy native bridge. To change it, revoke the profile and create a new one.",
+      ));
+      return true;
+    };
+    if (rejectManagedRotation()) return;
     const confirmed = await confirmDialog(
       t(
         "codex.localAccess.rotateConfirmMessage",
@@ -1799,7 +1824,7 @@ export function CodexLocalAccessModal({
       },
     );
 
-    if (!confirmed) {
+    if (!confirmed || rejectManagedRotation()) {
       return;
     }
 
@@ -2542,7 +2567,9 @@ export function CodexLocalAccessModal({
                               type="button"
                               className="btn btn-secondary btn-sm"
                               onClick={() => void handleResetKey()}
-                              disabled={saving || testing || starting}
+                              disabled={saving || testing || starting || Boolean(managedRotationNotice)}
+                              title={managedRotationNotice}
+                              aria-describedby={managedRotationNotice ? "codex-local-access-managed-key-rotation" : undefined}
                             >
                               {saving ? (
                                 <RefreshCw
@@ -2556,6 +2583,11 @@ export function CodexLocalAccessModal({
                             </button>
                           </div>
                         </div>
+                        {managedRotationNotice && (
+                          <p id="codex-local-access-managed-key-rotation" className="codex-local-access-config-hint">
+                            {managedRotationNotice}
+                          </p>
+                        )}
                         <code
                           className="codex-local-access-code"
                           title={collection.apiKey}
