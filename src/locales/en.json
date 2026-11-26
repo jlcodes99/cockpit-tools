@@ -8163,15 +8163,28 @@
       "title": "Common settings",
       "language": "T3 Code language"
     },
+    "platformOrder": {
+      "title": "Platform order",
+      "hint": "Drag the handles to reorder platform groups in the account overview.",
+      "saveFailed": "Could not save the platform order. Try again. {{error}}"
+    },
     "desktopPrivacy": {
       "title": "T3 Code privacy settings",
-      "enable": "Enable privacy mode",
-      "connection": "Your phone can still pair and stay connected for real-time use when these options are off.",
+      "enableAll": "Enable all telemetry",
+      "disableAll": "Disable all telemetry",
+      "statusOn": "On",
+      "statusOff": "Off",
+      "connection": "Phones can still pair and communicate with the computer in real time when telemetry is off.",
       "launchScope": "Telemetry settings apply to the default instance launched from Cockpit Tools.",
       "restartPending": "Settings saved. Restart T3 Code to apply the telemetry changes.",
       "environmentBlocked": "Disabled by {{variable}}.",
       "policyBlocked": "Disabled by system policy.",
       "linked": "Turning off usage analytics also turns off connection tracing.",
+      "statusPending": "Inactive",
+      "doNotTrack": {
+        "label": "Do Not Track",
+        "description": "DO_NOT_TRACK pauses usage analytics and connection tracing. Your choices stay saved."
+      },
       "analytics": {
         "label": "Usage analytics",
         "description": "Sends app version, platform and usage statistics to T3 Code."

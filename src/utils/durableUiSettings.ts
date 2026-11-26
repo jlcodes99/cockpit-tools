@@ -16,6 +16,7 @@ const bool = (value: string) => value === '0' || value === '1';
 export const FLOATING_CARD_PLATFORM_STORAGE_KEY = 'agtools.floating_card.platform';
 export const ANTIGRAVITY_LAUNCH_CLIENT_STORAGE_KEY = 'agtools.antigravity.launch_client.v1';
 export const CODEBUDDY_CN_LAUNCH_MODE_STORAGE_KEY = 'agtools.codebuddy_cn.launch_mode.v1';
+export const T3CODE_PLATFORM_ORDER_STORAGE_KEY = 'agtools.t3code.platform_order.v1';
 const topLayout = (value: string) => {
   try {
     const parsed = JSON.parse(value);
@@ -67,6 +68,10 @@ const settings = {
   },
   'agtools.t3code.accounts_view_mode': {
     valid: (value: string) => ['list', 'grid'].includes(value),
+  },
+  [T3CODE_PLATFORM_ORDER_STORAGE_KEY]: {
+    valid: value => value !== 'null' && jsonArrayOrNull(value),
+    portable: false,
   },
   'agtools.codex_show_code_review_quota': {
     valid: bool, event: 'agtools:codex-code-review-quota-visibility-changed', detail: (value: string | null) => value === '1',

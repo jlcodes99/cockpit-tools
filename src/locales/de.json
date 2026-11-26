@@ -9779,15 +9779,28 @@
       "title": "Häufige Einstellungen",
       "language": "Sprache von T3 Code"
     },
+    "platformOrder": {
+      "title": "Plattformreihenfolge",
+      "hint": "Ziehe an den Griffen, um die Plattformgruppen in der Kontoübersicht neu zu ordnen.",
+      "saveFailed": "Die Plattformreihenfolge konnte nicht gespeichert werden. Versuche es erneut. {{error}}"
+    },
     "desktopPrivacy": {
       "title": "T3 Code Datenschutz",
-      "enable": "Datenschutzmodus aktivieren",
-      "connection": "Das Smartphone lässt sich auch bei deaktivierten Optionen koppeln und in Echtzeit nutzen.",
+      "enableAll": "Alles einschalten",
+      "disableAll": "Telemetrie deaktivieren",
+      "statusOn": "Ein",
+      "statusOff": "Aus",
+      "connection": "Auch bei ausgeschalteter Telemetrie kann das Telefon gekoppelt werden und in Echtzeit mit dem Computer kommunizieren.",
       "launchScope": "Die Telemetrie-Einstellungen gelten für die aus Cockpit Tools gestartete Standardinstanz.",
       "restartPending": "Gespeichert. Telemetrie-Änderungen werden nach einem Neustart von T3 Code wirksam.",
       "environmentBlocked": "Durch die Umgebungsvariable {{variable}} deaktiviert.",
       "policyBlocked": "Durch die Systemrichtlinie deaktiviert.",
       "linked": "Das Abschalten der Nutzungsanalyse schaltet auch die Verbindungsdiagnose ab.",
+      "statusPending": "Noch nicht aktiv",
+      "doNotTrack": {
+        "label": "Nicht verfolgen",
+        "description": "DO_NOT_TRACK pausiert Nutzungsanalyse und Verbindungsverfolgung. Ihre Einstellungen bleiben gespeichert."
+      },
       "analytics": {
         "label": "Nutzungsanalyse",
         "description": "Sendet App-Version, Plattform und Nutzungsstatistiken an T3 Code."

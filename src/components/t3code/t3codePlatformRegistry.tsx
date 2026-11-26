@@ -85,6 +85,28 @@ const PLATFORM_SPEC_MAP = new Map<T3CodeDriverKind, T3codePlatformSpec>(
   T3CODE_PLATFORM_SPECS.map((spec) => [spec.driver, spec]),
 );
 
+export function getOrderedT3codePlatforms(savedOrder: string | null): readonly T3codePlatformSpec[] {
+  if (!savedOrder) return T3CODE_PLATFORM_SPECS;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(savedOrder);
+  } catch {
+    return T3CODE_PLATFORM_SPECS;
+  }
+  if (!Array.isArray(parsed)) return T3CODE_PLATFORM_SPECS;
+
+  const remaining = new Map<string, T3codePlatformSpec>(PLATFORM_SPEC_MAP);
+  const ordered: T3codePlatformSpec[] = [];
+  for (const driver of parsed) {
+    if (typeof driver !== 'string') continue;
+    const spec = remaining.get(driver);
+    if (!spec) continue;
+    ordered.push(spec);
+    remaining.delete(driver);
+  }
+  return [...ordered, ...remaining.values()];
+}
+
 export function getT3codePlatformSpec(driver: T3CodeDriverKind): T3codePlatformSpec {
   return PLATFORM_SPEC_MAP.get(driver) ?? T3CODE_PLATFORM_SPECS[0];
 }

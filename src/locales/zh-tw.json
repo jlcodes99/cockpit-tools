@@ -9779,15 +9779,28 @@
       "title": "常用設定",
       "language": "T3 Code 語言"
     },
+    "platformOrder": {
+      "title": "平台排序",
+      "hint": "拖曳把手，調整帳號總覽中的平台分組順序。",
+      "saveFailed": "無法儲存平台順序，請重試。{{error}}"
+    },
     "desktopPrivacy": {
       "title": "T3 Code 隱私設定",
-      "enable": "一鍵開啟隱私模式",
-      "connection": "關閉這三項後，手機仍可配對並與電腦即時通訊。",
+      "enableAll": "一鍵開啟遙測",
+      "disableAll": "一鍵關閉遙測",
+      "statusOn": "已開啟",
+      "statusOff": "已關閉",
+      "connection": "關閉遙測後，手機仍可配對並與電腦即時通訊。",
       "launchScope": "遙測設定適用於由 Cockpit Tools 啟動的 T3 Code 預設執行個體。",
       "restartPending": "設定已儲存。重新啟動 T3 Code 後，遙測設定生效。",
       "environmentBlocked": "已由環境變數 {{variable}} 關閉。",
       "policyBlocked": "已由系統原則關閉。",
       "linked": "關閉產品使用分析時，連線追蹤也會關閉。",
+      "statusPending": "暫未生效",
+      "doNotTrack": {
+        "label": "禁止追蹤",
+        "description": "DO_NOT_TRACK 開啟時暫停產品使用分析和桌面連線追蹤。各項開關的選擇會保留。"
+      },
       "analytics": {
         "label": "產品使用分析",
         "description": "向 T3 Code 傳送應用程式版本、平台和使用統計。"

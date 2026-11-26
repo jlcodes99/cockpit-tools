@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, ExternalLink, RefreshCw, Search, X } from 'lucide-react';
+import { AlertTriangle, Check, ExternalLink, Plus, RefreshCw, Search, Settings2, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { ModalErrorMessage, useModalErrorState } from '../ModalErrorMessage';
 import { useEscCloseTopmost } from '../../hooks/useEscClose';
@@ -41,6 +41,8 @@ export function T3codeModals({
   const modalError = useModalErrorState();
   const dialogRef = useRef<HTMLFormElement>(null);
   const add = modal.kind === 'add';
+  const runtimeSetup = modal.kind === 'runtime';
+  const remove = modal.kind === 'remove';
   const driver = add ? modal.driver : modal.instance.driver;
   const spec = getT3codePlatformSpec(driver);
   const accounts = add ? getAvailableProviderAccounts(workspace, driver) : [];
@@ -50,10 +52,10 @@ export function T3codeModals({
       .some((value) => value?.toLowerCase().includes(query));
   });
   const selected = accounts.some((account) => account.id === selectedId);
-  const runtimeSetup = modal.kind === 'runtime';
   const disabled = busy || pathSaving;
   const action = t(add ? 't3code.providerWorkspace.addAccount'
     : runtimeSetup ? 'appPath.missing.configurePath' : 't3code.overview.removeAccount');
+  const HeaderIcon = add ? Plus : runtimeSetup ? Settings2 : AlertTriangle;
 
   const close = useCallback(() => {
     if (!disabled) onClose();
@@ -82,15 +84,26 @@ export function T3codeModals({
 
   if (typeof document === 'undefined') return null;
   return createPortal(
-    <div className="modal-overlay">
-      <form className="modal t3code-dialog" ref={dialogRef} tabIndex={-1}
-        role="dialog" aria-modal="true" aria-labelledby="t3code-dialog-title"
+    <div className="modal-overlay t3code-modal-overlay">
+      <form
+        className={`modal t3code-dialog${remove ? ' is-compact' : ''}`}
+        ref={dialogRef}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="t3code-dialog-title"
         onSubmit={(event) => {
           event.preventDefault();
           if (!disabled) void submit();
-        }}>
-        <div className="modal-header">
-          <h2 id="t3code-dialog-title">{action} · {spec.label}</h2>
+        }}
+      >
+        <div className="modal-header t3code-dialog-header">
+          <div className="t3code-dialog-title-wrap">
+            <span className={`t3code-dialog-title-icon${remove ? ' is-danger' : ''}`} aria-hidden="true">
+              <HeaderIcon size={17} />
+            </span>
+            <h2 id="t3code-dialog-title">{action} · {spec.label}</h2>
+          </div>
           <button className="modal-close" type="button" aria-label={t('common.close')} disabled={disabled} onClick={close}>
             <X size={16} />
           </button>
@@ -106,29 +119,31 @@ export function T3codeModals({
           )}
           {add ? (
             <div className="t3code-switch-picker">
-              <div className="t3code-switch-picker-top">
-                {accounts.length > 0 && (
-                  <div className="search-box t3code-modal-search">
-                    <Search size={15} className="search-icon" />
-                    <input type="search" value={search} disabled={disabled} aria-label={t('common.search')}
-                      placeholder={t('common.search')} onChange={(event) => {
-                        setSearch(event.target.value);
-                        setSelectedId('');
-                        modalError.clear();
-                      }} />
-                  </div>
-                )}
-                {onNavigate && (
-                  <button type="button" className="btn btn-ghost btn-sm t3code-inline-link-btn" disabled={disabled}
-                    onClick={() => {
-                      onClose();
-                      onNavigate(spec.navPage);
-                    }}>
-                    <ExternalLink size={13} />
-                    {t('t3code.overview.goAddSourceAccount', { platform: spec.label })}
-                  </button>
-                )}
-              </div>
+              {(accounts.length > 0 || onNavigate) && (
+                <div className="t3code-switch-picker-top">
+                  {accounts.length > 0 && (
+                    <div className="search-box t3code-modal-search">
+                      <Search size={15} className="search-icon" />
+                      <input type="search" value={search} disabled={disabled} aria-label={t('common.search')}
+                        placeholder={t('common.search')} onChange={(event) => {
+                          setSearch(event.target.value);
+                          setSelectedId('');
+                          modalError.clear();
+                        }} />
+                    </div>
+                  )}
+                  {onNavigate && (
+                    <button type="button" className="btn btn-secondary btn-sm t3code-inline-link-btn" disabled={disabled}
+                      onClick={() => {
+                        onClose();
+                        onNavigate(spec.navPage);
+                      }}>
+                      <ExternalLink size={13} />
+                      {t('t3code.overview.goAddSourceAccount', { platform: spec.label })}
+                    </button>
+                  )}
+                </div>
+              )}
               {matches.length ? (
                 <div className="t3code-picker-list" role="group" aria-label={t('t3code.providerWorkspace.platformAccount')}>
                   {matches.map((account) => {
@@ -142,32 +157,51 @@ export function T3codeModals({
                           setSelectedId(account.id);
                         }}>
                         <span className="t3code-picker-option-head">
+                          <span className={`t3code-picker-radio${isSelected ? ' is-checked' : ''}`} aria-hidden="true">
+                            {isSelected && <Check size={12} className="t3code-picker-check" />}
+                          </span>
                           <span className="t3code-picker-option-name" title={label}>{label}</span>
                           {renderPlanBadge(driver, account.id, account.planBadge, account.isApiService)}
-                          {isSelected && <Check size={15} className="t3code-picker-check" aria-hidden="true" />}
                         </span>
-                        <T3codeQuotaSection driver={driver} windows={account.windows}
-                          quotaSummaryGroups={account.quotaSummaryGroups} providerQuota={account.providerQuota}
-                          allowQuotaOverflow={account.isApiService}
-                          compact emptyLabel={t('t3code.quotaQuery.empty')} />
+                        <div className="t3code-picker-option-quota">
+                          <T3codeQuotaSection driver={driver} windows={account.windows}
+                            quotaSummaryGroups={account.quotaSummaryGroups} providerQuota={account.providerQuota}
+                            allowQuotaOverflow={account.isApiService}
+                            compact emptyLabel={t('t3code.quotaQuery.empty')} />
+                        </div>
                       </button>
                     );
                   })}
                 </div>
               ) : (
-                <p className="t3code-picker-empty">
-                  {t(accounts.length ? 'common.shared.noMatch.title' : 't3code.providerWorkspace.noAccounts')}
-                </p>
+                <div className="t3code-picker-empty-box">
+                  <p className="t3code-picker-empty">
+                    {t(accounts.length ? 'common.shared.noMatch.title' : 't3code.providerWorkspace.noAccounts')}
+                  </p>
+                </div>
               )}
             </div>
           ) : modal.kind === 'runtime' ? (
             <T3codeRuntimeSetup instance={modal.instance} workspace={workspace} />
           ) : (
-            <p className="t3code-confirm-text">
-              {t('t3code.providerWorkspace.deleteConfirmDesc', {
-                name: maskAccountText(modal.instance.boundAccountEmail || modal.instance.displayName),
-              })}
-            </p>
+            <div className="t3code-confirm-card">
+              <div className="t3code-confirm-account">
+                <span className="t3code-confirm-account-name">
+                  {maskAccountText(modal.instance.boundAccountEmail || modal.instance.displayName)}
+                </span>
+                {renderPlanBadge(
+                  modal.instance.driver,
+                  modal.instance.boundAccountId,
+                  modal.instance.boundAccountPlan,
+                  modal.instance.boundIsApiService,
+                )}
+              </div>
+              <p className="t3code-confirm-text">
+                {t('t3code.providerWorkspace.deleteConfirmDesc', {
+                  name: maskAccountText(modal.instance.boundAccountEmail || modal.instance.displayName),
+                })}
+              </p>
+            </div>
           )}
         </div>
         <div className="modal-footer t3code-dialog-footer">

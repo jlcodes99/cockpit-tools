@@ -18,20 +18,59 @@ const LAUNCH_SETTINGS: &str = "COCKPIT_T3CODE_PRIVACY";
 const ENV_KEYS: &[&str] = &[TELEMETRY, DO_NOT_TRACK, OTEL, STANDARD_OTEL];
 static SETTINGS_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
-#[derive(Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 struct LaunchSettings {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    analytics: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tracing: Option<bool>,
+    #[serde(rename = "doNotTrack", skip_serializing_if = "Option::is_none")]
+    do_not_track: Option<bool>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct StoredLaunchSettings {
+    #[serde(flatten)]
+    current: LaunchSettings,
+    #[serde(default)]
     analytics_disabled: bool,
+    #[serde(default)]
     tracing_disabled: bool,
 }
 
 impl LaunchSettings {
-    fn marker(self) -> &'static str {
-        match (self.analytics_disabled, self.tracing_disabled) {
-            (false, false) => "",
-            (false, true) => "tracing",
-            (true, false) => "analytics",
-            (true, true) => "both",
+    fn marker(self) -> String {
+        [self.analytics, self.tracing, self.do_not_track]
+            .into_iter()
+            .map(|value| match value {
+                Some(true) => '1',
+                Some(false) => '0',
+                None => '-',
+            })
+            .collect()
+    }
+
+    fn from_marker(marker: &str) -> Self {
+        // Previous builds only wrote overrides that turned telemetry off.
+        let flags = match marker {
+            "analytics" => "0--",
+            "tracing" => "-0-",
+            "both" => "00-",
+            flags => flags,
+        };
+        let bit = |flag| match flag {
+            b'1' => Some(true),
+            b'0' => Some(false),
+            _ => None,
+        };
+        match flags.as_bytes() {
+            [analytics, tracing, do_not_track] => Self {
+                analytics: bit(*analytics),
+                tracing: bit(*tracing),
+                do_not_track: bit(*do_not_track),
+            },
+            _ => Self::default(),
         }
     }
 }
@@ -39,6 +78,7 @@ impl LaunchSettings {
 #[derive(Default, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct PrivacyPatch {
+    do_not_track: Option<bool>,
     analytics: Option<bool>,
     tracing: Option<bool>,
     agent_activity: Option<bool>,
@@ -48,17 +88,20 @@ pub struct PrivacyPatch {
 #[serde(rename_all = "camelCase")]
 struct OptionState {
     enabled: bool,
+    selected: bool,
     blocked_by: Option<&'static str>,
 }
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PrivacyState {
+    do_not_track: bool,
     analytics: OptionState,
     tracing: OptionState,
     agent_activity: bool,
     restart_required: bool,
     privacy_mode_saved: bool,
+    all_enabled_saved: bool,
 }
 
 type Environment = std::collections::HashMap<String, String>;
@@ -76,9 +119,22 @@ fn settings_path() -> Result<PathBuf, String> {
 }
 
 fn read_settings(path: &Path) -> Result<LaunchSettings, String> {
-    read_optional(path)?
-        .map(|text| serde_json::from_str(&text).map_err(|error| error.to_string()))
-        .unwrap_or_else(|| Ok(LaunchSettings::default()))
+    let Some(text) = read_optional(path)? else {
+        return Ok(LaunchSettings::default());
+    };
+    let stored: StoredLaunchSettings =
+        serde_json::from_str(&text).map_err(|error| error.to_string())?;
+    Ok(LaunchSettings {
+        analytics: stored
+            .current
+            .analytics
+            .or(stored.analytics_disabled.then_some(false)),
+        tracing: stored
+            .current
+            .tracing
+            .or(stored.tracing_disabled.then_some(false)),
+        do_not_track: stored.current.do_not_track,
+    })
 }
 
 fn activity_path() -> Result<PathBuf, String> {
@@ -121,14 +177,24 @@ fn inherited_environment() -> Environment {
 
 fn apply_launch_settings(settings: LaunchSettings, environment: &mut Environment) {
     environment.remove(LAUNCH_SETTINGS);
-    if settings.analytics_disabled {
-        environment.insert(TELEMETRY.into(), "false".into());
+    if let Some(enabled) = settings.do_not_track {
+        // T3 Code fills a missing value from the login shell. Pass a
+        // nonempty value even for an explicit opt-out of Do Not Track.
+        environment.insert(DO_NOT_TRACK.into(), if enabled { "1" } else { "0" }.into());
     }
-    if settings.tracing_disabled {
+    if let Some(enabled) = settings.analytics {
+        environment.insert(TELEMETRY.into(), enabled.to_string());
+    }
+    if settings.analytics == Some(false) || settings.do_not_track == Some(true) {
         environment.insert(OTEL.into(), "true".into());
+    } else if let Some(enabled) = settings.tracing {
+        let sdk_disabled = !enabled
+            || yes(&environment_flag(environment, DO_NOT_TRACK))
+            || no(&environment_flag(environment, TELEMETRY));
+        environment.insert(OTEL.into(), sdk_disabled.to_string());
     }
     if settings != LaunchSettings::default() {
-        environment.insert(LAUNCH_SETTINGS.into(), settings.marker().into());
+        environment.insert(LAUNCH_SETTINGS.into(), settings.marker());
     }
 }
 
@@ -233,22 +299,25 @@ fn no(value: &str) -> bool {
     matches!(value, "false" | "no" | "off" | "0" | "n")
 }
 
+fn environment_flag(environment: &Environment, key: &str) -> String {
+    environment
+        .get(key)
+        .map(|value| value.trim().to_ascii_lowercase())
+        .unwrap_or_default()
+}
+
 fn blocked_sources(
     environment: &Environment,
     managed_policy: bool,
 ) -> (Option<&'static str>, Option<&'static str>) {
-    let flag = |key: &str| {
-        environment
-            .get(key)
-            .map(|value| value.trim().to_ascii_lowercase())
-            .unwrap_or_default()
-    };
+    if managed_policy {
+        return (Some("managedPolicy"), Some("managedPolicy"));
+    }
+    let flag = |key| environment_flag(environment, key);
     let analytics = if yes(&flag(DO_NOT_TRACK)) {
         Some(DO_NOT_TRACK)
     } else if no(&flag(TELEMETRY)) {
         Some(TELEMETRY)
-    } else if managed_policy {
-        Some("managedPolicy")
     } else {
         None
     };
@@ -265,6 +334,29 @@ fn blocked_sources(
     (analytics, trace)
 }
 
+fn option_states(
+    settings: LaunchSettings,
+    mut environment: Environment,
+    managed_policy: bool,
+) -> (bool, OptionState, OptionState) {
+    apply_launch_settings(settings, &mut environment);
+    let do_not_track = yes(&environment_flag(&environment, DO_NOT_TRACK));
+    let (analytics_source, tracing_source) = blocked_sources(&environment, managed_policy);
+    let analytics = OptionState {
+        enabled: analytics_source.is_none(),
+        selected: settings.analytics.unwrap_or(analytics_source.is_none()),
+        blocked_by: analytics_source
+            .filter(|_| managed_policy || settings.analytics != Some(false)),
+    };
+    let tracing = OptionState {
+        enabled: tracing_source.is_none(),
+        selected: settings.tracing.unwrap_or(tracing_source.is_none()),
+        blocked_by: tracing_source
+            .filter(|_| managed_policy || (analytics.enabled && settings.tracing != Some(false))),
+    };
+    (do_not_track, analytics, tracing)
+}
+
 async fn state(settings: LaunchSettings, agent_activity: bool) -> Result<PrivacyState, String> {
     let (running, managed_policy) = tokio::task::spawn_blocking(|| {
         Ok::<_, String>((running_environment()?, managed_policy_disables_telemetry()))
@@ -273,16 +365,22 @@ async fn state(settings: LaunchSettings, agent_activity: bool) -> Result<Privacy
     .map_err(|error| error.to_string())??;
 
     let mut environment = inherited_environment();
-    let applied = running
-        .as_ref()
-        .and_then(|running| running.get(LAUNCH_SETTINGS))
-        .map(String::as_str)
-        .unwrap_or_default();
+    let applied = LaunchSettings::from_marker(
+        running
+            .as_ref()
+            .and_then(|running| running.get(LAUNCH_SETTINGS))
+            .map(String::as_str)
+            .unwrap_or_default(),
+    );
     if let Some(running) = &running {
         for (key, value) in running {
             // An override inserted by Cockpit should not appear as an external restriction.
-            if (key == TELEMETRY && matches!(applied, "analytics" | "both"))
-                || (key == OTEL && matches!(applied, "tracing" | "both"))
+            if (key == TELEMETRY && applied.analytics.is_some())
+                || (key == DO_NOT_TRACK && applied.do_not_track.is_some())
+                || (key == OTEL
+                    && (applied.tracing.is_some()
+                        || applied.analytics == Some(false)
+                        || applied.do_not_track == Some(true)))
             {
                 continue;
             }
@@ -294,24 +392,22 @@ async fn state(settings: LaunchSettings, agent_activity: bool) -> Result<Privacy
         read_login_shell_flags(&mut environment).await;
     }
 
-    let (analytics_blocked, trace_blocked) = blocked_sources(&environment, managed_policy);
-    let restart_required = running.is_some() && settings.marker() != applied;
+    let (do_not_track, analytics, tracing) = option_states(settings, environment, managed_policy);
+    let restart_required = running.is_some() && settings != applied;
     Ok(PrivacyState {
-        analytics: OptionState {
-            enabled: !settings.analytics_disabled && analytics_blocked.is_none(),
-            blocked_by: analytics_blocked,
-        },
-        tracing: OptionState {
-            enabled: !settings.analytics_disabled
-                && !settings.tracing_disabled
-                && trace_blocked.is_none(),
-            blocked_by: trace_blocked,
-        },
+        do_not_track,
+        analytics,
+        tracing,
         agent_activity,
         restart_required,
-        privacy_mode_saved: settings.analytics_disabled
-            && settings.tracing_disabled
+        privacy_mode_saved: settings.do_not_track == Some(true)
+            && settings.analytics == Some(false)
+            && settings.tracing == Some(false)
             && !agent_activity,
+        all_enabled_saved: settings.do_not_track == Some(false)
+            && settings.analytics == Some(true)
+            && settings.tracing == Some(true)
+            && agent_activity,
     })
 }
 
@@ -335,11 +431,14 @@ fn update_settings(
 ) -> Result<(LaunchSettings, bool), String> {
     let mut settings = read_settings(path)?;
     let previous = settings;
+    if let Some(enabled) = patch.do_not_track {
+        settings.do_not_track = Some(enabled);
+    }
     if let Some(enabled) = patch.analytics {
-        settings.analytics_disabled = !enabled;
+        settings.analytics = Some(enabled);
     }
     if let Some(enabled) = patch.tracing {
-        settings.tracing_disabled = !enabled;
+        settings.tracing = Some(enabled);
     }
     let previous_activity = read_optional(activity_path)?;
     let old_activity = previous_activity.as_deref() == Some("true");
@@ -381,19 +480,21 @@ mod tests {
     use super::*;
 
     #[test]
-    fn switching_off_analytics_also_blocks_tracing_and_preserves_external_overrides() {
+    fn switching_off_analytics_also_disables_tracing_and_preserves_inherited_defaults() {
         let mut environment = Environment::from([(TELEMETRY.into(), "true".into())]);
         apply_launch_settings(
             LaunchSettings {
-                analytics_disabled: true,
-                tracing_disabled: false,
+                analytics: Some(false),
+                tracing: Some(true),
+                ..Default::default()
             },
             &mut environment,
         );
         assert_eq!(
             environment.get(LAUNCH_SETTINGS).map(String::as_str),
-            Some("analytics")
+            Some("01-")
         );
+        assert_eq!(environment.get(OTEL).map(String::as_str), Some("true"));
         assert_eq!(
             blocked_sources(&environment, false),
             (Some(TELEMETRY), Some(TELEMETRY))
@@ -412,8 +513,8 @@ mod tests {
         let mut environment = Environment::new();
         apply_launch_settings(
             LaunchSettings {
-                analytics_disabled: false,
-                tracing_disabled: true,
+                tracing: Some(false),
+                ..Default::default()
             },
             &mut environment,
         );
@@ -431,7 +532,57 @@ mod tests {
     }
 
     #[test]
-    fn enabling_privacy_persists_both_telemetry_overrides_and_disables_only_activity() {
+    fn explicit_opt_in_overrides_child_environment_but_respects_managed_policy() {
+        let inherited = Environment::from([
+            (DO_NOT_TRACK.into(), "1".into()),
+            (TELEMETRY.into(), "false".into()),
+            (OTEL.into(), "true".into()),
+            (STANDARD_OTEL.into(), "true".into()),
+        ]);
+        let settings = LaunchSettings {
+            analytics: Some(true),
+            tracing: Some(true),
+            do_not_track: Some(false),
+        };
+        let mut child = inherited.clone();
+        apply_launch_settings(settings, &mut child);
+        assert_eq!(child.get(DO_NOT_TRACK).map(String::as_str), Some("0"));
+        assert_eq!(child.get(TELEMETRY).map(String::as_str), Some("true"));
+        assert_eq!(child.get(OTEL).map(String::as_str), Some("false"));
+        assert_eq!(LaunchSettings::from_marker(&settings.marker()), settings);
+
+        let (do_not_track, analytics, tracing) = option_states(settings, inherited.clone(), false);
+        assert!(!do_not_track);
+        assert!(analytics.enabled && tracing.enabled);
+        let (_, analytics, tracing) = option_states(settings, inherited, true);
+        assert!(analytics.selected && tracing.selected);
+        assert!(!analytics.enabled && !tracing.enabled);
+        assert_eq!(analytics.blocked_by, Some("managedPolicy"));
+        assert_eq!(tracing.blocked_by, Some("managedPolicy"));
+    }
+
+    #[test]
+    fn legacy_defaults_do_not_become_an_explicit_opt_in() {
+        let temp = tempfile::tempdir().unwrap();
+        let privacy_path = temp.path().join("privacy.json");
+        std::fs::write(
+            &privacy_path,
+            r#"{"analyticsDisabled":false,"tracingDisabled":true}"#,
+        )
+        .unwrap();
+        let settings = read_settings(&privacy_path).unwrap();
+        assert_eq!(settings.analytics, None);
+        assert_eq!(settings.tracing, Some(false));
+        assert_eq!(LaunchSettings::from_marker("tracing"), settings);
+        let inherited = Environment::from([(DO_NOT_TRACK.into(), "1".into())]);
+        let (do_not_track, analytics, tracing) = option_states(settings, inherited, false);
+        assert!(do_not_track);
+        assert!(!analytics.enabled && !tracing.enabled);
+        assert_eq!(analytics.blocked_by, Some(DO_NOT_TRACK));
+    }
+
+    #[test]
+    fn bulk_toggle_persists_all_choices_and_preserves_phone_pairing() {
         let temp = tempfile::tempdir().unwrap();
         let privacy_path = temp.path().join("privacy.json");
         let secrets = temp.path().join("secrets");
@@ -444,6 +595,7 @@ mod tests {
             &privacy_path,
             &activity_path,
             PrivacyPatch {
+                do_not_track: Some(true),
                 analytics: Some(false),
                 tracing: Some(false),
                 agent_activity: Some(false),
@@ -452,8 +604,39 @@ mod tests {
         .unwrap();
 
         assert!(!activity);
-        assert_eq!(read_settings(&privacy_path).unwrap().marker(), "both");
+        assert_eq!(read_settings(&privacy_path).unwrap().marker(), "001");
         assert_eq!(std::fs::read_to_string(&activity_path).unwrap(), "false");
+        let (_, activity) = update_settings(
+            &privacy_path,
+            &activity_path,
+            PrivacyPatch {
+                do_not_track: Some(false),
+                analytics: Some(true),
+                tracing: Some(true),
+                agent_activity: Some(true),
+            },
+        )
+        .unwrap();
+
+        assert!(activity);
+        assert_eq!(read_settings(&privacy_path).unwrap().marker(), "110");
+        assert_eq!(std::fs::read_to_string(&activity_path).unwrap(), "true");
         assert_eq!(std::fs::read_to_string(&link).unwrap(), "stored link");
+
+        let (_, activity) = update_settings(
+            &privacy_path,
+            &activity_path,
+            PrivacyPatch {
+                do_not_track: Some(true),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert!(activity);
+        let saved = read_settings(&privacy_path).unwrap();
+        assert_eq!(saved.marker(), "111");
+        let (do_not_track, analytics, tracing) = option_states(saved, Environment::new(), false);
+        assert!(do_not_track && analytics.selected && tracing.selected);
+        assert!(!analytics.enabled && !tracing.enabled);
     }
 }

@@ -2335,7 +2335,7 @@
     "noTags": "Không có thẻ",
     "privacy": {
       "disable": "Tắt chế độ riêng tư",
-      "enable": "Bật chế độ riêng tư"
+      "enable": "Tắt toàn bộ đo từ xa"
     },
     "refreshAllFailed": "Làm mới tất cả thất bại: {{error}}",
     "refreshAllSuccess": "Đã làm mới tất cả tài khoản",
@@ -9779,15 +9779,28 @@
       "title": "Cài đặt thường dùng",
       "language": "Ngôn ngữ T3 Code"
     },
+    "platformOrder": {
+      "title": "Thứ tự nền tảng",
+      "hint": "Kéo tay nắm để đổi thứ tự các nhóm nền tảng trong phần tổng quan tài khoản.",
+      "saveFailed": "Không thể lưu thứ tự nền tảng. Hãy thử lại. {{error}}"
+    },
     "desktopPrivacy": {
       "title": "Quyền riêng tư của T3 Code",
-      "enable": "Bật chế độ riêng tư",
-      "connection": "Điện thoại vẫn có thể ghép nối và liên lạc theo thời gian thực khi tắt các mục này.",
+      "enableAll": "Bật tất cả",
+      "disableAll": "Bật chế độ riêng tư",
+      "statusOn": "Bật",
+      "statusOff": "Tắt",
+      "connection": "Khi tắt dữ liệu đo từ xa, điện thoại vẫn có thể ghép nối và liên lạc với máy tính theo thời gian thực.",
       "launchScope": "Cài đặt đo từ xa áp dụng cho phiên bản mặc định khởi chạy từ Cockpit Tools.",
       "restartPending": "Đã lưu cài đặt. Khởi động lại T3 Code để áp dụng thay đổi đo từ xa.",
       "environmentBlocked": "Đã tắt bởi biến môi trường {{variable}}.",
       "policyBlocked": "Đã tắt bởi chính sách hệ thống.",
       "linked": "Tắt phân tích sử dụng cũng tắt theo dõi kết nối.",
+      "statusPending": "Chưa áp dụng",
+      "doNotTrack": {
+        "label": "Không theo dõi",
+        "description": "DO_NOT_TRACK tạm dừng phân tích sử dụng và theo dõi kết nối. Lựa chọn của bạn vẫn được lưu."
+      },
       "analytics": {
         "label": "Phân tích sử dụng",
         "description": "Gửi phiên bản ứng dụng, nền tảng và thống kê sử dụng đến T3 Code."

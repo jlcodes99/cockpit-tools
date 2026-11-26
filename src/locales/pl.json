@@ -2335,7 +2335,7 @@
     "noTags": "Brak tagów",
     "privacy": {
       "disable": "Wyłącz tryb prywatności",
-      "enable": "Włącz tryb prywatności"
+      "enable": "Wyłącz telemetrię"
     },
     "refreshAllFailed": "Masowe odświeżanie nie powiodło się: {{error}}",
     "refreshAllSuccess": "Wszystkie konta odświeżone",
@@ -9779,15 +9779,28 @@
       "title": "Częste ustawienia",
       "language": "Język T3 Code"
     },
+    "platformOrder": {
+      "title": "Kolejność platform",
+      "hint": "Przeciągnij uchwyty, aby zmienić kolejność grup platform w przeglądzie kont.",
+      "saveFailed": "Nie udało się zapisać kolejności platform. Spróbuj ponownie. {{error}}"
+    },
     "desktopPrivacy": {
       "title": "Prywatność T3 Code",
-      "enable": "Włącz tryb prywatności",
-      "connection": "Po wyłączeniu tych opcji nadal można sparować telefon i połączyć się w czasie rzeczywistym.",
+      "enableAll": "Włącz wszystko",
+      "disableAll": "Włącz tryb prywatności",
+      "statusOn": "Włączone",
+      "statusOff": "Wyłączone",
+      "connection": "Po wyłączeniu telemetrii telefon nadal można sparować i połączyć z komputerem w czasie rzeczywistym.",
       "launchScope": "Telemetria dotyczy domyślnej instancji uruchamianej z Cockpit Tools.",
       "restartPending": "Zapisano ustawienia. Uruchom ponownie T3 Code, aby zastosować zmiany telemetrii.",
       "environmentBlocked": "Wyłączone przez zmienną środowiskową {{variable}}.",
       "policyBlocked": "Wyłączone przez zasady systemowe.",
       "linked": "Wyłączenie analizy użycia wyłącza także śledzenie połączeń.",
+      "statusPending": "Nieaktywne",
+      "doNotTrack": {
+        "label": "Nie śledź",
+        "description": "DO_NOT_TRACK wstrzymuje analizę użycia i śledzenie połączeń. Wybrane ustawienia pozostają zapisane."
+      },
       "analytics": {
         "label": "Analiza użycia",
         "description": "Wysyła do T3 Code wersję aplikacji, platformę i statystyki użycia."

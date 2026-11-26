@@ -9779,15 +9779,28 @@
       "title": "Pengaturan umum",
       "language": "Bahasa T3 Code"
     },
+    "platformOrder": {
+      "title": "Urutan platform",
+      "hint": "Seret pegangan untuk mengubah urutan grup platform di ringkasan akun.",
+      "saveFailed": "Urutan platform gagal disimpan. Coba lagi. {{error}}"
+    },
     "desktopPrivacy": {
       "title": "Privasi T3 Code",
-      "enable": "Aktifkan mode privasi",
-      "connection": "Ponsel tetap dapat dipasangkan dan terhubung secara langsung setelah opsi ini dimatikan.",
+      "enableAll": "Aktifkan semua",
+      "disableAll": "Nonaktifkan telemetri",
+      "statusOn": "Aktif",
+      "statusOff": "Nonaktif",
+      "connection": "Saat telemetri nonaktif, ponsel tetap dapat dipasangkan dan berkomunikasi dengan komputer secara langsung.",
       "launchScope": "Telemetri berlaku untuk instans bawaan yang dijalankan dari Cockpit Tools.",
       "restartPending": "Setelan disimpan. Mulai ulang T3 Code untuk menerapkan perubahan telemetri.",
       "environmentBlocked": "Dinonaktifkan oleh variabel lingkungan {{variable}}.",
       "policyBlocked": "Dinonaktifkan oleh kebijakan sistem.",
       "linked": "Mematikan analitik penggunaan juga mematikan pelacakan koneksi.",
+      "statusPending": "Belum aktif",
+      "doNotTrack": {
+        "label": "Jangan lacak",
+        "description": "DO_NOT_TRACK menjeda analitik penggunaan dan pelacakan koneksi. Pilihan Anda tetap tersimpan."
+      },
       "analytics": {
         "label": "Analitik penggunaan",
         "description": "Mengirim versi aplikasi, platform, dan statistik penggunaan ke T3 Code."

@@ -217,18 +217,21 @@ export async function updateT3codeNativeSettings(
 
 export interface T3codePrivacyOption {
   enabled: boolean;
+  selected: boolean;
   blockedBy: string | null;
 }
 
 export interface T3codePrivacySettings {
+  doNotTrack: boolean;
   analytics: T3codePrivacyOption;
   tracing: T3codePrivacyOption;
   agentActivity: boolean;
   restartRequired: boolean;
   privacyModeSaved: boolean;
+  allEnabledSaved: boolean;
 }
 
-export type T3codePrivacyPatch = Partial<Record<'analytics' | 'tracing' | 'agentActivity', boolean>>;
+export type T3codePrivacyPatch = Partial<Record<'doNotTrack' | 'analytics' | 'tracing' | 'agentActivity', boolean>>;
 
 export function getT3codePrivacySettings(): Promise<T3codePrivacySettings> {
   return invoke('get_t3code_privacy_settings');

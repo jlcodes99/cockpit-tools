@@ -9779,15 +9779,28 @@
       "title": "Réglages courants",
       "language": "Langue de T3 Code"
     },
+    "platformOrder": {
+      "title": "Ordre des plateformes",
+      "hint": "Faites glisser les poignées pour réorganiser les groupes de plateformes dans la vue des comptes.",
+      "saveFailed": "Impossible d’enregistrer l’ordre des plateformes. Réessayez. {{error}}"
+    },
     "desktopPrivacy": {
       "title": "Confidentialité de T3 Code",
-      "enable": "Activer le mode privé",
-      "connection": "Le téléphone peut toujours être associé et communiquer en temps réel lorsque ces options sont désactivées.",
+      "enableAll": "Tout activer",
+      "disableAll": "Désactiver la télémétrie",
+      "statusOn": "Activé",
+      "statusOff": "Désactivé",
+      "connection": "Même si la télémétrie est désactivée, le téléphone peut être associé et communiquer en temps réel avec l’ordinateur.",
       "launchScope": "Ces réglages de télémétrie s’appliquent à l’instance par défaut lancée depuis Cockpit Tools.",
       "restartPending": "Réglages enregistrés. Redémarrez T3 Code pour appliquer les changements de télémétrie.",
       "environmentBlocked": "Désactivé par la variable d’environnement {{variable}}.",
       "policyBlocked": "Désactivé par la stratégie système.",
       "linked": "Désactiver les statistiques d’usage désactive aussi le suivi des connexions.",
+      "statusPending": "Inactif",
+      "doNotTrack": {
+        "label": "Ne pas suivre",
+        "description": "DO_NOT_TRACK suspend les statistiques d’utilisation et le suivi des connexions. Vos choix restent enregistrés."
+      },
       "analytics": {
         "label": "Statistiques d’usage",
         "description": "Envoie la version de l’app, la plateforme et les statistiques d’usage à T3 Code."

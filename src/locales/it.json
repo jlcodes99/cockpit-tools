@@ -9779,15 +9779,28 @@
       "title": "Impostazioni comuni",
       "language": "Lingua di T3 Code"
     },
+    "platformOrder": {
+      "title": "Ordine delle piattaforme",
+      "hint": "Trascina le maniglie per riordinare i gruppi di piattaforme nel riepilogo degli account.",
+      "saveFailed": "Impossibile salvare l’ordine delle piattaforme. Riprova. {{error}}"
+    },
     "desktopPrivacy": {
       "title": "Privacy di T3 Code",
-      "enable": "Attiva la modalità privacy",
-      "connection": "Il telefono può ancora associarsi e comunicare in tempo reale con queste opzioni disattivate.",
+      "enableAll": "Attiva tutto",
+      "disableAll": "Disattiva telemetria",
+      "statusOn": "Attivo",
+      "statusOff": "Disattivo",
+      "connection": "Con la telemetria disattivata, il telefono può ancora essere associato e comunicare con il computer in tempo reale.",
       "launchScope": "La telemetria si applica all’istanza predefinita avviata da Cockpit Tools.",
       "restartPending": "Impostazioni salvate. Riavvia T3 Code per applicare le modifiche alla telemetria.",
       "environmentBlocked": "Disattivato dalla variabile d’ambiente {{variable}}.",
       "policyBlocked": "Disattivato dai criteri di sistema.",
       "linked": "Disattivare le statistiche d’uso disattiva anche il tracciamento delle connessioni.",
+      "statusPending": "Non attivo",
+      "doNotTrack": {
+        "label": "Non tracciare",
+        "description": "DO_NOT_TRACK sospende l’analisi dell’utilizzo e il tracciamento delle connessioni. Le tue scelte restano salvate."
+      },
       "analytics": {
         "label": "Statistiche d’uso",
         "description": "Invia a T3 Code versione dell’app, piattaforma e statistiche d’uso."

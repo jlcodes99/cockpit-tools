@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Globe, SlidersHorizontal } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import {
   getT3codeNativeLanguage,
@@ -6,6 +7,7 @@ import {
   updateT3codeNativeLanguage,
 } from '../../services/t3codeService';
 import { T3codeLanguageSelect } from './T3codeLanguageSelect';
+import { T3codePlatformOrderButton } from './T3codePlatformOrder';
 import { T3codePrivacySettingsButton } from './T3codePrivacySettings';
 
 export function T3codeCommonSettings() {
@@ -29,8 +31,12 @@ export function T3codeCommonSettings() {
       .then(({ language }) => {
         if (current && !languageChanged) setLanguage(language);
       })
-      .catch((cause) => { if (current) setError(String(cause)); })
-      .finally(() => { if (current) setBusy(false); });
+      .catch((cause) => {
+        if (current) setError(String(cause));
+      })
+      .finally(() => {
+        if (current) setBusy(false);
+      });
     return () => {
       current = false;
       unsubscribe();
@@ -53,19 +59,31 @@ export function T3codeCommonSettings() {
 
   return (
     <section className="t3code-common-settings" aria-label={t('t3code.commonSettings.title')}>
-      <h3 className="t3code-common-settings-title">{t('t3code.commonSettings.title')}</h3>
-      <div className="t3code-common-settings-language">
-        <span title={label}>{label}</span>
-        <T3codeLanguageSelect
-          className="settings-dropdown t3code-common-settings-select"
-          label={label}
-          value={language}
-          disabled={busy || !language}
-          placeholder={t(busy ? 'common.loading' : 'common.unknown')}
-          onChange={(value) => void changeLanguage(value)}
-        />
+      <div className="t3code-common-settings-lead">
+        <span className="t3code-common-settings-icon" aria-hidden="true">
+          <SlidersHorizontal size={15} />
+        </span>
+        <h3 className="t3code-common-settings-title">{t('t3code.commonSettings.title')}</h3>
       </div>
-      <T3codePrivacySettingsButton />
+
+      <div className="t3code-common-settings-controls">
+        <div className="t3code-common-settings-language">
+          <Globe size={14} className="t3code-common-settings-lang-icon" aria-hidden="true" />
+          <span title={label}>{label}</span>
+          <T3codeLanguageSelect
+            className="settings-dropdown t3code-common-settings-select"
+            label={label}
+            value={language}
+            disabled={busy || !language}
+            placeholder={t(busy ? 'common.loading' : 'common.unknown')}
+            onChange={(value) => void changeLanguage(value)}
+          />
+        </div>
+        <span className="t3code-common-settings-divider" aria-hidden="true" />
+        <T3codePrivacySettingsButton />
+        <T3codePlatformOrderButton />
+      </div>
+
       {error ? (
         <div className="t3code-common-settings-feedback is-error">
           <span role="alert">{error}</span>
@@ -83,8 +101,12 @@ export function T3codeCommonSettings() {
             </button>
           )}
         </div>
-      ) : savedForLaunch && (
-        <p className="t3code-common-settings-feedback" role="status">{t('t3code.nativeSettings.savedForLaunch')}</p>
+      ) : (
+        savedForLaunch && (
+          <p className="t3code-common-settings-feedback" role="status">
+            {t('t3code.nativeSettings.savedForLaunch')}
+          </p>
+        )
       )}
     </section>
   );

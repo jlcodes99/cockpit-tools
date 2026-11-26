@@ -2335,7 +2335,7 @@
     "noTags": "태그 없음",
     "privacy": {
       "disable": "개인정보 보호 모드 끄기",
-      "enable": "개인정보 보호 모드 켜기"
+      "enable": "원격 측정 일괄 끄기"
     },
     "refreshAllFailed": "전체 새로고침 실패: {{error}}",
     "refreshAllSuccess": "모든 계정을 새로고침했습니다",
@@ -9779,15 +9779,28 @@
       "title": "자주 쓰는 설정",
       "language": "T3 Code 언어"
     },
+    "platformOrder": {
+      "title": "플랫폼 순서",
+      "hint": "핸들을 끌어 계정 개요의 플랫폼 그룹 순서를 바꾸세요.",
+      "saveFailed": "플랫폼 순서를 저장하지 못했습니다. 다시 시도하세요. {{error}}"
+    },
     "desktopPrivacy": {
       "title": "T3 Code 개인정보 설정",
-      "enable": "개인정보 보호 모드 켜기",
-      "connection": "이 옵션들을 꺼도 휴대폰 페어링과 실시간 연결을 사용할 수 있습니다.",
+      "enableAll": "모두 켜기",
+      "disableAll": "개인정보 보호 모드 켜기",
+      "statusOn": "켜짐",
+      "statusOff": "꺼짐",
+      "connection": "원격 분석을 꺼도 휴대폰을 페어링하고 컴퓨터와 실시간으로 통신할 수 있습니다.",
       "launchScope": "원격 측정 설정은 Cockpit Tools에서 시작한 기본 인스턴스에 적용됩니다.",
       "restartPending": "설정을 저장했습니다. T3 Code를 다시 시작하면 적용됩니다.",
       "environmentBlocked": "환경 변수 {{variable}}로 꺼져 있습니다.",
       "policyBlocked": "시스템 정책으로 꺼져 있습니다.",
       "linked": "사용 분석을 끄면 연결 추적도 꺼집니다.",
+      "statusPending": "미적용",
+      "doNotTrack": {
+        "label": "추적 금지",
+        "description": "DO_NOT_TRACK은 사용 분석과 연결 추적을 일시 중지합니다. 설정은 그대로 저장됩니다."
+      },
       "analytics": {
         "label": "사용 분석",
         "description": "앱 버전, 플랫폼, 사용 통계를 T3 Code로 보냅니다."

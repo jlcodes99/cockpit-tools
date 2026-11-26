@@ -8163,15 +8163,28 @@
       "title": "常用设置",
       "language": "T3 Code 语言"
     },
+    "platformOrder": {
+      "title": "平台排序",
+      "hint": "拖动把手，调整账号总览中的平台分组顺序。",
+      "saveFailed": "无法保存平台顺序，请重试。{{error}}"
+    },
     "desktopPrivacy": {
       "title": "T3 Code 隐私设置",
-      "enable": "一键开启隐私模式",
-      "connection": "关闭这三项后，手机仍可配对并与电脑实时通信。",
+      "enableAll": "一键开启遥测",
+      "disableAll": "一键关闭遥测",
+      "statusOn": "已开启",
+      "statusOff": "已关闭",
+      "connection": "关闭遥测后，手机仍可配对并与电脑实时通信。",
       "launchScope": "遥测设置适用于由 Cockpit Tools 启动的 T3 Code 默认实例。",
       "restartPending": "设置已保存。重启 T3 Code 后，遥测设置生效。",
       "environmentBlocked": "已由环境变量 {{variable}} 关闭。",
       "policyBlocked": "已由系统策略关闭。",
       "linked": "产品使用分析关闭时，连接追踪也会关闭。",
+      "statusPending": "暂未生效",
+      "doNotTrack": {
+        "label": "禁止追踪",
+        "description": "DO_NOT_TRACK 开启时暂停产品使用分析和桌面连接追踪。各项开关的选择会保留。"
+      },
       "analytics": {
         "label": "产品使用分析",
         "description": "向 T3 Code 发送应用版本、平台和使用统计。"

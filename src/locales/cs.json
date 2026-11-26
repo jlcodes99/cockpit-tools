@@ -2335,7 +2335,7 @@
     "noTags": "Žádné štítky",
     "privacy": {
       "disable": "Vypnout režim soukromí",
-      "enable": "Zapnout režim soukromí"
+      "enable": "Vypnout telemetrii"
     },
     "refreshAllFailed": "Hromadná aktualizace selhala: {{error}}",
     "refreshAllSuccess": "Všechny účty byly obnoveny",
@@ -9779,15 +9779,28 @@
       "title": "Běžná nastavení",
       "language": "Jazyk T3 Code"
     },
+    "platformOrder": {
+      "title": "Pořadí platforem",
+      "hint": "Tažením úchytů změníte pořadí skupin platforem v přehledu účtů.",
+      "saveFailed": "Pořadí platforem se nepodařilo uložit. Zkuste to znovu. {{error}}"
+    },
     "desktopPrivacy": {
       "title": "Soukromí T3 Code",
-      "enable": "Zapnout režim soukromí",
-      "connection": "Telefon lze i po vypnutí těchto voleb spárovat a používat v reálném čase.",
+      "enableAll": "Zapnout vše",
+      "disableAll": "Zapnout režim soukromí",
+      "statusOn": "Zapnuto",
+      "statusOff": "Vypnuto",
+      "connection": "Po vypnutí telemetrie se telefon může dál spárovat a komunikovat s počítačem v reálném čase.",
       "launchScope": "Telemetrie platí pro výchozí instanci spuštěnou z Cockpit Tools.",
       "restartPending": "Nastavení uloženo. Změny telemetrie se projeví po restartu T3 Code.",
       "environmentBlocked": "Vypnuto proměnnou prostředí {{variable}}.",
       "policyBlocked": "Vypnuto zásadami systému.",
       "linked": "Vypnutí analýzy využití vypne i trasování připojení.",
+      "statusPending": "Zatím neaktivní",
+      "doNotTrack": {
+        "label": "Nesledovat",
+        "description": "DO_NOT_TRACK pozastaví analytiku používání a sledování připojení. Vaše volby zůstanou uložené."
+      },
       "analytics": {
         "label": "Analýza využití",
         "description": "Odesílá verzi aplikace, platformu a statistiky využití do T3 Code."
