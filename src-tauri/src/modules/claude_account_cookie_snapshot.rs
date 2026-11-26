@@ -30,6 +30,52 @@ impl Drop for DesktopCookieSnapshot {
     }
 }
 
+fn copy_readonly_snapshot_file_with_fallback<F>(
+    source: &Path,
+    destination: &Path,
+    copy_fn: F,
+) -> Result<(), String>
+where
+    F: FnOnce(&Path, &Path) -> std::io::Result<u64>,
+{
+    match copy_fn(source, destination) {
+        Ok(_) => Ok(()),
+        #[cfg(any(windows, test))]
+        Err(error) if matches!(error.raw_os_error(), Some(32 | 33 | 6000)) => {
+            if source == destination
+                || fs::canonicalize(source)
+                    .ok()
+                    .zip(fs::canonicalize(destination).ok())
+                    .is_some_and(|(src, dst)| src == dst)
+            {
+                return Err("snapshot copy source equals destination".to_string());
+            }
+            #[cfg(windows)]
+            let mut input = {
+                use std::os::windows::fs::OpenOptionsExt;
+                // FILE_SHARE_READ (1) | FILE_SHARE_WRITE (2) | FILE_SHARE_DELETE (4)
+                fs::OpenOptions::new()
+                    .read(true)
+                    .share_mode(0x0000_0007)
+                    .open(source)
+                    .map_err(|open_err| open_err.to_string())?
+            };
+            #[cfg(not(windows))]
+            let mut input = File::open(source).map_err(|open_err| open_err.to_string())?;
+            let mut output =
+                File::create(destination).map_err(|create_err| create_err.to_string())?;
+            std::io::copy(&mut input, &mut output).map_err(|copy_err| copy_err.to_string())?;
+            output.sync_all().map_err(|sync_err| sync_err.to_string())?;
+            Ok(())
+        }
+        Err(error) => Err(error.to_string()),
+    }
+}
+
+fn copy_readonly_snapshot_file(source: &Path, destination: &Path) -> Result<(), String> {
+    copy_readonly_snapshot_file_with_fallback(source, destination, |src, dst| fs::copy(src, dst))
+}
+
 fn copy_desktop_cookie_files(cookies_path: &Path, destination_path: &Path) -> Result<(), String> {
     let sidecar_path = |path: &Path, suffix: &str| {
         let mut name = path.as_os_str().to_os_string();
@@ -41,9 +87,15 @@ fn copy_desktop_cookie_files(cookies_path: &Path, destination_path: &Path) -> Re
     for suffix in ["", "-journal", "-wal"] {
         let source = sidecar_path(cookies_path, suffix);
         if suffix.is_empty() || source.exists() {
-            let size = fs::metadata(&source)
-                .map_err(|error| error.to_string())?
-                .len();
+            let size = match fs::metadata(&source) {
+                Ok(metadata) => metadata.len(),
+                Err(error)
+                    if !suffix.is_empty() && error.kind() == std::io::ErrorKind::NotFound =>
+                {
+                    continue;
+                }
+                Err(error) => return Err(error.to_string()),
+            };
             if size > 128 * 1024 * 1024 {
                 return Err(crate::modules::i18n::translate(
                     &crate::modules::config::get_user_config().language,
@@ -52,7 +104,7 @@ fn copy_desktop_cookie_files(cookies_path: &Path, destination_path: &Path) -> Re
                 ));
             }
             let destination = sidecar_path(destination_path, suffix);
-            fs::copy(&source, &destination).map_err(|error| error.to_string())?;
+            copy_readonly_snapshot_file(&source, &destination)?;
             // Recovery writes only to this disposable copy, even when the source
             // has a read-only attribute. Unix copies restrict credentials to owner.
             let mut permissions = fs::metadata(&destination)
@@ -71,7 +123,7 @@ fn copy_desktop_cookie_files(cookies_path: &Path, destination_path: &Path) -> Re
     Ok(())
 }
 
-fn open_desktop_cookie_snapshot(cookies_path: &Path) -> Result<DesktopCookieSnapshot, String> {
+fn open_desktop_cookie_snapshot_once(cookies_path: &Path) -> Result<DesktopCookieSnapshot, String> {
     let directory =
         std::env::temp_dir().join(format!("cockpit-claude-cookies-{}", uuid::Uuid::new_v4()));
     fs::create_dir(&directory).map_err(|error| error.to_string())?;
@@ -97,6 +149,24 @@ fn open_desktop_cookie_snapshot(cookies_path: &Path) -> Result<DesktopCookieSnap
         .map_err(|error| error.to_string())?;
     snapshot.connection = Some(connection);
     Ok(snapshot)
+}
+
+fn open_desktop_cookie_snapshot(cookies_path: &Path) -> Result<DesktopCookieSnapshot, String> {
+    let mut last_error = None;
+    for attempt in 0..3 {
+        match open_desktop_cookie_snapshot_once(cookies_path) {
+            Ok(snapshot) => return Ok(snapshot),
+            Err(error) => {
+                last_error = Some(error);
+                if attempt < 2 && cookies_path.exists() {
+                    std::thread::sleep(Duration::from_millis(30));
+                } else {
+                    break;
+                }
+            }
+        }
+    }
+    Err(last_error.unwrap_or_else(|| "打开 Claude Cookies 快照失败".to_string()))
 }
 
 fn ensure_desktop_verification_profile(profile_dir: &Path) -> Result<(), String> {

@@ -77,6 +77,60 @@
   height: 36px;
 }
 
+.t3code-common-settings {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  margin-block: 0 12px;
+  padding-inline: 12px;
+}
+
+.t3code-common-settings-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.t3code-common-settings-language {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.t3code-common-settings-language > span {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.t3code-common-settings .t3code-common-settings-select {
+  width: min(9rem, 48vw);
+  flex-shrink: 0;
+}
+
+.t3code-common-settings .t3code-common-settings-select .single-select-dropdown-trigger {
+  min-height: 36px;
+}
+
+.t3code-common-settings-feedback {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.t3code-common-settings-feedback.is-error {
+  color: var(--text-negative);
+}
+
 .t3code-overview-list {
   min-width: 0;
   overflow: hidden;

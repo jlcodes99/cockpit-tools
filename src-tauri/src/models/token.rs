@@ -20,6 +20,9 @@ pub struct TokenData {
     /// OAuth 返回的 ID Token，写入 Antigravity IDE 本地登录态。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id_token: Option<String>,
+    /// OAuth 刷新或换取令牌时实际授予的 scope 列表（空格分隔）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub granted_scopes: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub session_id: Option<String>,
 }
@@ -45,6 +48,7 @@ impl TokenData {
             is_gcp_tos: None,
             oauth_client_key: None,
             id_token: None,
+            granted_scopes: None,
             session_id,
         }
     }
@@ -57,5 +61,16 @@ impl TokenData {
         self.oauth_client_key = oauth_client_key;
         self.id_token = id_token;
         self
+    }
+
+    pub fn with_granted_scopes(mut self, granted_scopes: Option<String>) -> Self {
+        self.granted_scopes = granted_scopes
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty());
+        self
+    }
+
+    pub fn lacks_aicode_scope(&self) -> bool {
+        crate::modules::oauth::scope_lacks_aicode(self.granted_scopes.as_deref())
     }
 }

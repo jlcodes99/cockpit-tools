@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { useCallback, useEffect, useState } from 'react';
 import type {
+  AntigravityRehydrateStatus,
   AntigravityTokenUsageSettings,
   AntigravityUsageRangePreset,
   ConversationDetailResponse,
@@ -272,4 +273,24 @@ export async function setAntigravityTokenUsageDataDir(
   recordBundleInCache(effectiveQuery, res);
   lastSyncedAtMs = Date.now();
   return res;
+}
+
+export async function setAntigravityRehydrateEnabled(
+  enabled: boolean,
+): Promise<AntigravityRehydrateStatus> {
+  const status = await invoke<AntigravityRehydrateStatus>(
+    'antigravity_set_rehydrate_enabled',
+    { enabled },
+  );
+  queryBundleCache.forEach((bundle) => {
+    if (bundle.settings) {
+      bundle.settings.rehydrate = status;
+    }
+  });
+  presetSummaryCache.forEach((bundle) => {
+    if (bundle.settings) {
+      bundle.settings.rehydrate = status;
+    }
+  });
+  return status;
 }

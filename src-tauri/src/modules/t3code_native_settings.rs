@@ -69,20 +69,34 @@ fn available_models(config: &Value) -> Vec<Value> {
         .collect()
 }
 
-async fn read_with_state(state_dir: &Path) -> Result<Value, String> {
+async fn read_client_with_state(state_dir: &Path) -> Result<Value, String> {
+    if let Some(mut live) = t3code_app_injection::native_client_settings(None, &Value::Null).await {
+        live["clientConnected"] = json!(true);
+        return Ok(live);
+    }
+    let path = client_path(state_dir);
+    let client = tokio::task::spawn_blocking(move || read_settings_object(&path))
+        .await
+        .map_err(|error| error.to_string())??;
+    Ok(json!({
+        "language": client["language"].as_str().unwrap_or("en"),
+        "notificationMode": client["notificationMode"].as_str().unwrap_or("off"),
+        "clientConnected": false,
+    }))
+}
+
+async fn read_with_state(state_dir: &Path, client_only: bool) -> Result<Value, String> {
+    if client_only {
+        return read_client_with_state(state_dir).await;
+    }
     let dir = state_dir.to_path_buf();
-    let (client, server) = tokio::task::spawn_blocking(move || {
-        Ok::<_, String>((
-            read_settings_object(&client_path(&dir))?,
-            read_t3_settings_json(&dir)?,
-        ))
-    })
-    .await
-    .map_err(|error| error.to_string())??;
-    let (live_client, control) = tokio::join!(
-        t3code_app_injection::native_client_settings(None, &Value::Null),
+    let (client, server, control) = tokio::join!(
+        read_client_with_state(state_dir),
+        tokio::task::spawn_blocking(move || read_t3_settings_json(&dir)),
         ProviderControl::connect("__default__", state_dir),
     );
+    let client = client?;
+    let server = server.map_err(|error| error.to_string())??;
     let live_server = if let Ok(Some(mut control)) = control {
         control
             .call("server.getConfig", json!({}), RPC_TIMEOUT)
@@ -91,7 +105,6 @@ async fn read_with_state(state_dir: &Path) -> Result<Value, String> {
     } else {
         None
     };
-    let client = live_client.as_ref().unwrap_or(&client);
     let server = live_server
         .as_ref()
         .and_then(|snapshot| snapshot.get("settings"))
@@ -101,13 +114,13 @@ async fn read_with_state(state_dir: &Path) -> Result<Value, String> {
         "notificationMode": client["notificationMode"].as_str().unwrap_or("off"),
         "defaultModelSelection": server["defaultModelSelection"],
         "models": live_server.as_ref().map(available_models).unwrap_or_default(),
-        "clientConnected": live_client.is_some(),
+        "clientConnected": client["clientConnected"],
     }))
 }
 
-pub async fn read() -> Result<Value, String> {
+pub async fn read(client_only: bool) -> Result<Value, String> {
     let (_, dir) = resolve_state_dir_for_t3_instance(None)?;
-    read_with_state(&dir).await
+    read_with_state(&dir, client_only).await
 }
 
 fn checked_model(config: &Value, selection: &Value) -> Option<Value> {
@@ -143,10 +156,10 @@ fn checked_model(config: &Value, selection: &Value) -> Option<Value> {
     Some(next)
 }
 
-pub async fn update(field: &str, value: Value) -> Result<Value, String> {
+pub async fn update(field: &str, value: Value, client_only: bool) -> Result<Value, String> {
     let (_, dir) = resolve_state_dir_for_t3_instance(None)?;
     match field {
-        "defaultModelSelection" => {
+        "defaultModelSelection" if !client_only => {
             let _reservation = reserve_provider_write(&dir)?;
             if let Some(mut control) = ProviderControl::connect("__default__", &dir).await? {
                 let next = if value.is_null() {
@@ -220,7 +233,7 @@ pub async fn update(field: &str, value: Value) -> Result<Value, String> {
         }
         _ => return Err(message("saveFailed")),
     }
-    read_with_state(&dir).await
+    read_with_state(&dir, client_only).await
 }
 
 #[cfg(test)]

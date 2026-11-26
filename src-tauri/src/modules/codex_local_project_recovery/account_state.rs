@@ -466,8 +466,17 @@ fn merge_local(target: &mut Value, view: &Value) {
 pub(crate) fn prepare(home: &Path, owner: Option<&str>) -> Result<bool, String> {
     match desktop_state::prepare_sqlite_startup(home, owner) {
         Ok(Some((state, changed))) => {
+            let legacy_changed = if read_bytes(&home.join(STATE))?
+                .as_deref()
+                .and_then(|bytes| decode(Some(bytes)).ok())
+                .is_some_and(|json_state| identity::has_scoped_owner_state(&json_state))
+            {
+                prepare_legacy(home, owner).unwrap_or(false)
+            } else {
+                false
+            };
             let startup_changed = ssh::prepare_startup(home, &state);
-            Ok(startup_changed || changed)
+            Ok(startup_changed || changed || legacy_changed)
         }
         Ok(None) => prepare_legacy(home, owner),
         Err(error) => {
@@ -483,7 +492,9 @@ fn prepare_legacy(home: &Path, owner: Option<&str>) -> Result<bool, String> {
     };
     let before = decode(Some(&bytes))?;
     let mut after = before.clone();
-    identity::inherit_scoped_auto_connect(&mut after, owner.unwrap_or(identity::SIGNED_OUT_OWNER));
+    let next_owner = owner.unwrap_or(identity::SIGNED_OUT_OWNER);
+    identity::inherit_scoped_auto_connect(&mut after, next_owner);
+    identity::inherit_scoped_owner_local_state(&mut after, next_owner);
     // Desktop can store account-specific SSH preferences before creating a project archive.
     if before.get(SCOPES).is_none() && before.get(PARKED).is_none() {
         return finish_prepare(home, &bytes, &before, &after);

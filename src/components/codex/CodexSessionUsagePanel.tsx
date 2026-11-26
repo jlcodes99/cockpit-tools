@@ -580,23 +580,73 @@ export function CodexSessionUsagePanel({
   const hasData = (totals?.requestCount ?? 0) > 0;
   const lastSyncedLabel = formatRelativeSyncTime(report?.lastSyncedAt, isZh);
   const error = scanError || readError;
-  const sessionTrend = useMemo<UsageTrendPoint[]>(
-    () =>
-      (report?.byDay ?? [])
-        .map((row) => ({
-          bucketStart: new Date(`${row.key}T00:00:00`).getTime(),
-          usage: {
-            totalTokens: row.totalTokens,
-            inputTokens: row.inputTokens,
-            outputTokens: row.outputTokens,
-            requestCount: row.requestCount,
-            estimatedCostUsd: 0,
-          },
-        }))
-        .filter((point) => Number.isFinite(point.bucketStart))
-        .sort((left, right) => left.bucketStart - right.bucketStart),
-    [report?.byDay],
-  );
+  const isTodayRange = range === 'today';
+  const sessionTrend = useMemo<UsageTrendPoint[]>(() => {
+    if (isTodayRange) {
+      const hourRows = report?.byHour ?? [];
+      const hourMap = new Map<number, CodexSessionUsageBreakdownRow>();
+      for (const row of hourRows) {
+        const bucketSec = Number(row.key);
+        if (Number.isFinite(bucketSec) && bucketSec > 0) {
+          hourMap.set(bucketSec * 1000, row);
+        }
+      }
+      const startSec = report?.fromTimestamp ?? query.fromTimestamp;
+      const endSec = report?.toTimestamp ?? query.toTimestamp;
+      if (startSec != null && endSec != null && endSec >= startSec) {
+        const firstHourMs = Math.floor(startSec / 3600) * 3600 * 1000;
+        const lastHourMs = Math.max(
+          firstHourMs,
+          Math.floor(endSec / 3600) * 3600 * 1000,
+          ...Array.from(hourMap.keys()),
+        );
+        const points: UsageTrendPoint[] = [];
+        for (let bucketMs = firstHourMs; bucketMs <= lastHourMs && points.length < 48; bucketMs += 3_600_000) {
+          const row = hourMap.get(bucketMs);
+          points.push({
+            bucketStart: bucketMs,
+            usage: {
+              totalTokens: row?.totalTokens ?? 0,
+              inputTokens: row?.inputTokens ?? 0,
+              outputTokens: row?.outputTokens ?? 0,
+              requestCount: row?.requestCount ?? 0,
+              estimatedCostUsd: row?.estimatedCostUsd ?? 0,
+            },
+          });
+        }
+        if (points.length > 0) {
+          return points;
+        }
+      }
+      if (hourMap.size > 0) {
+        return Array.from(hourMap.entries())
+          .map(([bucketStart, row]) => ({
+            bucketStart,
+            usage: {
+              totalTokens: row.totalTokens,
+              inputTokens: row.inputTokens,
+              outputTokens: row.outputTokens,
+              requestCount: row.requestCount,
+              estimatedCostUsd: row.estimatedCostUsd ?? 0,
+            },
+          }))
+          .sort((left, right) => left.bucketStart - right.bucketStart);
+      }
+    }
+    return (report?.byDay ?? [])
+      .map((row) => ({
+        bucketStart: new Date(`${row.key}T00:00:00`).getTime(),
+        usage: {
+          totalTokens: row.totalTokens,
+          inputTokens: row.inputTokens,
+          outputTokens: row.outputTokens,
+          requestCount: row.requestCount,
+          estimatedCostUsd: 0,
+        },
+      }))
+      .filter((point) => Number.isFinite(point.bucketStart))
+      .sort((left, right) => left.bucketStart - right.bucketStart);
+  }, [isTodayRange, query.fromTimestamp, query.toTimestamp, report?.byDay, report?.byHour, report?.fromTimestamp, report?.toTimestamp]);
 
   return (
     <div className="codex-session-usage">
@@ -764,7 +814,7 @@ export function CodexSessionUsagePanel({
         <CodexUsageTrend
           points={sessionTrend}
           metrics={['totalTokens', 'requestCount']}
-          hourly={false}
+          hourly={isTodayRange}
           title={t('codex.sessionUsage.title')}
           emptyLabel={t('codex.sessionUsage.empty.title')}
           labels={{

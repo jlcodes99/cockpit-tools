@@ -2,7 +2,7 @@
 use axum::http::HeaderMap;
 use serde_json::{json, Value};
 
-use super::contract::ServiceError;
+use super::contract::{Route, ServiceError, WireApi};
 
 #[path = "codex_wire_calls.rs"]
 mod calls;
@@ -15,6 +15,39 @@ mod schema;
 pub(super) use final_headers::{finalize_routing_hint, ROUTING_HINT};
 
 pub(super) const LITE_HEADER: &str = "x-openai-internal-codex-responses-lite";
+
+pub(super) fn uses_inline_compaction(route: &Route, compact: bool) -> bool {
+    compact
+        && route.chatgpt
+        && !route.chatgpt_plan
+        && route.wire_api == WireApi::Responses
+        && route.compact_endpoint.is_none()
+        && !super::grok_errors::applies(route)
+}
+
+pub(super) fn add_compaction_trigger(body: &mut Value) -> Result<(), ServiceError> {
+    let input = body["input"].as_array_mut().ok_or_else(|| {
+        ServiceError::new(400, "invalid_compaction_input", "Compaction requires input history")
+    })?;
+    input.retain(|item| item["type"] != "compaction_trigger");
+    input.push(json!({"type":"compaction_trigger"}));
+    Ok(())
+}
+
+pub(super) fn adapt_compaction_response(response: &mut Value) -> Result<(), ServiceError> {
+    if !response["output"].as_array().is_some_and(|items| {
+        items.iter().any(|item| {
+            item["type"] == "compaction"
+                && item["encrypted_content"].as_str().is_some_and(|value| !value.is_empty())
+        })
+    }) {
+        return Err(ServiceError::new(
+            502, "incomplete_upstream_compaction", "Upstream did not return a compaction item",
+        ));
+    }
+    response["object"] = json!("response.compaction");
+    Ok(())
+}
 
 pub(super) fn responses_lite(headers: &HeaderMap, body: &Value) -> bool {
     headers
@@ -110,25 +143,15 @@ fn normalize_inner(
         if object.get("parallel_tool_calls") != Some(&Value::Bool(false)) {
             object.insert("parallel_tool_calls".into(), json!(true));
         }
-        let sources = object
-            .get("include")
-            .and_then(Value::as_array)
-            .is_some_and(|items| {
-                items
-                    .iter()
-                    .any(|item| item == "web_search_call.action.sources")
-            });
-        object.insert(
-            "include".into(),
-            if sources {
-                json!([
-                    "reasoning.encrypted_content",
-                    "web_search_call.action.sources"
-                ])
-            } else {
-                json!(["reasoning.encrypted_content"])
-            },
-        );
+        let mut include = vec!["reasoning.encrypted_content"];
+        if let Some(requested) = object.get("include").and_then(Value::as_array) {
+            include.extend(
+                ["web_search_call.action.sources", "web_search_call.results", "output.encrypted_content"]
+                    .into_iter()
+                    .filter(|field| requested.iter().any(|item| item.as_str() == Some(*field))),
+            );
+        }
+        object.insert("include".into(), json!(include));
         for field in [
             "max_completion_tokens",
             "temperature",
@@ -262,6 +285,23 @@ fn normalize_builtin_tools(body: &mut Value) {
             }
         }
     }
+}
+
+#[cfg(test)]
+#[test]
+fn codex_include_preserves_explicit_fields_for_each_backend() {
+    let requested = json!(["output.encrypted_content", "message.output_text.logprobs",
+        "web_search_call.results", "web_search_call.action.sources", "web_search_call.results"]);
+    let expected = json!(["reasoning.encrypted_content", "web_search_call.action.sources",
+        "web_search_call.results", "output.encrypted_content"]);
+    for websocket in [false, true] {
+        let mut body = json!({"model":"m","input":[],"include":requested});
+        normalize_inner(&mut HeaderMap::new(), &mut body, true, false, websocket).unwrap();
+        assert_eq!(body["include"], expected);
+    }
+    let mut body = json!({"model":"m","input":[],"include":requested});
+    normalize(&mut HeaderMap::new(), &mut body, false, false).unwrap();
+    assert_eq!(body["include"], requested);
 }
 
 #[cfg(test)]

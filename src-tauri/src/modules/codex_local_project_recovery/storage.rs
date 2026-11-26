@@ -150,6 +150,11 @@ fn rollback(plan: &Plan) -> Result<(), String> {
         plan.before_backup.as_deref(),
         &plan.after,
     )?;
+    crate::modules::ssh_server_desktop_state::rollback_repaired_project_state_in_sqlite(
+        &plan.home,
+        &plan.before,
+        &plan.after,
+    )?;
     Ok(())
 }
 
@@ -254,6 +259,11 @@ pub(super) fn apply(plan: &Plan, backup: &Path) -> Result<(), String> {
         }
         atomic_value(&plan.home.join(STATE), &plan.after)?;
         atomic_value(&plan.home.join(format!("{STATE}.bak")), &plan.after)?;
+        crate::modules::ssh_server_desktop_state::sync_repaired_project_state_to_sqlite(
+            &plan.home,
+            &plan.before,
+            &plan.after,
+        )?;
         for db in &connections {
             db.execute_batch("COMMIT").map_err(|e| e.to_string())?;
         }

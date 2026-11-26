@@ -533,7 +533,7 @@ pub(super) fn spawn_open_app_with_options(
 }
 
 #[cfg(target_os = "macos")]
-fn spawn_open_app_with_options_and_env(
+pub(super) fn spawn_open_app_with_options_and_env(
     app_root: &str,
     args: &[String],
     force_new_instance: bool,

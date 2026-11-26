@@ -305,6 +305,14 @@ pub(super) struct Execution {
 }
 
 impl Execution {
+    fn native_batch_remaining(&self, completed: usize) -> usize {
+        if self.selected.route.chatgpt && self.selected.main_model.is_none() {
+            (self.request.n as usize).saturating_sub(completed)
+        } else {
+            0
+        }
+    }
+
     pub(super) fn response_limit(&self) -> usize {
         if self.selected.route.chatgpt {
             self.state.options.max_response_bytes
@@ -482,10 +490,16 @@ impl Execution {
                 path
             );
             if oauth {
-                super::super::reasoning_policy::check_dispatch(
-                    &self.state, &self.caller, &self.selected.route, &self.request.original, &payload,
-                    super::super::contract::WireApi::Responses,
-                ).await?;
+                self.budget
+                    .run(super::super::reasoning_policy::check_dispatch(
+                        &self.state,
+                        &self.caller,
+                        &self.selected.route,
+                        &self.request.original,
+                        &payload,
+                        super::super::contract::WireApi::Responses,
+                    ))
+                    .await?;
             }
             let mut outgoing = self.selected.route.client.post(url).headers(headers);
             if !oauth {
@@ -1109,6 +1123,87 @@ impl Execution {
     }
 }
 
+async fn collect_missing_native_images(
+    execution: &mut Execution,
+    initial: Value,
+    completed: usize,
+    mut bytes_used: usize,
+) -> Result<Value, ServiceError> {
+    let mut completed = completed;
+    let mut usage = initial.get("usage").cloned().unwrap_or(Value::Null);
+    let mut responses = vec![initial];
+    while execution.native_batch_remaining(completed) > 0 {
+        // A successful partial batch pins its owner. Ask only for the outputs
+        // still owed, while keeping the original request's total deadline.
+        execution.tracker.attempt_result(200, true, None);
+        execution.owner_committed = true;
+        execution.budget = execution.budget.renew_open();
+        execution.request.original["n"] = json!(execution.native_batch_remaining(completed));
+        let (upstream, _) = execution.send(false).await?;
+        let status = upstream.status();
+        let sse = is_sse(upstream.headers());
+        let bytes = execution.read_bounded(upstream).await?;
+        if !status.is_success() {
+            return Err(ServiceError::new(
+                status.as_u16(),
+                "image_upstream_error",
+                "An image operation was rejected by upstream",
+            ));
+        }
+        bytes_used = bytes_used.saturating_add(bytes.len());
+        if bytes_used > execution.response_limit() {
+            return Err(ServiceError::new(
+                502,
+                "upstream_response_too_large",
+                "Combined image output exceeds its size limit",
+            ));
+        }
+        let value = if sse {
+            let mut decoder = SseDecoder::new(execution.event_limit());
+            let mut events = decoder.push(&bytes)?;
+            events.extend(decoder.finish()?);
+            if decoder.has_partial_event() {
+                return Err(ServiceError::new(
+                    502,
+                    "incomplete_upstream_stream",
+                    "Native image stream has a truncated event",
+                ));
+            }
+            native_from_events(&events)?
+        } else {
+            serde_json::from_slice::<Value>(&bytes).map_err(|_| {
+                ServiceError::new(502, "invalid_image_response", "Native Images response was not valid JSON")
+            })?
+        };
+        let count = value["data"]
+            .as_array()
+            .map_or(0, Vec::len);
+        if count == 0 {
+            return Err(super::result::missing_image_output());
+        }
+        completed += count;
+        if let Some(next_usage) = value.get("usage") {
+            super::result::add_usage(&mut usage, next_usage);
+        }
+        execution.usage = Some(usage.clone()).filter(|value| !value.is_null());
+        execution.tracker.capture_usage(&execution.usage);
+        responses.push(value);
+    }
+    merge_responses(&responses)
+}
+
+async fn complete_buffered_native_images(
+    execution: &mut Execution,
+    value: &mut Value,
+    bytes_used: usize,
+) -> Result<(), ServiceError> {
+    let count = value["data"].as_array().map_or(0, Vec::len);
+    if count > 0 && execution.native_batch_remaining(count) > 0 {
+        *value = collect_missing_native_images(execution, value.take(), count, bytes_used).await?;
+    }
+    Ok(())
+}
+
 async fn forward_native(mut execution: Execution) -> Result<Response, ServiceError> {
     let (upstream, _) = match execution.send(false).await {
         Ok(value) => value,
@@ -1207,6 +1302,36 @@ async fn forward_native(mut execution: Execution) -> Result<Response, ServiceErr
                                 )
                                 .await;
                         }
+                        let completed = current.completed as usize;
+                        if current.execution.native_batch_remaining(completed) > 0 {
+                            let initial = json!({"data":[], "usage":current.usage.take()});
+                            let result = collect_missing_native_images(
+                                &mut current.execution, initial, completed, current.progress.bytes,
+                            ).await;
+                            let mut result = match result {
+                                Ok(result) => result,
+                                Err(error) => return current.error_after(error, output).await,
+                            };
+                            if let Err(error) = super::assets::normalize_output(
+                                &current.execution.state,
+                                &mut result,
+                                current.execution.request.response_format,
+                                current.execution.response_limit(),
+                                current.execution.asset_budget(),
+                            ).await {
+                                return current.error_after(error, output).await;
+                            }
+                            let events = match native_to_events(&result, current.execution.request.operation) {
+                                Ok(events) => events,
+                                Err(error) => return current.error_after(error, output).await,
+                            };
+                            for (index, mut event) in events.into_iter().enumerate() {
+                                event["output_index"] = json!(completed + index);
+                                let kind = event["type"].as_str().unwrap_or("message");
+                                output.push_str(&format!("event: {kind}\ndata: {event}\n\n"));
+                            }
+                            current.usage = result.get("usage").cloned();
+                        }
                         current
                             .execution
                             .tracker
@@ -1257,6 +1382,10 @@ async fn forward_native(mut execution: Execution) -> Result<Response, ServiceErr
                 return Err(error);
             }
         };
+        if let Err(error) = complete_buffered_native_images(&mut execution, &mut value, bytes.len()).await {
+            execution.tracker.fail(&error).await;
+            return Err(error);
+        }
         if let Err(error) = super::assets::normalize_output(
             &execution.state,
             &mut value,
@@ -1279,7 +1408,7 @@ async fn forward_native(mut execution: Execution) -> Result<Response, ServiceErr
         ));
     }
     let mut value = serde_json::from_slice::<Value>(&bytes).ok();
-    let usage = value.as_ref().and_then(|value| value.get("usage")).cloned();
+    let mut usage = value.as_ref().and_then(|value| value.get("usage")).cloned();
     execution.tracker.capture_usage(&usage);
     let succeeded = status.is_success()
         && value
@@ -1293,6 +1422,11 @@ async fn forward_native(mut execution: Execution) -> Result<Response, ServiceErr
                 "Native Images response was not valid JSON",
             )
         })?;
+        if let Err(error) = complete_buffered_native_images(&mut execution, value, bytes.len()).await {
+            execution.tracker.fail(&error).await;
+            return Err(error);
+        }
+        usage = value.get("usage").cloned();
         if let Err(error) = super::assets::normalize_output(
             &execution.state,
             value,

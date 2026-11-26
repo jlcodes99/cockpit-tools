@@ -8225,7 +8225,10 @@
       "recovered": "{{model}} 사용 가능 상태 복구 ({{time}})",
       "until": "{{model}} 이전 확인 시 제한됨, 해제 {{time}}",
       "unavailable": "{{model}} 이전 확인 시 제한됨",
-      "failed": "{{model}} 이전 확인 실패"
+      "failed": "{{model}} 이전 확인 실패",
+      "logUntil": "{{model}} 클라이언트 로그 한도 제한, 초기화 {{time}}",
+      "logUnknownUntil": "클라이언트 로그에서 속도 제한 감지, 초기화 {{time}}",
+      "logHits": "로그 {{count}}회 감지"
     },
     "exposeToCodex": {
       "title": "WorkBuddy 토큰을 복사하지 않고 Native Rust 게이트웨이를 통해 연결합니다"
@@ -9697,7 +9700,9 @@
       "conversations": "대화 수",
       "turns": "응답 턴",
       "coverage": "정확도 범위",
-      "avgPerDay": "활성일 평균"
+      "avgPerDay": "활성일 평균",
+      "refCost": "API 환산 참고 비용",
+      "cacheSavingsHint": "프롬프트 캐시로 약 {{savings}} 절감"
     },
     "estimated": {
       "notice": "원본 API 사용량이 없는 {{turns}}턴은 별도로 추정되었습니다(정확한 합계에 합산되지 않음):"
@@ -9736,6 +9741,32 @@
     "errors": {
       "loadFailed": "토큰 사용량을 불러오지 못했습니다: {{error}}",
       "syncFailed": "토큰 사용량 스캔에 실패했습니다: {{error}}"
+    },
+    "heatmap": {
+      "title": "365일 활동 히트맵",
+      "activeDays": "활동 {{count}}일",
+      "peak": "최고 {{date}} ({{tokens}})",
+      "less": "적음",
+      "more": "많음"
+    },
+    "rehydrate": {
+      "title": "압축 후 기억 복원 훅 (Rehydrate)",
+      "enabledBadge": "사용 중",
+      "disabledBadge": "비활성",
+      "desc": "컨텍스트 압축(CHECKPOINT) 직후 다음 호출 전에 사용자 요청 타임라인, 수정된 파일 및 핵심 결정을 자동 주입하여 AI 기억 손실을 방지합니다.",
+      "noPython": "python3 미감지",
+      "enableBtn": "훅 활성화",
+      "disableBtn": "훅 비활성화"
+    },
+    "audit": {
+      "title": "컨텍스트 및 실행 감사",
+      "peakContext": "최대 단계 컨텍스트",
+      "compactions": "압축 {{count}}회",
+      "userPrompts": "사용자 질문",
+      "toolCalls": "도구 호출",
+      "fileOps": "파일 읽기/쓰기",
+      "commands": "명령 실행",
+      "subagents": "서브에이전트"
     }
   },
   "t3code": {
@@ -9743,6 +9774,32 @@
       "title": "계정 설정",
       "providers": "제공자 계정",
       "codexCatalogPending": "모델 동기화를 기다리는 외부 키: {{count}}개"
+    },
+    "commonSettings": {
+      "title": "자주 쓰는 설정",
+      "language": "T3 Code 언어"
+    },
+    "desktopPrivacy": {
+      "title": "T3 Code 개인정보 설정",
+      "enable": "개인정보 보호 모드 켜기",
+      "connection": "이 옵션들을 꺼도 휴대폰 페어링과 실시간 연결을 사용할 수 있습니다.",
+      "launchScope": "원격 측정 설정은 Cockpit Tools에서 시작한 기본 인스턴스에 적용됩니다.",
+      "restartPending": "설정을 저장했습니다. T3 Code를 다시 시작하면 적용됩니다.",
+      "environmentBlocked": "환경 변수 {{variable}}로 꺼져 있습니다.",
+      "policyBlocked": "시스템 정책으로 꺼져 있습니다.",
+      "linked": "사용 분석을 끄면 연결 추적도 꺼집니다.",
+      "analytics": {
+        "label": "사용 분석",
+        "description": "앱 버전, 플랫폼, 사용 통계를 T3 Code로 보냅니다."
+      },
+      "tracing": {
+        "label": "데스크톱 연결 추적",
+        "description": "연결 시간과 오류 유형을 보냅니다. OpenTelemetry 내보내기도 함께 제어합니다."
+      },
+      "agentActivity": {
+        "label": "에이전트 활동 알림",
+        "description": "프로젝트 이름, 대화 제목, 모델 이름, 작업 상태를 T3 Connect로 보냅니다. 끄면 휴대폰의 실시간 현황과 오프라인 알림이 중지됩니다."
+      }
     },
     "nativeSettings": {
       "defaultModel": "새 대화 모델",

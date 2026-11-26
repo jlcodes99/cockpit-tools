@@ -219,6 +219,18 @@ mod codex_direct_launch_tests {
         command.args(&args).arg("NO_PROXY=mcp.lan");
         let log = format_command_preview(&command);
         assert!(!log.contains("mcp.lan"));
+
+        let mut custom_bypass_args = parse_extra_args(
+            r#"--proxy-bypass-list="localhost;127.0.0.1;[::1];10.0.0.0/8;172.16.0.0/12;192.168.0.0/16""#,
+        );
+        append_electron_proxy_args_with_direct_hosts(&mut custom_bypass_args, proxy, &rules);
+        assert_eq!(
+            custom_bypass_args,
+            [
+                "--proxy-server=socks5://127.0.0.1:48825",
+                "--proxy-bypass-list=localhost;127.0.0.1;[::1];mcp.lan;*.mcp.lan;10.20.0.0/16;10.0.0.0/8;172.16.0.0/12;192.168.0.0/16"
+            ]
+        );
     }
 
     #[cfg(target_os = "macos")]

@@ -3128,8 +3128,15 @@ pub async fn prepare_account_for_injection(account_id: &str) -> Result<Account, 
     let fresh_token = modules::oauth::ensure_fresh_token(&original_token)
         .await
         .map_err(|e| format!("Token 刷新失败: {}", e))?;
-    let refreshed = !same_oauth_credentials(&fresh_token, &original_token);
+    let refreshed = !same_oauth_credentials(&fresh_token, &original_token)
+        || fresh_token.granted_scopes != original_token.granted_scopes;
     account.token = fresh_token;
+    if account.token.lacks_aicode_scope() {
+        modules::logger::log_warn(&format!(
+            "[Account] 账号 {} 的 refresh_token 缺少 https://www.googleapis.com/auth/aicode 权限，Antigravity 2.35+ 桌面端启动后可能会自动登出，请使用 OAuth 重新授权该账号",
+            account.email
+        ));
+    }
     let mut token_changed = refreshed;
 
     // 全链路确保 is_gcp_tos 与 project_id 已被探测和沉淀
@@ -3156,6 +3163,7 @@ pub async fn prepare_account_for_injection(account_id: &str) -> Result<Account, 
                 latest.token.expiry_timestamp = account.token.expiry_timestamp;
                 latest.token.oauth_client_key = account.token.oauth_client_key;
                 latest.token.id_token = account.token.id_token;
+                latest.token.granted_scopes = account.token.granted_scopes;
             }
             if latest.token.project_id == original_token.project_id {
                 latest.token.project_id = account.token.project_id;

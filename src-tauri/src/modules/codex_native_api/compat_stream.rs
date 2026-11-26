@@ -429,7 +429,19 @@ impl CompatStreamAdapter {
                     .insert(self.reasoning_key.clone(), signature.to_owned());
             }
         }
-        let chunks = self.inner.push(event)?;
+        let search_call = if self.context.flavor == CompatFlavor::Claude
+            && kind == "response.output_item.done"
+        {
+            super::tool_search::function_call(&event["item"])?
+        } else {
+            None
+        };
+        let search_event = search_call.map(|call| {
+            let mut event = event.clone();
+            event["item"] = call;
+            event
+        });
+        let chunks = self.inner.push(search_event.as_ref().unwrap_or(event))?;
         if !self.started {
             self.started = true;
             if let Some(response) = event.get("response") {

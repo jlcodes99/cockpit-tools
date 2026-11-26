@@ -196,3 +196,33 @@ async fn unfinished_http_upload_still_times_out_without_reaching_account_selecti
     upstream.abort();
     let _ = std::fs::remove_dir_all(root);
 }
+
+#[tokio::test]
+async fn codex_oauth_legacy_compact_uses_inline_trigger_and_returns_reusable_capsule() {
+    let app = Router::new().route("/v1/responses", post(|axum::Json(body): axum::Json<Value>| async move {
+        let input = body["input"].as_array().unwrap();
+        assert_eq!(body["stream"], true);
+        assert_eq!(input.last().unwrap()["type"], "compaction_trigger");
+        assert_eq!(input.iter().filter(|item| item["type"] == "compaction_trigger").count(), 1);
+        let response = json!({"type":"response.completed","response":{
+            "id":"resp-compact","object":"response","status":"completed",
+            "output":[{"id":"cmp-1","type":"compaction","encrypted_content":"opaque-context"}],
+            "usage":{"input_tokens":20,"output_tokens":5,"total_tokens":25}
+        }});
+        ([(axum::http::header::CONTENT_TYPE,"text/event-stream")], format!("data: {response}\n\n"))
+    }));
+    let (addr, upstream) = mock(app).await;
+    let (mut service, _, root) = native(addr, true, false, Options::default()).await;
+    let response = client().post(format!("http://{}/v1/responses/compact", service.addr))
+        .bearer_auth("local-test-key")
+        .json(&json!({"model":"test-model","input":"retain the project goal"}))
+        .send().await.unwrap();
+    assert_eq!(response.status(), 200);
+    let body = response.json::<Value>().await.unwrap();
+    assert_eq!(body["object"], "response.compaction");
+    assert_eq!(body["output"][0]["encrypted_content"], "opaque-context");
+    assert_eq!(body["usage"]["total_tokens"], 25);
+    service.shutdown(Duration::from_secs(3)).await.unwrap();
+    upstream.abort();
+    let _ = std::fs::remove_dir_all(root);
+}

@@ -13,6 +13,10 @@ pub(super) fn is_host_result(item: &Value) -> bool {
                 matches!(
                     name,
                     "browser_tabs"
+                        | "browser_info"
+                        | "ide_context"
+                        | "terminal_info"
+                        | "untrusted_context"
                         | "codex_apps_open_page"
                         | "codex_apps_writing_block_edits"
                         | "goal_objective"
@@ -66,6 +70,10 @@ mod agent_browser_tests {
     fn agent_browser_host_envelopes_and_page_part_boundaries_are_exact() {
         for name in [
             "browser_tabs",
+            "browser_info",
+            "ide_context",
+            "terminal_info",
+            "untrusted_context",
             "goal_objective",
             "codex_apps_open_page",
             "codex_apps_writing_block_edits",
@@ -138,6 +146,10 @@ mod agent_browser_tests {
         use crate::modules::codex_native_api::identity::rebuild::{paired_tools, replay_items};
         for name in [
             "browser_tabs",
+            "browser_info",
+            "ide_context",
+            "terminal_info",
+            "untrusted_context",
             "goal_objective",
             "codex_apps_open_page",
             "codex_apps_writing_block_edits",
@@ -202,6 +214,22 @@ mod agent_browser_tests {
         let mut unknown_namespace = history.clone();
         unknown_namespace[1]["namespace"] = json!("other");
         assert!(responses_custom_results::replay(&unknown_namespace).is_none());
+    }
+
+    #[test]
+    fn ide_and_terminal_context_do_not_consume_a_pending_tool_call() {
+        for name in ["ide_context", "terminal_info", "browser_info", "untrusted_context"] {
+            let mut body = json!({"input":[
+                {"type":"function_call","name":"normal_tool","call_id":"real","arguments":"{}"},
+                browser_result(name),
+                {"type":"function_call_output","call_id":"real","output":"normal result"}
+            ]});
+            crate::modules::codex_native_api::codex_wire::normalize_websocket(
+                &mut Default::default(), &mut body, true,
+            ).unwrap();
+            assert_eq!(body["input"][1], browser_result(name));
+            assert_eq!(body["input"][2]["call_id"], "real");
+        }
     }
 }
 

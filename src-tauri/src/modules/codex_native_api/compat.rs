@@ -15,6 +15,8 @@ mod search;
 mod signature;
 #[path = "compat_stream.rs"]
 mod stream;
+#[path = "compat_tool_search.rs"]
+mod tool_search;
 #[path = "compat_tools.rs"]
 mod tools;
 pub use native_chat::{
@@ -25,6 +27,7 @@ pub use output::count_tokens_response;
 pub use output::{models, ollama_show, response_from_responses};
 pub use request::{count_tokens_request, prepare_request};
 pub use stream::CompatStreamAdapter;
+pub(super) use tool_search::lower_for_function_backend as lower_claude_tool_search;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CompatFlavor {
     Claude,

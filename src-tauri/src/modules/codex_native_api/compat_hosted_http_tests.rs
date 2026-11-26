@@ -10,6 +10,7 @@ use std::{
 
 struct FixtureHost {
     url: String,
+    oauth: bool,
     selections: Mutex<Vec<RouteRequest>>,
 }
 impl Host for FixtureHost {
@@ -46,7 +47,7 @@ impl Host for FixtureHost {
                 client: reqwest::Client::builder().no_proxy().build().unwrap(),
                 proxy_url: None,
                 proxy_route: None,
-                chatgpt: false,
+                chatgpt: self.oauth,
                 chatgpt_plan: false,
                 wire_api: WireApi::Responses,
                 compact_endpoint: None,
@@ -63,6 +64,96 @@ impl Host for FixtureHost {
     }
     fn record(&self, _: RequestReport) -> BoxFuture<'_, ()> {
         Box::pin(async {})
+    }
+}
+
+#[tokio::test]
+async fn claude_tool_search_http_discovery_and_continuation_use_the_selected_backend() {
+    use axum::response::IntoResponse;
+
+    for oauth in [true, false] {
+        let seen = Arc::new(Mutex::new(Vec::<Value>::new()));
+        let capture = seen.clone();
+        let app = Router::new().route("/v1/responses", post(move |Json(body): Json<Value>| {
+            let capture = capture.clone();
+            async move {
+                let turn = {
+                    let mut requests = capture.lock().unwrap();
+                    requests.push(body.clone());
+                    requests.len()
+                };
+                let item = match (turn, oauth) {
+                    (1, true) => json!({"type":"tool_search_call","id":"tsc_fixture",
+                        "call_id":"call_search","execution":"client","status":"completed",
+                        "arguments":{"query":"fetch"}}),
+                    (1, false) => json!({"type":"function_call","id":"fc_fixture",
+                        "call_id":"call_search","name":"ToolSearch","status":"completed",
+                        "arguments":"{\"query\":\"fetch\"}"}),
+                    _ => json!({"type":"message","id":"msg_fixture","role":"assistant",
+                        "status":"completed","content":[{"type":"output_text","text":"Found."}]}),
+                };
+                let response = json!({"id":format!("resp_fixture_{turn}"),"object":"response",
+                    "status":"completed","model":"model","output":[item]});
+                if body["stream"] == true {
+                    let done = json!({"type":"response.completed","response":response});
+                    ([("content-type", "text/event-stream")], format!("data: {done}\n\n")).into_response()
+                } else {
+                    Json(response).into_response()
+                }
+            }
+        }));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let host = Arc::new(FixtureHost {
+            url: format!("http://{}/v1", listener.local_addr().unwrap()),
+            oauth,
+            selections: Mutex::new(Vec::new()),
+        });
+        let task = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let dir = tempfile::tempdir().unwrap();
+        let mut service = native::start("127.0.0.1:0".parse().unwrap(), host,
+            dir.path().join("identity.sqlite"), native::Options::default()).await.unwrap();
+        let client = reqwest::Client::builder().no_proxy().build().unwrap();
+        let endpoint = format!("http://{}/v1/messages", service.addr);
+        let mut request = json!({"model":"model","max_tokens":32,
+            "messages":[{"role":"user","content":"Find a tool."}],"tools":[
+                {"name":"ToolSearch","input_schema":{"type":"object"}},
+                {"name":"mcp__fixture__fetch","defer_loading":true,"input_schema":{"type":"object"}}
+            ]});
+        async fn call(client: &reqwest::Client, endpoint: &str, request: &Value) -> Value {
+            let response = client.post(endpoint).bearer_auth("key").header("thread-id", "fixture")
+                .json(request).send().await.unwrap();
+            let status = response.status();
+            let body: Value = response.json().await.unwrap();
+            assert_eq!(status, 200, "{body}");
+            body
+        }
+        let reply = call(&client, &endpoint, &request).await;
+        assert_eq!(reply["content"][0]["name"], "ToolSearch");
+        assert_eq!(reply["stop_reason"], "tool_use");
+        request["messages"].as_array_mut().unwrap().extend([
+            json!({"role":"assistant","content":reply["content"]}),
+            json!({"role":"user","content":[{"type":"tool_result",
+                "tool_use_id":reply["content"][0]["id"],
+                "content":[{"type":"tool_reference","tool_name":"mcp__fixture__fetch"}]}]}),
+        ]);
+        let reply = call(&client, &endpoint, &request).await;
+        assert_eq!(reply["content"][0]["text"], "Found.");
+        {
+            let requests = seen.lock().unwrap();
+            assert_eq!(requests.len(), 2);
+            assert_eq!(requests[0]["tools"][0]["type"], if oauth { "tool_search" } else { "function" });
+            let items = requests[1]["input"].as_array().unwrap();
+            let result = items.iter().find(|item| item["type"] ==
+                if oauth { "tool_search_output" } else { "function_call_output" }).unwrap();
+            if oauth {
+                assert_eq!(requests[0]["tools"], requests[1]["tools"]);
+                assert_eq!(result["tools"][0]["name"], "mcp__fixture__fetch");
+            } else {
+                assert_eq!(requests[1]["tools"][1]["name"], "mcp__fixture__fetch");
+            }
+        }
+        service.shutdown(Duration::from_secs(2)).await.unwrap();
+        task.abort();
     }
 }
 
@@ -105,6 +196,7 @@ async fn claude_signature_http_continuation_survives_restart_and_replays_for_onl
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let host = Arc::new(FixtureHost {
         url: format!("http://{}/v1", listener.local_addr().unwrap()),
+        oauth: false,
         selections: Mutex::new(Vec::new()),
     });
     let task = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });

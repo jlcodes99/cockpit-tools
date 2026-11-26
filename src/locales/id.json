@@ -8406,7 +8406,10 @@
       "recovered": "{{model}} kembali tersedia pada {{time}}",
       "until": "{{model}} dibatasi pada uji terakhir, pulih {{time}}",
       "unavailable": "{{model}} dibatasi pada uji terakhir",
-      "failed": "Uji terakhir {{model}} gagal"
+      "failed": "Uji terakhir {{model}} gagal",
+      "logUntil": "{{model}} dibatasi di log klien, reset {{time}}",
+      "logUnknownUntil": "Batas laju terdeteksi di log klien, reset {{time}}",
+      "logHits": "Cocok {{count}} kali di log"
     },
     "exposeToCodex": {
       "title": "Terhubung melalui gateway Native Rust tanpa menyalin token WorkBuddy"
@@ -9697,7 +9700,9 @@
       "conversations": "Percakapan",
       "turns": "Giliran",
       "coverage": "Cakupan Pasti",
-      "avgPerDay": "Rata-rata / Hari Aktif"
+      "avgPerDay": "Rata-rata / Hari Aktif",
+      "refCost": "Estimasi Biaya API",
+      "cacheSavingsHint": "Cache menghemat ~{{savings}}"
     },
     "estimated": {
       "notice": "{{turns}} giliran tanpa data mentah API diestimasi secara terpisah (tidak ditambahkan ke Jumlah Pasti):"
@@ -9736,6 +9741,32 @@
     "errors": {
       "loadFailed": "Gagal memuat pemakaian token: {{error}}",
       "syncFailed": "Gagal memindai pemakaian token: {{error}}"
+    },
+    "heatmap": {
+      "title": "Peta Aktivitas 365 Hari",
+      "activeDays": "{{count}} hari aktif",
+      "peak": "Puncak {{date}} ({{tokens}})",
+      "less": "Sedikit",
+      "more": "Banyak"
+    },
+    "rehydrate": {
+      "title": "Hook Rehidrasi Pasca-Kompaksi",
+      "enabledBadge": "Aktif",
+      "disabledBadge": "Nonaktif",
+      "desc": "Menyuntikkan kembali linimasa permintaan, file yang diubah, dan keputusan penting secara otomatis setelah kompaksi konteks (CHECKPOINT).",
+      "noPython": "python3 tidak ada",
+      "enableBtn": "Aktifkan Hook",
+      "disableBtn": "Matikan Hook"
+    },
+    "audit": {
+      "title": "Audit Konteks & Eksekusi",
+      "peakContext": "Konteks Puncak Langkah",
+      "compactions": "{{count}} kompaksi",
+      "userPrompts": "Permintaan",
+      "toolCalls": "Panggilan Alat",
+      "fileOps": "File B/T",
+      "commands": "Perintah",
+      "subagents": "Subagen"
     }
   },
   "t3code": {
@@ -9743,6 +9774,32 @@
       "title": "Konfigurasi akun",
       "providers": "Akun penyedia",
       "codexCatalogPending": "Kunci pihak ketiga menunggu sinkronisasi model: {{count}}"
+    },
+    "commonSettings": {
+      "title": "Pengaturan umum",
+      "language": "Bahasa T3 Code"
+    },
+    "desktopPrivacy": {
+      "title": "Privasi T3 Code",
+      "enable": "Aktifkan mode privasi",
+      "connection": "Ponsel tetap dapat dipasangkan dan terhubung secara langsung setelah opsi ini dimatikan.",
+      "launchScope": "Telemetri berlaku untuk instans bawaan yang dijalankan dari Cockpit Tools.",
+      "restartPending": "Setelan disimpan. Mulai ulang T3 Code untuk menerapkan perubahan telemetri.",
+      "environmentBlocked": "Dinonaktifkan oleh variabel lingkungan {{variable}}.",
+      "policyBlocked": "Dinonaktifkan oleh kebijakan sistem.",
+      "linked": "Mematikan analitik penggunaan juga mematikan pelacakan koneksi.",
+      "analytics": {
+        "label": "Analitik penggunaan",
+        "description": "Mengirim versi aplikasi, platform, dan statistik penggunaan ke T3 Code."
+      },
+      "tracing": {
+        "label": "Pelacakan koneksi desktop",
+        "description": "Mengirim durasi koneksi dan jenis kesalahan. Opsi ini juga mengatur ekspor OpenTelemetry."
+      },
+      "agentActivity": {
+        "label": "Notifikasi aktivitas agen",
+        "description": "Mengirim nama proyek, judul percakapan, nama model, dan status tugas ke T3 Connect. Menonaktifkannya akan mematikan Aktivitas Langsung dan notifikasi luring di ponsel."
+      }
     },
     "nativeSettings": {
       "defaultModel": "Model obrolan baru",

@@ -203,6 +203,7 @@ pub mod sync_settings;
 pub mod t3code_account;
 pub mod t3code_app_injection;
 pub mod t3code_native_settings;
+pub mod t3code_privacy;
 pub mod t3code_instance;
 pub mod t3code_provider_bindings;
 #[cfg(test)]
@@ -245,6 +246,7 @@ pub(crate) mod workbuddy_auth_crypto;
 pub mod workbuddy_auto_checkin;
 pub mod workbuddy_instance;
 pub mod workbuddy_oauth;
+pub mod workbuddy_log_limits;
 pub mod workbuddy_model_probe;
 pub mod workbuddy_session_transfer;
 mod workbuddy_workspace_rebind;

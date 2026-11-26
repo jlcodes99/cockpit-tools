@@ -56,6 +56,7 @@ async fn oauth_image_batch_renews_each_opening_without_extending_request_total_d
             .route("/v1/responses", post(delayed_batch_response))
             .with_state(source.clone());
         let (mut handle, host, upstream, root) = fixture(app, true, false).await;
+        host.reasoning_delay_ms.store(25, Ordering::SeqCst);
         {
             let mut policy = host.policy.lock().unwrap();
             policy.image_open_timeout = Duration::from_millis(200);

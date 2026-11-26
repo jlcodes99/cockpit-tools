@@ -1,6 +1,67 @@
 use super::*;
 use serde_json::json;
 #[test]
+fn native_compat_claude_tool_search_round_trips_and_keeps_the_tool_prefix() {
+    let initial = json!({"model":"m","tools":[
+        {"name":"ToolSearch","description":"Discover tools","input_schema":{"type":"object"}},
+        {"name":"mcp__fixture__fetch","defer_loading":true,"input_schema":{"type":"object"}}
+    ],"messages":[{"role":"user","content":"find a tool"}]});
+    let first = prepare_request(initial.clone(), CompatFlavor::Claude, None, None).unwrap();
+    assert_eq!(first.responses["tools"].as_array().unwrap().len(), 1);
+    assert_eq!(first.responses["tools"][0]["type"], "tool_search");
+    let call = json!({"type":"tool_search_call","execution":"client","call_id":"search-1",
+        "arguments":{"query":"fetch"},"id":"tsc_1"});
+    let response = json!({"id":"r","status":"completed","output":[call]});
+    let decoded = response_from_responses(&response, &first.context).unwrap();
+    assert_eq!(decoded["stop_reason"], "tool_use");
+    assert_eq!(decoded["content"][0], json!({"type":"tool_use","name":"ToolSearch",
+        "id":"search-1","input":{"query":"fetch"}}));
+
+    let mut stream = CompatStreamAdapter::new(first.context.clone());
+    let mut frames = stream.push(&json!({"type":"response.output_item.done","item":call})).unwrap();
+    frames.extend(stream.push(&json!({"type":"response.completed","response":response})).unwrap());
+    assert_eq!(frames.iter().filter(|frame| frame.data["content_block"]["id"] == "search-1").count(), 1);
+    assert!(frames.iter().any(|frame| frame.data["delta"]["stop_reason"] == "tool_use"));
+
+    let mut next = initial;
+    next["messages"].as_array_mut().unwrap().extend([
+        json!({"role":"assistant","content":decoded["content"]}),
+        json!({"role":"user","content":[{"type":"tool_result","tool_use_id":"search-1",
+            "content":[{"type":"tool_reference","tool_name":"mcp__fixture__fetch"},
+            {"type":"text","text":"Tool discovered."}]},{"type":"text","text":"continue"}]}),
+    ]);
+    let resume = prepare_request(next.clone(), CompatFlavor::Claude, None, None).unwrap();
+    assert_eq!(resume.responses["tools"], first.responses["tools"]);
+    assert_eq!(resume.responses["input"][1]["type"], "tool_search_call");
+    assert_eq!(resume.responses["input"][2]["call_id"], "search-1");
+    assert_eq!(resume.responses["input"][2]["tools"][0]["name"], "mcp__fixture__fetch");
+    assert_eq!(resume.responses["input"][3]["content"][0]["text"], "Tool discovered.");
+    assert_eq!(resume.responses["input"][3]["content"][1]["text"], "continue");
+
+    let mut function_backend = resume.responses;
+    lower_claude_tool_search(&mut function_backend).unwrap();
+    assert_eq!(function_backend["tools"][0]["name"], "ToolSearch");
+    assert_eq!(function_backend["tools"][1]["name"], "mcp__fixture__fetch");
+    assert_eq!(function_backend["input"][2]["type"], "function_call_output");
+
+    next["tool_choice"] = json!({"type":"tool","name":"mcp__fixture__fetch"});
+    let forced = prepare_request(next, CompatFlavor::Claude, None, None).unwrap();
+    assert_eq!(forced.responses["tools"].as_array().unwrap().len(), 2);
+    assert_eq!(forced.responses["input"][1]["type"], "function_call");
+    assert_eq!(forced.responses["input"][2]["type"], "function_call_output");
+}
+
+#[test]
+fn native_compat_claude_tool_reference_must_answer_a_tool_search_call() {
+    let request = json!({"model":"m","messages":[
+        {"role":"assistant","content":[{"type":"tool_use","id":"call-1","name":"ordinary","input":{}}]},
+        {"role":"user","content":[{"type":"tool_result","tool_use_id":"call-1",
+            "content":[{"type":"tool_reference","tool_name":"mcp__fixture__fetch"}]}]}
+    ]});
+    let error = prepare_request(request, CompatFlavor::Claude, None, None).err().unwrap();
+    assert_eq!(error.code, "compat_parameter_not_representable");
+}
+#[test]
 fn gemini_replayed_thought_signatures_do_not_become_codex_state() {
     let req = prepare_request(json!({"contents":[
         {"role":"model","parts":[{"thought":true,"text":"private reasoning","thoughtSignature":"opaque-gemini"},

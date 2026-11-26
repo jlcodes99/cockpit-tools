@@ -91,6 +91,67 @@ pub(crate) fn chromium_rules(rules: &[String]) -> String {
     result
 }
 
+fn is_builtin_loopback_rule(rule: &str) -> bool {
+    matches!(rule, "localhost" | "127.0.0.1" | "::1")
+}
+
+pub(crate) fn extract_from_electron_args(args: &[String]) -> Vec<String> {
+    let mut raw_values = Vec::new();
+    let mut iter = args.iter().peekable();
+    while let Some(arg) = iter.next() {
+        let trimmed = arg.trim();
+        if let Some(value) = trimmed.strip_prefix("--proxy-bypass-list=") {
+            raw_values.push(value);
+        } else if trimmed == "--proxy-bypass-list" {
+            if let Some(next) = iter.peek().copied() {
+                if !next.trim_start().starts_with('-') {
+                    raw_values.push(next.as_str());
+                    iter.next();
+                }
+            }
+        }
+    }
+
+    let mut seen = HashSet::new();
+    let mut rules = Vec::new();
+    for raw in raw_values {
+        let raw = raw.trim_matches(['"', '\'', '“', '”', '‘', '’']);
+        for entry in raw
+            .split(|ch: char| ch == ',' || ch == ';' || ch.is_whitespace())
+            .map(|entry| entry.trim_matches(['"', '\'', '“', '”', '‘', '’']))
+            .filter(|entry| !entry.is_empty())
+        {
+            let Some(rule) = normalize(entry) else {
+                continue;
+            };
+            if is_builtin_loopback_rule(&rule) {
+                continue;
+            }
+            if seen.insert(rule.clone()) {
+                rules.push(rule);
+            }
+        }
+    }
+    rules
+}
+
+pub(crate) fn merge_rules(primary: &[String], extra: &[String]) -> Vec<String> {
+    let mut seen = HashSet::new();
+    let mut merged = Vec::with_capacity(primary.len() + extra.len());
+    for rule in primary.iter().chain(extra.iter()) {
+        let Some(normalized) = normalize(rule) else {
+            continue;
+        };
+        if is_builtin_loopback_rule(&normalized) {
+            continue;
+        }
+        if seen.insert(normalized.clone()) {
+            merged.push(normalized);
+        }
+    }
+    merged
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -131,5 +192,25 @@ mod tests {
             assert_eq!(parse(&format!("good.lan,{entry}")).unwrap_err(), INVALID);
         }
         assert!(parse("\n , ").unwrap().is_empty());
+    }
+
+    #[test]
+    fn extracts_and_merges_valid_extra_args_proxy_bypass_rules_while_dropping_wildcards() {
+        let args = vec![
+            "--proxy-bypass-list=\"localhost;127.0.0.1;[::1];10.0.0.0/8;172.16.0.0/12;192.168.0.0/16\""
+                .to_string(),
+            "--proxy-bypass-list".to_string(),
+            "*;*.corp.test;<local>".to_string(),
+        ];
+        let extracted = extract_from_electron_args(&args);
+        assert_eq!(
+            extracted,
+            ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "corp.test"]
+        );
+        let merged = merge_rules(&["mcp.lan".to_string(), "10.0.0.0/8".to_string()], &extracted);
+        assert_eq!(
+            chromium_rules(&merged),
+            "localhost;127.0.0.1;[::1];mcp.lan;*.mcp.lan;10.0.0.0/8;172.16.0.0/12;192.168.0.0/16;corp.test;*.corp.test"
+        );
     }
 }

@@ -454,7 +454,7 @@ pub(crate) fn merge_responses(responses: &[Value]) -> Result<Value, ServiceError
     Ok(combined)
 }
 
-fn add_usage(target: &mut Value, incoming: &Value) {
+pub(super) fn add_usage(target: &mut Value, incoming: &Value) {
     match (target, incoming) {
         (Value::Object(target), Value::Object(source)) => {
             for (key, value) in source {

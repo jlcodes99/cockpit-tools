@@ -1402,7 +1402,136 @@ fn windows_proxy_url_from_server(proxy_server: &str, target_scheme: &str) -> Opt
 }
 
 #[cfg(target_os = "windows")]
+fn windows_internet_settings_proxy_from_registry(
+    target_scheme: &str,
+) -> Result<Option<String>, String> {
+    use std::ffi::OsStr;
+    use std::os::windows::ffi::OsStrExt;
+    use windows::core::PCWSTR;
+    use windows::Win32::Foundation::{ERROR_FILE_NOT_FOUND, ERROR_SUCCESS};
+    use windows::Win32::System::Registry::{
+        RegCloseKey, RegOpenKeyExW, RegQueryValueExW, HKEY, HKEY_CURRENT_USER, KEY_READ, REG_DWORD,
+        REG_EXPAND_SZ, REG_SZ, REG_VALUE_TYPE,
+    };
+
+    fn to_wide(value: &str) -> Vec<u16> {
+        OsStr::new(value)
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect()
+    }
+
+    let subkey = to_wide(r"Software\Microsoft\Windows\CurrentVersion\Internet Settings");
+    let mut hkey = HKEY::default();
+    let open_status = unsafe {
+        RegOpenKeyExW(
+            HKEY_CURRENT_USER,
+            PCWSTR(subkey.as_ptr()),
+            0,
+            KEY_READ,
+            &mut hkey,
+        )
+    };
+    if open_status == ERROR_FILE_NOT_FOUND {
+        return Ok(None);
+    }
+    if open_status != ERROR_SUCCESS {
+        return Err(format!("RegOpenKeyExW failed: {:?}", open_status));
+    }
+
+    struct KeyGuard(HKEY);
+    impl Drop for KeyGuard {
+        fn drop(&mut self) {
+            unsafe {
+                let _ = RegCloseKey(self.0);
+            }
+        }
+    }
+    let _guard = KeyGuard(hkey);
+
+    let enable_name = to_wide("ProxyEnable");
+    let mut value_type = REG_VALUE_TYPE::default();
+    let mut dword_buf = [0u8; 4];
+    let mut dword_len = dword_buf.len() as u32;
+    let enable_status = unsafe {
+        RegQueryValueExW(
+            hkey,
+            PCWSTR(enable_name.as_ptr()),
+            None,
+            Some(&mut value_type),
+            Some(dword_buf.as_mut_ptr()),
+            Some(&mut dword_len),
+        )
+    };
+    if enable_status == ERROR_FILE_NOT_FOUND {
+        return Ok(None);
+    }
+    if enable_status != ERROR_SUCCESS || value_type != REG_DWORD || dword_len != 4 {
+        return Err(format!("RegQueryValueExW(ProxyEnable) failed: {:?}", enable_status));
+    }
+    let enabled = u32::from_le_bytes(dword_buf);
+    if enabled == 0 {
+        return Ok(None);
+    }
+
+    let server_name = to_wide("ProxyServer");
+    let mut server_type = REG_VALUE_TYPE::default();
+    let mut byte_len: u32 = 0;
+    let size_status = unsafe {
+        RegQueryValueExW(
+            hkey,
+            PCWSTR(server_name.as_ptr()),
+            None,
+            Some(&mut server_type),
+            None,
+            Some(&mut byte_len),
+        )
+    };
+    if size_status == ERROR_FILE_NOT_FOUND || byte_len == 0 {
+        return Ok(None);
+    }
+    if size_status != ERROR_SUCCESS
+        || (server_type != REG_SZ && server_type != REG_EXPAND_SZ)
+        || byte_len > 16 * 1024
+    {
+        return Err(format!("RegQueryValueExW(ProxyServer size) failed: {:?}", size_status));
+    }
+
+    let mut raw_bytes = vec![0u8; byte_len as usize];
+    let read_status = unsafe {
+        RegQueryValueExW(
+            hkey,
+            PCWSTR(server_name.as_ptr()),
+            None,
+            Some(&mut server_type),
+            Some(raw_bytes.as_mut_ptr()),
+            Some(&mut byte_len),
+        )
+    };
+    if read_status != ERROR_SUCCESS {
+        return Err(format!("RegQueryValueExW(ProxyServer) failed: {:?}", read_status));
+    }
+    raw_bytes.truncate(byte_len as usize);
+    let wide_len = raw_bytes.len() / 2;
+    let mut wide_chars = Vec::with_capacity(wide_len);
+    for chunk in raw_bytes.chunks_exact(2) {
+        let ch = u16::from_le_bytes([chunk[0], chunk[1]]);
+        if ch == 0 {
+            break;
+        }
+        wide_chars.push(ch);
+    }
+    let proxy_server = String::from_utf16_lossy(&wide_chars);
+    Ok(windows_proxy_url_from_server(&proxy_server, target_scheme))
+}
+
+#[cfg(target_os = "windows")]
 pub(crate) fn system_proxy_url_for_target(target_url: &str) -> Option<String> {
+    let target_scheme = system_proxy_target_scheme(target_url);
+    if let Ok(resolved) = windows_internet_settings_proxy_from_registry(&target_scheme) {
+        return resolved;
+    }
+
     let mut command = StdCommand::new("reg");
     {
         use std::os::windows::process::CommandExt;
@@ -1419,7 +1548,6 @@ pub(crate) fn system_proxy_url_for_target(target_url: &str) -> Option<String> {
         return None;
     }
 
-    let target_scheme = system_proxy_target_scheme(target_url);
     let stdout = String::from_utf8_lossy(&output.stdout);
     let values = windows_reg_query_map(&stdout);
     if !windows_reg_dword_enabled(values.get("ProxyEnable")) {

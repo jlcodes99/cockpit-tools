@@ -91,10 +91,23 @@ struct ImageHost {
     retries: AtomicUsize,
     credential_retries: AtomicUsize,
     alternate_sources: AtomicUsize,
+    reasoning_delay_ms: AtomicUsize,
     policy: Mutex<ExecutionPolicy>,
 }
 
 impl Host for ImageHost {
+    fn reasoning_ceiling<'a>(
+        &'a self,
+        _: &'a Caller,
+    ) -> BoxFuture<'a, Result<Option<crate::models::codex_local_access::CodexReasoningLevel>, ServiceError>> {
+        Box::pin(async move {
+            let delay = self.reasoning_delay_ms.load(Ordering::SeqCst);
+            if delay > 0 {
+                tokio::time::sleep(Duration::from_millis(delay as u64)).await;
+            }
+            Ok(None)
+        })
+    }
     fn execution_policy(&self) -> BoxFuture<'_, Result<ExecutionPolicy, ServiceError>> {
         Box::pin(async move {
             let mut policy = self.policy.lock().unwrap().clone();
@@ -267,6 +280,7 @@ fn fixture_host(base_url: String, oauth: bool, deny: bool) -> Arc<ImageHost> {
         retries: AtomicUsize::new(0),
         credential_retries: AtomicUsize::new(1),
         alternate_sources: AtomicUsize::new(0),
+        reasoning_delay_ms: AtomicUsize::new(0),
         policy: Mutex::new(ExecutionPolicy::default()),
     })
 }

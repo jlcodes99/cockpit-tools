@@ -65,6 +65,22 @@ impl Prepared {
     }
 }
 
+fn json_byte_len(value: &Value) -> usize {
+    struct Counter(usize);
+    impl std::io::Write for Counter {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.0 = self.0.saturating_add(buf.len());
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    let mut counter = Counter(0);
+    serde_json::to_writer(&mut counter, value).expect("count JSON bytes");
+    counter.0
+}
+
 pub(super) async fn prepare(
     state: &AppState,
     caller: &Caller,
@@ -228,14 +244,13 @@ async fn prepare_excluding_inner(
     // A preferred owner supplied by the partial-HTTP continuation path is a
     // transport constraint, not a replaceable affinity hint.
     let enabled = requested_rebuild && preferred.is_none();
-    let (context_next, rebuild_plan) = if enabled {
+    let (context_next, rebuild_plan, body) = if enabled {
         let identity = state.identity.clone();
         let headers_copy = incoming.clone();
-        let body_copy = body.clone();
         let max_body_bytes = state.options.max_body_bytes;
         super::blocking::run_prepared(state, move || {
             let mut plan =
-                identity.configure_rebuild(&mut context, &headers_copy, &body_copy, enabled)?;
+                identity.configure_rebuild(&mut context, &headers_copy, &body, enabled)?;
             if plan.is_none() {
                 // Account selection must know a complete cached continuation
                 // is available even before the selected HTTP transport applies
@@ -243,20 +258,20 @@ async fn prepare_excluding_inner(
                 plan = identity.preview_rebuild_with_checkpoint_parameters(
                     &context,
                     &headers_copy,
-                    &body_copy,
+                    &body,
                 )?;
             }
             let plan = plan.filter(|plan| {
-                max_body_bytes == usize::MAX || plan.body.to_string().len() <= max_body_bytes
+                max_body_bytes == usize::MAX || json_byte_len(&plan.body) <= max_body_bytes
             });
             if enabled && plan.is_none() {
                 identity.protect_unrebuildable(&mut context)?;
             }
-            Ok::<_, ServiceError>((context, plan))
+            Ok::<_, ServiceError>((context, plan, body))
         })
         .await?
     } else {
-        (context, None)
+        (context, None, body)
     };
     let mut context = context_next;
     if preferred.is_some_and(|account| {
@@ -425,7 +440,7 @@ async fn prepare_excluding_inner(
             } else {
                 identity.configure_rebuild(&mut context, &original_headers, &normalized, enabled)?
             };
-            if max_body_bytes != usize::MAX && plan.as_ref().map_or(&normalized, |plan| &plan.body).to_string().len() > max_body_bytes {
+            if max_body_bytes != usize::MAX && json_byte_len(plan.as_ref().map_or(&normalized, |plan| &plan.body)) > max_body_bytes {
                 return Err(ServiceError::new(413, "continuation_history_too_large",
                     "Expanded conversation exceeds the request size limit; existing history was preserved"));
             }
@@ -1249,14 +1264,16 @@ pub(super) async fn prepare_control(
 }
 
 async fn refresh_route(state: &AppState, prepared: &mut Prepared, force_refresh: bool) -> Result<(), ServiceError> {
-    prepared.execution = prepared.execution.renew_open();
-    let execution = prepared.execution.clone();
+    let execution = prepared.execution.renew_open();
     execution
+        .clone()
         .run(super::execution::prepare(
             state,
             refresh_inner(state, prepared, force_refresh),
         ))
-        .await
+        .await?;
+    prepared.execution = execution;
+    Ok(())
 }
 
 async fn refresh_inner(state: &AppState, prepared: &mut Prepared, force_refresh: bool) -> Result<(), ServiceError> {
@@ -1475,14 +1492,16 @@ pub(super) async fn retry_other_account(
     state: &AppState,
     prepared: &mut Prepared,
 ) -> Result<(), ServiceError> {
-    prepared.execution = prepared.execution.renew_open();
-    let execution = prepared.execution.clone();
+    let execution = prepared.execution.renew_open();
     execution
+        .clone()
         .run(super::execution::prepare(
             state,
             retry_other_account_inner(state, prepared),
         ))
-        .await
+        .await?;
+    prepared.execution = execution;
+    Ok(())
 }
 
 /// The local quota gate has not sent a request. Keep the current opening budget
@@ -1596,13 +1615,16 @@ pub(super) async fn retry_cooldown_round(
     prepared: &mut Prepared,
     excluded: Vec<String>,
 ) -> Result<(), ServiceError> {
-    let execution = prepared.execution.clone();
+    let execution = prepared.execution.renew_open();
     execution
+        .clone()
         .run(super::execution::prepare(
             state,
             retry_cooldown_round_inner(state, prepared, excluded),
         ))
-        .await
+        .await?;
+    prepared.execution = execution;
+    Ok(())
 }
 
 async fn retry_cooldown_round_inner(

@@ -8225,7 +8225,10 @@
       "recovered": "{{model}} je opět dostupný od {{time}}",
       "until": "{{model}} při posledním testu omezen, obnova {{time}}",
       "unavailable": "{{model}} při posledním testu omezen",
-      "failed": "Poslední test {{model}} selhal"
+      "failed": "Poslední test {{model}} selhal",
+      "logUntil": "{{model}} omezen v protokolech klienta, obnovení {{time}}",
+      "logUnknownUntil": "V protokolech klienta zjištěn limit, obnovení {{time}}",
+      "logHits": "{{count}} výskytů v protokolech"
     },
     "exposeToCodex": {
       "title": "Připojí se přes bránu Native Rust bez kopírování tokenu WorkBuddy"
@@ -9697,7 +9700,9 @@
       "conversations": "Konverzace",
       "turns": "Kola odpovědí",
       "coverage": "Přesné pokrytí",
-      "avgPerDay": "Prům. / aktivní den"
+      "avgPerDay": "Prům. / aktivní den",
+      "refCost": "Ekviv. cena API",
+      "cacheSavingsHint": "Mezipaměť ušetřila ~{{savings}}"
     },
     "estimated": {
       "notice": "{{turns}} kol bez surových metrik API bylo odhadnuto samostatně (nikdy se nepřičítá k přesnému součtu):"
@@ -9736,6 +9741,32 @@
     "errors": {
       "loadFailed": "Nepodařilo se načíst spotřebu tokenů: {{error}}",
       "syncFailed": "Prohledání spotřeby tokenů selhalo: {{error}}"
+    },
+    "heatmap": {
+      "title": "Mapa aktivity za 365 dní",
+      "activeDays": "{{count}} aktivních dní",
+      "peak": "Maximum {{date}} ({{tokens}})",
+      "less": "Méně",
+      "more": "Více"
+    },
+    "rehydrate": {
+      "title": "Hook obnovy paměti po kompakci",
+      "enabledBadge": "Zapnuto",
+      "disabledBadge": "Vypnuto",
+      "desc": "Po kompakci kontextu (CHECKPOINT) automaticky znovu vloží historii požadavků, upravené soubory a klíčová rozhodnutí.",
+      "noPython": "python3 chybí",
+      "enableBtn": "Zapnout hook",
+      "disableBtn": "Vypnout hook"
+    },
+    "audit": {
+      "title": "Audit kontextu a nástrojů",
+      "peakContext": "Špičkový kontext kroku",
+      "compactions": "{{count}} kompakcí",
+      "userPrompts": "Dotazy",
+      "toolCalls": "Volání nástrojů",
+      "fileOps": "Soubory Č/Z",
+      "commands": "Příkazy",
+      "subagents": "Podagenti"
     }
   },
   "t3code": {
@@ -9743,6 +9774,32 @@
       "title": "Nastavení účtů",
       "providers": "Účty poskytovatelů",
       "codexCatalogPending": "Klíče třetích stran čekající na synchronizaci modelů: {{count}}"
+    },
+    "commonSettings": {
+      "title": "Běžná nastavení",
+      "language": "Jazyk T3 Code"
+    },
+    "desktopPrivacy": {
+      "title": "Soukromí T3 Code",
+      "enable": "Zapnout režim soukromí",
+      "connection": "Telefon lze i po vypnutí těchto voleb spárovat a používat v reálném čase.",
+      "launchScope": "Telemetrie platí pro výchozí instanci spuštěnou z Cockpit Tools.",
+      "restartPending": "Nastavení uloženo. Změny telemetrie se projeví po restartu T3 Code.",
+      "environmentBlocked": "Vypnuto proměnnou prostředí {{variable}}.",
+      "policyBlocked": "Vypnuto zásadami systému.",
+      "linked": "Vypnutí analýzy využití vypne i trasování připojení.",
+      "analytics": {
+        "label": "Analýza využití",
+        "description": "Odesílá verzi aplikace, platformu a statistiky využití do T3 Code."
+      },
+      "tracing": {
+        "label": "Trasování připojení",
+        "description": "Odesílá časy připojení a typy chyb. Přepínač řídí i export OpenTelemetry."
+      },
+      "agentActivity": {
+        "label": "Oznámení o aktivitě agenta",
+        "description": "Odesílá názvy projektů, konverzací a modelů a stav úloh do T3 Connect. Vypnutí zastaví živé aktivity a oznámení při odpojení telefonu."
+      }
     },
     "nativeSettings": {
       "defaultModel": "Model pro nové chaty",

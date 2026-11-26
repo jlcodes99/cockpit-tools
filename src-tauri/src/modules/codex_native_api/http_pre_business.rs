@@ -15,6 +15,7 @@ pub(super) async fn recover(
     streaming: bool,
 ) -> Result<Option<HttpResponseStream>, ServiceError> {
     let original = frame.identity_event.as_ref().or(frame.value.as_ref());
+    let mut status_503_or_overload = false;
     if let Some(event) = original {
         if let Some(code) = super::super::quota_exhaustion::code(event) {
             let wait = previous_wait.max(super::super::events::retry_after_event(event));
@@ -23,18 +24,39 @@ pub(super) async fn recover(
         if super::super::overload::event(event) { tracker.observe_overload(); }
         if !fence.active() { tracker.overload.recovered(); }
         let overloaded = ["/error/code", "/response/error/code", "/code"].iter()
-            .any(|path| event.pointer(path).and_then(Value::as_str) == Some("server_is_overloaded"));
-        if overloaded || super::super::bootstrap::rejection(event).is_some_and(|(status, _)| status == 503) {
+            .any(|path| event.pointer(path).and_then(Value::as_str) == Some("server_is_overloaded"))
+            || super::super::overload::event(event);
+        status_503_or_overload = overloaded
+            || super::super::bootstrap::rejection(event).is_some_and(|(status, _)| status == 503);
+        if status_503_or_overload {
             tracing::info!(target: "codex_api", "[NativeAPI][recovery] request_id={} status=503 fence_active={} pre_execution={} switch_allowed={} rebuild_available={}",
                 tracker.diagnostic_request_id(), fence.active(), super::super::bootstrap::pre_execution(event),
                 super::super::retry::can_switch_account(prepared), prepared.rebuild_plan.is_some());
         }
     }
+    let fence_was_active = fence.active();
     let Some((status, _)) = fence.observe(
         original,
         frame.bytes.len(),
         super::super::grok_errors::applies(&prepared.route),
     ) else {
+        if status_503_or_overload {
+            let reason = if !fence_was_active {
+                "fence_inactive"
+            } else if original.is_some_and(super::super::bootstrap::handshake) {
+                "handshake_frame"
+            } else if original.is_some_and(|event| !super::super::bootstrap::pre_execution(event)) {
+                "execution_observed"
+            } else {
+                "unrecognized_rejection"
+            };
+            tracing::info!(
+                target: "codex_api",
+                "[NativeAPI][recovery] request_id={} status=503 early_exit_reason={}",
+                tracker.diagnostic_request_id(),
+                reason
+            );
+        }
         return Ok(None);
     };
     let event = original.expect("rejection has an event");
@@ -58,19 +80,37 @@ pub(super) async fn recover(
     let deadline = tracker.overload.deadline(deadline);
     let remaining = super::super::retry::remaining_credential_policy(prepared, tracker, policy);
     let mut opened = match open_response_stream(
-        state, prepared, false, streaming, tracker, &remaining, deadline,
+        state, prepared, prepared.compact, streaming, tracker, &remaining, deadline,
     )
     .await
     {
         Ok(opened) => opened,
-        Err(_failure)
+        Err(failure)
             if !state.stop.stopped()
                 && tokio::time::Instant::now() < deadline
                 && tracker.upstream_attempt_count() == attempts =>
         {
-            return Err(error)
+            tracing::info!(
+                target: "codex_api",
+                "[NativeAPI][recovery] request_id={} status={} early_exit_reason=reopen_unsent_fallback code={} fallback_status={}",
+                tracker.diagnostic_request_id(),
+                status,
+                failure.code,
+                failure.status
+            );
+            return Err(error);
         }
-        Err(failure) => return Err(failure),
+        Err(failure) => {
+            tracing::info!(
+                target: "codex_api",
+                "[NativeAPI][recovery] request_id={} status={} early_exit_reason=reopen_failed code={} fallback_status={}",
+                tracker.diagnostic_request_id(),
+                status,
+                failure.code,
+                failure.status
+            );
+            return Err(failure);
+        }
     };
     if opened.status.is_success() && !opened.is_sse {
         let bytes = read_bounded(state, opened.bytes, tracker, policy, deadline).await?;
@@ -129,6 +169,8 @@ pub(super) async fn recover(
         .with_error_details(error_value)
         .with_credential_scope(scope));
     }
-    *fence = super::super::bootstrap::Fence::new(!prepared.route.chatgpt_plan);
+    *fence = super::super::bootstrap::Fence::new(
+        !prepared.route.chatgpt_plan || policy.continuous_overload_retry,
+    );
     Ok(Some(opened))
 }

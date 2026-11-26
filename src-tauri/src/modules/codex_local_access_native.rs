@@ -1645,10 +1645,10 @@ impl native_contract::Host for NativeHostBridge {
                     first_response_ms: diagnostics.and_then(|d| d.first_response_ms),
                     output_generation_ms: diagnostics.and_then(|d| d.output_generation_ms),
                     input_text_characters: report.input_text_characters,
-                    service_tier: report
-                        .response_service_tier
-                        .as_deref()
-                        .or(report.requested_service_tier.as_deref()),
+                    service_tier: effective_billing_service_tier(
+                        report.requested_service_tier.as_deref(),
+                        report.response_service_tier.as_deref(),
+                    ),
                     requested_service_tier: report.requested_service_tier.as_deref(),
                     response_service_tier: report.response_service_tier.as_deref(),
                     reasoning_effort: report.reasoning_effort.as_deref(),

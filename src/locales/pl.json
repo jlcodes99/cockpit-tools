@@ -8225,7 +8225,10 @@
       "recovered": "{{model}} ponownie dostępny od {{time}}",
       "until": "{{model}} ograniczony w ostatnim teście, reset {{time}}",
       "unavailable": "{{model}} ograniczony w ostatnim teście",
-      "failed": "Ostatni test {{model}} nieudany"
+      "failed": "Ostatni test {{model}} nieudany",
+      "logUntil": "{{model}} ograniczony w logach klienta, reset {{time}}",
+      "logUnknownUntil": "Wykryto limit w logach klienta, reset {{time}}",
+      "logHits": "Trafienia w logach: {{count}}"
     },
     "exposeToCodex": {
       "title": "Łączy przez bramę Native Rust bez kopiowania tokenu WorkBuddy"
@@ -9697,7 +9700,9 @@
       "conversations": "Rozmowy",
       "turns": "Tury odpowiedzi",
       "coverage": "Dokładne pokrycie",
-      "avgPerDay": "Śred. / aktywny dzień"
+      "avgPerDay": "Śred. / aktywny dzień",
+      "refCost": "Równowartość API",
+      "cacheSavingsHint": "Cache zaoszczędził ~{{savings}}"
     },
     "estimated": {
       "notice": "{{turns}} tur bez surowych danych API oszacowano osobno (nie są wliczane do dokładnej sumy):"
@@ -9736,6 +9741,32 @@
     "errors": {
       "loadFailed": "Nie udało się wczytać zużycia tokenów: {{error}}",
       "syncFailed": "Skanowanie zużycia tokenów nie powiodło się: {{error}}"
+    },
+    "heatmap": {
+      "title": "Mapa aktywności (365 dni)",
+      "activeDays": "{{count}} aktywnych dni",
+      "peak": "Szczyt {{date}} ({{tokens}})",
+      "less": "Mniej",
+      "more": "Więcej"
+    },
+    "rehydrate": {
+      "title": "Hook przywracania pamięci po kompakcji",
+      "enabledBadge": "Włączony",
+      "disabledBadge": "Wyłączony",
+      "desc": "Automatycznie wstrzykuje oś czasu żądań, edytowane pliki i kluczowe ustalenia po kompakcji kontekstu (CHECKPOINT).",
+      "noPython": "Brak python3",
+      "enableBtn": "Włącz hook",
+      "disableBtn": "Wyłącz hook"
+    },
+    "audit": {
+      "title": "Audyt kontekstu i wykonania",
+      "peakContext": "Szczytowy kontekst kroku",
+      "compactions": "{{count}} kompakcji",
+      "userPrompts": "Zapytania",
+      "toolCalls": "Narzędzia",
+      "fileOps": "Pliki O/Z",
+      "commands": "Polecenia",
+      "subagents": "Subagenci"
     }
   },
   "t3code": {
@@ -9743,6 +9774,32 @@
       "title": "Konfiguracja kont",
       "providers": "Konta dostawców",
       "codexCatalogPending": "Klucze zewnętrzne czekające na synchronizację modeli: {{count}}"
+    },
+    "commonSettings": {
+      "title": "Częste ustawienia",
+      "language": "Język T3 Code"
+    },
+    "desktopPrivacy": {
+      "title": "Prywatność T3 Code",
+      "enable": "Włącz tryb prywatności",
+      "connection": "Po wyłączeniu tych opcji nadal można sparować telefon i połączyć się w czasie rzeczywistym.",
+      "launchScope": "Telemetria dotyczy domyślnej instancji uruchamianej z Cockpit Tools.",
+      "restartPending": "Zapisano ustawienia. Uruchom ponownie T3 Code, aby zastosować zmiany telemetrii.",
+      "environmentBlocked": "Wyłączone przez zmienną środowiskową {{variable}}.",
+      "policyBlocked": "Wyłączone przez zasady systemowe.",
+      "linked": "Wyłączenie analizy użycia wyłącza także śledzenie połączeń.",
+      "analytics": {
+        "label": "Analiza użycia",
+        "description": "Wysyła do T3 Code wersję aplikacji, platformę i statystyki użycia."
+      },
+      "tracing": {
+        "label": "Śledzenie połączeń",
+        "description": "Wysyła czasy połączeń i typy błędów. Steruje również eksportem OpenTelemetry."
+      },
+      "agentActivity": {
+        "label": "Powiadomienia o aktywności agenta",
+        "description": "Wysyła nazwy projektów i modeli, tytuły konwersacji i stany zadań do T3 Connect. Wyłączenie zatrzymuje aktywności na żywo i powiadomienia offline w telefonie."
+      }
     },
     "nativeSettings": {
       "defaultModel": "Model nowych czatów",

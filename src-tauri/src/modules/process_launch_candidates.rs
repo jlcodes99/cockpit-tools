@@ -2053,12 +2053,15 @@ fn append_electron_proxy_args_with_direct_hosts(
     if proxy_url.is_empty() {
         return;
     }
+    let extra_direct_hosts = super::codex_proxy_direct_hosts::extract_from_electron_args(args);
+    let merged_direct_hosts =
+        super::codex_proxy_direct_hosts::merge_rules(direct_hosts, &extra_direct_hosts);
     clear_electron_proxy_args(args);
     let chromium_proxy_url = proxy_url.replace("socks5h://", "socks5://");
     args.push(format!("--proxy-server={chromium_proxy_url}"));
     args.push(format!(
         "--proxy-bypass-list={}",
-        super::codex_proxy_direct_hosts::chromium_rules(direct_hosts)
+        super::codex_proxy_direct_hosts::chromium_rules(&merged_direct_hosts)
     ));
 }
 

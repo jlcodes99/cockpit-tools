@@ -400,7 +400,8 @@ async fn import_from_refresh_token(
         None,
         None,
     )
-    .with_oauth_metadata(token_response.oauth_client_key, token_response.id_token);
+    .with_oauth_metadata(token_response.oauth_client_key, token_response.id_token)
+    .with_granted_scopes(token_response.scope);
 
     // 添加或更新账号
     let account = modules::upsert_account(email.clone(), user_info.get_display_name(), token)?;
@@ -575,7 +576,8 @@ async fn import_delimited_account_line(
                     None,
                     None,
                 )
-                .with_oauth_metadata(token_response.oauth_client_key, token_response.id_token);
+                .with_oauth_metadata(token_response.oauth_client_key, token_response.id_token)
+                .with_granted_scopes(token_response.scope);
                 let account = modules::upsert_account(parsed.email.clone(), None, token)?;
                 return modules::account::update_account_note(&account.id, parsed.note_update);
             }
@@ -759,7 +761,8 @@ pub async fn import_from_json_logic(json_content: String) -> Result<Vec<models::
                         None,
                         None,
                     )
-                    .with_oauth_metadata(token_response.oauth_client_key, token_response.id_token);
+                    .with_oauth_metadata(token_response.oauth_client_key, token_response.id_token)
+                    .with_granted_scopes(token_response.scope);
 
                     match modules::upsert_account(email.clone(), None, token) {
                         Ok(mut new_account) => {
@@ -1024,7 +1027,8 @@ pub async fn import_from_files_logic(file_paths: Vec<String>) -> Result<FileImpo
                     None,
                     None,
                 )
-                .with_oauth_metadata(token_response.oauth_client_key, token_response.id_token);
+                .with_oauth_metadata(token_response.oauth_client_key, token_response.id_token)
+                .with_granted_scopes(token_response.scope);
 
                 match modules::upsert_account(email.clone(), None, token) {
                     Ok(mut new_account) => {
@@ -1236,7 +1240,8 @@ pub async fn import_from_extension_credentials(
                     item.project_id.clone(),
                     None,
                 )
-                .with_oauth_metadata(token_response.oauth_client_key, token_response.id_token);
+                .with_oauth_metadata(token_response.oauth_client_key, token_response.id_token)
+                .with_granted_scopes(token_response.scope);
 
                 match modules::add_account(
                     user_info.email.clone(),

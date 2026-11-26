@@ -41,6 +41,7 @@ function loadOverview() {
   return loadHookModule(new URL('./T3codeOverviewSection.tsx', import.meta.url), {
     'react-i18next': { useTranslation: () => ({ t: mockT }) },
     '../QuickSettingsPopover': { QuickSettingsPopover: empty },
+    './T3codeCommonSettings': { T3codeCommonSettings: empty },
     '../../utils/codexProviderPoolQuota': providerQuota,
     '../../utils/platformMeta': { renderPlatformIcon: empty },
     './t3codePlatformRegistry': registryMod.exports,

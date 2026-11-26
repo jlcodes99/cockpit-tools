@@ -121,15 +121,20 @@ pub(super) async fn open_with_retries(
                 // No generating request has been sent. The original input is
                 // still intact, so the existing HTTP bridge is a safe fallback.
                 tracker.attempt_error(&error);
+                prepared.execution = prepared.execution.renew_open();
             }
             Err(error) if !prepared.continuation_recovered
                 && ((error.status == 426 && error.code == "websocket_upstream_rejected")
                     || (error.code == "websocket_pool_unavailable"
                         && prepared.source_body.get("previous_response_id").is_none_or(Value::is_null))) => {
                 tracker.attempt_error(&error);
+                prepared.execution = prepared.execution.renew_open();
             }
             Err(error) => return Err(error),
         }
+        // The permitted HTTP fallback is a new opening attempt. A WebSocket
+        // bootstrap may have already used the preceding attempt's budget.
+        prepared.execution = prepared.execution.renew_open();
     }
     open_http(state, caller, prepared, tracker, policy, deadline, history).await
 }

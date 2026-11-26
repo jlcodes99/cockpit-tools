@@ -6,6 +6,7 @@ struct CompressionHost {
     client: reqwest::Client,
     url: String,
     stalled_rejection: bool,
+    recover_before_rejection: bool,
 }
 impl Host for CompressionHost {
     fn authorize<'a>(&'a self, key: &'a str) -> BoxFuture<'a, Result<Caller, ServiceError>> {
@@ -24,6 +25,12 @@ impl Host for CompressionHost {
                 policy.open_timeout = Duration::from_millis(250);
                 policy.total_timeout = Duration::from_secs(3);
                 policy.send_retries = 2;
+            }
+            if self.recover_before_rejection {
+                policy.open_timeout = Duration::from_millis(750);
+                policy.network_recovery_timeout = Duration::from_millis(200);
+                policy.send_retries = 2;
+                policy.retry_base_delay = Duration::from_millis(1);
             }
             Ok(policy)
         })
@@ -45,12 +52,14 @@ impl Host for CompressionHost {
 
 #[tokio::test]
 async fn full_compat_official_zstd_request_rejection_retries_exact_plaintext_once() {
-    for (rejected_status, executed, stalled) in [
-        (400, false, false),
-        (415, false, false),
-        (400, true, false),
-        (415, true, false),
-        (400, false, true),
+    for (rejected_status, executed, stalled, ordinary, recover) in [
+        (400, false, false, false, false),
+        (415, false, false, false, false),
+        (400, true, false, false, false),
+        (415, true, false, false, false),
+        (400, false, true, false, false),
+        (400, false, false, true, false),
+        (415, false, false, false, true),
     ] {
         let cert = rcgen::generate_simple_self_signed(vec!["chatgpt.com".into()]).unwrap();
         let root = reqwest::Certificate::from_der(cert.cert.der()).unwrap();
@@ -93,7 +102,15 @@ async fn full_compat_official_zstd_request_rejection_retries_exact_plaintext_onc
                                 } else {
                                     bytes.to_vec()
                                 };
-                                capture.lock().unwrap().push((parts.headers, plain));
+                                let sequence = {
+                                    let mut requests = capture.lock().unwrap();
+                                    let sequence = requests.len();
+                                    requests.push((parts.headers, plain));
+                                    sequence
+                                };
+                                if recover && sequence == 0 {
+                                    return Err(std::io::Error::from(std::io::ErrorKind::ConnectionReset));
+                                }
                                 let response = if compressed && stalled {
                                     Response::builder()
                                         .status(rejected_status)
@@ -106,13 +123,23 @@ async fn full_compat_official_zstd_request_rejection_retries_exact_plaintext_onc
                                 } else if compressed {
                                     let rejected = if executed {
                                         json!({"error":{"code":"unsupported_content_encoding","message":"Use identity"},"response":{"output":[{"type":"function_call","call_id":"already-run","name":"write_file","arguments":"{}"}]}}).to_string()
+                                    } else if ordinary {
+                                        r#"{"error":{"code":"invalid_request_error","message":"Invalid parameter"}}"#.into()
                                     } else {
                                         r#"{"error":{"code":"unsupported_content_encoding","message":"Use identity"}}"#.into()
+                                    };
+                                    let body = if recover {
+                                        Body::from_stream(futures_util::stream::once(async move {
+                                            tokio::time::sleep(Duration::from_millis(300)).await;
+                                            Ok::<_, std::io::Error>(axum::body::Bytes::from(rejected))
+                                        }))
+                                    } else {
+                                        Body::from(rejected)
                                     };
                                     Response::builder()
                                         .status(rejected_status)
                                         .header("content-type", "application/json")
-                                        .body(Body::from(rejected))
+                                        .body(body)
                                         .unwrap()
                                 } else {
                                     let bytes=zstd::stream::encode_all(br#"{"id":"compressed-upstream","status":"completed","output":[]}"#.as_slice(),3).unwrap();
@@ -122,7 +149,7 @@ async fn full_compat_official_zstd_request_rejection_retries_exact_plaintext_onc
                                         .body(Body::from(bytes))
                                         .unwrap()
                                 };
-                                Ok::<_, std::convert::Infallible>(response)
+                                Ok::<_, std::io::Error>(response)
                             }
                         },
                     );
@@ -144,6 +171,7 @@ async fn full_compat_official_zstd_request_rejection_retries_exact_plaintext_onc
                 .unwrap(),
             url: format!("https://chatgpt.com:{}/backend-api/codex", addr.port()),
             stalled_rejection: stalled,
+            recover_before_rejection: recover,
         });
         let mut handle = start(
             "127.0.0.1:0".parse().unwrap(),
@@ -167,29 +195,34 @@ async fn full_compat_official_zstd_request_rejection_retries_exact_plaintext_onc
             status.as_u16(),
             if stalled {
                 504
-            } else if executed {
+            } else if executed || ordinary {
                 rejected_status
             } else {
                 200
             },
             "{value}"
         );
-        if !executed && !stalled {
+        let retried_plain = !executed && !stalled && !ordinary;
+        if retried_plain {
             assert_eq!(value["id"], "compressed-upstream");
+        }
+        if ordinary {
+            assert_eq!(value["error"]["message"], "Invalid parameter");
         }
         if stalled {
             assert_eq!(value["error"]["code"], "upstream_idle_timeout");
         }
         let capture = captured.lock().unwrap();
-        assert_eq!(capture.len(), if executed || stalled { 1 } else { 2 });
+        assert_eq!(capture.len(), 1 + usize::from(retried_plain) + usize::from(recover));
         assert_eq!(capture[0].0["content-encoding"], "zstd");
-        if !executed && !stalled {
-            assert!(!capture[1].0.contains_key("content-encoding"));
-            assert_eq!(capture[0].1, capture[1].1);
-            assert_eq!(capture[0].0["authorization"], capture[1].0["authorization"]);
+        if retried_plain {
+            let last = capture.last().unwrap();
+            assert!(!last.0.contains_key("content-encoding"));
+            assert_eq!(capture[0].1, last.1);
+            assert_eq!(capture[0].0["authorization"], last.0["authorization"]);
         }
         drop(capture);
-        assert_eq!(host.host.selections.lock().unwrap().len(), 1);
+        assert_eq!(host.host.selections.lock().unwrap().len(), 1 + usize::from(recover));
         handle.shutdown(Duration::from_secs(2)).await.unwrap();
         task.abort();
         let _ = std::fs::remove_dir_all(path);
@@ -270,6 +303,7 @@ async fn duplicate_inline_images_use_identity_and_keep_the_original_input() {
                 .unwrap(),
             url: format!("https://chatgpt.com:{}/backend-api/codex", addr.port()),
             stalled_rejection: false,
+            recover_before_rejection: false,
         });
         let mut handle = start(
             "127.0.0.1:0".parse().unwrap(),

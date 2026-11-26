@@ -1127,6 +1127,15 @@ fn antigravity_ide_version_uses_shared_credentials(version: &str) -> Option<bool
     Some((major, minor) >= (2, 6))
 }
 
+pub(crate) fn antigravity_desktop_version_at(root: &Path) -> Option<String> {
+    #[cfg(target_os = "macos")]
+    return read_antigravity_macos_bundle_metadata(root).map(|info| info.version);
+    #[cfg(target_os = "windows")]
+    return read_antigravity_windows_exe_metadata(root).map(|info| info.version);
+    #[cfg(target_os = "linux")]
+    return antigravity_linux_asar::desktop_version_from_asar(&root.join("resources/app.asar"));
+}
+
 fn resolve_antigravity_installed_version_info_for_target_with_mode(
     target: Option<&str>,
     scan_mode: AntigravityVersionScanMode,

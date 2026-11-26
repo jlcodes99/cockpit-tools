@@ -128,3 +128,35 @@ async fn native_image_headers_can_arrive_after_text_opening_within_image_budget(
     assert_eq!(host.capacity.available_permits(), 1);
     cleanup(handle, upstream, root).await;
 }
+
+#[tokio::test]
+async fn native_oauth_image_batch_delivers_all_requested_images_and_usage() {
+    let counts = Arc::new(Mutex::new(Vec::<Value>::new()));
+    let capture = counts.clone();
+    let app = Router::new().route("/v1/images/generations", post(move |Json(body): Json<Value>| {
+        let capture = capture.clone();
+        async move {
+            let number = {
+                let mut counts = capture.lock().unwrap();
+                counts.push(body["n"].clone());
+                counts.len()
+            };
+            Json(json!({"data":[{"b64_json": if number == 1 { "AA==" } else { "AQ==" }}],
+                "usage":{"total_tokens": 3}}))
+        }
+    }));
+    let (handle, host, upstream, root) = fixture(app, true, false).await;
+    host.direct_images.store(1, Ordering::SeqCst);
+    let response = client()
+        .post(format!("http://{}/v1/images/generations", handle.addr))
+        .bearer_auth("local-image-key")
+        .json(&native_request(false, 2))
+        .send().await.unwrap();
+    assert_eq!(response.status(), 200);
+    let body: Value = response.json().await.unwrap();
+    assert_eq!(body["data"], json!([{"b64_json":"AA=="},{"b64_json":"AQ=="}]));
+    assert_eq!(body["usage"]["total_tokens"], 6);
+    assert_eq!(*counts.lock().unwrap(), vec![json!(2), json!(1)]);
+    assert_eq!(host.selections.lock().unwrap().len(), 1);
+    cleanup(handle, upstream, root).await;
+}

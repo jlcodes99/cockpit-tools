@@ -10,15 +10,16 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use chrono::{DateTime, Datelike, Days, FixedOffset, Local, NaiveDate, Utc};
 
 use super::models::format_model_display_name;
+use super::pricing::estimate_exact_cost_usd;
 use super::protobuf::format_utc_ms;
 use super::scanner::{get_workspace_key_from_path, normalize_timestamp};
 use super::types::{
     AggregatedDashboardBundle, AppliedFilters, CatalogModelOption, CatalogWorkspaceOption,
-    ConversationKind, ConversationListResponse, ConversationSortField, ConversationSummaryItem,
-    DashboardQueryRequest, DashboardSummaryResponse, DatePreset, EstimatedTokenTotals,
-    ExactTokenTotals, FilterOptionsCatalog, KindUsageSummary, KpiSummary, ModelUsageSummary,
-    ResolvedTurnGroup, ScanResult, ScannedConversation, SortDirection, TimeBucketPoint,
-    TimeGranularity, WorkspaceUsageSummary,
+    ClientSourceKind, ConversationKind, ConversationListResponse, ConversationSortField,
+    ConversationSummaryItem, DashboardQueryRequest, DashboardSummaryResponse, DatePreset,
+    EstimatedTokenTotals, ExactTokenTotals, FilterOptionsCatalog, HeatmapDayPoint,
+    KindUsageSummary, KpiSummary, ModelUsageSummary, ResolvedTurnGroup, ScanResult,
+    ScannedConversation, SortDirection, TimeBucketPoint, TimeGranularity, WorkspaceUsageSummary,
 };
 
 const MAX_ZERO_FILL_BUCKETS: i64 = 400;
@@ -93,6 +94,15 @@ fn parse_kind_filter(raw: Option<&str>) -> String {
     }
 }
 
+#[inline]
+fn round_cost(val: f64) -> f64 {
+    if !val.is_finite() || val <= 0.0 {
+        0.0
+    } else {
+        (val * 10_000.0).round() / 10_000.0
+    }
+}
+
 fn parse_sort_field(raw: Option<&str>) -> ConversationSortField {
     match raw.map(str::trim).unwrap_or("lastModifiedTime") {
         "totalTokens" => ConversationSortField::TotalTokens,
@@ -101,6 +111,7 @@ fn parse_sort_field(raw: Option<&str>) -> ConversationSortField {
         "combinedOutputTokens" => ConversationSortField::CombinedOutputTokens,
         "thinkingTokens" => ConversationSortField::ThinkingTokens,
         "cacheReadTokens" => ConversationSortField::CacheReadTokens,
+        "estimatedCostUsd" => ConversationSortField::EstimatedCostUsd,
         "stepCount" => ConversationSortField::StepCount,
         "turnCount" => ConversationSortField::TurnCount,
         "title" => ConversationSortField::Title,
@@ -398,6 +409,7 @@ impl BucketAccumulator {
                 conversation_count: 0,
                 exact: ExactTokenTotals::default(),
                 estimated_total_tokens: 0,
+                estimated_cost_usd: 0.0,
             },
             conv_indices: HashSet::new(),
         }
@@ -501,6 +513,10 @@ fn compare_conversations(
         ConversationSortField::CacheReadTokens => {
             a.exact.cache_read_tokens.cmp(&b.exact.cache_read_tokens)
         }
+        ConversationSortField::EstimatedCostUsd => a
+            .estimated_cost_usd
+            .partial_cmp(&b.estimated_cost_usd)
+            .unwrap_or(Ordering::Equal),
         ConversationSortField::StepCount => a.step_count.cmp(&b.step_count),
         ConversationSortField::TurnCount => a.turn_count.cmp(&b.turn_count),
         ConversationSortField::Title => a
@@ -616,9 +632,26 @@ pub fn aggregate_dashboard(
     let mut main_conversations = 0usize;
     let mut swarm_conversations = 0usize;
     let mut subagent_conversations = 0usize;
+    let mut desktop_conversations = 0usize;
+    let mut cli_conversations = 0usize;
+    let mut kpi_cost_usd = 0.0f64;
+    let mut kpi_savings_usd = 0.0f64;
     let mut active_day_set: HashSet<NaiveDate> = HashSet::new();
     let mut min_turn_date: Option<NaiveDate> = None;
     let mut max_turn_date: Option<NaiveDate> = None;
+
+    struct DailyHeatmapAcc {
+        total_tokens: u64,
+        input_tokens: u64,
+        output_tokens: u64,
+        thinking_tokens: u64,
+        cache_tokens: u64,
+        turn_count: usize,
+        conv_indices: HashSet<usize>,
+        cost_usd: f64,
+    }
+    let mut daily_heatmap_map: BTreeMap<NaiveDate, DailyHeatmapAcc> = BTreeMap::new();
+    let heatmap_min_date = today_local.checked_sub_days(Days::new(364));
 
     struct ModelAgg {
         display_name: String,
@@ -669,9 +702,55 @@ pub fn aggregate_dashboard(
                 ConversationKind::Swarm => swarm_conversations += 1,
                 ConversationKind::Subagent => subagent_conversations += 1,
             }
+            match conv.summary.client_source {
+                ClientSourceKind::Desktop => desktop_conversations += 1,
+                ClientSourceKind::Cli => cli_conversations += 1,
+            }
             total_steps = total_steps.saturating_add(conv.summary.step_count);
             filtered_conversations.push(conv.summary.clone());
             continue;
+        }
+
+        // Accumulate into 365-day calendar heatmap (respects kind / workspace / search / model filters, independent of preset range)
+        for g in &conv.turn_groups {
+            if !model_filter.is_empty() && g.model_id != model_filter {
+                continue;
+            }
+            let Some(d) = group_local_date(g, conv, tz_offset_minutes, &tz) else {
+                continue;
+            };
+            if heatmap_min_date.is_some_and(|min_d| d < min_d) || d > today_local {
+                continue;
+            }
+            let (g_cost, _) = if g.exact_turn_count > 0 {
+                estimate_exact_cost_usd(&g.model_id, &g.exact)
+            } else {
+                (0.0, 0.0)
+            };
+            let acc = daily_heatmap_map.entry(d).or_insert_with(|| DailyHeatmapAcc {
+                total_tokens: 0,
+                input_tokens: 0,
+                output_tokens: 0,
+                thinking_tokens: 0,
+                cache_tokens: 0,
+                turn_count: 0,
+                conv_indices: HashSet::new(),
+                cost_usd: 0.0,
+            });
+            acc.turn_count += g.exact_turn_count + g.estimated_turn_count;
+            acc.conv_indices.insert(conv_idx);
+            if g.exact_turn_count > 0 {
+                acc.total_tokens = acc.total_tokens.saturating_add(g.exact.total_tokens);
+                acc.input_tokens = acc.input_tokens.saturating_add(g.exact.input_tokens);
+                acc.output_tokens = acc.output_tokens.saturating_add(g.exact.output_tokens);
+                acc.thinking_tokens = acc.thinking_tokens.saturating_add(g.exact.thinking_tokens);
+                acc.cache_tokens = acc
+                    .cache_tokens
+                    .saturating_add(g.exact.cache_read_tokens + g.exact.cache_write_tokens);
+                acc.cost_usd += g_cost;
+            } else {
+                acc.total_tokens = acc.total_tokens.saturating_add(g.estimated.total_tokens);
+            }
         }
 
         matching_groups.clear();
@@ -703,6 +782,8 @@ pub fn aggregate_dashboard(
             let mut c_est_tot = 0u64;
             let mut c_exact_turns = 0usize;
             let mut c_est_turns = 0usize;
+            let mut c_cost_usd = 0.0f64;
+            let mut c_savings_usd = 0.0f64;
             let mut per_model_tok: HashMap<String, (String, u64, usize)> = HashMap::new();
             let mut latest_ms: Option<i64> = None;
 
@@ -719,6 +800,9 @@ pub fn aggregate_dashboard(
                     c_exact_turns += g.exact_turn_count;
                     c_exact.add_assign(&g.exact);
                     pm.1 = pm.1.saturating_add(g.exact.total_tokens);
+                    let (gc, gs) = estimate_exact_cost_usd(&g.model_id, &g.exact);
+                    c_cost_usd += gc;
+                    c_savings_usd += gs;
                 }
                 if g.estimated_turn_count > 0 {
                     c_est_turns += g.estimated_turn_count;
@@ -744,6 +828,8 @@ pub fn aggregate_dashboard(
             item.exact_turn_count = c_exact_turns;
             item.estimated_turn_count = c_est_turns;
             item.exact = c_exact;
+            item.estimated_cost_usd = round_cost(c_cost_usd);
+            item.cache_savings_usd = round_cost(c_savings_usd);
             item.estimated = EstimatedTokenTotals {
                 input_tokens: c_est_in,
                 output_tokens: c_est_out,
@@ -766,10 +852,21 @@ pub fn aggregate_dashboard(
             ConversationKind::Swarm => swarm_conversations += 1,
             ConversationKind::Subagent => subagent_conversations += 1,
         }
+        match item.client_source {
+            ClientSourceKind::Desktop => desktop_conversations += 1,
+            ClientSourceKind::Cli => cli_conversations += 1,
+        }
         total_steps = total_steps.saturating_add(item.step_count);
 
         for &(g, d_opt) in &matching_groups {
             let g_turns = g.exact_turn_count + g.estimated_turn_count;
+            let (g_cost_usd, g_savings_usd) = if g.exact_turn_count > 0 {
+                estimate_exact_cost_usd(&g.model_id, &g.exact)
+            } else {
+                (0.0, 0.0)
+            };
+            kpi_cost_usd += g_cost_usd;
+            kpi_savings_usd += g_savings_usd;
             let m_agg = if let Some(existing) = model_aggs.get_mut(g.model_id.as_str()) {
                 existing
             } else {
@@ -826,6 +923,8 @@ pub fn aggregate_dashboard(
                     bucket.conv_indices.insert(conv_idx);
                     if g.exact_turn_count > 0 {
                         bucket.point.exact.add_assign(&g.exact);
+                        bucket.point.estimated_cost_usd =
+                            round_cost(bucket.point.estimated_cost_usd + g_cost_usd);
                     }
                     if g.estimated_turn_count > 0 {
                         bucket.point.estimated_total_tokens = bucket
@@ -877,22 +976,27 @@ pub fn aggregate_dashboard(
 
     let mut by_model: Vec<ModelUsageSummary> = model_aggs
         .into_iter()
-        .map(|(model_id, m)| ModelUsageSummary {
-            model_id,
-            model_display_name: m.display_name,
-            api_provider: m.api_provider,
-            conversation_count: m.conv_indices.len(),
-            turn_count: m.turn_count,
-            exact_turn_count: m.exact_turn_count,
-            estimated_turn_count: m.estimated_turn_count,
-            share_percent: compute_share_percent(
-                m.exact.total_tokens,
-                kpi_exact.total_tokens,
-                m.estimated_total_tokens,
-                kpi_est_total,
-            ),
-            exact: m.exact,
-            estimated_total_tokens: m.estimated_total_tokens,
+        .map(|(model_id, m)| {
+            let (cost_usd, savings_usd) = estimate_exact_cost_usd(&model_id, &m.exact);
+            ModelUsageSummary {
+                model_id,
+                model_display_name: m.display_name,
+                api_provider: m.api_provider,
+                conversation_count: m.conv_indices.len(),
+                turn_count: m.turn_count,
+                exact_turn_count: m.exact_turn_count,
+                estimated_turn_count: m.estimated_turn_count,
+                share_percent: compute_share_percent(
+                    m.exact.total_tokens,
+                    kpi_exact.total_tokens,
+                    m.estimated_total_tokens,
+                    kpi_est_total,
+                ),
+                exact: m.exact,
+                estimated_total_tokens: m.estimated_total_tokens,
+                estimated_cost_usd: cost_usd,
+                cache_savings_usd: savings_usd,
+            }
         })
         .collect();
     by_model.sort_by(|a, b| {
@@ -923,6 +1027,7 @@ pub fn aggregate_dashboard(
                         exact: ExactTokenTotals::default(),
                         estimated_total_tokens: 0,
                         share_percent: 0.0,
+                        estimated_cost_usd: 0.0,
                     },
                 );
             }
@@ -942,11 +1047,14 @@ pub fn aggregate_dashboard(
                 exact: ExactTokenTotals::default(),
                 estimated_total_tokens: 0,
                 share_percent: 0.0,
+                estimated_cost_usd: 0.0,
                 last_active_time: None,
             });
         ws_entry.conversation_count += 1;
         ws_entry.turn_count += item.turn_count;
         ws_entry.exact.add_assign(&item.exact);
+        ws_entry.estimated_cost_usd =
+            round_cost(ws_entry.estimated_cost_usd + item.estimated_cost_usd);
         ws_entry.estimated_total_tokens = ws_entry
             .estimated_total_tokens
             .saturating_add(item.estimated.total_tokens);
@@ -968,10 +1076,13 @@ pub fn aggregate_dashboard(
                 exact: ExactTokenTotals::default(),
                 estimated_total_tokens: 0,
                 share_percent: 0.0,
+                estimated_cost_usd: 0.0,
             });
         k_entry.conversation_count += 1;
         k_entry.turn_count += item.turn_count;
         k_entry.exact.add_assign(&item.exact);
+        k_entry.estimated_cost_usd =
+            round_cost(k_entry.estimated_cost_usd + item.estimated_cost_usd);
         k_entry.estimated_total_tokens = k_entry
             .estimated_total_tokens
             .saturating_add(item.estimated.total_tokens);
@@ -1063,6 +1174,43 @@ pub fn aggregate_dashboard(
         tz_offset_minutes,
     };
 
+    let max_daily_tok = daily_heatmap_map
+        .values()
+        .map(|a| a.total_tokens)
+        .max()
+        .unwrap_or(0);
+    let heatmap: Vec<HeatmapDayPoint> = daily_heatmap_map
+        .into_iter()
+        .map(|(d, acc)| {
+            let level = if acc.total_tokens == 0 || max_daily_tok == 0 {
+                0
+            } else {
+                let ratio = (acc.total_tokens as f64) / (max_daily_tok as f64);
+                if ratio >= 0.75 {
+                    4
+                } else if ratio >= 0.45 {
+                    3
+                } else if ratio >= 0.20 {
+                    2
+                } else {
+                    1
+                }
+            };
+            HeatmapDayPoint {
+                date: d.format("%Y-%m-%d").to_string(),
+                total_tokens: acc.total_tokens,
+                input_tokens: acc.input_tokens,
+                output_tokens: acc.output_tokens,
+                thinking_tokens: acc.thinking_tokens,
+                cache_tokens: acc.cache_tokens,
+                turn_count: acc.turn_count,
+                conversation_count: acc.conv_indices.len(),
+                estimated_cost_usd: round_cost(acc.cost_usd),
+                level,
+            }
+        })
+        .collect();
+
     let kpi = KpiSummary {
         exact: kpi_exact,
         estimated: EstimatedTokenTotals {
@@ -1075,6 +1223,8 @@ pub fn aggregate_dashboard(
         main_conversations,
         swarm_conversations,
         subagent_conversations,
+        desktop_conversations,
+        cli_conversations,
         total_steps,
         total_turns,
         exact_turns,
@@ -1083,6 +1233,8 @@ pub fn aggregate_dashboard(
         active_days,
         avg_exact_tokens_per_active_day,
         avg_exact_tokens_per_conversation,
+        estimated_cost_usd: round_cost(kpi_cost_usd),
+        cache_savings_usd: round_cost(kpi_savings_usd),
     };
 
     AggregatedDashboardBundle {
@@ -1092,6 +1244,7 @@ pub fn aggregate_dashboard(
             catalog,
             kpi,
             time_series,
+            heatmap,
             by_model,
             by_workspace,
             by_kind,
@@ -1169,6 +1322,7 @@ mod tests {
                 display_title: "Test".to_string(),
                 preview: String::new(),
                 kind: ConversationKind::Main,
+                client_source: ClientSourceKind::Desktop,
                 has_swarm_children: false,
                 agent_name: String::new(),
                 parent_conversation_id: String::new(),
@@ -1192,6 +1346,8 @@ mod tests {
                 data_source: DataSourceKind::SqliteDb,
                 exact,
                 estimated: EstimatedTokenTotals::default(),
+                estimated_cost_usd: 0.0,
+                cache_savings_usd: 0.0,
             },
             last_modified_ms: Some(ts_ms),
             created_at_ms: Some(ts_ms),
@@ -1203,6 +1359,8 @@ mod tests {
                 turn_count: 1,
                 exact,
                 estimated_total_tokens: 0,
+                estimated_cost_usd: 0.0,
+                cache_savings_usd: 0.0,
             }],
             turn_groups: vec![ResolvedTurnGroup {
                 minute_slot: Some(ts_ms.div_euclid(60_000)),
@@ -1231,9 +1389,11 @@ mod tests {
                 cache_misses: 1,
                 rpc_cache_sessions_found: 0,
                 brain_dirs_found: 0,
+                cli_sessions_found: 0,
                 warnings: Vec::new(),
             },
             data_dir: PathBuf::from("/tmp"),
+            cli_data_dir: None,
             dynamic_enum_map: HashMap::new(),
             conversations: vec![conv],
             index_by_id,
