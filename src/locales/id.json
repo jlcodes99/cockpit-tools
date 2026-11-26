@@ -8188,6 +8188,34 @@
     }
   },
   "workbuddy": {
+    "nativeCodex": {
+      "nativeRequired": "Buat dan aktifkan layanan Native Rust terlebih dahulu di halaman layanan API. Mode tidak akan dialihkan secara otomatis.",
+      "enterpriseUnsupported": "Versi awal belum dapat mengikat tenant perusahaan tertentu secara ketat; hanya sumber WorkBuddy pribadi yang didukung.",
+      "revokedFilesPreserved": "Key khusus telah dicabut. Berkas konfigurasi telah diubah atau tidak dapat dibersihkan dengan aman. Semua berkas yang diubah dan data sesi tetap disimpan; periksa berkas tersebut, lalu coba pemulihan lagi.",
+      "notOwned": "Bukti kepemilikan konfigurasi tidak cocok dengan Key khusus. Tidak ada Key yang diubah. Periksa penanda kepemilikan di direktori konfigurasi.",
+      "profileChanged": "Konfigurasi terpisah ini telah diubah. Program tidak akan menimpa perubahan Anda.",
+      "selectionChanged": "Model atau tingkat penalaran sudah tidak tersedia. Muat ulang katalog dan pilih kembali.",
+      "sourceUnavailable": "Sumber WorkBuddy ini tidak tersedia. Periksa status login. Akun lain tidak akan dicoba.",
+      "operationFailed": "Operasi gagal. Pastikan WorkBuddy CLI terpasang dan akun masih valid, lalu muat ulang katalog.",
+      "title": "WorkBuddy → Codex: penghubung alat native",
+      "scope": "Buat Key lokal khusus dengan sumber tetap dan CODEX_HOME terpisah. Codex menjalankan alatnya sendiri; token WorkBuddy tidak ditulis ke konfigurasi Codex, dan login default maupun Key utama layanan API tidak akan diubah.",
+      "account": "Sumber WorkBuddy",
+      "noSourceSelected": "Tidak ada sumber yang tersedia; konfigurasi yang sudah dibuat tetap dapat dikelola",
+      "model": "Model CLI yang tersedia saat ini",
+      "readCatalog": "Muat katalog terkini",
+      "effort": "Tingkat penalaran",
+      "metadataOnly": "Memuat katalog hanya menginisialisasi CLI tanpa mengirim prompt ke model. Model dan tingkat penalaran akan diperiksa kembali sebelum pembuatan; jika sumber tidak valid, kesalahan langsung ditampilkan tanpa beralih ke akun lain. Hanya HTTP Responses yang didukung; pencarian web (web_search) dinonaktifkan dalam konfigurasi terpisah. Gambar, alat terkelola lainnya, compact, dan WebSocket tidak didukung.",
+      "refreshCatalog": "Muat ulang katalog",
+      "managedProfile": "Konfigurasi terpisah yang telah dibuat",
+      "profileSource": "Sumber: ",
+      "profileSourceMissing": "Sumber telah dihapus; Anda tetap dapat mencabut Key khusus dan memulihkan konfigurasi terpisah.",
+      "profileSourceUnavailable": "Sumber sedang tidak tersedia; pencabutan dan pemulihan tidak bergantung pada status login sumber.",
+      "launchHelp": "Buka direktori proyek Anda di terminal, lalu jalankan perintah di bawah ini. Hanya peluncuran Codex kali ini yang menggunakan konfigurasi tersebut.",
+      "retryRestore": "Coba pemulihan lagi (Key telah dicabut)",
+      "restore": "Cabut Key khusus dan pulihkan konfigurasi ini",
+      "create": "Buat Key khusus dan konfigurasi terpisah",
+      "open": "Penghubung alat Codex"
+    },
     "errors": {
       "nodeAppPath": "Jalur ini mengarah ke lingkungan runtime Node ({{path}}). Pilih WorkBuddy.exe.",
       "keyProcessFailed": "Kunci resmi WorkBuddy tidak dapat dibaca. Data login tetap tersimpan. Periksa jalur klien ({{path}}) di Pengaturan, lalu periksa pembaruan klien."
@@ -8409,6 +8437,8 @@
       "failed": "Uji terakhir {{model}} gagal"
     },
     "exposeToCodex": {
+      "textOnlyTitle": "Native ACP lama hanya mendukung teks. Untuk membaca dan menulis berkas serta menjalankan perintah, gunakan Penghubung alat Codex.",
+      "textOnlyAction": "Hubungkan ke Codex (teks saja)",
       "title": "Terhubung melalui gateway Native Rust tanpa menyalin token WorkBuddy"
     }
   },

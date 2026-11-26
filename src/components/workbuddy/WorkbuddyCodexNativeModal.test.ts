@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFileSync, readdirSync } from 'node:fs';
 import { deferred, loadHookModule, settlePromises } from '../../../tests/helpers/reactHookHarness';
 import type { CodexWorkbuddyDelegateCatalog, CodexWorkbuddyDelegateProfile } from '../../types/codex';
 import type { WorkbuddyAccount } from '../../types/workbuddy';
@@ -212,5 +213,25 @@ test('closing the modal ignores late catalog success and failure without changin
     assert.equal(h.error.message, '');
     assert.equal(h.error.scrollKey, errorSequence);
     assert.deepEqual(h.calls.creates, []);
+  }
+});
+
+test('native bridge and text-only entry labels are registered in every shipped locale', () => {
+  const sources = [
+    new URL('./WorkbuddyCodexNativeModal.tsx', import.meta.url),
+    new URL('../../pages/WorkbuddyAccountsPage.tsx', import.meta.url),
+  ].map((url) => readFileSync(url, 'utf8')).join('\n');
+  const keys = new Set([...sources.matchAll(/\bt\('(workbuddy\.(?:nativeCodex|exposeToCodex)\.[^']+)',/g)]
+    .map((match) => match[1]));
+  assert.equal(keys.size, 28); // Includes page.t() labels, not just bare t() calls.
+  const locales = new URL('../../locales/', import.meta.url);
+  const files = readdirSync(locales).filter((name) => name.endsWith('.json'));
+  assert.equal(files.length, 18);
+  for (const name of files) {
+    const locale = JSON.parse(readFileSync(new URL(name, locales), 'utf8'));
+    for (const key of keys) {
+      const value = key.split('.').reduce((entry, part) => entry?.[part], locale);
+      assert.ok(typeof value === 'string' && value.trim(), `${name}: missing ${key}`);
+    }
   }
 });

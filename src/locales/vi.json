@@ -8007,6 +8007,34 @@
     }
   },
   "workbuddy": {
+    "nativeCodex": {
+      "nativeRequired": "Trước tiên, hãy tạo và bật dịch vụ Native Rust trên trang dịch vụ API. Chế độ sẽ không tự động thay đổi.",
+      "enterpriseUnsupported": "Phiên bản đầu tiên chưa bảo đảm ràng buộc chính xác với bên thuê doanh nghiệp; chỉ hỗ trợ tài khoản WorkBuddy cá nhân.",
+      "revokedFilesPreserved": "Key chuyên dụng đã được thu hồi. Các tệp cấu hình đã bị sửa đổi hoặc không thể dọn dẹp an toàn, nên toàn bộ tệp đã sửa và dữ liệu phiên đều được giữ lại. Bạn có thể kiểm tra tệp rồi thử khôi phục lại.",
+      "notOwned": "Bằng chứng sở hữu cấu hình không khớp với Key chuyên dụng. Không có Key nào bị thay đổi. Hãy kiểm tra dấu xác nhận quyền sở hữu trong thư mục cấu hình.",
+      "profileChanged": "Cấu hình độc lập này đã bị sửa đổi. Chương trình sẽ không ghi đè thay đổi của bạn.",
+      "selectionChanged": "Mô hình hoặc mức suy luận không còn khả dụng. Hãy tải lại danh mục và chọn lại.",
+      "sourceUnavailable": "Tài khoản nguồn WorkBuddy này không khả dụng. Hãy kiểm tra trạng thái đăng nhập. Hệ thống sẽ không thử tài khoản khác.",
+      "operationFailed": "Thao tác thất bại. Hãy kiểm tra WorkBuddy CLI đã được cài đặt và tài khoản còn hợp lệ, rồi tải lại danh mục.",
+      "title": "WorkBuddy → Codex — cầu nối công cụ gốc",
+      "scope": "Tạo Key cục bộ chuyên dụng gắn với một tài khoản nguồn cố định và CODEX_HOME độc lập. Codex tự thực thi công cụ. Mã thông báo WorkBuddy không được ghi vào cấu hình Codex; thông tin đăng nhập mặc định và Key chính của dịch vụ API cũng không bị thay đổi.",
+      "account": "Tài khoản nguồn WorkBuddy",
+      "noSourceSelected": "Chưa có tài khoản nguồn khả dụng; bạn vẫn có thể quản lý các cấu hình đã tạo",
+      "model": "Mô hình hiện có của CLI",
+      "readCatalog": "Hãy tải danh mục hiện tại",
+      "effort": "Mức suy luận",
+      "metadataOnly": "Việc tải danh mục chỉ khởi tạo CLI, không gửi lời nhắc đến mô hình. Mô hình và mức suy luận sẽ được kiểm tra lại trước khi tạo. Nếu tài khoản nguồn mất hiệu lực, hệ thống báo lỗi ngay và không chuyển sang tài khoản khác. Chỉ hỗ trợ HTTP Responses. Tìm kiếm web (web_search) đã bị tắt trong cấu hình độc lập; không hỗ trợ hình ảnh, các công cụ được lưu trữ khác, compact hoặc WebSocket.",
+      "refreshCatalog": "Tải lại danh mục",
+      "managedProfile": "Cấu hình độc lập đã tạo",
+      "profileSource": "Tài khoản nguồn: ",
+      "profileSourceMissing": "Tài khoản nguồn đã bị xóa; bạn vẫn có thể thu hồi Key chuyên dụng và khôi phục cấu hình độc lập.",
+      "profileSourceUnavailable": "Tài khoản nguồn hiện không khả dụng. Việc thu hồi và khôi phục không phụ thuộc vào trạng thái đăng nhập của tài khoản nguồn.",
+      "launchHelp": "Trong terminal, chuyển đến thư mục dự án rồi chạy lệnh bên dưới. Cấu hình này chỉ áp dụng cho lần khởi chạy Codex đó.",
+      "retryRestore": "Thử khôi phục lại (Key đã thu hồi)",
+      "restore": "Thu hồi Key chuyên dụng và khôi phục cấu hình này",
+      "create": "Tạo Key chuyên dụng và cấu hình độc lập",
+      "open": "Cầu nối công cụ Codex"
+    },
     "errors": {
       "nodeAppPath": "Đường dẫn này trỏ đến môi trường chạy Node ({{path}}). Hãy chọn WorkBuddy.exe.",
       "keyProcessFailed": "Không đọc được khóa chính thức của WorkBuddy. Dữ liệu đăng nhập được giữ nguyên. Hãy kiểm tra đường dẫn ứng dụng ({{path}}) trong Cài đặt, sau đó kiểm tra bản cập nhật."
@@ -8228,6 +8256,8 @@
       "failed": "Lần thử trước của {{model}} thất bại"
     },
     "exposeToCodex": {
+      "textOnlyTitle": "Chế độ Native ACP cũ chỉ hỗ trợ văn bản thuần. Để đọc, ghi tệp và chạy lệnh, hãy dùng cầu nối công cụ Codex.",
+      "textOnlyAction": "Kết nối Codex (chỉ văn bản)",
       "title": "Kết nối qua cổng Native Rust mà không sao chép token WorkBuddy"
     }
   },

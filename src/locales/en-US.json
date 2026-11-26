@@ -8576,6 +8576,34 @@
     }
   },
   "workbuddy": {
+    "nativeCodex": {
+      "nativeRequired": "First create and enable a Native Rust service on the API Service page. The mode will not be switched automatically.",
+      "enterpriseUnsupported": "This first release cannot strictly pin an enterprise tenant; only personal WorkBuddy sources are supported.",
+      "revokedFilesPreserved": "The dedicated key has been revoked. Configuration files were changed or could not be safely cleaned up. All changed files and session data have been preserved; inspect the files before retrying restore.",
+      "notOwned": "The profile ownership proof does not match its dedicated key. No key was changed. Check the ownership marker in the profile directory.",
+      "profileChanged": "This independent profile was modified. Your changes will not be overwritten.",
+      "selectionChanged": "The model or reasoning effort is no longer available. Reload the catalog and select again.",
+      "sourceUnavailable": "This WorkBuddy source is unavailable. Check its sign-in status. No other account will be tried.",
+      "operationFailed": "The operation failed. Check that WorkBuddy CLI is installed and the account is valid, then reload the catalog.",
+      "title": "WorkBuddy → Codex native tool bridge",
+      "scope": "Create a dedicated local key pinned to one source and an independent CODEX_HOME. Codex executes tools itself. The WorkBuddy token is not written to the Codex profile, and neither the default sign-in nor the API Service master key is changed.",
+      "account": "WorkBuddy source",
+      "noSourceSelected": "No source is available; existing profiles can still be managed",
+      "model": "Live CLI model",
+      "readCatalog": "Read the live catalog first",
+      "effort": "Reasoning effort",
+      "metadataOnly": "Reading the catalog initializes CLI without sending a model prompt. The model and effort are validated again before creation. An invalid source fails explicitly; no other account is used. HTTP Responses only. Web search (web_search) is disabled in the independent profile; images, other hosted tools, compact and WebSocket are unsupported.",
+      "refreshCatalog": "Reload catalog",
+      "managedProfile": "Created independent profile",
+      "profileSource": "Source: ",
+      "profileSourceMissing": "The source was deleted. Its dedicated key can still be revoked and the independent profile restored.",
+      "profileSourceUnavailable": "The source is currently unavailable. Revocation and restore do not require the source to be signed in.",
+      "launchHelp": "Open your project directory in a terminal, then run the command below. Only this Codex launch uses the profile.",
+      "retryRestore": "Retry restore (key revoked)",
+      "restore": "Revoke dedicated key and restore this profile",
+      "create": "Create dedicated key and independent profile",
+      "open": "Codex tool bridge"
+    },
     "errors": {
       "nodeAppPath": "This path points to the Node runtime ({{path}}). Select WorkBuddy.exe.",
       "keyProcessFailed": "Could not read the official WorkBuddy key. Sign-in data was left intact. Verify the client path ({{path}}) in Settings, then check for client updates."
@@ -8797,6 +8825,8 @@
       "failed": "Last probe of {{model}} failed"
     },
     "exposeToCodex": {
+      "textOnlyTitle": "The legacy Native ACP route supports text only. To read or edit files and run commands, use the Codex tool bridge.",
+      "textOnlyAction": "Connect to Codex (text only)",
       "title": "Connects through the Native Rust gateway without copying the WorkBuddy token"
     }
   },

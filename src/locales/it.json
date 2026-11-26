@@ -8007,6 +8007,34 @@
     }
   },
   "workbuddy": {
+    "nativeCodex": {
+      "nativeRequired": "Crea e attiva prima il servizio Native Rust nella pagina del servizio API. La modalità non verrà cambiata automaticamente.",
+      "enterpriseUnsupported": "La prima versione non consente ancora di vincolare in modo rigoroso un tenant aziendale; sono supportate solo le origini WorkBuddy personali.",
+      "revokedFilesPreserved": "Il Key dedicato è stato revocato. I file di configurazione sono stati modificati o non possono essere rimossi in sicurezza. Tutti i file modificati e i dati delle sessioni sono stati conservati; controlla i file e riprova il ripristino.",
+      "notOwned": "La prova di proprietà della configurazione non corrisponde al Key dedicato. Nessun Key è stato modificato. Controlla l’indicatore di proprietà nella cartella della configurazione.",
+      "profileChanged": "Questa configurazione indipendente è stata modificata. Il programma non sovrascriverà le tue modifiche.",
+      "selectionChanged": "Il modello o il livello di ragionamento non è più disponibile. Ricarica il catalogo ed effettua una nuova selezione.",
+      "sourceUnavailable": "Questa origine WorkBuddy non è disponibile. Controlla lo stato di accesso. Non verranno provati altri account.",
+      "operationFailed": "Operazione non riuscita. Verifica che WorkBuddy CLI sia installato e che l’account sia valido, quindi ricarica il catalogo.",
+      "title": "WorkBuddy → Codex: ponte di strumenti nativi",
+      "scope": "Crea un Key locale dedicato a un’origine fissa e un CODEX_HOME indipendente. Codex esegue gli strumenti autonomamente; il token WorkBuddy non viene scritto nella configurazione di Codex e non vengono modificati né l’accesso predefinito né il Key principale del servizio API.",
+      "account": "Origine WorkBuddy",
+      "noSourceSelected": "Nessuna origine disponibile; puoi comunque gestire le configurazioni già create",
+      "model": "Modelli CLI attualmente disponibili",
+      "readCatalog": "Carica il catalogo aggiornato",
+      "effort": "Livello di ragionamento",
+      "metadataOnly": "Il caricamento del catalogo inizializza soltanto CLI e non invia prompt al modello. Il modello e il livello di ragionamento vengono verificati di nuovo prima della creazione; se l’origine non è valida, viene mostrato subito un errore, senza passare a un altro account. È supportato solo HTTP Responses; la ricerca web (web_search) è disattivata nella configurazione indipendente. Immagini, altri strumenti ospitati, compact e WebSocket non sono supportati.",
+      "refreshCatalog": "Ricarica il catalogo",
+      "managedProfile": "Configurazione indipendente creata",
+      "profileSource": "Origine: ",
+      "profileSourceMissing": "L’origine è stata eliminata; puoi comunque revocare il Key dedicato e ripristinare la configurazione indipendente.",
+      "profileSourceUnavailable": "L’origine non è attualmente disponibile; la revoca e il ripristino non richiedono l’accesso all’origine.",
+      "launchHelp": "Nel terminale, passa alla cartella del tuo progetto ed esegui il comando qui sotto. Solo questo avvio di Codex utilizzerà la configurazione.",
+      "retryRestore": "Riprova il ripristino (Key revocato)",
+      "restore": "Revoca il Key dedicato e ripristina questa configurazione",
+      "create": "Crea un Key dedicato e una configurazione indipendente",
+      "open": "Ponte di strumenti Codex"
+    },
     "errors": {
       "nodeAppPath": "Questo percorso punta all’ambiente di esecuzione di Node ({{path}}). Seleziona WorkBuddy.exe.",
       "keyProcessFailed": "Impossibile leggere la chiave ufficiale di WorkBuddy. I dati di accesso sono stati conservati. Verifica il percorso del client ({{path}}) nelle impostazioni, quindi cerca aggiornamenti."
@@ -8228,6 +8256,8 @@
       "failed": "Ultimo test di {{model}} non riuscito"
     },
     "exposeToCodex": {
+      "textOnlyTitle": "Il precedente Native ACP supporta solo testo. Per leggere e scrivere file o eseguire comandi, usa il Ponte di strumenti Codex.",
+      "textOnlyAction": "Collega a Codex (solo testo)",
       "title": "Si collega tramite il gateway Native Rust senza copiare il token WorkBuddy"
     }
   },

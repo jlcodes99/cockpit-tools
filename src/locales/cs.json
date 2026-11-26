@@ -8007,6 +8007,34 @@
     }
   },
   "workbuddy": {
+    "nativeCodex": {
+      "nativeRequired": "Nejprve na stránce služby API vytvořte a povolte službu Native Rust; režim se automaticky nepřepne.",
+      "enterpriseUnsupported": "První verze zatím nedokáže spolehlivě navázat konkrétního firemního tenanta; podporuje pouze osobní zdroje WorkBuddy.",
+      "revokedFilesPreserved": "Vyhrazený Key byl zneplatněn. Konfigurační soubory byly změněny nebo je nelze bezpečně odstranit, proto byly všechny změněné soubory i data relací zachovány. Zkontrolujte soubory a zkuste obnovení znovu.",
+      "notOwned": "Doklad o vlastnictví konfigurace neodpovídá vyhrazenému Key. Žádný Key nebyl změněn. Zkontrolujte označení vlastníka v adresáři konfigurace.",
+      "profileChanged": "Tato samostatná konfigurace byla změněna. Program vaše úpravy nepřepíše.",
+      "selectionChanged": "Model nebo úroveň uvažování již nejsou dostupné. Znovu načtěte seznam a vyberte jinou možnost.",
+      "sourceUnavailable": "Tento zdroj WorkBuddy není dostupný. Zkontrolujte přihlášení. Jiný účet se zkoušet nebude.",
+      "operationFailed": "Operace se nezdařila. Ověřte instalaci WorkBuddy CLI a platnost účtu a znovu načtěte seznam.",
+      "title": "WorkBuddy → Codex: nativní most nástrojů",
+      "scope": "Vytvořte vyhrazený místní Key s pevně určeným zdrojem a samostatný CODEX_HOME. Nástroje spouští samotný Codex; token WorkBuddy se do konfigurace Codex nezapíše a nezmění se výchozí přihlášení ani hlavní Key služby API.",
+      "account": "Zdroj WorkBuddy",
+      "noSourceSelected": "Žádný dostupný zdroj; vytvořené konfigurace lze nadále spravovat",
+      "model": "Aktuálně dostupné modely CLI",
+      "readCatalog": "Načtěte aktuální seznam",
+      "effort": "Úroveň uvažování",
+      "metadataOnly": "Načtení seznamu pouze inicializuje CLI a neodesílá modelu žádný prompt. Před vytvořením se model a úroveň uvažování znovu ověří; při neplatném zdroji se rovnou zobrazí chyba, bez přechodu na jiný účet. Podporováno je pouze HTTP Responses; v samostatné konfiguraci je vypnuto vyhledávání na webu (web_search). Obrázky, jiné hostované nástroje, compact ani WebSocket nejsou podporovány.",
+      "refreshCatalog": "Znovu načíst seznam",
+      "managedProfile": "Vytvořená samostatná konfigurace",
+      "profileSource": "Zdroj: ",
+      "profileSourceMissing": "Zdroj byl odstraněn; vyhrazený Key lze stále zneplatnit a samostatnou konfiguraci obnovit.",
+      "profileSourceUnavailable": "Zdroj nyní není dostupný; zneplatnění ani obnovení nevyžadují přihlášení ke zdroji.",
+      "launchHelp": "V terminálu přejděte do adresáře projektu a spusťte níže uvedený příkaz. Tuto konfiguraci použije pouze toto spuštění Codex.",
+      "retryRestore": "Zkusit obnovení znovu (Key je zneplatněn)",
+      "restore": "Zneplatnit vyhrazený Key a obnovit tuto konfiguraci",
+      "create": "Vytvořit vyhrazený Key a samostatnou konfiguraci",
+      "open": "Most nástrojů Codex"
+    },
     "errors": {
       "nodeAppPath": "Tato cesta odkazuje na běhové prostředí Node ({{path}}). Vyberte WorkBuddy.exe.",
       "keyProcessFailed": "Oficiální klíč WorkBuddy se nepodařilo načíst. Přihlašovací údaje zůstaly beze změny. Ověřte v nastavení cestu ke klientovi ({{path}}) a poté zkontrolujte aktualizace."
@@ -8228,6 +8256,8 @@
       "failed": "Poslední test {{model}} selhal"
     },
     "exposeToCodex": {
+      "textOnlyTitle": "Starší Native ACP podporuje pouze text. Pro čtení a zápis souborů a spouštění příkazů použijte Most nástrojů Codex.",
+      "textOnlyAction": "Připojit ke Codex (pouze text)",
       "title": "Připojí se přes bránu Native Rust bez kopírování tokenu WorkBuddy"
     }
   },

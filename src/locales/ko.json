@@ -8007,6 +8007,34 @@
     }
   },
   "workbuddy": {
+    "nativeCodex": {
+      "nativeRequired": "먼저 API 서비스 페이지에서 Native Rust 서비스를 만들고 활성화하세요. 모드는 자동으로 전환되지 않습니다.",
+      "enterpriseUnsupported": "첫 버전에서는 기업 테넌트를 확실하게 고정할 수 없어 개인 WorkBuddy 계정만 지원합니다.",
+      "revokedFilesPreserved": "전용 Key가 폐기되었습니다. 설정 파일이 수정되었거나 안전하게 정리할 수 없어 수정된 파일과 세션 데이터를 모두 보존했습니다. 파일을 확인한 후 복원을 다시 시도할 수 있습니다.",
+      "notOwned": "설정의 소유권 증명이 전용 Key와 일치하지 않아 어떤 Key도 변경하지 않았습니다. 설정 디렉터리의 소유권 표시를 확인하세요.",
+      "profileChanged": "이 독립 설정이 수정되었습니다. 프로그램은 수정 사항을 덮어쓰지 않습니다.",
+      "selectionChanged": "모델 또는 추론 강도를 더 이상 사용할 수 없습니다. 목록을 다시 불러와 선택하세요.",
+      "sourceUnavailable": "이 WorkBuddy 계정을 사용할 수 없습니다. 로그인 상태를 확인하세요. 다른 계정으로 재시도하지 않습니다.",
+      "operationFailed": "작업에 실패했습니다. WorkBuddy CLI 설치 여부와 계정의 유효성을 확인한 후 목록을 다시 불러오세요.",
+      "title": "WorkBuddy → Codex 네이티브 도구 브리지",
+      "scope": "고정된 계정에 연결되는 전용 로컬 Key와 독립 CODEX_HOME을 만듭니다. 도구는 Codex가 직접 실행합니다. WorkBuddy 토큰은 Codex 설정에 저장되지 않으며 기본 로그인이나 API 서비스의 기본 Key도 변경하지 않습니다.",
+      "account": "WorkBuddy 연결 계정",
+      "noSourceSelected": "사용 가능한 계정이 없습니다. 이미 만든 설정은 계속 관리할 수 있습니다.",
+      "model": "CLI 실시간 모델",
+      "readCatalog": "실시간 목록을 불러오세요",
+      "effort": "추론 강도",
+      "metadataOnly": "목록을 불러올 때는 CLI만 초기화하며 모델에 프롬프트를 보내지 않습니다. 생성 전에 모델과 추론 강도를 다시 검증합니다. 연결 계정이 무효해지면 즉시 오류를 반환하며 다른 계정으로 전환하지 않습니다. HTTP Responses만 지원합니다. 독립 설정에서는 웹 검색(web_search)이 비활성화되며 이미지, 다른 호스팅 도구, compact 및 WebSocket은 지원하지 않습니다.",
+      "refreshCatalog": "목록 다시 불러오기",
+      "managedProfile": "생성된 독립 설정",
+      "profileSource": "연결 계정: ",
+      "profileSourceMissing": "연결 계정이 삭제되었습니다. 전용 Key를 폐기하고 독립 설정을 복원하는 작업은 계속할 수 있습니다.",
+      "profileSourceUnavailable": "현재 연결 계정을 사용할 수 없습니다. Key 폐기 및 설정 복원에는 해당 계정의 로그인이 필요하지 않습니다.",
+      "launchHelp": "터미널에서 프로젝트 디렉터리로 이동한 후 아래 명령을 실행하세요. 이 설정은 해당 Codex 실행에만 적용됩니다.",
+      "retryRestore": "복원 다시 시도(Key 폐기됨)",
+      "restore": "전용 Key 폐기 및 이 설정 복원",
+      "create": "전용 Key와 독립 설정 만들기",
+      "open": "Codex 도구 브리지"
+    },
     "errors": {
       "nodeAppPath": "이 경로는 Node 런타임({{path}})을 가리킵니다. WorkBuddy.exe를 선택하세요.",
       "keyProcessFailed": "WorkBuddy 공식 키를 읽지 못해 로그인 정보 덮어쓰기를 중단했습니다. 설정에서 클라이언트 경로({{path}})를 확인한 다음 업데이트가 있는지 확인하세요."
@@ -8228,6 +8256,8 @@
       "failed": "{{model}} 이전 확인 실패"
     },
     "exposeToCodex": {
+      "textOnlyTitle": "기존 Native ACP는 일반 텍스트만 지원합니다. 파일을 읽고 쓰거나 명령을 실행하려면 ‘Codex 도구 브리지’를 사용하세요.",
+      "textOnlyAction": "Codex 연결(일반 텍스트)",
       "title": "WorkBuddy 토큰을 복사하지 않고 Native Rust 게이트웨이를 통해 연결합니다"
     }
   },

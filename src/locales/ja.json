@@ -8007,6 +8007,34 @@
     }
   },
   "workbuddy": {
+    "nativeCodex": {
+      "nativeRequired": "先に API サービスページで Native Rust サービスを作成し、有効にしてください。モードは自動で切り替わりません。",
+      "enterpriseUnsupported": "初期バージョンでは企業テナントを厳密に固定できないため、個人用の WorkBuddy ソースのみ対応しています。",
+      "revokedFilesPreserved": "専用 Key は失効済みです。設定ファイルが変更されているか、安全に削除できないため、変更されたファイルとセッションデータはすべて保持されています。ファイルを確認してから復元を再試行できます。",
+      "notOwned": "設定の所有権情報が専用 Key と一致しません。どの Key も変更していません。設定ディレクトリの所有権マーカーを確認してください。",
+      "profileChanged": "この独立設定は変更されています。プログラムが変更内容を上書きすることはありません。",
+      "selectionChanged": "モデルまたは推論強度が利用できなくなりました。一覧を再取得して選択し直してください。",
+      "sourceUnavailable": "この WorkBuddy ソースは利用できません。ログイン状態を確認してください。他のアカウントは試行しません。",
+      "operationFailed": "操作に失敗しました。WorkBuddy CLI がインストールされ、アカウントが有効であることを確認してから、一覧を再取得してください。",
+      "title": "WorkBuddy → Codex ネイティブツールブリッジ",
+      "scope": "ソースを固定した専用ローカル Key と独立した CODEX_HOME を作成します。ツールは Codex 自身が実行します。WorkBuddy トークンは Codex の設定に書き込まれず、既定のログインや API サービスのメイン Key も変更しません。",
+      "account": "WorkBuddy ソース",
+      "noSourceSelected": "利用できるソースがありません。作成済みの設定は引き続き管理できます",
+      "model": "CLI の現在利用可能なモデル",
+      "readCatalog": "最新の一覧を取得してください",
+      "effort": "推論強度",
+      "metadataOnly": "一覧の取得では CLI の初期化のみを行い、モデルへのプロンプトは送信しません。作成前にモデルと推論強度を再検証し、ソースが無効な場合は他のアカウントへ切り替えず、直ちにエラーを表示します。HTTP Responses のみ対応しています。独立設定ではウェブ検索（web_search）が無効になっており、画像、その他のホスト型ツール、compact、WebSocket は利用できません。",
+      "refreshCatalog": "一覧を再取得",
+      "managedProfile": "作成済みの独立設定",
+      "profileSource": "ソース：",
+      "profileSourceMissing": "ソースは削除されています。専用 Key の失効と独立設定の復元は引き続き実行できます。",
+      "profileSourceUnavailable": "ソースは現在利用できません。失効と復元は、ソースのログイン状態に関係なく実行できます。",
+      "launchHelp": "ターミナルでプロジェクトのディレクトリに移動し、次のコマンドを実行してください。この設定は今回の Codex 起動にのみ使用されます。",
+      "retryRestore": "復元を再試行（Key は失効済み）",
+      "restore": "専用 Key を失効させ、この設定を復元",
+      "create": "専用 Key と独立設定を作成",
+      "open": "Codex ツールブリッジ"
+    },
     "errors": {
       "nodeAppPath": "このパスは Node ランタイム（{{path}}）を指しています。WorkBuddy.exe を選択してください。",
       "keyProcessFailed": "WorkBuddy の公式キーを読み込めなかったため、ログイン情報の上書きを中止しました。設定でクライアントのパス（{{path}}）を確認し、正しければ更新を確認してください。"
@@ -8228,6 +8256,8 @@
       "failed": "{{model}} の前回確認に失敗"
     },
     "exposeToCodex": {
+      "textOnlyTitle": "従来の Native ACP はテキストのみ対応しています。ファイルの読み書きやコマンドの実行には「Codex ツールブリッジ」を使用してください。",
+      "textOnlyAction": "Codex に接続（テキストのみ）",
       "title": "WorkBuddy トークンをコピーせずに Native Rust ゲートウェイ経由で接続します"
     }
   },

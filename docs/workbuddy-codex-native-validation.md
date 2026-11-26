@@ -70,9 +70,10 @@ Broader pre-integration runs found two existing-area failures, not hidden by the
 Rebased the independent feature commit onto the upstream squash merge of #3301 (`d4b7de66`), without repeating the original repair commit.
 
 - Final WorkBuddy Rust regression run: **166 passed, 0 failed, 2 ignored**. Explicitly excluded only the already identified installed-process path probe, which needs process inspection outside the outer sandbox; ignored live checks were not invoked.
-- Final selected frontend run, including the new production-modal tests: **50 passed, 0 failed**.
-- Full TypeScript typecheck and feature-only `git diff --check`: passed.
-- Final exact-token audit of all **41 committed feature files**: no WorkBuddy access-token matches.
+- Final selected frontend run, including the production-modal tests and an all-locales coverage regression: **51 passed, 0 failed**.
+- Added all 28 new bridge/text-only-entry strings to all 18 locales. The locale key/reference/value-reuse checker passed. The coverage regression also checks `page.t()` references, which the original static checker did not catch.
+- Full TypeScript typecheck, production frontend build and feature-only `git diff --check`: passed.
+- Final exact-token audit of all **59 feature files**: no WorkBuddy access-token matches.
 - No additional real inference was used for integration or final regression.
 
 The broader pre-integration failure disclosures above remain applicable; they were not silently converted into passing results.

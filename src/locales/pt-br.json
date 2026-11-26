@@ -8007,6 +8007,34 @@
     }
   },
   "workbuddy": {
+    "nativeCodex": {
+      "nativeRequired": "Primeiro crie e ative o serviço Native Rust na página do serviço de API. O modo não será alterado automaticamente.",
+      "enterpriseUnsupported": "A primeira versão ainda não garante a vinculação estrita a um locatário empresarial. Apenas contas pessoais do WorkBuddy são compatíveis.",
+      "revokedFilesPreserved": "A Key exclusiva foi revogada. Os arquivos de configuração foram alterados ou não podem ser removidos com segurança; todos os arquivos modificados e os dados de sessão foram preservados. Confira os arquivos e tente restaurar novamente.",
+      "notOwned": "A comprovação de propriedade da configuração não corresponde à Key exclusiva. Nenhuma Key foi alterada. Verifique o marcador de propriedade no diretório da configuração.",
+      "profileChanged": "Esta configuração independente foi alterada. O programa não sobrescreverá suas alterações.",
+      "selectionChanged": "O modelo ou o nível de raciocínio não está mais disponível. Recarregue o catálogo e selecione novamente.",
+      "sourceUnavailable": "Esta conta de origem do WorkBuddy está indisponível. Confira o estado do login. Nenhuma outra conta será tentada.",
+      "operationFailed": "A operação falhou. Confira se o WorkBuddy CLI está instalado e se a conta é válida; depois, recarregue o catálogo.",
+      "title": "WorkBuddy → Codex — ponte nativa de ferramentas",
+      "scope": "Cria uma Key local exclusiva vinculada a uma conta fixa e um CODEX_HOME independente. O próprio Codex executa as ferramentas. O token do WorkBuddy não é gravado na configuração do Codex, e o login padrão e a Key principal do serviço de API não são alterados.",
+      "account": "Conta de origem do WorkBuddy",
+      "noSourceSelected": "Nenhuma conta de origem disponível; você ainda pode gerenciar as configurações já criadas",
+      "model": "Modelos atuais do CLI",
+      "readCatalog": "Carregue o catálogo atual",
+      "effort": "Nível de raciocínio",
+      "metadataOnly": "Carregar o catálogo apenas inicializa o CLI, sem enviar prompts ao modelo. O modelo e o nível de raciocínio são verificados novamente antes da criação. Se a conta de origem ficar inválida, um erro será retornado sem recorrer a outra conta. Apenas HTTP Responses é compatível. A busca na web (web_search) está desativada na configuração independente; imagens, outras ferramentas hospedadas, compact e WebSocket não são compatíveis.",
+      "refreshCatalog": "Recarregar catálogo",
+      "managedProfile": "Configuração independente criada",
+      "profileSource": "Conta de origem: ",
+      "profileSourceMissing": "A conta de origem foi excluída. Você ainda pode revogar a Key exclusiva e restaurar a configuração independente.",
+      "profileSourceUnavailable": "A conta de origem está indisponível no momento. A revogação e a restauração não dependem do login nessa conta.",
+      "launchHelp": "No terminal, entre no diretório do seu projeto e execute o comando abaixo. Esta configuração será usada apenas nessa execução do Codex.",
+      "retryRestore": "Tentar restaurar novamente (Key revogada)",
+      "restore": "Revogar a Key exclusiva e restaurar esta configuração",
+      "create": "Criar Key exclusiva e configuração independente",
+      "open": "Ponte de ferramentas do Codex"
+    },
     "errors": {
       "nodeAppPath": "Este caminho aponta para o ambiente de execução do Node ({{path}}). Selecione WorkBuddy.exe.",
       "keyProcessFailed": "Não foi possível ler a chave oficial do WorkBuddy. Os dados de login foram preservados. Verifique o caminho do cliente ({{path}}) nas configurações e depois procure atualizações."
@@ -8228,6 +8256,8 @@
       "failed": "Último teste de {{model}} falhou"
     },
     "exposeToCodex": {
+      "textOnlyTitle": "O modo antigo Native ACP aceita apenas texto simples. Para ler e gravar arquivos e executar comandos, use a ponte de ferramentas do Codex.",
+      "textOnlyAction": "Conectar ao Codex (somente texto)",
       "title": "Conecta pela gateway Native Rust sem copiar o token do WorkBuddy"
     }
   },

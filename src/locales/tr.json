@@ -8007,6 +8007,34 @@
     }
   },
   "workbuddy": {
+    "nativeCodex": {
+      "nativeRequired": "Önce API hizmeti sayfasında Native Rust hizmetini oluşturup etkinleştirin. Mod otomatik olarak değiştirilmez.",
+      "enterpriseUnsupported": "İlk sürümde kurumsal kiracıya kesin bağlama henüz sağlanamıyor. Yalnızca kişisel WorkBuddy hesapları desteklenir.",
+      "revokedFilesPreserved": "Özel Key iptal edildi. Yapılandırma dosyaları değiştirilmiş veya güvenle temizlenemiyor; değiştirilen tüm dosyalar ve oturum verileri korundu. Dosyaları kontrol ettikten sonra geri yüklemeyi yeniden deneyebilirsiniz.",
+      "notOwned": "Yapılandırmanın sahiplik kanıtı özel Key ile eşleşmiyor. Hiçbir Key değiştirilmedi. Yapılandırma dizinindeki sahiplik işaretini kontrol edin.",
+      "profileChanged": "Bu bağımsız yapılandırma değiştirilmiş. Program değişikliklerinizin üzerine yazmaz.",
+      "selectionChanged": "Model veya akıl yürütme düzeyi artık kullanılamıyor. Kataloğu yeniden yükleyip tekrar seçin.",
+      "sourceUnavailable": "Bu WorkBuddy kaynak hesabı kullanılamıyor. Oturum açma durumunu kontrol edin. Başka bir hesap denenmez.",
+      "operationFailed": "İşlem başarısız oldu. WorkBuddy CLI kurulumunu ve hesabın geçerliliğini kontrol edip kataloğu yeniden yükleyin.",
+      "title": "WorkBuddy → Codex yerel araç köprüsü",
+      "scope": "Sabit bir kaynak hesaba bağlı özel bir yerel Key ve bağımsız bir CODEX_HOME oluşturur. Araçları Codex kendisi çalıştırır. WorkBuddy belirteci Codex yapılandırmasına yazılmaz; varsayılan oturum açma bilgileri ve API hizmetinin ana Key değeri değiştirilmez.",
+      "account": "WorkBuddy kaynak hesabı",
+      "noSourceSelected": "Kullanılabilir kaynak hesap yok; oluşturulmuş yapılandırmaları yönetmeye devam edebilirsiniz",
+      "model": "CLI güncel modelleri",
+      "readCatalog": "Güncel kataloğu yükleyin",
+      "effort": "Akıl yürütme düzeyi",
+      "metadataOnly": "Katalog yüklenirken yalnızca CLI başlatılır, modele istem gönderilmez. Oluşturmadan önce model ve akıl yürütme düzeyi tekrar doğrulanır. Kaynak hesap geçersiz olursa başka bir hesaba geçilmeden doğrudan hata döndürülür. Yalnızca HTTP Responses desteklenir. Bağımsız yapılandırmada web araması (web_search) devre dışıdır; görseller, diğer barındırılan araçlar, compact ve WebSocket desteklenmez.",
+      "refreshCatalog": "Kataloğu yeniden yükle",
+      "managedProfile": "Oluşturulan bağımsız yapılandırma",
+      "profileSource": "Kaynak hesap: ",
+      "profileSourceMissing": "Kaynak hesap silinmiş. Özel Key değerini iptal edip bağımsız yapılandırmayı geri yükleyebilirsiniz.",
+      "profileSourceUnavailable": "Kaynak hesap şu anda kullanılamıyor. İptal ve geri yükleme için kaynak hesapta oturum açılması gerekmez.",
+      "launchHelp": "Terminalde proje dizininize geçin ve aşağıdaki komutu çalıştırın. Bu yapılandırma yalnızca bu Codex başlatmasında kullanılır.",
+      "retryRestore": "Geri yüklemeyi yeniden dene (Key iptal edildi)",
+      "restore": "Özel Key değerini iptal et ve bu yapılandırmayı geri yükle",
+      "create": "Özel Key ve bağımsız yapılandırma oluştur",
+      "open": "Codex araç köprüsü"
+    },
     "errors": {
       "nodeAppPath": "Bu yol Node çalışma ortamını ({{path}}) gösteriyor. WorkBuddy.exe dosyasını seçin.",
       "keyProcessFailed": "Resmî WorkBuddy anahtarı okunamadığı için oturum açma bilgileri korundu. Ayarlardan istemci yolunu ({{path}}) doğrulayın, ardından güncellemeleri kontrol edin."
@@ -8228,6 +8256,8 @@
       "failed": "{{model}} son testi başarısız"
     },
     "exposeToCodex": {
+      "textOnlyTitle": "Eski Native ACP modu yalnızca düz metni destekler. Dosya okumak, yazmak ve komut çalıştırmak için Codex araç köprüsünü kullanın.",
+      "textOnlyAction": "Codex bağlantısı (yalnızca metin)",
       "title": "WorkBuddy belirtecini kopyalamadan Native Rust ağ geçidi üzerinden bağlanır"
     }
   },

@@ -8576,6 +8576,34 @@
     }
   },
   "workbuddy": {
+    "nativeCodex": {
+      "nativeRequired": "请先在 API 服务页面创建并启用 Native Rust 服务；不会自动切换模式。",
+      "enterpriseUnsupported": "首版尚不能严格绑定企业租户，仅支持个人 WorkBuddy 来源。",
+      "revokedFilesPreserved": "专属 Key 已撤销。配置文件已被修改或无法安全清理，所有修改文件与会话数据均已保留；可检查文件后重试恢复。",
+      "notOwned": "配置所有权凭证与专属 Key 不匹配，未修改任何 Key。请检查配置目录的归属标记。",
+      "profileChanged": "该独立配置已被修改，程序不会覆盖你的修改。",
+      "selectionChanged": "模型或推理强度已不可用，请重新读取目录并选择。",
+      "sourceUnavailable": "该 WorkBuddy 来源不可用，请检查登录状态。不会尝试其他账号。",
+      "operationFailed": "操作失败，请检查 WorkBuddy CLI 是否已安装、账号是否有效，并重新读取目录。",
+      "title": "WorkBuddy → Codex 原生工具桥",
+      "scope": "创建固定来源的专属本地 Key 和独立 CODEX_HOME。Codex 自己执行工具；WorkBuddy Token 不会写入 Codex 配置，也不会修改默认登录或 API 服务主 Key。",
+      "account": "WorkBuddy 来源",
+      "noSourceSelected": "暂无可用来源；仍可管理已创建的配置",
+      "model": "CLI 实时模型",
+      "readCatalog": "请读取实时目录",
+      "effort": "推理强度",
+      "metadataOnly": "读取目录只初始化 CLI，不发送模型提示词。创建前会再次校验模型和强度；来源失效时直接报错，不回退其他账号。仅支持 HTTP Responses；独立配置已禁用联网搜索（web_search），不支持图片、其他托管工具、compact 或 WebSocket。",
+      "refreshCatalog": "重新读取目录",
+      "managedProfile": "已创建的独立配置",
+      "profileSource": "来源：",
+      "profileSourceMissing": "来源已删除；仍可撤销该专属 Key 并恢复独立配置。",
+      "profileSourceUnavailable": "来源当前不可用；撤销和恢复不依赖来源登录状态。",
+      "launchHelp": "在终端进入你的项目目录，再运行下面的命令。仅该次 Codex 启动使用此配置。",
+      "retryRestore": "重试恢复（Key 已撤销）",
+      "restore": "撤销专属 Key 并恢复此配置",
+      "create": "创建专属 Key 与独立配置",
+      "open": "Codex 工具桥"
+    },
     "errors": {
       "nodeAppPath": "当前路径指向 Node 运行时（{{path}}）。请选择 WorkBuddy.exe。",
       "keyProcessFailed": "读取 WorkBuddy 官方密钥失败，已停止覆盖登录信息。请在设置中核对客户端路径（{{path}}），并在确认路径正确后检查客户端更新。"
@@ -8797,6 +8825,8 @@
       "failed": "{{model}} 上次探测失败"
     },
     "exposeToCodex": {
+      "textOnlyTitle": "旧式 Native ACP 仅支持纯文本；需要读写文件和运行命令，请使用「Codex 工具桥」",
+      "textOnlyAction": "接入 Codex（纯文本）",
       "title": "仅在 Native Rust 网关中接入，不会复制 WorkBuddy Token"
     }
   },

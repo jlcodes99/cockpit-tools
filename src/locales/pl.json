@@ -8007,6 +8007,34 @@
     }
   },
   "workbuddy": {
+    "nativeCodex": {
+      "nativeRequired": "Najpierw utwórz i włącz usługę Native Rust na stronie usługi API. Tryb nie zostanie przełączony automatycznie.",
+      "enterpriseUnsupported": "Pierwsza wersja nie zapewnia jeszcze ścisłego przypisania do dzierżawy firmowej. Obsługiwane są tylko osobiste konta WorkBuddy.",
+      "revokedFilesPreserved": "Dedykowany Key został unieważniony. Pliki konfiguracji zostały zmienione lub nie można ich bezpiecznie usunąć, więc zachowano wszystkie zmodyfikowane pliki i dane sesji. Po sprawdzeniu plików możesz ponowić przywracanie.",
+      "notOwned": "Potwierdzenie własności konfiguracji nie pasuje do dedykowanego Key. Nie zmieniono żadnego Key. Sprawdź znacznik własności w katalogu konfiguracji.",
+      "profileChanged": "Ta niezależna konfiguracja została zmodyfikowana. Program nie nadpisze Twoich zmian.",
+      "selectionChanged": "Model lub poziom rozumowania nie jest już dostępny. Wczytaj ponownie katalog i wybierz inne ustawienie.",
+      "sourceUnavailable": "To konto WorkBuddy jest niedostępne. Sprawdź stan logowania. Inne konta nie będą próbowane.",
+      "operationFailed": "Operacja nie powiodła się. Sprawdź, czy WorkBuddy CLI jest zainstalowane i czy konto jest ważne, a następnie wczytaj ponownie katalog.",
+      "title": "WorkBuddy → Codex — natywny most narzędzi",
+      "scope": "Tworzy dedykowany lokalny Key przypisany do jednego konta oraz niezależny CODEX_HOME. Codex sam wykonuje narzędzia. Token WorkBuddy nie trafia do konfiguracji Codex; domyślne logowanie i główny Key usługi API pozostają bez zmian.",
+      "account": "Konto źródłowe WorkBuddy",
+      "noSourceSelected": "Brak dostępnego konta źródłowego; nadal możesz zarządzać utworzonymi konfiguracjami",
+      "model": "Bieżące modele CLI",
+      "readCatalog": "Wczytaj aktualny katalog",
+      "effort": "Poziom rozumowania",
+      "metadataOnly": "Wczytanie katalogu jedynie inicjalizuje CLI i nie wysyła promptu do modelu. Przed utworzeniem model i poziom rozumowania są ponownie sprawdzane. Jeśli konto źródłowe przestanie działać, zwracany jest błąd bez przełączania na inne konto. Obsługiwane jest tylko HTTP Responses. W niezależnej konfiguracji wyłączono wyszukiwanie w sieci (web_search); obrazy, inne narzędzia hostowane, compact i WebSocket nie są obsługiwane.",
+      "refreshCatalog": "Wczytaj katalog ponownie",
+      "managedProfile": "Utworzona niezależna konfiguracja",
+      "profileSource": "Konto źródłowe: ",
+      "profileSourceMissing": "Konto źródłowe zostało usunięte. Nadal możesz unieważnić dedykowany Key i przywrócić niezależną konfigurację.",
+      "profileSourceUnavailable": "Konto źródłowe jest obecnie niedostępne. Unieważnienie i przywracanie nie wymagają zalogowania na to konto.",
+      "launchHelp": "W terminalu przejdź do katalogu projektu, a następnie uruchom poniższe polecenie. Ta konfiguracja będzie używana tylko przy tym uruchomieniu Codex.",
+      "retryRestore": "Ponów przywracanie (Key unieważniony)",
+      "restore": "Unieważnij dedykowany Key i przywróć tę konfigurację",
+      "create": "Utwórz dedykowany Key i niezależną konfigurację",
+      "open": "Most narzędzi Codex"
+    },
     "errors": {
       "nodeAppPath": "Ta ścieżka wskazuje środowisko uruchomieniowe Node ({{path}}). Wybierz WorkBuddy.exe.",
       "keyProcessFailed": "Nie udało się odczytać oficjalnego klucza WorkBuddy. Dane logowania zostały zachowane. Sprawdź ścieżkę klienta ({{path}}) w ustawieniach, a następnie sprawdź dostępność aktualizacji."
@@ -8228,6 +8256,8 @@
       "failed": "Ostatni test {{model}} nieudany"
     },
     "exposeToCodex": {
+      "textOnlyTitle": "Starszy tryb Native ACP obsługuje wyłącznie zwykły tekst. Aby odczytywać i zapisywać pliki oraz wykonywać polecenia, użyj mostu narzędzi Codex.",
+      "textOnlyAction": "Połącz z Codex (tylko tekst)",
       "title": "Łączy przez bramę Native Rust bez kopiowania tokenu WorkBuddy"
     }
   },

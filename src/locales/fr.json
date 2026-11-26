@@ -8007,6 +8007,34 @@
     }
   },
   "workbuddy": {
+    "nativeCodex": {
+      "nativeRequired": "Créez et activez d’abord le service Native Rust sur la page du service API. Le mode ne sera pas changé automatiquement.",
+      "enterpriseUnsupported": "Cette première version ne permet pas encore de lier strictement un tenant d’entreprise ; seules les sources WorkBuddy personnelles sont prises en charge.",
+      "revokedFilesPreserved": "Le Key dédié a été révoqué. Les fichiers de configuration ont été modifiés ou ne peuvent pas être supprimés en toute sécurité. Tous les fichiers modifiés et les données de session ont été conservés ; vérifiez les fichiers, puis réessayez la restauration.",
+      "notOwned": "La preuve de propriété de la configuration ne correspond pas au Key dédié. Aucun Key n’a été modifié. Vérifiez le marqueur de propriété du dossier de configuration.",
+      "profileChanged": "Cette configuration indépendante a été modifiée. Le programme n’écrasera pas vos changements.",
+      "selectionChanged": "Le modèle ou le niveau de raisonnement n’est plus disponible. Rechargez le catalogue et faites une nouvelle sélection.",
+      "sourceUnavailable": "Cette source WorkBuddy n’est pas disponible. Vérifiez la connexion au compte. Aucun autre compte ne sera essayé.",
+      "operationFailed": "L’opération a échoué. Vérifiez que WorkBuddy CLI est installé et que le compte est valide, puis rechargez le catalogue.",
+      "title": "WorkBuddy → Codex : passerelle d’outils native",
+      "scope": "Créez un Key local dédié à une source fixe et un CODEX_HOME indépendant. Codex exécute lui-même les outils ; le jeton WorkBuddy ne sera pas écrit dans la configuration de Codex et ni la connexion par défaut ni le Key principal du service API ne seront modifiés.",
+      "account": "Source WorkBuddy",
+      "noSourceSelected": "Aucune source disponible ; vous pouvez toujours gérer les configurations créées",
+      "model": "Modèles CLI disponibles actuellement",
+      "readCatalog": "Chargez le catalogue actuel",
+      "effort": "Niveau de raisonnement",
+      "metadataOnly": "Le chargement du catalogue initialise uniquement CLI et n’envoie aucune instruction au modèle. Le modèle et le niveau de raisonnement sont revérifiés avant la création ; si la source devient invalide, une erreur s’affiche immédiatement, sans basculer vers un autre compte. Seul HTTP Responses est pris en charge ; la recherche web (web_search) est désactivée dans la configuration indépendante. Les images, les autres outils hébergés, compact et WebSocket ne sont pas pris en charge.",
+      "refreshCatalog": "Recharger le catalogue",
+      "managedProfile": "Configuration indépendante créée",
+      "profileSource": "Source : ",
+      "profileSourceMissing": "La source a été supprimée ; vous pouvez toujours révoquer le Key dédié et restaurer la configuration indépendante.",
+      "profileSourceUnavailable": "La source est actuellement indisponible ; la révocation et la restauration ne nécessitent pas d’être connecté à cette source.",
+      "launchHelp": "Placez-vous dans le dossier de votre projet dans le terminal, puis exécutez la commande ci-dessous. Seul ce lancement de Codex utilisera cette configuration.",
+      "retryRestore": "Réessayer la restauration (Key révoqué)",
+      "restore": "Révoquer le Key dédié et restaurer cette configuration",
+      "create": "Créer un Key dédié et une configuration indépendante",
+      "open": "Passerelle d’outils Codex"
+    },
     "errors": {
       "nodeAppPath": "Ce chemin pointe vers l’environnement d’exécution Node ({{path}}). Sélectionnez WorkBuddy.exe.",
       "keyProcessFailed": "Impossible de lire la clé officielle de WorkBuddy. Les données de connexion ont été conservées. Vérifiez le chemin du client ({{path}}) dans les paramètres, puis recherchez des mises à jour."
@@ -8228,6 +8256,8 @@
       "failed": "Dernier test de {{model}} échoué"
     },
     "exposeToCodex": {
+      "textOnlyTitle": "L’ancien Native ACP ne prend en charge que le texte. Pour lire et écrire des fichiers ou exécuter des commandes, utilisez la passerelle d’outils Codex.",
+      "textOnlyAction": "Connecter à Codex (texte uniquement)",
       "title": "Se connecte via la passerelle Native Rust sans copier le jeton WorkBuddy"
     }
   },
