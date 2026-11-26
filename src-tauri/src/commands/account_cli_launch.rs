@@ -5,7 +5,7 @@ use std::time::Duration;
 use tauri::AppHandle;
 
 use super::super::codex_instance::terminal::{
-    build_codex_terminal_launch_plan, CodexTerminalLaunchPlan,
+    build_codex_terminal_launch_plan, is_powershell_program, CodexTerminalLaunchPlan,
 };
 use crate::{models::Account, modules};
 
@@ -212,7 +212,7 @@ fn open_terminal(plan: CodexTerminalLaunchPlan, terminal: &str) -> Result<(), St
             #[cfg(target_os = "windows")]
             {
                 use std::os::windows::process::CommandExt;
-                let flags = if matches!(program.as_str(), "powershell" | "pwsh") {
+                let flags = if is_powershell_program(&program) {
                     0x00000010 // The selected PowerShell is the interactive terminal.
                 } else {
                     0x08000000

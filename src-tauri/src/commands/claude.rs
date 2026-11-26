@@ -226,34 +226,24 @@ pub(crate) fn execute_claude_cli_command(
     {
         let terminal_key = terminal.to_ascii_lowercase();
         let shell = if terminal_key == "pwsh" {
-            "pwsh"
+            super::codex_instance::terminal::windows_pwsh_executable()
+                .map(|path| path.to_string_lossy().into_owned())
+                .unwrap_or_else(|| "pwsh".to_string())
         } else {
-            "powershell"
+            "powershell".to_string()
         };
         let mut cmd = if terminal_key == "wt" {
             let mut command_process = Command::new("wt");
-            command_process.args([
-                shell,
-                "-NoExit",
-                "-ExecutionPolicy",
-                "Bypass",
-                "-Command",
-                command,
-            ]);
+            command_process
+                .arg(&shell)
+                .args(["-NoExit", "-ExecutionPolicy", "Bypass", "-Command", command]);
             command_process
         } else {
             let mut command_process = Command::new("cmd");
-            command_process.args([
-                "/C",
-                "start",
-                "",
-                shell,
-                "-NoExit",
-                "-ExecutionPolicy",
-                "Bypass",
-                "-Command",
-                command,
-            ]);
+            command_process
+                .args(["/C", "start", ""])
+                .arg(&shell)
+                .args(["-NoExit", "-ExecutionPolicy", "Bypass", "-Command", command]);
             command_process
         };
 

@@ -176,10 +176,15 @@ pub async fn get_available_terminals() -> Result<Vec<String>, String> {
 
     #[cfg(target_os = "windows")]
     {
-        // Windows 下检查可执行文件是否在 PATH 中
+        // Windows 下检查可执行文件是否在 PATH 中；pwsh 同时接受商店版执行别名。
         let terminals = ["cmd", "PowerShell", "pwsh", "wt"];
         for name in terminals {
-            if is_command_available(name) {
+            let detected = if name == "pwsh" {
+                super::codex_instance::terminal::windows_pwsh_available()
+            } else {
+                is_command_available(name)
+            };
+            if detected {
                 available.push(name.to_string());
             }
         }
