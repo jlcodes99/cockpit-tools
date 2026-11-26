@@ -1657,10 +1657,11 @@ pub fn start_trae_platform_with_args_with_new_window(
             cmd.creation_flags(0x08000000);
         }
         cmd.arg("--user-data-dir").arg(target);
+        // use_new_window=false 表示冷启动（切号/启动实例前会先关闭客户端）：不传任何
+        // 窗口参数，让 Trae 按 window.startupWindowType 决定打开 Agent 还是 IDE 窗口；
+        // 显式 --new-window 会绕过该设置直接打开 IDE 窗口。
         if use_new_window {
             cmd.arg("--new-window");
-        } else {
-            cmd.arg("--reuse-window");
         }
         for arg in extra_args {
             let trimmed = arg.trim();
@@ -1691,10 +1692,10 @@ pub fn start_trae_platform_with_args_with_new_window(
                 .stderr(Stdio::null());
         }
         cmd.arg("--user-data-dir").arg(target);
+        // use_new_window=false 表示冷启动：不传窗口参数，让 Trae 按
+        // window.startupWindowType 决定打开 Agent 还是 IDE 窗口。
         if use_new_window {
             cmd.arg("--new-window");
-        } else {
-            cmd.arg("--reuse-window");
         }
         for arg in extra_args {
             let trimmed = arg.trim();
@@ -1867,10 +1868,11 @@ pub fn start_trae_platform_default_with_args_with_new_window(
         } else {
             cmd.creation_flags(0x08000000);
         }
+        // use_new_window=false 表示冷启动（切号流程会先关闭客户端）：不传任何窗口
+        // 参数，让 Trae 按 window.startupWindowType 决定打开 Agent 还是 IDE 窗口；
+        // 显式 --new-window 会绕过该设置直接打开 IDE 窗口。
         if use_new_window {
             cmd.arg("--new-window");
-        } else {
-            cmd.arg("--reuse-window");
         }
         for arg in extra_args {
             let trimmed = arg.trim();
@@ -1897,10 +1899,10 @@ pub fn start_trae_platform_default_with_args_with_new_window(
                 .stdout(Stdio::null())
                 .stderr(Stdio::null());
         }
+        // use_new_window=false 表示冷启动：不传窗口参数，让 Trae 按
+        // window.startupWindowType 决定打开 Agent 还是 IDE 窗口。
         if use_new_window {
             cmd.arg("--new-window");
-        } else {
-            cmd.arg("--reuse-window");
         }
         for arg in extra_args {
             let trimmed = arg.trim();
