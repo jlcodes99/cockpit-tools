@@ -458,6 +458,8 @@ pub fn detect_t3code_exec_path() -> Option<PathBuf> {
                 ("T3 Code (Beta)", "T3 Code (Beta).exe"),
                 ("T3 Code", "T3 Code.exe"),
                 ("t3code", "T3 Code.exe"),
+                ("t3code", "T3 Code (Beta).exe"),
+                ("t3code", "T3 Code (Nightly).exe"),
                 ("T3 Code (Nightly)", "T3 Code (Nightly).exe"),
             ] {
                 candidates.push(programs.join(folder).join(exe));
