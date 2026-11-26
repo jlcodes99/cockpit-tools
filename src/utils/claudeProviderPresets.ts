@@ -603,6 +603,17 @@ const CC_SWITCH_DIRECT_CLAUDE_PROVIDER_PRESETS: readonly ClaudeApiProviderPreset
       ANTHROPIC_DEFAULT_OPUS_MODEL: 'claude-opus-5-5',
     }),
   }),
+  createClaudeApiProviderPreset({
+    id: 'onomeo',
+    name: 'onomeo',
+    baseUrl: 'https://onomeo.com',
+    website: 'https://onomeo.com',
+    apiKeyUrl: 'https://onomeo.com/dashboard',
+    extraEnv: modelEnv('claude-sonnet-5.5', {
+      ANTHROPIC_DEFAULT_HAIKU_MODEL: 'claude-haiku-5.5',
+      ANTHROPIC_DEFAULT_OPUS_MODEL: 'claude-opus-5.5',
+    }),
+  }),
 ];
 
 export const CLAUDE_API_PROVIDER_PRESETS: readonly ClaudeApiProviderPreset[] = [
