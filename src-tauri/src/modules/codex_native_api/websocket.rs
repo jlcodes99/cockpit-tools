@@ -440,7 +440,8 @@ async fn run(
                                     full_replay_parent = None;
                                     if !reconnect {
                                         let mut wire_headers = prepared.headers.clone();
-                                        let mut wire_body = prepare_ws_body(&state, &mut prepared, &mut wire_headers).await?;
+                                        let opening = prepared.execution.clone();
+                                        let mut wire_body = opening.run(prepare_ws_body(&state, &mut prepared, &mut wire_headers)).await?;
                                         tracker.field_compat.apply(&prepared.route, &mut wire_body);
                                         if super::multi_agent_compat::is_codex_client(
                                             client_headers.get("user-agent").and_then(|v| v.to_str().ok()).unwrap_or("")
@@ -465,10 +466,10 @@ async fn run(
                                                     prepared.source_body["previous_response_id"].as_str() == Some(id)
                                                         || full_replay_parent.as_deref() == Some(id))
                                         });
-                                        let proof = super::reasoning_policy::check_dispatch_with_parent(
+                                        let proof = opening.run(super::reasoning_policy::check_dispatch_with_parent(
                                             &state, &caller, &prepared.route, &prepared.source_body, &wire_body,
                                             super::contract::WireApi::Responses, parent,
-                                        ).await;
+                                        )).await;
                                         prepared.reasoning_ceiling_proof = match proof {
                                             Ok(proof) => proof,
                                             Err(error) => {
@@ -543,11 +544,11 @@ async fn run(
                                                 reused_wire = Some((wire_headers, wire_text));
                                             }
                                         }
-                                    } else if let Err(error) = super::reasoning_policy::check_dispatch_with_parent(
+                                    } else if let Err(error) = prepared.execution.run(super::reasoning_policy::check_dispatch_with_parent(
                                         &state, &caller, &prepared.route, &prepared.source_body, &prepared.body,
                                         super::contract::WireApi::Responses,
                                         state.reasoning_proofs.parent(&prepared, &prepared.body),
-                                    ).await {
+                                    )).await {
                                         tracker.fail(&error).await;
                                         prepared = previous;
                                         timed_client_until(&state, None, client_sink.send(Message::Text(error_event(&error).to_string().into()))).await?;
@@ -619,6 +620,7 @@ async fn run(
                                                 Err(error) if error.code == "websocket_context_seed_unavailable" => {
                                                     tracker.attempt_error(&error);
                                                     let _ = tokio::time::timeout(std::time::Duration::from_secs(1), sink.close()).await;
+                                                    prepared.execution = prepared.execution.renew_open();
                                                     let opened = while_split_connected(
                                                         &state, &mut client_sink, &mut client_stream, &mut pending_messages, &mut heartbeat,
                                                         turn_deadline, None,
@@ -921,21 +923,20 @@ async fn run(
                             if super::overload::event(&event) { tracker.observe_overload(); }
                             if !probe_reused { tracker.overload.recovered(); }
                             if probe_reused {
-                                reused_bytes = reused_bytes.saturating_add(text.len());
-                                reused_events = reused_events.saturating_add(1);
-                                if reused_events >= super::bootstrap::MAX_EVENTS || reused_bytes >= super::bootstrap::MAX_BYTES {
-                                    probe_reused = false;
-                                }
-                            }
-                            if probe_reused {
                                 if !upstream_http && first_event_rejection(&UpstreamMessage::Text(text.clone()), false).is_some_and(|(error, _)| error.status == 400) {
                                     let mut wire_headers = prepared.headers.clone();
-                                    let mut body = prepare_ws_body(&state, &mut prepared, &mut wire_headers).await?;
+                                    let mut body = prepared
+                                        .execution
+                                        .clone()
+                                        .run(prepare_ws_body(&state, &mut prepared, &mut wire_headers))
+                                        .await?;
                                     tracker.field_compat.apply(&prepared.route, &mut body);
                                     if tracker.field_compat.rejected_for(&prepared, &body, 400, &event) {
                                         tracker.field_compat.commit_reasoning(&mut prepared);
                                         tracker.attempt_result(400, false, Some(tracker.field_compat.reason()));
+                                        prepared.execution = prepared.execution.renew_open();
                                         if let Some(sink) = &mut upstream_sink { let _ = tokio::time::timeout(std::time::Duration::from_secs(1), sink.close()).await; }
+                                        prepared.execution = prepared.execution.renew_open();
                                         let opened = while_split_connected(&state, &mut client_sink, &mut client_stream, &mut pending_messages, &mut heartbeat, turn_deadline, None,
                                             transport_bridge::open_with_retries(&state, &caller, &mut prepared, &mut tracker, &policy, turn_deadline, &mut history, std::mem::take(&mut opening_retries))).await?;
                                         upstream_sink = opened.sink; upstream_events.clear(); upstream_stream = opened.stream;
@@ -1023,6 +1024,11 @@ async fn run(
                                     }
                                 }
                                 if super::bootstrap::handshake(&event) {
+                                    reused_bytes = reused_bytes.saturating_add(text.len());
+                                    reused_events = reused_events.saturating_add(1);
+                                    if reused_events >= super::bootstrap::MAX_EVENTS || reused_bytes >= super::bootstrap::MAX_BYTES {
+                                        probe_reused = false;
+                                    }
                                     reused_handshake.push((event, text.to_string()));
                                     continue;
                                 }
@@ -1386,13 +1392,16 @@ async fn open_response(
             ));
         }
         let mut headers = prepared.headers.clone();
-        let mut wire_body = prepare_ws_body(state, prepared, &mut headers).await?;
+        let opening = prepared.execution.clone();
+        let mut wire_body = opening.run(prepare_ws_body(state, prepared, &mut headers)).await?;
         tracker.field_compat.apply(&prepared.route, &mut wire_body);
         let parent = state.reasoning_proofs.parent(prepared, &wire_body);
-        prepared.reasoning_ceiling_proof = super::reasoning_policy::check_dispatch_with_parent(
-            state, &prepared.caller, &prepared.route, &prepared.source_body, &wire_body,
-            super::contract::WireApi::Responses, parent,
-        ).await?;
+        prepared.reasoning_ceiling_proof = opening
+            .run(super::reasoning_policy::check_dispatch_with_parent(
+                state, &prepared.caller, &prepared.route, &prepared.source_body, &wire_body,
+                super::contract::WireApi::Responses, parent,
+            ))
+            .await?;
         // A new side chat can inherit hundreds of MB of images. Prime the
         // same authenticated socket in bounded, non-generating messages;
         // retain the complete source for recovery and history validation.
@@ -1435,7 +1444,7 @@ async fn open_response(
             state.options.max_event_bytes,
             policy.websocket_fragment_timeout,
             policy.websocket_connect_timeout.min(
-                deadline.cap(prepared.execution.prepare_deadline())
+                deadline.cap(opening.prepare_deadline())
                     .saturating_duration_since(tokio::time::Instant::now()),
             ),
             state.stop.clone(),
@@ -1555,8 +1564,11 @@ async fn open_response(
                         for message in super::event_documents::websocket(message) {
                             let UpstreamMessage::Text(text) = &message else { unreachable!() };
                             let event: Value = serde_json::from_str(text.as_str()).map_err(|_| ServiceError::new(502, "invalid_upstream_event", "Upstream returned invalid JSON"))?;
-                            size = size.saturating_add(text.len());
-                            all_handshake &= super::bootstrap::handshake(&event);
+                            if super::bootstrap::handshake(&event) {
+                                size = size.saturating_add(text.len());
+                            } else {
+                                all_handshake = false;
+                            }
                             buffered.push(message);
                         }
                         hold_deadline.get_or_insert(tokio::time::Instant::now() + super::bootstrap::MAX_HOLD);
@@ -1576,7 +1588,11 @@ async fn open_response(
             Ok(initial) => {
                 let last = initial.last().expect("opening always buffers a message");
                 let within_fence = initial.len() <= super::bootstrap::MAX_EVENTS
-                    && initial.iter().map(|message| match message { UpstreamMessage::Text(text) => text.len(), _ => 0 }).sum::<usize>() < super::bootstrap::MAX_BYTES;
+                    && initial.iter().enumerate().map(|(index, message)| match message {
+                        UpstreamMessage::Text(text) if index + 1 < initial.len()
+                            || serde_json::from_str::<Value>(text).is_ok_and(|event| super::bootstrap::handshake(&event)) => text.len(),
+                        _ => 0,
+                    }).sum::<usize>() < super::bootstrap::MAX_BYTES;
                 if within_fence && initial.iter().take(initial.len().saturating_sub(1)).all(|message| {
                     matches!(message, UpstreamMessage::Text(text) if serde_json::from_str::<Value>(text).is_ok_and(|event| super::bootstrap::handshake(&event)))
                 }) {
@@ -1901,7 +1917,11 @@ async fn retry_opening_failure(
     };
     if let Some((delay, maximum)) = backoff {
         super::retry::delay(state, delay, maximum, deadline).await?;
-        super::retry::renew_transport_after_failure(state, prepared, tracker, error).await?;
+        if error.transport_failure_kind().is_some() {
+            super::retry::renew_transport_after_failure(state, prepared, tracker, error).await?;
+        } else {
+            prepared.execution = prepared.execution.renew_open();
+        }
         return Ok(true);
     }
     if exhausted.is_none() && !overload && matches!(kind, OpeningFailure::Status)

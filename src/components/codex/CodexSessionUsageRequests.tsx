@@ -13,6 +13,24 @@ import {
   formatSessionUsageTokensShort,
 } from '../../utils/codexSessionUsageFormat';
 
+function formatFirstResponseMs(value?: number | null): string {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0
+    ? `${Math.round(value)} ms`
+    : '—';
+}
+
+function formatTpsRate(
+  value: number | null | undefined,
+  t: (key: string, options?: Record<string, unknown>) => string,
+): string {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+    return '—';
+  }
+  const rate = value.toFixed(1);
+  const translated = t('common.outputSpeed.value', { value: rate, defaultValue: `${rate} tok/s` });
+  return translated === 'common.outputSpeed.value' ? `${rate} tok/s` : translated;
+}
+
 export function usageProjectLabel(path: string): string {
   const parts = path.split(/[\\/]/).filter(Boolean);
   return parts[parts.length - 1] ?? path;
@@ -67,6 +85,8 @@ export function CodexSessionUsageRequests({ query, revision, lang, sessionNames,
     { id: 'input', label: t(`${prefix}.freshInput`) },
     { id: 'cached', label: t(`${prefix}.cached`) },
     { id: 'output', label: t('codex.sessionUsage.summary.output') },
+    { id: 'firstResponse', label: t('codex.requestDiagnostics.firstResponse') },
+    { id: 'tps', label: t('common.outputSpeed.label') },
     { id: 'cost', label: t(`${prefix}.referenceCost`) },
   ];
   const token = (value: number) => (
@@ -113,6 +133,8 @@ export function CodexSessionUsageRequests({ query, revision, lang, sessionNames,
                       <td className="codex-session-usage__col-input">{token(fresh)}</td>
                       <td className="codex-session-usage__col-cached">{token(row.cachedInputTokens)}</td>
                       <td className="codex-session-usage__col-output">{token(row.outputTokens)}</td>
+                      <td className="codex-session-usage__col-firstResponse">{formatFirstResponseMs(row.firstResponseMs)}</td>
+                      <td className="codex-session-usage__col-tps">{formatTpsRate(row.tokensPerSecond, t)}</td>
                       <td className="codex-session-usage__col-cost" title={row.estimatedCostUsd == null ? t(`${prefix}.unpriced`) : undefined}>
                         {row.estimatedCostUsd == null ? '—' : formatSessionUsageCostUsd(row.estimatedCostUsd)}
                       </td>
@@ -137,6 +159,8 @@ export function CodexSessionUsageRequests({ query, revision, lang, sessionNames,
                               [t(`${prefix}.cached`), formatSessionUsageCount(row.cachedInputTokens)],
                               [t('codex.sessionUsage.summary.output'), formatSessionUsageCount(row.outputTokens)],
                               [t(`${prefix}.cacheRate`), row.inputTokens ? percent.format(row.cachedInputTokens / row.inputTokens) : '—'],
+                              [t('codex.requestDiagnostics.firstResponse'), formatFirstResponseMs(row.firstResponseMs)],
+                              [t('common.outputSpeed.label'), formatTpsRate(row.tokensPerSecond, t)],
                             ].map(([label, value]) => (
                               <div key={label}><dt>{label}</dt><dd title={value}>{value}</dd></div>
                             ))}

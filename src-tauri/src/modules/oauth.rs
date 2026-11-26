@@ -7,6 +7,7 @@ const USERINFO_URL: &str = "https://www.googleapis.com/oauth2/v2/userinfo";
 const AUTH_URL: &str = "https://accounts.google.com/o/oauth2/v2/auth";
 const DEFAULT_OAUTH_CLIENT_KEY: &str = "antigravity_enterprise";
 const TOKEN_REFRESH_SKEW_SECONDS: i64 = 900;
+pub const AICODE_SCOPE: &str = "https://www.googleapis.com/auth/aicode";
 // Match Antigravity-Manager's native OAuth UA and known-stable fallback.
 // Do not run version probes or remote discovery on the authorization path.
 const NATIVE_OAUTH_USER_AGENT: &str = "vscode/1.X.X (Antigravity/4.3.0)";
@@ -21,8 +22,19 @@ pub struct TokenResponse {
     pub refresh_token: Option<String>,
     #[serde(default)]
     pub id_token: Option<String>,
+    #[serde(default)]
+    pub scope: Option<String>,
     #[serde(skip)]
     pub oauth_client_key: Option<String>,
+}
+
+pub fn scope_lacks_aicode(scope: Option<&str>) -> bool {
+    let Some(scope) = scope.map(str::trim).filter(|value| !value.is_empty()) else {
+        return false;
+    };
+    !scope
+        .split_whitespace()
+        .any(|item| item.eq_ignore_ascii_case(AICODE_SCOPE))
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -206,6 +218,11 @@ async fn refresh_access_token_at(
                 .await
                 .map_err(|e| format!("刷新数据解析失败: {}", e))?;
             token_data.oauth_client_key = Some(client_key);
+            if scope_lacks_aicode(token_data.scope.as_deref()) {
+                crate::modules::logger::log_warn(
+                    "[OAuth] 当前 refresh_token 缺少 https://www.googleapis.com/auth/aicode 权限，Antigravity 2.35+ 桌面端启动后可能会自动退出登录，建议通过 OAuth 重新授权该账号",
+                );
+            }
             return Ok(token_data);
         }
 
@@ -290,6 +307,11 @@ fn build_refreshed_token(
     .with_oauth_metadata(
         response.oauth_client_key,
         response.id_token.or_else(|| current_token.id_token.clone()),
+    )
+    .with_granted_scopes(
+        response
+            .scope
+            .or_else(|| current_token.granted_scopes.clone()),
     );
     token.is_gcp_tos = current_token.is_gcp_tos;
     token

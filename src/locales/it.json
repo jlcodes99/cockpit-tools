@@ -8253,7 +8253,10 @@
       "recovered": "{{model}} di nuovo disponibile alle {{time}}",
       "until": "{{model}} limitato all’ultimo test, ripristino {{time}}",
       "unavailable": "{{model}} limitato all’ultimo test",
-      "failed": "Ultimo test di {{model}} non riuscito"
+      "failed": "Ultimo test di {{model}} non riuscito",
+      "logUntil": "{{model}} limitato nei log del client, ripristino {{time}}",
+      "logUnknownUntil": "Limite rilevato nei log del client, ripristino {{time}}",
+      "logHits": "{{count}} occorrenze nei log"
     },
     "exposeToCodex": {
       "textOnlyTitle": "Il precedente Native ACP supporta solo testo. Per leggere e scrivere file o eseguire comandi, usa il Ponte di strumenti Codex.",
@@ -9727,7 +9730,9 @@
       "conversations": "Conversazioni",
       "turns": "Turni di risposta",
       "coverage": "Copertura esatta",
-      "avgPerDay": "Media / giorno attivo"
+      "avgPerDay": "Media / giorno attivo",
+      "refCost": "Costo equiv. API",
+      "cacheSavingsHint": "Cache risparmiato ~{{savings}}"
     },
     "estimated": {
       "notice": "{{turns}} turni privi di metriche API grezze sono stati stimati separatamente (mai sommati al totale esatto):"
@@ -9766,6 +9771,32 @@
     "errors": {
       "loadFailed": "Impossibile caricare l’utilizzo token: {{error}}",
       "syncFailed": "Scansione utilizzo token non riuscita: {{error}}"
+    },
+    "heatmap": {
+      "title": "Mappa attività 365 giorni",
+      "activeDays": "{{count}} giorni attivi",
+      "peak": "Picco {{date}} ({{tokens}})",
+      "less": "Meno",
+      "more": "Più"
+    },
+    "rehydrate": {
+      "title": "Hook di reidratazione post-compattazione",
+      "enabledBadge": "Attivo",
+      "disabledBadge": "Inattivo",
+      "desc": "Reinietta automaticamente cronologia richieste, file modificati e decisioni chiave dopo la compattazione del contesto (CHECKPOINT).",
+      "noPython": "python3 assente",
+      "enableBtn": "Attiva hook",
+      "disableBtn": "Disattiva hook"
+    },
+    "audit": {
+      "title": "Audit contesto ed esecuzione",
+      "peakContext": "Contesto di picco",
+      "compactions": "{{count}} compattazioni",
+      "userPrompts": "Richieste",
+      "toolCalls": "Strumenti",
+      "fileOps": "File L/S",
+      "commands": "Comandi",
+      "subagents": "Subagenti"
     }
   },
   "t3code": {
@@ -9773,6 +9804,32 @@
       "title": "Configurazione account",
       "providers": "Account dei provider",
       "codexCatalogPending": "Chiavi esterne in attesa di sincronizzare i modelli: {{count}}"
+    },
+    "commonSettings": {
+      "title": "Impostazioni comuni",
+      "language": "Lingua di T3 Code"
+    },
+    "desktopPrivacy": {
+      "title": "Privacy di T3 Code",
+      "enable": "Attiva la modalità privacy",
+      "connection": "Il telefono può ancora associarsi e comunicare in tempo reale con queste opzioni disattivate.",
+      "launchScope": "La telemetria si applica all’istanza predefinita avviata da Cockpit Tools.",
+      "restartPending": "Impostazioni salvate. Riavvia T3 Code per applicare le modifiche alla telemetria.",
+      "environmentBlocked": "Disattivato dalla variabile d’ambiente {{variable}}.",
+      "policyBlocked": "Disattivato dai criteri di sistema.",
+      "linked": "Disattivare le statistiche d’uso disattiva anche il tracciamento delle connessioni.",
+      "analytics": {
+        "label": "Statistiche d’uso",
+        "description": "Invia a T3 Code versione dell’app, piattaforma e statistiche d’uso."
+      },
+      "tracing": {
+        "label": "Tracciamento connessioni",
+        "description": "Invia i tempi di connessione e i tipi di errore. Controlla anche le esportazioni di OpenTelemetry."
+      },
+      "agentActivity": {
+        "label": "Notifiche attività agente",
+        "description": "Invia nomi di progetti e modelli, titoli delle conversazioni e stato delle attività a T3 Connect. Disattivandolo si spengono le attività in tempo reale e le notifiche offline sul telefono."
+      }
     },
     "nativeSettings": {
       "defaultModel": "Modello per nuove chat",

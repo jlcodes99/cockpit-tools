@@ -6,6 +6,46 @@ pub(super) const CONNECTIONS: &str = "codex-managed-remote-connections";
 pub(super) const AUTO_CONNECT: &str = "remote-connection-auto-connect-by-host-id";
 pub(super) const SIGNED_OUT_OWNER: &str = "signed-out";
 pub(super) const RENDERER_OWNER: &str = "electron-renderer-content-owner";
+pub(super) const OWNER_VALUE_PREFIX: &str = "electron-owner-value:";
+pub(super) const OWNER_ATOMS_PREFIX: &str = "electron-owner-atoms:";
+pub(super) const PERSISTED_ATOMS: &str = "electron-persisted-atom-state";
+
+pub(super) const LOCAL_OWNER_VALUE_SUBKEYS: &[&str] = &[
+    "open-in-target-preferences",
+    "worktree-repository-preferences",
+    "active-workspace-roots",
+    "electron-saved-workspace-roots",
+    "electron-workspace-root-labels",
+    "local-projects",
+    "app-server-project-id-by-legacy-project-id-by-host",
+    "app-server-projects-migration-by-host",
+    "app-server-pending-project-deletions-by-host",
+    "selected-project",
+    "project-writable-roots",
+    "project-appearances",
+    "project-files",
+    "pinned-thread-ids",
+    "app-server-migrated-pinned-thread-ids-by-host",
+    "pinned-project-ids",
+    "sidebar-project-thread-orders",
+    "sidebar-thread-metadata",
+    "thread-project-assignments",
+    "thread-project-membership-host-ids",
+    "thread-writable-roots",
+    "thread-workspace-root-hints",
+    "thread-projectless-output-directories",
+    "projectless-thread-ids",
+    "project-order",
+];
+
+pub(super) const SHARED_OWNER_ATOMS: &[&str] = &[
+    "last_completed_onboarding",
+    "electron:onboarding-projectless-completed",
+    "electron:bedrock-govcloud-guidance-acknowledged",
+    "ctrl-tab-shortcut-notice-shown",
+    "number-shortcut-notice-shown",
+    "thread-sort-key",
+];
 
 pub(super) fn renderer_owner(state: &Value) -> Option<&str> {
     state[RENDERER_OWNER].as_str()
@@ -65,6 +105,257 @@ pub(super) fn inherit_scoped_auto_connect(state: &mut Value, next_owner: &str) -
     }
     state[key] = Value::Object(target);
     true
+}
+
+pub(super) fn scoped_owner_value_key(subkey: &str, owner: &str) -> String {
+    format!("{OWNER_VALUE_PREFIX}{subkey}:{owner}")
+}
+
+pub(super) fn scoped_owner_atoms_key(owner: &str) -> String {
+    format!("{OWNER_ATOMS_PREFIX}{owner}")
+}
+
+pub(super) fn has_scoped_owner_state(state: &Value) -> bool {
+    state.as_object().is_some_and(|map| {
+        map.keys().any(|key| {
+            key.starts_with(OWNER_VALUE_PREFIX) || key.starts_with(OWNER_ATOMS_PREFIX)
+        })
+    })
+}
+
+fn merge_owner_json_objects(
+    subkey: &str,
+    target: &mut serde_json::Map<String, Value>,
+    donor: &serde_json::Map<String, Value>,
+) {
+    for (k, v) in donor {
+        match target.get_mut(k) {
+            None => {
+                target.insert(k.clone(), v.clone());
+            }
+            Some(existing) if existing.is_null() && !v.is_null() => {
+                *existing = v.clone();
+            }
+            Some(Value::Array(existing_arr)) if v.is_array() => {
+                if let Some(donor_arr) = v.as_array() {
+                    for item in donor_arr {
+                        if !existing_arr.contains(item) {
+                            existing_arr.push(item.clone());
+                        }
+                    }
+                }
+            }
+            Some(Value::Object(existing_obj)) if v.is_object() => {
+                let donor_obj = v.as_object().expect("checked object");
+                if subkey == "app-server-projects-migration-by-host" {
+                    for flag in ["projectsMigrated", "threadAssignmentsMigrated"] {
+                        if donor_obj.get(flag) == Some(&Value::Bool(true)) {
+                            existing_obj.insert(flag.to_owned(), Value::Bool(true));
+                        }
+                    }
+                    for (fk, fv) in donor_obj {
+                        if !existing_obj.contains_key(fk) || existing_obj[fk].is_null() {
+                            existing_obj.insert(fk.clone(), fv.clone());
+                        }
+                    }
+                } else {
+                    merge_owner_json_objects(subkey, existing_obj, donor_obj);
+                }
+            }
+            Some(_) => {}
+        }
+    }
+}
+
+fn merge_local_owner_subkey_values(subkey: &str, donors: &[&Value]) -> Option<Value> {
+    if donors.is_empty() {
+        return None;
+    }
+    let Some(first_non_null) = donors.iter().copied().find(|v| !v.is_null()) else {
+        return Some(Value::Null);
+    };
+    match first_non_null {
+        Value::Array(_) => {
+            let mut merged = Vec::new();
+            for donor in donors {
+                if let Some(items) = donor.as_array() {
+                    for item in items {
+                        if !merged.contains(item) {
+                            merged.push(item.clone());
+                        }
+                    }
+                }
+            }
+            Some(Value::Array(merged))
+        }
+        Value::Object(_) => {
+            let mut merged = serde_json::Map::new();
+            for donor in donors {
+                if let Some(obj) = donor.as_object() {
+                    merge_owner_json_objects(subkey, &mut merged, obj);
+                }
+            }
+            Some(Value::Object(merged))
+        }
+        _ => donors
+            .iter()
+            .copied()
+            .find(|v| match v {
+                Value::Null => false,
+                Value::String(s) => !s.trim().is_empty(),
+                _ => true,
+            })
+            .or_else(|| Some(first_non_null))
+            .cloned(),
+    }
+}
+
+pub(super) fn inherit_scoped_owner_local_state(
+    state: &mut Value,
+    next_owner: &str,
+) -> Vec<String> {
+    let Some(map) = state.as_object() else {
+        return Vec::new();
+    };
+    let active_owner = renderer_owner(state).map(str::to_owned);
+    let mut owners = BTreeSet::new();
+    let mut has_atoms = false;
+    let mut present_subkeys = BTreeSet::new();
+    for key in map.keys() {
+        if let Some(owner) = key.strip_prefix(OWNER_ATOMS_PREFIX) {
+            if !owner.is_empty() {
+                owners.insert(owner.to_owned());
+                has_atoms = true;
+            }
+        } else if let Some(rest) = key.strip_prefix(OWNER_VALUE_PREFIX) {
+            if let Some((subkey, owner)) = rest.rsplit_once(':') {
+                if !subkey.is_empty() && !owner.is_empty() {
+                    owners.insert(owner.to_owned());
+                    present_subkeys.insert(subkey.to_owned());
+                }
+            }
+        }
+    }
+    if owners.is_empty() {
+        return Vec::new();
+    }
+
+    let mut donor_owners = Vec::new();
+    if let Some(ref active) = active_owner {
+        donor_owners.push(active.clone());
+    }
+    if !donor_owners.iter().any(|o| o == next_owner) {
+        donor_owners.push(next_owner.to_owned());
+    }
+    for owner in &owners {
+        if !donor_owners.iter().any(|o| o == owner) {
+            donor_owners.push(owner.clone());
+        }
+    }
+
+    let mut updates: Vec<(String, Value)> = Vec::new();
+    for &subkey in LOCAL_OWNER_VALUE_SUBKEYS {
+        let has_scoped = present_subkeys.contains(subkey);
+        if !has_scoped {
+            continue;
+        }
+        let mut donors = Vec::new();
+        if let Some(ref active) = active_owner {
+            if let Some(val) = map.get(&scoped_owner_value_key(subkey, active)) {
+                donors.push(val);
+            }
+        }
+        if let Some(top_val) = map.get(subkey) {
+            donors.push(top_val);
+        }
+        for owner in &donor_owners {
+            if Some(owner.as_str()) == active_owner.as_deref() {
+                continue;
+            }
+            if let Some(val) = map.get(&scoped_owner_value_key(subkey, owner)) {
+                donors.push(val);
+            }
+        }
+        let Some(merged) = merge_local_owner_subkey_values(subkey, &donors) else {
+            continue;
+        };
+        let next_key = scoped_owner_value_key(subkey, next_owner);
+        if map.get(&next_key) != Some(&merged) {
+            updates.push((next_key, merged.clone()));
+        }
+        if let Some(ref active) = active_owner {
+            if active != next_owner {
+                let active_key = scoped_owner_value_key(subkey, active);
+                if map.contains_key(&active_key) && map.get(&active_key) != Some(&merged) {
+                    updates.push((active_key, merged.clone()));
+                }
+            }
+        }
+        if map.contains_key(subkey) && map.get(subkey) != Some(&merged) {
+            updates.push((subkey.to_owned(), merged));
+        }
+    }
+
+    if has_atoms {
+        let mut atom_donors = Vec::new();
+        if let Some(ref active) = active_owner {
+            if let Some(val) = map.get(&scoped_owner_atoms_key(active)) {
+                atom_donors.push(val);
+            }
+        }
+        if let Some(top_atoms) = map.get(PERSISTED_ATOMS) {
+            atom_donors.push(top_atoms);
+        }
+        for owner in &donor_owners {
+            if Some(owner.as_str()) == active_owner.as_deref() {
+                continue;
+            }
+            if let Some(val) = map.get(&scoped_owner_atoms_key(owner)) {
+                atom_donors.push(val);
+            }
+        }
+        let next_atoms_key = scoped_owner_atoms_key(next_owner);
+        let mut next_atoms = map
+            .get(&next_atoms_key)
+            .and_then(Value::as_object)
+            .cloned()
+            .unwrap_or_default();
+        let mut shared_found = serde_json::Map::new();
+        for &atom_key in SHARED_OWNER_ATOMS {
+            if let Some(val) = atom_donors
+                .iter()
+                .find_map(|donor| donor.get(atom_key).filter(|v| !v.is_null()))
+            {
+                next_atoms.insert(atom_key.to_owned(), val.clone());
+                shared_found.insert(atom_key.to_owned(), val.clone());
+            }
+        }
+        let next_atoms_val = Value::Object(next_atoms);
+        if (!next_atoms_val.as_object().unwrap().is_empty() || map.contains_key(&next_atoms_key))
+            && map.get(&next_atoms_key) != Some(&next_atoms_val)
+        {
+            updates.push((next_atoms_key, next_atoms_val));
+        }
+        if let Some(top_atoms) = map.get(PERSISTED_ATOMS).and_then(Value::as_object) {
+            let mut updated_top = top_atoms.clone();
+            for (k, v) in shared_found {
+                updated_top.insert(k, v);
+            }
+            let updated_top_val = Value::Object(updated_top);
+            if map.get(PERSISTED_ATOMS) != Some(&updated_top_val) {
+                updates.push((PERSISTED_ATOMS.to_owned(), updated_top_val));
+            }
+        }
+    }
+
+    let mut changed_keys = Vec::with_capacity(updates.len());
+    if let Some(map_mut) = state.as_object_mut() {
+        for (key, value) in updates {
+            map_mut.insert(key.clone(), value);
+            changed_keys.push(key);
+        }
+    }
+    changed_keys
 }
 
 #[derive(Debug, PartialEq, Eq)]

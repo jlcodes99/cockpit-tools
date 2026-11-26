@@ -218,7 +218,8 @@ pub async fn add_account(refresh_token: String) -> Result<models::Account, Strin
         None,
         None,
     )
-    .with_oauth_metadata(token_res.oauth_client_key, token_res.id_token);
+    .with_oauth_metadata(token_res.oauth_client_key, token_res.id_token)
+    .with_granted_scopes(token_res.scope);
 
     let account = tauri::async_runtime::spawn_blocking(move || {
         modules::upsert_account(user_info.email.clone(), user_info.get_display_name(), token)

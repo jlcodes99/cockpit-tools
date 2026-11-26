@@ -42,6 +42,10 @@ async fn account_installation_compact_search_oauth_images_and_audio_use_consiste
         let seen = source.seen.lock().unwrap();
         let record = seen.last().unwrap();
         assert_account_header(record);
+        if path == "responses/compact" {
+            assert_eq!(record.path, "/v1/responses");
+            assert_eq!(record.body["input"][0]["type"], "compaction_trigger");
+        }
         let profile = test_profile("a");
         assert_eq!(
             record.body["client_metadata"]["x-codex-installation-id"],

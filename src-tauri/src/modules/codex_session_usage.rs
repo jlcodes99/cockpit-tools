@@ -89,6 +89,8 @@ pub struct CodexSessionUsageReport {
     pub model_options: Vec<CodexSessionUsageInstanceOption>,
     pub project_options: Vec<CodexSessionUsageInstanceOption>,
     pub by_day: Vec<CodexSessionUsageBreakdownRow>,
+    #[serde(default)]
+    pub by_hour: Vec<CodexSessionUsageBreakdownRow>,
     pub instances: Vec<CodexSessionUsageInstanceOption>,
     pub from_timestamp: Option<i64>,
     pub to_timestamp: Option<i64>,
@@ -498,6 +500,14 @@ impl SessionUsageStore {
         };
         let mut by_day = query_day_breakdown(&conn, &where_sql, &params)?;
         by_day.sort_by(|left, right| right.key.cmp(&left.key));
+        let by_hour = if query
+            .from_timestamp
+            .is_some_and(|from_ts| to.saturating_sub(from_ts) <= 48 * 3600)
+        {
+            query_hour_breakdown(&conn, &where_sql, &params)?
+        } else {
+            Vec::new()
+        };
         let estimated_cost_usd = by_model.iter().filter_map(|row| row.estimated_cost_usd).sum();
         let totals = CodexSessionUsageTotals {
             estimated_cost_usd,
@@ -531,6 +541,7 @@ impl SessionUsageStore {
             model_options,
             project_options,
             by_day,
+            by_hour,
             instances: collect_usage_instances()
                 .unwrap_or_default()
                 .into_iter()
@@ -1825,6 +1836,95 @@ fn query_day_breakdown(
             row
         })
         .collect())
+}
+
+fn query_hour_breakdown(
+    conn: &Connection,
+    where_sql: &str,
+    params: &[rusqlite::types::Value],
+) -> Result<Vec<CodexSessionUsageBreakdownRow>, String> {
+    let sql = format!(
+        "SELECT CASE WHEN timestamp<=0 THEN 0 ELSE (timestamp / 3600) * 3600 END AS hour_bucket,
+                model,SUM(input_tokens),SUM(cached_input_tokens),SUM(output_tokens),SUM(request_count)
+         FROM session_usage_report {where_sql} GROUP BY hour_bucket,model"
+    );
+    let mut statement = conn
+        .prepare(&sql)
+        .map_err(|error| format!("查询会话用量小时分组失败: {error}"))?;
+    let rows = statement
+        .query_map(rusqlite::params_from_iter(params.iter()), |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, i64>(2)?.max(0) as u64,
+                row.get::<_, i64>(3)?.max(0) as u64,
+                row.get::<_, i64>(4)?.max(0) as u64,
+                row.get::<_, i64>(5)?.max(0) as u64,
+            ))
+        })
+        .map_err(|error| format!("遍历会话用量小时分组失败: {error}"))?;
+    let mut hours: HashMap<i64, HashMap<String, CodexSessionUsageTotals>> = HashMap::new();
+    for row in rows {
+        let (hour_bucket, model, input, cached, output, requests) =
+            row.map_err(|error| format!("解析会话用量小时分组失败: {error}"))?;
+        if hour_bucket <= 0 {
+            continue;
+        }
+        let totals = hours
+            .entry(hour_bucket)
+            .or_default()
+            .entry(model)
+            .or_default();
+        totals.input_tokens = totals.input_tokens.saturating_add(input);
+        totals.cached_input_tokens = totals.cached_input_tokens.saturating_add(cached);
+        totals.output_tokens = totals.output_tokens.saturating_add(output);
+        totals.total_tokens = totals
+            .total_tokens
+            .saturating_add(input.saturating_add(output));
+        totals.request_count = totals.request_count.saturating_add(requests);
+    }
+    let mut list: Vec<CodexSessionUsageBreakdownRow> = hours
+        .into_iter()
+        .map(|(bucket, models)| {
+            let key = bucket.to_string();
+            let mut row = CodexSessionUsageBreakdownRow {
+                label: key.clone(),
+                key,
+                input_tokens: 0,
+                cached_input_tokens: 0,
+                output_tokens: 0,
+                total_tokens: 0,
+                request_count: 0,
+                estimated_cost_usd: Some(0.0),
+            };
+            for (model, totals) in models {
+                row.input_tokens = row.input_tokens.saturating_add(totals.input_tokens);
+                row.cached_input_tokens = row
+                    .cached_input_tokens
+                    .saturating_add(totals.cached_input_tokens);
+                row.output_tokens = row.output_tokens.saturating_add(totals.output_tokens);
+                row.total_tokens = row.total_tokens.saturating_add(totals.total_tokens);
+                row.request_count = row.request_count.saturating_add(totals.request_count);
+                row.estimated_cost_usd = row.estimated_cost_usd.and_then(|cost| {
+                    crate::modules::codex_local_access::estimate_known_model_token_cost_usd(
+                        &model,
+                        totals.input_tokens,
+                        totals.cached_input_tokens,
+                        totals.output_tokens,
+                    )
+                    .map(|model_cost| cost + model_cost)
+                });
+            }
+            row
+        })
+        .collect();
+    list.sort_by(|left, right| {
+        left.key
+            .parse::<i64>()
+            .unwrap_or(0)
+            .cmp(&right.key.parse::<i64>().unwrap_or(0))
+    });
+    Ok(list)
 }
 
 #[cfg(test)]

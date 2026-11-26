@@ -8253,7 +8253,10 @@
       "recovered": "{{model}} seit {{time}} wieder verfügbar",
       "until": "{{model}} beim letzten Test begrenzt, Freigabe {{time}}",
       "unavailable": "{{model}} beim letzten Test begrenzt",
-      "failed": "Letzter Test von {{model}} fehlgeschlagen"
+      "failed": "Letzter Test von {{model}} fehlgeschlagen",
+      "logUntil": "{{model}} laut Client-Protokoll begrenzt, Reset {{time}}",
+      "logUnknownUntil": "Ratenlimit im Client-Protokoll erkannt, Reset {{time}}",
+      "logHits": "{{count}} Treffer im Protokoll"
     },
     "exposeToCodex": {
       "textOnlyTitle": "Das bisherige Native ACP unterstützt nur Text. Nutze die Codex-Werkzeugbrücke, um Dateien zu lesen und zu schreiben oder Befehle auszuführen.",
@@ -9727,7 +9730,9 @@
       "conversations": "Unterhaltungen",
       "turns": "Antwortrunden",
       "coverage": "Exakte Abdeckung",
-      "avgPerDay": "Ø / aktiver Tag"
+      "avgPerDay": "Ø / aktiver Tag",
+      "refCost": "API-Referenzkosten",
+      "cacheSavingsHint": "Cache sparte ~{{savings}}"
     },
     "estimated": {
       "notice": "{{turns}} Runden ohne direkte API-Messwerte wurden separat geschätzt (nicht zur exakten Summe addiert):"
@@ -9766,6 +9771,32 @@
     "errors": {
       "loadFailed": "Token-Nutzung konnte nicht geladen werden: {{error}}",
       "syncFailed": "Scan der Token-Nutzung fehlgeschlagen: {{error}}"
+    },
+    "heatmap": {
+      "title": "365-Tage-Aktivitätskarte",
+      "activeDays": "{{count}} aktive Tage",
+      "peak": "Spitze {{date}} ({{tokens}})",
+      "less": "Weniger",
+      "more": "Mehr"
+    },
+    "rehydrate": {
+      "title": "Gedächtnis-Hook nach Komprimierung",
+      "enabledBadge": "Aktiv",
+      "disabledBadge": "Inaktiv",
+      "desc": "Fügt nach einer Kontextkomprimierung (CHECKPOINT) automatisch Anfrageverlauf, bearbeitete Dateien und Entscheidungen wieder ein.",
+      "noPython": "python3 fehlt",
+      "enableBtn": "Hook aktivieren",
+      "disableBtn": "Hook deaktivieren"
+    },
+    "audit": {
+      "title": "Kontext- & Ausführungsaudit",
+      "peakContext": "Spitzenkontext pro Schritt",
+      "compactions": "{{count}} Komprimierungen",
+      "userPrompts": "Anfragen",
+      "toolCalls": "Werkzeuge",
+      "fileOps": "Dateien L/S",
+      "commands": "Befehle",
+      "subagents": "Subagenten"
     }
   },
   "t3code": {
@@ -9773,6 +9804,32 @@
       "title": "Kontoeinrichtung",
       "providers": "Anbieterkonten",
       "codexCatalogPending": "Drittanbieterschlüssel warten auf Modellsync: {{count}}"
+    },
+    "commonSettings": {
+      "title": "Häufige Einstellungen",
+      "language": "Sprache von T3 Code"
+    },
+    "desktopPrivacy": {
+      "title": "T3 Code Datenschutz",
+      "enable": "Datenschutzmodus aktivieren",
+      "connection": "Das Smartphone lässt sich auch bei deaktivierten Optionen koppeln und in Echtzeit nutzen.",
+      "launchScope": "Die Telemetrie-Einstellungen gelten für die aus Cockpit Tools gestartete Standardinstanz.",
+      "restartPending": "Gespeichert. Telemetrie-Änderungen werden nach einem Neustart von T3 Code wirksam.",
+      "environmentBlocked": "Durch die Umgebungsvariable {{variable}} deaktiviert.",
+      "policyBlocked": "Durch die Systemrichtlinie deaktiviert.",
+      "linked": "Das Abschalten der Nutzungsanalyse schaltet auch die Verbindungsdiagnose ab.",
+      "analytics": {
+        "label": "Nutzungsanalyse",
+        "description": "Sendet App-Version, Plattform und Nutzungsstatistiken an T3 Code."
+      },
+      "tracing": {
+        "label": "Verbindungsdiagnose",
+        "description": "Sendet Verbindungszeiten und Fehlertypen. Der Schalter steuert auch OpenTelemetry-Exporte."
+      },
+      "agentActivity": {
+        "label": "Agentenaktivität melden",
+        "description": "Sendet Projekt- und Modellnamen, Unterhaltungstitel und Aufgabenstatus an T3 Connect. Beim Abschalten entfallen Live-Aktivitäten und Offline-Mitteilungen am Smartphone."
+      }
     },
     "nativeSettings": {
       "defaultModel": "Modell für neue Chats",

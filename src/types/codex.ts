@@ -593,6 +593,9 @@ export interface CodexSessionUsageRequest extends CodexSessionUsageCursor {
   cachedInputTokens: number;
   outputTokens: number;
   estimatedCostUsd: number | null;
+  firstResponseMs?: number | null;
+  outputGenerationMs?: number | null;
+  tokensPerSecond?: number | null;
 }
 
 export interface CodexSessionUsagePage {
@@ -609,6 +612,7 @@ export interface CodexSessionUsageReport {
   modelOptions: CodexSessionUsageInstanceOption[];
   projectOptions: CodexSessionUsageInstanceOption[];
   byDay: CodexSessionUsageBreakdownRow[];
+  byHour?: CodexSessionUsageBreakdownRow[];
   instances: CodexSessionUsageInstanceOption[];
   fromTimestamp?: number | null;
   toTimestamp?: number | null;

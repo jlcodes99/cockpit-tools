@@ -162,3 +162,76 @@ fn project_backfill_resumes_without_overwriting_new_metadata_or_hiding_unknown_u
     assert_eq!(metadata_count, 0);
     fs::remove_dir_all(dir).unwrap();
 }
+
+#[test]
+fn request_page_attaches_first_response_and_tps_from_gateway_summaries_and_builds_hourly_breakdown() {
+    let dir = make_temp_dir("usage-request-perf");
+    let store = SessionUsageStore::open_path(dir.join("usage.sqlite"));
+    let conn = store.open_conn().unwrap();
+    let base_ts = 1_780_002_000_i64; // exact hour boundary (divisible by 3600)
+    conn.execute("INSERT INTO session_log_sync VALUES ('f','i',0,0,0)", [])
+        .unwrap();
+    conn.execute(
+        "INSERT INTO session_usage_events
+         VALUES ('r1','i','Instance','session-1','gpt-5.4',?1,1000,400,250,'f')",
+        params![base_ts + 120],
+    )
+    .unwrap();
+    conn.execute(
+        "INSERT INTO session_usage_events
+         VALUES ('r2','i','Instance','session-1','gpt-5.4',?1,800,200,120,'f')",
+        params![base_ts + 3720],
+    )
+    .unwrap();
+
+    let query = CodexSessionUsageQuery {
+        from_timestamp: Some(base_ts),
+        to_timestamp: Some(base_ts + 7200),
+        ..Default::default()
+    };
+    let report = store.query(&query).unwrap();
+    assert_eq!(report.by_hour.len(), 2);
+    assert_eq!(report.by_hour[0].key, base_ts.to_string());
+    assert_eq!(report.by_hour[0].total_tokens, 1250);
+    assert_eq!(report.by_hour[1].key, (base_ts + 3600).to_string());
+    assert_eq!(report.by_hour[1].total_tokens, 920);
+
+    let mut page = query_usage_request_page(&conn, &query, None, &HashMap::new()).unwrap();
+    let logs_conn = Connection::open_in_memory().unwrap();
+    logs_conn
+        .execute_batch(
+            "CREATE TABLE request_display_summaries (
+                client_thread_id TEXT,
+                timestamp INTEGER,
+                dispatched INTEGER,
+                data_json TEXT
+            );",
+        )
+        .unwrap();
+    logs_conn
+        .execute(
+            "INSERT INTO request_display_summaries VALUES (?1, ?2, 1, ?3)",
+            params![
+                "session-1",
+                (base_ts + 122) * 1000,
+                serde_json::json!({
+                    "success": true,
+                    "outputTokens": 250,
+                    "firstResponseMs": 640,
+                    "outputGenerationMs": 2500
+                })
+                .to_string()
+            ],
+        )
+        .unwrap();
+    attach_gateway_request_performance_from_conn(&logs_conn, &mut page.rows);
+    let matched = page.rows.iter().find(|row| row.request_id == "r1").unwrap();
+    assert_eq!(matched.first_response_ms, Some(640));
+    assert_eq!(matched.output_generation_ms, Some(2500));
+    assert!((matched.tokens_per_second.unwrap() - 100.0).abs() < 1e-6);
+
+    let unmatched = page.rows.iter().find(|row| row.request_id == "r2").unwrap();
+    assert_eq!(unmatched.first_response_ms, None);
+    assert_eq!(unmatched.tokens_per_second, None);
+    fs::remove_dir_all(dir).unwrap();
+}

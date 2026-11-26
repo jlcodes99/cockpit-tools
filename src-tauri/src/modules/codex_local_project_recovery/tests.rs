@@ -701,3 +701,85 @@ fn check_full_visibility_history_preflight(duplicate_ordinal: bool) {
     assert_eq!(fs::read_to_string(&rollout).unwrap(), contents);
     assert!(full.backup_dirs.len() >= 2);
 }
+
+#[test]
+fn quick_projects_preserve_distinct_native_partitions_from_sqlite_global_state_over_stale_json() {
+    let f = Fixture::new();
+    let root_b = f.home().join("PartitionB");
+    fs::create_dir(&root_b).unwrap();
+    let root_b_str = root_b.to_string_lossy().into_owned();
+    f.db()
+        .execute_batch(
+            "INSERT INTO projects VALUES('partition-b','Partition B','{}',30,40);
+             INSERT INTO projects VALUES('partition-c','Partition C','{}',50,60);",
+        )
+        .unwrap();
+    f.db()
+        .execute("INSERT INTO project_roots VALUES('partition-b',?1,0)", [&root_b_str])
+        .unwrap();
+    // partition-c shares f.root with 'server' (default "Project") and uses its native ID without a MAP entry.
+    f.db()
+        .execute("INSERT INTO project_roots VALUES('partition-c',?1,0)", [&f.root])
+        .unwrap();
+    f.db()
+        .execute(
+            "UPDATE threads SET cwd=?1, project_id='partition-b' WHERE id='chat'",
+            [&root_b_str],
+        )
+        .unwrap();
+    f.db()
+        .execute(
+            "UPDATE threads SET project_id='partition-c' WHERE id='archived'",
+            [],
+        )
+        .unwrap();
+
+    // Stale .codex-global-state.json still maps both threads to the default project 'server'.
+    let host = host_key(&f.state(), f.home());
+    let stale_json = json!({
+        "local-projects": {
+            "server": {"id": "server", "name": "Project", "rootPaths": [f.root]}
+        },
+        MAP: {&host: {"server": "server"}},
+        ASSIGN: {
+            "chat": {"projectKind": "local", "projectId": "server"},
+            "archived": {"projectKind": "local", "projectId": "server"}
+        },
+        HOSTS: {"chat": "local", "archived": "local"},
+        "project-order": ["server"]
+    });
+    f.set(&stale_json);
+
+    // Live .codex-global-state.sqlite has the newly created native partitions.
+    let owner = "778c9793a8eb8bb524148367763e9100e4f4403284f0791c8fbcb1f047314e55";
+    let _sqlite = crate::modules::ssh_server_desktop_state::desktop_settings_fixture(
+        f.home(),
+        &[
+            ("electron-renderer-content-owner", json!(owner)),
+            (
+                "local-projects",
+                json!({
+                    "server": {"id": "server", "name": "Project", "rootPaths": [f.root]},
+                    "partition-b": {"id": "partition-b", "name": "Partition B", "rootPaths": [root_b_str]},
+                    "partition-c": {"id": "partition-c", "name": "Partition C", "rootPaths": [f.root]}
+                }),
+            ),
+            (MAP, json!({&host: {"server": "server"}})),
+            (
+                ASSIGN,
+                json!({
+                    "chat": {"projectKind": "local", "projectId": "partition-b"},
+                    "archived": {"projectKind": "local", "projectId": "partition-c"}
+                }),
+            ),
+            (HOSTS, json!({"chat": "local", "archived": "local"})),
+            ("project-order", json!(["partition-b", "partition-c", "server"])),
+        ],
+    );
+
+    let plan = scan_for_repair(f.home(), None, true).unwrap().unwrap();
+    assert_eq!(plan.after[ASSIGN]["chat"]["projectId"], "partition-b");
+    assert_eq!(plan.after[ASSIGN]["archived"]["projectId"], "partition-c");
+    assert_eq!(f.project("chat").as_deref(), Some("partition-b"));
+    assert_eq!(f.project("archived").as_deref(), Some("partition-c"));
+}

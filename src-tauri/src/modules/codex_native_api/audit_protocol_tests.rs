@@ -233,12 +233,14 @@ async fn audit_binary_attachments_and_explicit_identity_are_not_magic_decoded() 
 
 #[tokio::test]
 async fn audit_compression_rejection_inspection_preserves_bodies_and_execution_fences() {
+    let rejection = "unsupported content-encoding";
     let cases = [
-        (json!({"error":{"message":"invalid encoding"}}).to_string(),true),
-        (json!({"error":{"message":"invalid encoding"},"usage":{"output_tokens":1}}).to_string(),false),
-        (json!({"body":{"error":{"message":"invalid encoding"},"output":[{"type":"function_call","call_id":"ran"}]}}).to_string(),false),
+        (json!({"error":{"message":rejection}}).to_string(),true),
+        (json!({"error":{"message":"invalid encoding"}}).to_string(),false),
+        (json!({"error":{"message":rejection},"usage":{"output_tokens":1}}).to_string(),false),
+        (json!({"error":{"message":rejection},"body":{"output":[{"type":"function_call","call_id":"ran"}]}}).to_string(),false),
         ("data: {\"type\":\"response.output_text.delta\",\"delta\":\"zstd\"}\n\n".to_string(),false),
-        (json!({"error":{"message":"invalid encoding"},"padding":"x".repeat(65536)}).to_string(),false),
+        (json!({"error":{"message":rejection},"padding":"x".repeat(65536)}).to_string(),false),
     ];
     for (body, safe) in cases {
         let response = reqwest::Response::from(

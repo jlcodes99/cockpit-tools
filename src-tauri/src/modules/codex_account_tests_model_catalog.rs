@@ -219,6 +219,14 @@ fn opencode_go_catalog_upgrade_adds_vision_once_and_respects_explicit_settings()
         );
         account.api_wire_api = Some("responses".into());
         assert!(!account_requires_provider_gateway(&account));
+        account.bound_oauth_account_id = Some("oauth-bound-id".into());
+        account.api_supports_websockets = false;
+        assert!(account_requires_provider_gateway(&account));
+        account.api_supports_websockets = true;
+        assert!(!account_requires_provider_gateway(&account));
+        account.bound_oauth_account_id = None;
+        account.api_supports_websockets = false;
+        assert!(!account_requires_provider_gateway(&account));
         let automatic_profile = env.codex_home();
         write_account_bundle_to_dir(&automatic_profile, &account).unwrap();
         let automatic_config = fs::read_to_string(automatic_profile.join("config.toml")).unwrap();

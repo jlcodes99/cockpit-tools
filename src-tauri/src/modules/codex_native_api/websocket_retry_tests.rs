@@ -305,6 +305,7 @@ struct RetryHost {
     refreshable: AtomicBool,
     refresh_fails: AtomicBool,
     passthrough: AtomicBool,
+    reasoning_budgets: Mutex<Vec<Option<super::super::execution::Execution>>>,
 }
 
 impl Host for RetryHost {
@@ -398,6 +399,15 @@ impl Host for RetryHost {
     }
     fn execution_policy(&self) -> BoxFuture<'_, Result<ExecutionPolicy, ServiceError>> {
         Box::pin(async { Ok(self.policy.clone()) })
+    }
+    fn reasoning_ceiling<'a>(
+        &'a self,
+        _: &'a Caller,
+    ) -> BoxFuture<'a, Result<Option<crate::models::codex_local_access::CodexReasoningLevel>, ServiceError>> {
+        Box::pin(async move {
+            self.reasoning_budgets.lock().unwrap().push(super::super::execution::current());
+            Ok(None)
+        })
     }
     fn route_failed<'a>(
         &'a self,
@@ -520,6 +530,7 @@ impl Fixture {
             refreshable: AtomicBool::new(true),
             refresh_fails: AtomicBool::new(false),
             passthrough: AtomicBool::new(true),
+            reasoning_budgets: Mutex::new(Vec::new()),
         });
         let path = std::env::temp_dir().join(format!("native-ws-retry-{}", uuid::Uuid::now_v7()));
         let handle = crate::modules::codex_native_api::start(
@@ -988,11 +999,38 @@ mod quota_gate_tests;
 use quota_gate_tests::quota_gate_events;
 
 #[tokio::test]
+async fn websocket_rejected_upgrade_gives_http_fallback_a_new_opening_budget() {
+    let fixture = Fixture::start(
+        Behavior::Handshake(426),
+        ExecutionPolicy {
+            open_timeout: Duration::from_secs(1),
+            status_retries: 0,
+            ..policy()
+        },
+        false,
+    )
+    .await;
+    let events = fixture.request(request(), 2).await;
+    assert_eq!(events[1]["type"], "response.completed", "{events:?}");
+    assert_eq!(fixture.first.handshakes.lock().unwrap().len(), 1);
+    assert_eq!(fixture.first.requests.lock().unwrap().len(), 1);
+    {
+        let budgets = fixture.host.reasoning_budgets.lock().unwrap();
+        assert_eq!(budgets.len(), 2);
+        let socket = budgets[0].as_ref().expect("WebSocket opening budget");
+        let http = budgets[1].as_ref().expect("HTTP fallback opening budget");
+        assert!(http.open_deadline > socket.open_deadline);
+        assert_eq!(http.total_deadline, socket.total_deadline);
+    }
+    fixture.finish().await;
+}
+
+#[tokio::test]
 async fn websocket_single_account_capacity_reselects_owner_and_releases_permit() {
     for delayed in [false, true] {
         let fixture = Fixture::start(
             Behavior::FirstCapacityThenComplete { delayed },
-            ExecutionPolicy { credential_retries: 1, status_retries: 0, bootstrap_retries: 0, ..policy() },
+            ExecutionPolicy { credential_retries: 1, status_retries: 0, bootstrap_retries: 0, open_timeout: Duration::from_secs(1), ..policy() },
             false,
         ).await;
         let events = fixture.request(request(), if delayed { 2 } else { 1 }).await;
@@ -1004,6 +1042,14 @@ async fn websocket_single_account_capacity_reselects_owner_and_releases_permit()
         let sent = fixture.first.requests.lock().unwrap().clone();
         assert_eq!(sent[0].1, sent[1].1);
         assert_eq!(sent[0].0["session-id"], sent[1].0["session-id"]);
+        {
+            let budgets = fixture.host.reasoning_budgets.lock().unwrap();
+            assert_eq!(budgets.len(), 2);
+            let first = budgets[0].as_ref().expect("first opening budget");
+            let retry = budgets[1].as_ref().expect("retry opening budget");
+            assert!(retry.open_deadline > first.open_deadline);
+            assert_eq!(retry.total_deadline, first.total_deadline);
+        }
         fixture.finish().await;
     }
 }

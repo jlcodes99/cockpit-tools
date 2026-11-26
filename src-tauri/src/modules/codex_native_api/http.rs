@@ -505,6 +505,7 @@ async fn forward_with_policy(
     let canonical_sse = canonical.as_ref().map_or(is_sse, |stream| stream.is_sse);
     let upstream = canonical.map_or(raw_upstream, |stream| stream.bytes);
     let is_sse = canonical_sse;
+    let inline_compaction = super::codex_wire::uses_inline_compaction(&prepared.route, compact);
     if prepared.route.chatgpt_plan && status.is_success() && !is_sse {
         let error = ServiceError::new(502, "incomplete_upstream_stream",
             "ChatGPT plan inference requires a Responses event stream");
@@ -526,7 +527,9 @@ async fn forward_with_policy(
     }
     if is_sse && status.is_success() && client_stream {
         let event_limit = state.options.max_event_bytes;
-        let fence = super::bootstrap::Fence::new(!prepared.route.chatgpt_plan);
+        let fence = super::bootstrap::Fence::new(
+            !prepared.route.chatgpt_plan || policy.continuous_overload_retry,
+        );
         let stream_state = StreamingResponse {
             state,
             prepared,
@@ -705,6 +708,19 @@ async fn forward_with_policy(
             tracker.fail(&error).await;
             return Err(error);
         }
+        if inline_compaction {
+            if !observation.succeeded {
+                let error = ServiceError::new(
+                    502, "incomplete_upstream_compaction", "Upstream did not complete compaction",
+                );
+                tracker.fail(&error).await;
+                return Err(error);
+            }
+            if let Err(error) = super::codex_wire::adapt_compaction_response(&mut response) {
+                tracker.fail(&error).await;
+                return Err(error);
+            }
+        }
         super::replay_wire::instructions(&prepared.source_body, &mut response);
         tracker.record_response_model(&prepared.route, &response);
         super::response_wire::ResponseWire::default().stamp_response(&mut response);
@@ -751,6 +767,15 @@ async fn forward_with_policy(
     );
     let mut value = serde_json::from_slice::<Value>(&bytes).ok();
     let mut normalized = false;
+    if inline_compaction && status.is_success() {
+        if let Some(value) = &mut value {
+            if let Err(error) = super::codex_wire::adapt_compaction_response(value) {
+                tracker.fail(&error).await;
+                return Err(error);
+            }
+            normalized = true;
+        }
+    }
     if !compact {
         if let Some(value) = &mut value {
             if prepared.route.chatgpt_plan {
@@ -1121,7 +1146,7 @@ async fn collect_sse(
         retry_after: initial_retry_after,
         ..Default::default()
     };
-    let mut fence=super::bootstrap::Fence::new(!prepared.route.chatgpt_plan);
+    let mut fence=super::bootstrap::Fence::new(!prepared.route.chatgpt_plan || policy.continuous_overload_retry);
     let mut total = 0usize;
     let mut stop = state.stop.clone();
     'read: loop {

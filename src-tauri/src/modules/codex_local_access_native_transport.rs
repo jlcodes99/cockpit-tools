@@ -1,6 +1,8 @@
 // Shared transport policy for native HTTP and WebSocket requests.
 const NATIVE_HTTP_CLIENT_CACHE_LIMIT: usize = 128;
 const NATIVE_TLS_ROOTS_TTL: Duration = Duration::from_secs(60);
+const NATIVE_SYSTEM_PROXY_CACHE_TTL: Duration = Duration::from_secs(15);
+const NATIVE_SYSTEM_PROXY_FALLBACK_TTL: Duration = Duration::from_secs(5);
 
 struct NativeHttpClientEntry {
     account_id: String,
@@ -295,45 +297,7 @@ async fn native_http_client(
         if signature.proxy_source == UpstreamProxySource::SystemAuto
             && signature.proxy_url.is_none()
         {
-            let mut cache = host.system_proxy_cache.lock().await;
-            if let Some((at, value)) = cache
-                .as_ref()
-                .filter(|(at, _)| at.elapsed() < Duration::from_secs(5))
-            {
-                let _ = at;
-                signature.proxy_url = value.clone();
-            } else {
-                let permit = NATIVE_SYSTEM_PROXY_IO
-                    .clone()
-                    .try_acquire_owned()
-                    .map_err(|_| {
-                        native_error(
-                            503,
-                            "proxy_resolution_busy",
-                            "Upstream proxy discovery is still running",
-                        )
-                    })?;
-                let worker = tokio::task::spawn_blocking(move || {
-                    let _permit = permit;
-                    system_proxy_url_for_target(DEFAULT_OPENAI_RESPONSES_BASE_URL)
-                });
-                let budget = native_api::execution::remaining_prepare_budget()
-                    .unwrap_or_else(|| Duration::from_secs(5))
-                    .min(Duration::from_secs(5));
-                signature.proxy_url = timeout(budget, worker)
-                    .await
-                    .map_err(|_| {
-                        native_error(
-                            504,
-                            "proxy_resolution_timeout",
-                            "Upstream proxy discovery timed out",
-                        )
-                    })?
-                    .map_err(|_| {
-                        native_error(503, "proxy_unavailable", "Upstream proxy discovery failed")
-                    })?;
-                *cache = Some((Instant::now(), signature.proxy_url.clone()));
-            }
+            signature.proxy_url = resolve_native_system_proxy(host).await;
         }
         let source = match signature.proxy_source {
             UpstreamProxySource::ApiService => "service",
@@ -442,6 +406,102 @@ async fn native_http_client(
         // This uncached client has no shared pool to retire.
         return Ok((client, proxy, proxy_route, cache_key));
     }
+}
+
+async fn resolve_native_system_proxy_with<F>(
+    host: &NativeHostBridge,
+    discover: F,
+) -> Option<String>
+where
+    F: FnOnce() -> Option<String> + Send + 'static,
+{
+    let stale_fallback = {
+        let cache = host.system_proxy_cache.lock().await;
+        if let Some((at, value)) = cache
+            .as_ref()
+            .filter(|(at, _)| at.elapsed() < NATIVE_SYSTEM_PROXY_CACHE_TTL)
+        {
+            let _ = at;
+            return value.clone();
+        }
+        cache.as_ref().and_then(|(_, value)| value.clone())
+    };
+
+    let fallback_label = if stale_fallback.is_some() {
+        "cached_proxy"
+    } else {
+        "direct"
+    };
+
+    let Ok(permit) = NATIVE_SYSTEM_PROXY_IO.clone().try_acquire_owned() else {
+        crate::modules::logger::log_codex_api_warn(&format!(
+            "[Codex API] System proxy discovery is already running; degrading to {fallback_label}"
+        ));
+        return stale_fallback;
+    };
+
+    let budget = native_api::execution::remaining_prepare_budget()
+        .unwrap_or_else(|| Duration::from_secs(2))
+        .min(Duration::from_secs(2));
+    if budget < Duration::from_millis(25) {
+        drop(permit);
+        crate::modules::logger::log_codex_api_warn(&format!(
+            "[Codex API] Remaining prepare budget ({}ms) is too small for system proxy discovery; degrading to {fallback_label}",
+            budget.as_millis()
+        ));
+        return stale_fallback;
+    }
+
+    let started = Instant::now();
+    let worker = tokio::task::spawn_blocking(move || {
+        let _permit = permit;
+        discover()
+    });
+
+    match timeout(budget, worker).await {
+        Ok(Ok(discovered)) => {
+            let mut cache = host.system_proxy_cache.lock().await;
+            *cache = Some((Instant::now(), discovered.clone()));
+            discovered
+        }
+        Ok(Err(join_error)) => {
+            let cooldown_anchor = Instant::now()
+                .checked_sub(
+                    NATIVE_SYSTEM_PROXY_CACHE_TTL
+                        .saturating_sub(NATIVE_SYSTEM_PROXY_FALLBACK_TTL),
+                )
+                .unwrap_or_else(Instant::now);
+            let mut cache = host.system_proxy_cache.lock().await;
+            *cache = Some((cooldown_anchor, stale_fallback.clone()));
+            crate::modules::logger::log_codex_api_warn(&format!(
+                "[Codex API] System proxy discovery worker failed after {}ms ({join_error}); degrading to {fallback_label}",
+                started.elapsed().as_millis()
+            ));
+            stale_fallback
+        }
+        Err(_) => {
+            let cooldown_anchor = Instant::now()
+                .checked_sub(
+                    NATIVE_SYSTEM_PROXY_CACHE_TTL
+                        .saturating_sub(NATIVE_SYSTEM_PROXY_FALLBACK_TTL),
+                )
+                .unwrap_or_else(Instant::now);
+            let mut cache = host.system_proxy_cache.lock().await;
+            *cache = Some((cooldown_anchor, stale_fallback.clone()));
+            crate::modules::logger::log_codex_api_warn(&format!(
+                "[Codex API] System proxy discovery timed out after {}ms; degrading to {fallback_label}",
+                started.elapsed().as_millis()
+            ));
+            stale_fallback
+        }
+    }
+}
+
+async fn resolve_native_system_proxy(host: &NativeHostBridge) -> Option<String> {
+    resolve_native_system_proxy_with(host, || {
+        system_proxy_url_for_target(DEFAULT_OPENAI_RESPONSES_BASE_URL)
+    })
+    .await
 }
 
 async fn native_codex_tls_roots(
@@ -675,6 +735,62 @@ mod native_proxy_diagnostic_tests {
             assert_eq!(route.name, "http://127.0.0.1:7890");
             assert_eq!(host.clients.lock().unwrap().len(), 1);
         }
+    }
+
+    #[tokio::test]
+    async fn system_proxy_discovery_busy_or_timeout_degrades_to_cached_or_direct_without_failing() {
+        let host = NativeHostBridge::default();
+        // When the single-flight permit is held by a slow worker, concurrent
+        // requests must degrade immediately to direct/cached instead of 503/504.
+        {
+            let _held = NATIVE_SYSTEM_PROXY_IO.clone().acquire_owned().await.unwrap();
+            let direct = resolve_native_system_proxy_with(&host, || {
+                Some("http://127.0.0.1:7890".to_string())
+            })
+            .await;
+            assert_eq!(direct, None);
+
+            *host.system_proxy_cache.lock().await = Some((
+                Instant::now() - NATIVE_SYSTEM_PROXY_CACHE_TTL - Duration::from_secs(1),
+                Some("http://127.0.0.1:10808".to_string()),
+            ));
+            let stale = resolve_native_system_proxy_with(&host, || None).await;
+            assert_eq!(stale.as_deref(), Some("http://127.0.0.1:10808"));
+        }
+
+        // Normal discovery updates the cache and serves fresh reads within TTL.
+        *host.system_proxy_cache.lock().await = None;
+        let discovered = resolve_native_system_proxy_with(&host, || {
+            Some("http://127.0.0.1:7890".to_string())
+        })
+        .await;
+        assert_eq!(discovered.as_deref(), Some("http://127.0.0.1:7890"));
+        let cached = resolve_native_system_proxy_with(&host, || None).await;
+        assert_eq!(cached.as_deref(), Some("http://127.0.0.1:7890"));
+    }
+
+    #[test]
+    fn effective_billing_service_tier_preserves_outbound_fast_when_oauth_reports_default() {
+        assert_eq!(
+            effective_billing_service_tier(Some("priority"), Some("default")),
+            Some("priority")
+        );
+        assert_eq!(
+            effective_billing_service_tier(Some("ultrafast"), Some("default")),
+            Some("ultrafast")
+        );
+        assert_eq!(
+            effective_billing_service_tier(Some("default"), Some("default")),
+            Some("default")
+        );
+        assert_eq!(
+            effective_billing_service_tier(Some("auto"), Some("priority")),
+            Some("priority")
+        );
+        assert_eq!(
+            effective_billing_service_tier(None, Some("default")),
+            Some("default")
+        );
     }
 }
 

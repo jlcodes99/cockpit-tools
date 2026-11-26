@@ -1459,6 +1459,29 @@ fn parse_billing_service_tier(service_tier: Option<&str>) -> CodexBillingService
     }
 }
 
+pub(crate) fn effective_billing_service_tier<'a>(
+    requested_service_tier: Option<&'a str>,
+    response_service_tier: Option<&'a str>,
+) -> Option<&'a str> {
+    if let Some(response) = response_service_tier {
+        if matches!(
+            normalize_proxy_service_tier(response),
+            Some("priority" | "ultrafast" | "flex")
+        ) {
+            return Some(response);
+        }
+    }
+    if let Some(requested) = requested_service_tier {
+        if matches!(
+            normalize_proxy_service_tier(requested),
+            Some("priority" | "ultrafast" | "flex" | "standard")
+        ) {
+            return Some(requested);
+        }
+    }
+    response_service_tier.or(requested_service_tier)
+}
+
 fn is_openai_session_long_context_model(model_id: &str) -> bool {
     let normalized = normalize_known_openai_codex_model(model_id)
         .unwrap_or_else(|| model_id.trim().to_ascii_lowercase());

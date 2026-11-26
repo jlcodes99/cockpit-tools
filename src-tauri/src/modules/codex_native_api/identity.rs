@@ -976,17 +976,32 @@ impl IdentityStore {
                 ));
             }
         }
+        if context.session_identity_mapping_enabled && !body.is_object() {
+            return Err(invalid("Responses body must be an object"));
+        }
         // Commit both mappings and affinity before publishing any transformed request.
+        // Stage only the small identity metadata fields rather than cloning a large
+        // multi-megabyte conversation body while holding the identity mutex.
         let mut new_headers = headers.clone();
-        let mut new_body = body.clone();
+        let mut staged_body = {
+            let mut map = serde_json::Map::new();
+            if let Some(object) = body.as_object() {
+                for key in ["prompt_cache_key", "client_metadata"] {
+                    if let Some(value) = object.get(key) {
+                        map.insert(key.to_owned(), value.clone());
+                    }
+                }
+            }
+            Value::Object(map)
+        };
         if context.session_identity_mapping_enabled {
-            supplement_identities(context, &mut new_headers, &mut new_body)?;
+            supplement_identities(context, &mut new_headers, &mut staged_body)?;
         }
         if context.detached_parent {
-            strip_parent_anchor(&mut new_headers, &mut new_body)?;
+            strip_parent_anchor(&mut new_headers, &mut staged_body)?;
         }
         if !context.detached_turn_states.is_empty() {
-            strip_stale_turn_states(context, &mut new_headers, &mut new_body)?;
+            strip_stale_turn_states(context, &mut new_headers, &mut staged_body)?;
         }
         let generation = rebuild::select_generation(&transaction, context, owner_id)?;
         let mapping_owner = rebuild::mapping_owner(owner_id, generation.as_ref());
@@ -1011,7 +1026,7 @@ impl IdentityStore {
                 &context.caller,
                 &mapping_owner,
                 cache_owner,
-                &mut new_body,
+                &mut staged_body,
             )?;
         }
         // Passthrough retains related parent/window/cache references as well:
@@ -1039,7 +1054,13 @@ impl IdentityStore {
         transaction.commit().map_err(storage)?;
         drop(connection);
         *headers = new_headers;
-        *body = new_body;
+        if let (Some(target), Some(staged)) = (body.as_object_mut(), staged_body.as_object_mut()) {
+            for key in ["prompt_cache_key", "client_metadata"] {
+                if let Some(value) = staged.remove(key) {
+                    target.insert(key.to_owned(), value);
+                }
+            }
+        }
         let pending_input = (generation.is_none() && !context.unregistered_blobs.is_empty())
             .then(|| Arc::new(automatic_history::Admission::default()));
         Ok(Binding {

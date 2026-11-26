@@ -1198,3 +1198,116 @@ fn deleting_a_restored_ssh_project_removes_its_order_and_memberships() {
         f.write(&booted);
     }
 }
+
+#[test]
+fn sqlite_owner_values_and_atoms_inherit_workspace_partitions_across_account_switches() {
+    let f = Fixture::new();
+    let owner_a = "778c9793a8eb8bb524148367763e9100e4f4403284f0791c8fbcb1f047314e55";
+    let owner_b = "96ab4affd64ba277fd7c0d290c597d4d9c095a94c510a591125754e8121f8df8";
+    let host = format!("local:{}", f.home().display());
+    let db = desktop_state::desktop_settings_fixture(
+        f.home(),
+        &[
+            ("electron-renderer-content-owner", json!(owner_a)),
+            (
+                &format!("electron-owner-atoms:{owner_a}"),
+                json!({
+                    "last_completed_onboarding": 999,
+                    "electron:onboarding-projectless-completed": true,
+                    "private-a": "secret"
+                }),
+            ),
+            (
+                &format!("electron-owner-atoms:{owner_b}"),
+                json!({
+                    "private-b": "keep"
+                }),
+            ),
+            (
+                &format!("electron-owner-value:electron-saved-workspace-roots:{owner_a}"),
+                json!(["/work/partition-a", "/work/partition-b"]),
+            ),
+            (
+                &format!("electron-owner-value:electron-saved-workspace-roots:{owner_b}"),
+                json!(["/work/partition-a"]),
+            ),
+            (
+                &format!("electron-owner-value:selected-project:{owner_a}"),
+                json!("partition-b"),
+            ),
+            (
+                &format!("electron-owner-value:selected-project:{owner_b}"),
+                json!("default-project"),
+            ),
+            (
+                &format!("electron-owner-value:thread-workspace-root-hints:{owner_a}"),
+                json!({"chat": "/work/partition-b"}),
+            ),
+            (
+                &format!("electron-owner-value:thread-writable-roots:{owner_a}"),
+                json!({"chat": ["/work/partition-b"]}),
+            ),
+            (
+                &format!("electron-owner-value:thread-projectless-output-directories:{owner_a}"),
+                json!({"projectless-chat": "/work/scratch"}),
+            ),
+            (
+                &format!("electron-owner-value:app-server-migrated-pinned-thread-ids-by-host:{owner_a}"),
+                json!({&host: ["chat"]}),
+            ),
+            (
+                &format!("electron-owner-value:app-server-projects-migration-by-host:{owner_a}"),
+                json!({&host: {"version": 1, "projectsMigrated": true, "threadAssignmentsMigrated": true}}),
+            ),
+            (
+                &format!("electron-owner-value:app-server-projects-migration-by-host:{owner_b}"),
+                json!({&host: {"version": 1, "projectsMigrated": false, "threadAssignmentsMigrated": false}}),
+            ),
+        ],
+    );
+    assert!(prepare(f.home(), Some(owner_b)).unwrap());
+    let read = |key: &str| -> Value {
+        let stored: String = db
+            .query_row(
+                "SELECT value FROM settings WHERE scope = 'global' AND key = ?1",
+                [key],
+                |row| row.get(0),
+            )
+            .unwrap();
+        serde_json::from_str(&stored).unwrap()
+    };
+    assert_eq!(
+        read(&format!("electron-owner-value:electron-saved-workspace-roots:{owner_b}")),
+        json!(["/work/partition-a", "/work/partition-b"])
+    );
+    assert_eq!(
+        read(&format!("electron-owner-value:selected-project:{owner_b}")),
+        json!("partition-b")
+    );
+    assert_eq!(
+        read(&format!("electron-owner-value:thread-workspace-root-hints:{owner_b}")),
+        json!({"chat": "/work/partition-b"})
+    );
+    assert_eq!(
+        read(&format!("electron-owner-value:thread-writable-roots:{owner_b}")),
+        json!({"chat": ["/work/partition-b"]})
+    );
+    assert_eq!(
+        read(&format!("electron-owner-value:thread-projectless-output-directories:{owner_b}")),
+        json!({"projectless-chat": "/work/scratch"})
+    );
+    assert_eq!(
+        read(&format!("electron-owner-value:app-server-migrated-pinned-thread-ids-by-host:{owner_b}")),
+        json!({&host: ["chat"]})
+    );
+    assert_eq!(
+        read(&format!("electron-owner-value:app-server-projects-migration-by-host:{owner_b}")),
+        json!({&host: {"version": 1, "projectsMigrated": true, "threadAssignmentsMigrated": true}})
+    );
+    let atoms_b = read(&format!("electron-owner-atoms:{owner_b}"));
+    assert_eq!(atoms_b["last_completed_onboarding"], 999);
+    assert_eq!(atoms_b["electron:onboarding-projectless-completed"], true);
+    assert_eq!(atoms_b["private-b"], "keep");
+    assert!(atoms_b.get("private-a").is_none());
+    assert!(!prepare(f.home(), Some(owner_b)).unwrap(), "repeat prepare is idempotent");
+}

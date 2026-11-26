@@ -202,3 +202,26 @@ export async function fetchCodebuddyCnCloudModels(
 ): Promise<WorkbuddyCloudModel[]> {
   return await invoke('fetch_codebuddy_cn_cloud_models', { accountId });
 }
+
+export interface WorkbuddyLogLimitRecord {
+  accountId: string;
+  uid: string;
+  sessionId: string;
+  model: string;
+  resetAt: number;
+  firstSeenAt: number;
+  lastSeenAt: number;
+  hitCount: number;
+  message: string;
+  source: string;
+}
+
+/**
+ * 扫描本地 WorkBuddy 客户端日志中的 429 限流事件（被动来源）。
+ * 后端带 5 分钟缓存节流；force=true 时绕过缓存立即重扫。
+ */
+export async function scanWorkbuddyLogLimits(
+  force?: boolean,
+): Promise<WorkbuddyLogLimitRecord[]> {
+  return await invoke('scan_workbuddy_log_limits', { force: force ?? null });
+}

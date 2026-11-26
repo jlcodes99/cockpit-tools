@@ -8253,7 +8253,10 @@
       "recovered": "{{model}} khả dụng trở lại lúc {{time}}",
       "until": "{{model}} bị giới hạn ở lần thử trước, đặt lại {{time}}",
       "unavailable": "{{model}} bị giới hạn ở lần thử trước",
-      "failed": "Lần thử trước của {{model}} thất bại"
+      "failed": "Lần thử trước của {{model}} thất bại",
+      "logUntil": "{{model}} bị giới hạn trong nhật ký client, đặt lại {{time}}",
+      "logUnknownUntil": "Phát hiện giới hạn tốc độ trong nhật ký client, đặt lại {{time}}",
+      "logHits": "Khớp {{count}} lần trong nhật ký"
     },
     "exposeToCodex": {
       "textOnlyTitle": "Chế độ Native ACP cũ chỉ hỗ trợ văn bản thuần. Để đọc, ghi tệp và chạy lệnh, hãy dùng cầu nối công cụ Codex.",
@@ -9727,7 +9730,9 @@
       "conversations": "Phiên hội thoại",
       "turns": "Lượt phản hồi",
       "coverage": "Độ phủ chính xác",
-      "avgPerDay": "TB / ngày hoạt động"
+      "avgPerDay": "TB / ngày hoạt động",
+      "refCost": "Chi phí API quy đổi",
+      "cacheSavingsHint": "Bộ đệm tiết kiệm ~{{savings}}"
     },
     "estimated": {
       "notice": "Có {{turns}} lượt thiếu số liệu API gốc được ước tính riêng (không cộng vào Tổng chính xác):"
@@ -9766,6 +9771,32 @@
     "errors": {
       "loadFailed": "Không thể tải thống kê token: {{error}}",
       "syncFailed": "Quét dữ liệu token thất bại: {{error}}"
+    },
+    "heatmap": {
+      "title": "Biểu đồ hoạt động 365 ngày",
+      "activeDays": "{{count}} ngày hoạt động",
+      "peak": "Đỉnh {{date}} ({{tokens}})",
+      "less": "Ít",
+      "more": "Nhiều"
+    },
+    "rehydrate": {
+      "title": "Hook khôi phục trí nhớ sau nén",
+      "enabledBadge": "Đã bật",
+      "disabledBadge": "Đã tắt",
+      "desc": "Tự động nạp lại dòng thời gian yêu cầu, tệp đã sửa và quyết định quan trọng ngay sau khi nén ngữ cảnh (CHECKPOINT).",
+      "noPython": "Thiếu python3",
+      "enableBtn": "Bật Hook",
+      "disableBtn": "Tắt Hook"
+    },
+    "audit": {
+      "title": "Kiểm toán ngữ cảnh & công cụ",
+      "peakContext": "Ngữ cảnh đỉnh mỗi bước",
+      "compactions": "Nén {{count}} lần",
+      "userPrompts": "Câu hỏi",
+      "toolCalls": "Gọi công cụ",
+      "fileOps": "Tệp Đọc/Ghi",
+      "commands": "Lệnh chạy",
+      "subagents": "Tác tử phụ"
     }
   },
   "t3code": {
@@ -9773,6 +9804,32 @@
       "title": "Cấu hình tài khoản",
       "providers": "Tài khoản nhà cung cấp",
       "codexCatalogPending": "Khóa bên thứ ba đang chờ đồng bộ mô hình: {{count}}"
+    },
+    "commonSettings": {
+      "title": "Cài đặt thường dùng",
+      "language": "Ngôn ngữ T3 Code"
+    },
+    "desktopPrivacy": {
+      "title": "Quyền riêng tư của T3 Code",
+      "enable": "Bật chế độ riêng tư",
+      "connection": "Điện thoại vẫn có thể ghép nối và liên lạc theo thời gian thực khi tắt các mục này.",
+      "launchScope": "Cài đặt đo từ xa áp dụng cho phiên bản mặc định khởi chạy từ Cockpit Tools.",
+      "restartPending": "Đã lưu cài đặt. Khởi động lại T3 Code để áp dụng thay đổi đo từ xa.",
+      "environmentBlocked": "Đã tắt bởi biến môi trường {{variable}}.",
+      "policyBlocked": "Đã tắt bởi chính sách hệ thống.",
+      "linked": "Tắt phân tích sử dụng cũng tắt theo dõi kết nối.",
+      "analytics": {
+        "label": "Phân tích sử dụng",
+        "description": "Gửi phiên bản ứng dụng, nền tảng và thống kê sử dụng đến T3 Code."
+      },
+      "tracing": {
+        "label": "Theo dõi kết nối máy tính",
+        "description": "Gửi thời gian kết nối và loại lỗi. Tùy chọn này cũng kiểm soát xuất dữ liệu OpenTelemetry."
+      },
+      "agentActivity": {
+        "label": "Thông báo hoạt động tác tử",
+        "description": "Gửi tên dự án, tiêu đề cuộc trò chuyện, tên mô hình và trạng thái tác vụ đến T3 Connect. Khi tắt, điện thoại sẽ dừng Hoạt động trực tiếp và thông báo ngoại tuyến."
+      }
     },
     "nativeSettings": {
       "defaultModel": "Mô hình cho chat mới",

@@ -8253,7 +8253,10 @@
       "recovered": "{{model}} voltou a ficar disponível às {{time}}",
       "until": "{{model}} limitado no último teste, restauração {{time}}",
       "unavailable": "{{model}} limitado no último teste",
-      "failed": "Último teste de {{model}} falhou"
+      "failed": "Último teste de {{model}} falhou",
+      "logUntil": "{{model}} limitado nos logs do cliente, reinício {{time}}",
+      "logUnknownUntil": "Limite detectado nos logs do cliente, reinício {{time}}",
+      "logHits": "{{count}} ocorrências nos logs"
     },
     "exposeToCodex": {
       "textOnlyTitle": "O modo antigo Native ACP aceita apenas texto simples. Para ler e gravar arquivos e executar comandos, use a ponte de ferramentas do Codex.",
@@ -9727,7 +9730,9 @@
       "conversations": "Conversas",
       "turns": "Turnos",
       "coverage": "Cobertura exata",
-      "avgPerDay": "Média / dia ativo"
+      "avgPerDay": "Média / dia ativo",
+      "refCost": "Custo equiv. API",
+      "cacheSavingsHint": "Cache economizou ~{{savings}}"
     },
     "estimated": {
       "notice": "{{turns}} turnos sem métricas brutas da API foram estimados separadamente (nunca somados ao total exato):"
@@ -9766,6 +9771,32 @@
     "errors": {
       "loadFailed": "Falha ao carregar uso de tokens: {{error}}",
       "syncFailed": "Falha ao verificar uso de tokens: {{error}}"
+    },
+    "heatmap": {
+      "title": "Mapa de atividade (365 dias)",
+      "activeDays": "{{count}} dias ativos",
+      "peak": "Pico {{date}} ({{tokens}})",
+      "less": "Menos",
+      "more": "Mais"
+    },
+    "rehydrate": {
+      "title": "Hook de reidratação pós-compactação",
+      "enabledBadge": "Ativado",
+      "disabledBadge": "Desativado",
+      "desc": "Reinjeta automaticamente histórico de pedidos, arquivos editados e decisões-chave após a compactação de contexto (CHECKPOINT).",
+      "noPython": "python3 ausente",
+      "enableBtn": "Ativar hook",
+      "disableBtn": "Desativar hook"
+    },
+    "audit": {
+      "title": "Auditoria de contexto e execução",
+      "peakContext": "Pico de contexto por passo",
+      "compactions": "{{count}} compactações",
+      "userPrompts": "Prompts",
+      "toolCalls": "Ferramentas",
+      "fileOps": "Arquivos L/G",
+      "commands": "Comandos",
+      "subagents": "Subagentes"
     }
   },
   "t3code": {
@@ -9773,6 +9804,32 @@
       "title": "Configuração de contas",
       "providers": "Contas de provedores",
       "codexCatalogPending": "Chaves de terceiros aguardando sincronização dos modelos: {{count}}"
+    },
+    "commonSettings": {
+      "title": "Configurações comuns",
+      "language": "Idioma do T3 Code"
+    },
+    "desktopPrivacy": {
+      "title": "Privacidade do T3 Code",
+      "enable": "Ativar modo de privacidade",
+      "connection": "Mesmo com essas opções desativadas, o celular pode ser pareado e se comunicar em tempo real.",
+      "launchScope": "A telemetria se aplica à instância padrão iniciada pelo Cockpit Tools.",
+      "restartPending": "Configurações salvas. Reinicie o T3 Code para aplicar as mudanças de telemetria.",
+      "environmentBlocked": "Desativado pela variável de ambiente {{variable}}.",
+      "policyBlocked": "Desativado pela política do sistema.",
+      "linked": "Desativar a análise de uso também desativa o rastreamento de conexões.",
+      "analytics": {
+        "label": "Análise de uso",
+        "description": "Envia a versão do app, a plataforma e estatísticas de uso ao T3 Code."
+      },
+      "tracing": {
+        "label": "Rastreamento de conexões",
+        "description": "Envia tempos de conexão e tipos de erro. Também controla as exportações do OpenTelemetry."
+      },
+      "agentActivity": {
+        "label": "Notificações do agente",
+        "description": "Envia nomes de projetos e modelos, títulos de conversas e status de tarefas ao T3 Connect. Ao desativar, as Atividades ao Vivo e notificações offline no celular são interrompidas."
+      }
     },
     "nativeSettings": {
       "defaultModel": "Modelo para novas conversas",

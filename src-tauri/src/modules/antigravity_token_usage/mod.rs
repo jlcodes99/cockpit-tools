@@ -12,8 +12,11 @@
 //!   `RECENT_SCAN_REUSE_WINDOW`.
 
 pub mod aggregator;
+pub mod audit;
 pub mod models;
+pub mod pricing;
 pub mod protobuf;
+pub mod rehydrate;
 pub mod scanner;
 pub mod types;
 
@@ -29,12 +32,14 @@ use serde::{Deserialize, Serialize};
 use crate::modules::account;
 
 use self::aggregator::{aggregate_dashboard, query_conversation_list};
+use self::audit::{merge_cli_scan_into_primary, resolve_companion_cli_data_dir};
+use self::rehydrate::{get_rehydrate_status, set_rehydrate_enabled};
 use self::scanner::{
     build_conversation_detail, get_default_antigravity_data_dir, AntigravityScanner,
 };
 use self::types::{
-    AntigravityTokenUsageSettings, ConversationDetailResponse, DashboardBundleResponse,
-    DashboardQueryRequest, ScanResult,
+    AntigravityRehydrateStatus, AntigravityTokenUsageSettings, ConversationDetailResponse,
+    DashboardBundleResponse, DashboardQueryRequest, ScanResult,
 };
 
 const STORAGE_SUBDIR: &str = "antigravity_token_usage";
@@ -60,6 +65,35 @@ struct ScannerState {
     storage_dir: PathBuf,
     custom_data_dir: Option<String>,
     scanner: AntigravityScanner,
+    cli_scanner: Option<AntigravityScanner>,
+}
+
+fn create_cli_scanner(
+    custom_data_dir: Option<&str>,
+    storage_dir: &Path,
+) -> Option<AntigravityScanner> {
+    let primary_dir = match custom_data_dir {
+        Some(c) => PathBuf::from(c),
+        None => get_default_antigravity_data_dir(),
+    };
+    let cli_dir = resolve_companion_cli_data_dir(&primary_dir)?;
+    Some(AntigravityScanner::new(
+        Some(cli_dir),
+        storage_dir.join("cli_cache"),
+        true,
+    ))
+}
+
+fn scan_with_cli_companion(state: &mut ScannerState, rebuild: bool) -> ScanResult {
+    let mut primary = state.scanner.scan(rebuild);
+    if state.cli_scanner.is_none() {
+        state.cli_scanner = create_cli_scanner(state.custom_data_dir.as_deref(), &state.storage_dir);
+    }
+    if let Some(ref mut cli_sc) = state.cli_scanner {
+        let cli_res = cli_sc.scan(rebuild);
+        merge_cli_scan_into_primary(&mut primary, cli_res);
+    }
+    primary
 }
 
 static SNAPSHOT_STORE: OnceLock<RwLock<Option<SnapshotEntry>>> = OnceLock::new();
@@ -143,6 +177,7 @@ fn build_settings_snapshot(custom_data_dir: Option<&str>) -> AntigravityTokenUsa
         effective_data_dir,
         default_data_dir: default_dir,
         is_custom_data_dir,
+        rehydrate: get_rehydrate_status(),
     }
 }
 
@@ -204,10 +239,12 @@ fn run_coordinated_scan(
     let state = coord_guard.get_or_insert_with(|| {
         let persisted = read_persisted_settings(&storage_dir);
         let custom = sanitize_custom_dir(persisted.custom_data_dir.as_deref());
+        let cli_scanner = create_cli_scanner(custom.as_deref(), &storage_dir);
         ScannerState {
             storage_dir: storage_dir.clone(),
             custom_data_dir: custom.clone(),
             scanner: AntigravityScanner::new(custom.map(PathBuf::from), storage_dir.clone(), true),
+            cli_scanner,
         }
     });
 
@@ -218,9 +255,10 @@ fn run_coordinated_scan(
         state.custom_data_dir = custom.clone();
         state.scanner =
             AntigravityScanner::new(custom.map(PathBuf::from), storage_dir.clone(), true);
+        state.cli_scanner = create_cli_scanner(state.custom_data_dir.as_deref(), &storage_dir);
     }
 
-    let scan = Arc::new(state.scanner.scan(rebuild));
+    let scan = Arc::new(scan_with_cli_companion(state, rebuild));
     let entry = SnapshotEntry {
         storage_dir,
         custom_data_dir: state.custom_data_dir.clone(),
@@ -314,17 +352,20 @@ pub fn set_custom_data_dir(
         .lock()
         .map_err(|_| "Antigravity token usage scan lock poisoned".to_string())?;
 
-    let mut scanner = AntigravityScanner::new(
+    let scanner = AntigravityScanner::new(
         next_custom.clone().map(PathBuf::from),
         storage_dir.clone(),
         true,
     );
-    let scan = Arc::new(scanner.scan(false));
-    *coord_guard = Some(ScannerState {
+    let cli_scanner = create_cli_scanner(next_custom.as_deref(), &storage_dir);
+    let mut next_state = ScannerState {
         storage_dir: storage_dir.clone(),
         custom_data_dir: next_custom.clone(),
         scanner,
-    });
+        cli_scanner,
+    };
+    let scan = Arc::new(scan_with_cli_companion(&mut next_state, false));
+    *coord_guard = Some(next_state);
 
     let entry = SnapshotEntry {
         storage_dir,
@@ -342,4 +383,8 @@ pub fn set_custom_data_dir(
         entry.custom_data_dir.as_deref(),
         query.as_ref(),
     ))
+}
+
+pub fn toggle_rehydrate_hook(enabled: bool) -> Result<AntigravityRehydrateStatus, String> {
+    set_rehydrate_enabled(enabled)
 }

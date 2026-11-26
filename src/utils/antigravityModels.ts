@@ -33,7 +33,17 @@ const CANONICAL_MODELS: CanonicalModel[] = [
   { id: 'gemini-4-hydrogen-low', displayName: 'Gemini 4 Hydrogen (Low)', modelConstant: 'MODEL_PLACEHOLDER_M527', aliases: [] },
   { id: 'gemini-4-hydrogen-medium', displayName: 'Gemini 4 Hydrogen (Medium)', modelConstant: 'MODEL_PLACEHOLDER_M526', aliases: [] },
   { id: 'gemini-4-hydrogen-high', displayName: 'Gemini 4 Hydrogen (High)', modelConstant: 'MODEL_PLACEHOLDER_M525', aliases: [] },
-  { id: 'gemini-4-hydrogen-xhigh', displayName: 'Gemini 4 Hydrogen (XHigh)', modelConstant: 'MODEL_PLACEHOLDER_M528', aliases: [] },
+  {
+    id: 'gemini-4-hydrogen-xhigh',
+    displayName: 'Gemini 4 Hydrogen (XHigh)',
+    modelConstant: 'MODEL_PLACEHOLDER_M528',
+    aliases: [
+      'gemini-4-hydrogen-extra-high',
+      'Gemini 4 Hydrogen (Extra High)',
+      'Gemini 4 Hydrogen Extra High',
+      'MODEL_PLACEHOLDER_M531',
+    ],
+  },
   { id: 'gemini-3.8-flash', displayName: 'Gemini 3.8 Flash', modelConstant: null, aliases: [] },
   { id: 'gemini-3.8-flash-low', displayName: 'Gemini 3.8 Flash (Low)', modelConstant: 'MODEL_PLACEHOLDER_M320', aliases: [] },
   { id: 'gemini-3.8-flash-medium', displayName: 'Gemini 3.8 Flash (Medium)', modelConstant: 'MODEL_PLACEHOLDER_M319', aliases: [] },

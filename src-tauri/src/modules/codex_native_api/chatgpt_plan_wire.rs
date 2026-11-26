@@ -321,6 +321,7 @@ pub(super) fn prepare_with_effort_override(
     // SIWC is a standard Responses endpoint. CPA model compatibility performs
     // this same projection; it is required here independently of its optional
     // namespace optimization. Source/checkpoint history remains untouched.
+    super::responses_http_input::normalize_external_results(body);
     super::multi_agent_compat::portable_input(body);
     super::responses_tool_history::normalize_empty_function_arguments(body);
     let context = super::chatgpt_plan_tools::prepare(body)?;
@@ -479,5 +480,29 @@ mod tests {
             );
         }
         assert!(validate(&json!({"input":[]}), true).is_err());
+    }
+
+    #[test]
+    fn plan_wire_normalizes_window_switch_external_results_without_call_id() {
+        let mut body = json!({
+            "model": "account-model",
+            "input": [
+                {"type": "message", "role": "user", "content": "hello"},
+                {
+                    "type": "function_call_output",
+                    "namespace": "agent",
+                    "name": "codex_apps_open_page",
+                    "output": "{\"url\":\"https://example.com\"}"
+                }
+            ]
+        });
+        normalize(&mut HeaderMap::new(), &mut body, false).unwrap();
+        assert_eq!(body["input"][1]["type"], "message");
+        assert_eq!(body["input"][1]["role"], "user");
+        assert!(body["input"][1].get("call_id").is_none());
+        assert_eq!(
+            body["input"][1]["content"][0]["text"],
+            "[External tool result: agent.codex_apps_open_page]\n{\"url\":\"https://example.com\"}"
+        );
     }
 }

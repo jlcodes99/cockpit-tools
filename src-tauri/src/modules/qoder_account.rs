@@ -358,7 +358,21 @@ pub fn remove_accounts(account_ids: &[String]) -> Result<(), String> {
 }
 
 fn parse_json_or_string(raw: &str) -> Value {
-    serde_json::from_str(raw).unwrap_or_else(|_| Value::String(raw.to_string()))
+    match serde_json::from_str::<Value>(raw) {
+        Ok(Value::String(inner)) => {
+            let trimmed = inner.trim();
+            if trimmed.starts_with('{') || trimmed.starts_with('[') {
+                if let Ok(nested @ (Value::Object(_) | Value::Array(_))) =
+                    serde_json::from_str::<Value>(trimmed)
+                {
+                    return nested;
+                }
+            }
+            Value::String(inner)
+        }
+        Ok(value) => value,
+        Err(_) => Value::String(raw.to_string()),
+    }
 }
 
 fn walk_value<'a>(value: &'a Value, path: &str, visit: &mut dyn FnMut(&str, &'a Value)) {
@@ -1024,13 +1038,23 @@ pub fn ensure_state_db_path_for_user_data_dir(user_data_dir: &str) -> Result<Pat
     Ok(resolve_state_db_path_for_user_data_dir(user_data_dir))
 }
 
-fn read_local_session(root: &Path) -> Result<Option<QoderSnapshot>, String> {
+fn read_local_session_with_mode(
+    root: &Path,
+    passive_cooldown: bool,
+) -> Result<Option<QoderSnapshot>, String> {
     let db_path = root.join("User/globalStorage/state.vscdb");
-    let [user_info, plan] = crate::modules::vscode_inject::read_qoder_secret_snapshot(
-        &db_path,
-        [QODER_SECRET_USER_INFO_KEY, QODER_SECRET_USER_PLAN_KEY],
-    )?
-    .map(|value| value.map(|text| parse_json_or_string(&text)));
+    let raw_values = if passive_cooldown {
+        crate::modules::vscode_inject::read_qoder_secret_snapshot_passive(
+            &db_path,
+            [QODER_SECRET_USER_INFO_KEY, QODER_SECRET_USER_PLAN_KEY],
+        )?
+    } else {
+        crate::modules::vscode_inject::read_qoder_secret_snapshot(
+            &db_path,
+            [QODER_SECRET_USER_INFO_KEY, QODER_SECRET_USER_PLAN_KEY],
+        )?
+    };
+    let [user_info, plan] = raw_values.map(|value| value.map(|text| parse_json_or_string(&text)));
     if crate::modules::qoder_oauth::access_token_from_info(user_info.as_ref()).is_none() {
         return Ok(None);
     }
@@ -1039,6 +1063,14 @@ fn read_local_session(root: &Path) -> Result<Option<QoderSnapshot>, String> {
         user_plan_raw: plan,
         credit_usage_raw: None,
     }))
+}
+
+fn read_local_session(root: &Path) -> Result<Option<QoderSnapshot>, String> {
+    read_local_session_with_mode(root, false)
+}
+
+fn read_local_session_passive(root: &Path) -> Result<Option<QoderSnapshot>, String> {
+    read_local_session_with_mode(root, true)
 }
 
 pub(crate) fn local_session_matches(root: &Path, account: &QoderAccount) -> Result<bool, String> {
@@ -1096,7 +1128,7 @@ pub(crate) fn reconcile_current_account() -> Result<Option<String>, String> {
     };
     let wal = database.with_extension("vscdb-wal");
     let before = (stamp(&database), stamp(&wal));
-    let snapshot = before.0.map(|_| read_local_session(&root));
+    let snapshot = before.0.map(|_| read_local_session_passive(&root));
     let index = load_account_index_checked()?;
     let previous = crate::modules::provider_current_state::resolve_existing_current_account_id(
         "qoder",
@@ -1133,7 +1165,7 @@ pub(crate) fn reconcile_current_account() -> Result<Option<String>, String> {
 
 pub(crate) fn local_identity_key() -> Option<String> {
     let root = crate::modules::qoder_instance::get_default_qoder_user_data_dir().ok()?;
-    let snapshot = read_local_session(&root).ok()??;
+    let snapshot = read_local_session_passive(&root).ok()??;
     let (source, org) = qoder_identity::scope(
         snapshot.user_info_raw.as_ref(),
         snapshot.user_plan_raw.as_ref(),

@@ -1,3 +1,4 @@
+import { T3codeCommonSettings } from './T3codeCommonSettings';
 import { useMemo, useState, type ReactNode } from 'react';
 import { CheckCircle2, Eye, EyeOff, Play, Plus, RefreshCw, RotateCw, Search } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -122,6 +123,8 @@ export function T3codeOverviewSection({
           <QuickSettingsPopover type="t3code" />
         </div>
       </div>
+
+      <T3codeCommonSettings />
 
       {loading && !workspace && (
         <div className="loading-container" role="status">

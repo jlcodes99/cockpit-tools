@@ -1,5 +1,7 @@
 export type ConversationKind = 'main' | 'swarm' | 'subagent';
 
+export type ClientSourceKind = 'desktop' | 'cli';
+
 export type DataSourceKind = 'sqlite_db' | 'rpc_cache' | 'transcript_jsonl' | 'summary_only';
 
 export type TimeGranularity = 'day' | 'week' | 'month';
@@ -16,6 +18,7 @@ export type ConversationSortField =
   | 'combinedOutputTokens'
   | 'thinkingTokens'
   | 'cacheReadTokens'
+  | 'estimatedCostUsd'
   | 'stepCount'
   | 'turnCount'
   | 'title'
@@ -60,6 +63,8 @@ export interface TurnUsageRecord {
   status: number;
   exact: ExactTokenTotals;
   estimated: TurnEstimatedTotals;
+  estimatedCostUsd: number;
+  cacheSavingsUsd: number;
   messageId?: string;
 }
 
@@ -70,6 +75,8 @@ export interface ConversationModelSlice {
   turnCount: number;
   exact: ExactTokenTotals;
   estimatedTotalTokens: number;
+  estimatedCostUsd: number;
+  cacheSavingsUsd: number;
 }
 
 export interface ChildConversationRef {
@@ -87,6 +94,7 @@ export interface ConversationSummaryItem {
   displayTitle: string;
   preview: string;
   kind: ConversationKind;
+  clientSource?: ClientSourceKind;
   hasSwarmChildren: boolean;
   agentName: string;
   parentConversationId: string;
@@ -110,12 +118,38 @@ export interface ConversationSummaryItem {
   dataSource: DataSourceKind;
   exact: ExactTokenTotals;
   estimated: EstimatedTokenTotals;
+  estimatedCostUsd?: number;
+  cacheSavingsUsd?: number;
+}
+
+export interface ToolCallSummary {
+  toolName: string;
+  count: number;
+}
+
+export interface ConversationContextAudit {
+  peakContextTokens: number;
+  latestContextTokens: number;
+  contextLimitTokens: number;
+  peakContextPercent: number;
+  userPromptCount: number;
+  assistantTurnCount: number;
+  toolCallCount: number;
+  commandExecutionCount: number;
+  fileReadCount: number;
+  fileEditCount: number;
+  subagentSpawnCount: number;
+  compactionCount: number;
+  compactionSteps: number[];
+  topTools: ToolCallSummary[];
+  activeFiles: string[];
 }
 
 export interface ConversationDetail extends ConversationSummaryItem {
   modelBreakdown: ConversationModelSlice[];
   turns: TurnUsageRecord[];
   children: ChildConversationRef[];
+  audit?: ConversationContextAudit;
 }
 
 export interface ModelUsageSummary {
@@ -129,6 +163,8 @@ export interface ModelUsageSummary {
   exact: ExactTokenTotals;
   estimatedTotalTokens: number;
   sharePercent: number;
+  estimatedCostUsd: number;
+  cacheSavingsUsd: number;
 }
 
 export interface WorkspaceUsageSummary {
@@ -140,6 +176,7 @@ export interface WorkspaceUsageSummary {
   exact: ExactTokenTotals;
   estimatedTotalTokens: number;
   sharePercent: number;
+  estimatedCostUsd: number;
   lastActiveTime: string | null;
 }
 
@@ -150,6 +187,7 @@ export interface KindUsageSummary {
   exact: ExactTokenTotals;
   estimatedTotalTokens: number;
   sharePercent: number;
+  estimatedCostUsd: number;
 }
 
 export interface TimeBucketPoint {
@@ -161,6 +199,20 @@ export interface TimeBucketPoint {
   conversationCount: number;
   exact: ExactTokenTotals;
   estimatedTotalTokens: number;
+  estimatedCostUsd: number;
+}
+
+export interface HeatmapDayPoint {
+  date: string;
+  totalTokens: number;
+  inputTokens: number;
+  outputTokens: number;
+  thinkingTokens: number;
+  cacheTokens: number;
+  turnCount: number;
+  conversationCount: number;
+  estimatedCostUsd: number;
+  level: number;
 }
 
 export interface ScanMetadata {
@@ -173,6 +225,7 @@ export interface ScanMetadata {
   cacheMisses: number;
   rpcCacheSessionsFound: number;
   brainDirsFound: number;
+  cliSessionsFound?: number;
   warnings: string[];
 }
 
@@ -203,6 +256,8 @@ export interface KpiSummary {
   mainConversations: number;
   swarmConversations: number;
   subagentConversations: number;
+  desktopConversations?: number;
+  cliConversations?: number;
   totalSteps: number;
   totalTurns: number;
   exactTurns: number;
@@ -211,6 +266,8 @@ export interface KpiSummary {
   activeDays: number;
   avgExactTokensPerActiveDay: number;
   avgExactTokensPerConversation: number;
+  estimatedCostUsd?: number;
+  cacheSavingsUsd?: number;
 }
 
 export interface AppliedFilters {
@@ -231,6 +288,7 @@ export interface DashboardSummaryResponse {
   catalog: FilterOptionsCatalog;
   kpi: KpiSummary;
   timeSeries: TimeBucketPoint[];
+  heatmap?: HeatmapDayPoint[];
   byModel: ModelUsageSummary[];
   byWorkspace: WorkspaceUsageSummary[];
   byKind: KindUsageSummary[];
@@ -251,11 +309,22 @@ export interface ConversationDetailResponse {
   conversation: ConversationDetail;
 }
 
+export interface AntigravityRehydrateStatus {
+  enabled: boolean;
+  scriptInstalled: boolean;
+  pythonAvailable: boolean;
+  pythonCommand: string | null;
+  pythonVersion: string | null;
+  hooksConfigPath: string;
+  scriptPath: string;
+}
+
 export interface AntigravityTokenUsageSettings {
   customDataDir: string | null;
   effectiveDataDir: string;
   defaultDataDir: string;
   isCustomDataDir: boolean;
+  rehydrate?: AntigravityRehydrateStatus;
 }
 
 export interface DashboardQueryRequest {

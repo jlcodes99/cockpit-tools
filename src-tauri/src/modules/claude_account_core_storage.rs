@@ -8,6 +8,12 @@ use crate::models::claude::{
 use crate::modules::{account, atomic_write, logger};
 #[cfg(target_os = "macos")]
 use aes::Aes128;
+#[cfg(any(target_os = "windows", test))]
+use aes_gcm::aead::generic_array::GenericArray as AesGcmGenericArray;
+#[cfg(any(target_os = "windows", test))]
+use aes_gcm::aead::Aead as AesGcmAead;
+#[cfg(any(target_os = "windows", test))]
+use aes_gcm::{Aes256Gcm, KeyInit as AesGcmKeyInit, Nonce as AesGcmNonce};
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
 #[cfg(target_os = "macos")]
@@ -33,6 +39,10 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager};
 use url::{form_urlencoded, Url};
+#[cfg(target_os = "windows")]
+use windows::Win32::Foundation::{LocalFree, HLOCAL};
+#[cfg(target_os = "windows")]
+use windows::Win32::Security::Cryptography::{CryptUnprotectData, CRYPT_INTEGER_BLOB};
 
 const ACCOUNTS_INDEX_FILE: &str = "claude_accounts.json";
 const ACCOUNTS_DIR: &str = "claude_accounts";
@@ -90,6 +100,7 @@ const CLAUDE_DESKTOP_BUNDLE_ID_MACOS: &str = "com.anthropic.claudefordesktop";
 const CLAUDE_DESKTOP_LOGIN_TIMEOUT_SECONDS: i64 = 30 * 60;
 const CLAUDE_DESKTOP_AUTH_EXPORT_WAIT_SECONDS: u64 = 8;
 const CLAUDE_DESKTOP_HIDDEN_PROBE_COOLDOWN_SECONDS: u64 = 10 * 60;
+const CLAUDE_DESKTOP_HIDDEN_PROBE_FAILURE_COOLDOWN_SECONDS: u64 = 30;
 const CLAUDE_DESKTOP_REQUIRED_COOKIE_NAMES: &[&str] = &["sessionKey", "lastActiveOrg"];
 const CHROMIUM_EPOCH_OFFSET_MS: i64 = 11_644_473_600_000;
 const CLAUDE_DESKTOP_LOCAL_PROFILE_MAX_FILES: usize = 600;
@@ -131,8 +142,15 @@ static CLAUDE_PENDING_DESKTOP_LOGIN: std::sync::LazyLock<
 > = std::sync::LazyLock::new(|| Mutex::new(None));
 static CLAUDE_DESKTOP_ELECTRON_RUNTIME_LOCK: std::sync::LazyLock<Mutex<()>> =
     std::sync::LazyLock::new(|| Mutex::new(()));
-static CLAUDE_DESKTOP_HIDDEN_PROBE_ATTEMPTS: std::sync::LazyLock<Mutex<HashMap<String, Instant>>> =
-    std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct DesktopHiddenProbeAttempt {
+    attempted_at: Instant,
+    cooldown: Duration,
+}
+
+static CLAUDE_DESKTOP_HIDDEN_PROBE_ATTEMPTS: std::sync::LazyLock<
+    Mutex<HashMap<String, DesktopHiddenProbeAttempt>>,
+> = std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
 static EMAIL_RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
     Regex::new(r"(?i)[a-z0-9._%+\-]{1,64}@[a-z0-9.\-]{2,253}\.[a-z]{2,24}")
         .expect("valid email regex")
@@ -1081,6 +1099,81 @@ pub fn get_default_claude_desktop_user_data_dir() -> Result<PathBuf, String> {
     }
 
     Ok(standard_dir)
+}
+
+fn candidate_default_claude_desktop_user_data_dirs(exclude_dir: Option<&Path>) -> Vec<PathBuf> {
+    let mut raw_candidates = Vec::new();
+    if let Ok(value) = std::env::var("CLAUDE_DESKTOP_USER_DATA_DIR") {
+        let trimmed = value.trim();
+        if !trimmed.is_empty() {
+            raw_candidates.push(PathBuf::from(trimmed));
+        }
+    } else {
+        if let Ok(default_dir) = get_default_claude_desktop_user_data_dir() {
+            raw_candidates.push(default_dir);
+        }
+        #[cfg(target_os = "windows")]
+        {
+            if let Some(store_profile) =
+                crate::modules::claude_instance::windows_store_desktop_profile_dir()
+            {
+                raw_candidates.push(store_profile);
+            }
+            if let Some(data_dir) = dirs::data_dir() {
+                raw_candidates.push(data_dir.join("Claude"));
+            }
+            if let Some(store_dir) = find_windows_store_claude_desktop_user_data_dir() {
+                raw_candidates.push(store_dir);
+            }
+            if let Some(local_data_dir) = dirs::data_local_dir() {
+                let claude_data = local_data_dir.join("Claude-Data");
+                if let Ok(entries) = fs::read_dir(&claude_data) {
+                    let mut store_dirs = entries
+                        .flatten()
+                        .map(|entry| entry.path())
+                        .filter(|path| {
+                            path.is_dir()
+                                && path
+                                    .file_name()
+                                    .and_then(|name| name.to_str())
+                                    .is_some_and(|name| name.starts_with("claude_"))
+                        })
+                        .collect::<Vec<_>>();
+                    store_dirs.sort();
+                    raw_candidates.extend(store_dirs);
+                }
+            }
+        }
+    }
+
+    let excluded_canonical = exclude_dir.and_then(|path| fs::canonicalize(path).ok());
+    let mut seen_keys = HashSet::new();
+    let mut results = Vec::new();
+    for dir in raw_candidates {
+        if !dir.is_dir() {
+            continue;
+        }
+        if let Some(excluded) = exclude_dir {
+            if dir == excluded {
+                continue;
+            }
+            if let (Some(left), Ok(right)) = (excluded_canonical.as_ref(), fs::canonicalize(&dir)) {
+                if left == &right {
+                    continue;
+                }
+            }
+        }
+        let dedupe_key = fs::canonicalize(&dir)
+            .unwrap_or_else(|_| dir.clone())
+            .to_string_lossy()
+            .to_string();
+        #[cfg(target_os = "windows")]
+        let dedupe_key = dedupe_key.to_ascii_lowercase();
+        if seen_keys.insert(dedupe_key) {
+            results.push(dir);
+        }
+    }
+    results
 }
 
 #[derive(Debug, Clone)]

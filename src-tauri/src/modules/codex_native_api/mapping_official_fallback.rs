@@ -198,9 +198,9 @@ pub(in crate::modules::codex_native_api) async fn retry(
     {
         return Ok(false);
     }
-    prepared.execution = prepared.execution.renew_open();
-    let execution = prepared.execution.clone();
-    execution
+    let execution = prepared.execution.renew_open();
+    let switched = execution
+        .clone()
         .run(super::super::execution::prepare(state, async {
             let body = prepared.replay_body().clone();
             let headers = prepared.replay_headers().clone();
@@ -242,7 +242,11 @@ pub(in crate::modules::codex_native_api) async fn retry(
             *prepared = next;
             Ok(true)
         }))
-        .await
+        .await?;
+    if switched {
+        prepared.execution = execution;
+    }
+    Ok(switched)
 }
 
 #[cfg(test)]

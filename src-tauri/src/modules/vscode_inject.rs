@@ -13,10 +13,14 @@
 //! re-encrypts, and writes back.
 
 #[cfg(target_os = "macos")]
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 use std::process::Command;
+#[cfg(target_os = "macos")]
+use std::sync::{LazyLock, Mutex};
+#[cfg(target_os = "macos")]
+use std::time::{Duration, Instant};
 
 #[cfg(not(target_os = "windows"))]
 use aes::Aes128;
@@ -26,7 +30,6 @@ use aes_gcm::aead::generic_array::GenericArray;
 use aes_gcm::aead::{Aead, AeadCore, OsRng};
 #[cfg(target_os = "windows")]
 use aes_gcm::{Aes256Gcm, KeyInit, Nonce};
-#[cfg(target_os = "windows")]
 use base64::{engine::general_purpose, Engine as _};
 #[cfg(not(target_os = "windows"))]
 use cbc::cipher::block_padding::Pkcs7;
@@ -55,7 +58,7 @@ const CBC_IV: [u8; 16] = [b' '; 16];
 #[cfg(not(target_os = "windows"))]
 const SALT: &[u8] = b"saltysalt";
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum SafeStorageReadMode {
     Default,
     AntigravityOnly,
@@ -327,21 +330,172 @@ fn detect_prefix(encrypted: &[u8]) -> Option<&'static str> {
 }
 
 #[cfg(target_os = "macos")]
-fn run_command_get_trimmed(program: &str, args: &[&str]) -> Option<String> {
-    let output = crate::modules::process_timeout::output_with_timeout(
-        Command::new(program).args(args),
-        std::time::Duration::from_secs(2),
-    )
-    .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    if value.is_empty() {
-        None
+const MACOS_KEYCHAIN_PROMPT_TIMEOUT: Duration = Duration::from_secs(45);
+#[cfg(target_os = "macos")]
+const MACOS_KEYCHAIN_INTERACTIVE_COOLDOWN: Duration = Duration::from_secs(15);
+#[cfg(target_os = "macos")]
+const MACOS_KEYCHAIN_PASSIVE_COOLDOWN: Duration = Duration::from_secs(600);
+
+#[cfg(target_os = "macos")]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct SafeStorageCacheKey {
+    mode: SafeStorageReadMode,
+    data_root_app_name: Option<String>,
+}
+
+#[cfg(target_os = "macos")]
+#[derive(Debug, Clone)]
+enum SafeStorageCacheEntry {
+    Password {
+        password: String,
+        service: String,
+    },
+    Cooldown {
+        failed_at: Instant,
+        reason: String,
+    },
+}
+
+#[cfg(target_os = "macos")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum MacosKeychainReadOutcome {
+    Found(String),
+    NotFound,
+    EmptyPassword,
+    AccessBlocked(String),
+}
+
+#[cfg(target_os = "macos")]
+static MACOS_SAFE_STORAGE_CACHE: LazyLock<Mutex<HashMap<SafeStorageCacheKey, SafeStorageCacheEntry>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+#[cfg(target_os = "macos")]
+static MACOS_KEYCHAIN_PROBE_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
+
+#[cfg(target_os = "macos")]
+static MACOS_FALLBACK_SERVICE_ATTEMPTS: LazyLock<Mutex<HashSet<(SafeStorageCacheKey, String)>>> =
+    LazyLock::new(|| Mutex::new(HashSet::new()));
+
+#[cfg(target_os = "macos")]
+fn build_macos_safe_storage_cache_key(
+    data_root: Option<&Path>,
+    mode: SafeStorageReadMode,
+) -> SafeStorageCacheKey {
+    let data_root_app_name = if matches!(mode, SafeStorageReadMode::Default) {
+        data_root
+            .and_then(|root| root.file_name())
+            .and_then(|name| name.to_str())
+            .map(str::trim)
+            .filter(|name| !name.is_empty())
+            .map(str::to_string)
     } else {
-        Some(value)
+        None
+    };
+    SafeStorageCacheKey {
+        mode,
+        data_root_app_name,
     }
+}
+
+#[cfg(target_os = "macos")]
+fn classify_macos_security_result(
+    result: std::io::Result<std::process::Output>,
+) -> MacosKeychainReadOutcome {
+    match result {
+        Ok(output) => {
+            if output.status.success() {
+                let password = String::from_utf8_lossy(&output.stdout)
+                    .trim_end_matches(['\r', '\n'])
+                    .to_string();
+                if password.is_empty() {
+                    MacosKeychainReadOutcome::EmptyPassword
+                } else {
+                    MacosKeychainReadOutcome::Found(password)
+                }
+            } else {
+                let code = output.status.code();
+                let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+                let lower = stderr.to_ascii_lowercase();
+                if code == Some(44)
+                    || lower.contains("could not be found")
+                    || lower.contains("errsecitemnotfound")
+                {
+                    MacosKeychainReadOutcome::NotFound
+                } else if code == Some(128)
+                    || lower.contains("user canceled")
+                    || lower.contains("user cancelled")
+                    || lower.contains("-128")
+                {
+                    MacosKeychainReadOutcome::AccessBlocked(
+                        "Keychain access was canceled by user".to_string(),
+                    )
+                } else if code == Some(36)
+                    || lower.contains("interaction is not allowed")
+                    || lower.contains("-25308")
+                {
+                    MacosKeychainReadOutcome::AccessBlocked(
+                        "Keychain user interaction is not allowed or keychain is locked"
+                            .to_string(),
+                    )
+                } else if code == Some(51)
+                    || lower.contains("passphrase")
+                    || lower.contains("auth")
+                    || lower.contains("denied")
+                    || lower.contains("-25293")
+                {
+                    MacosKeychainReadOutcome::AccessBlocked(
+                        "Keychain authorization failed or was denied".to_string(),
+                    )
+                } else if stderr.is_empty() {
+                    MacosKeychainReadOutcome::AccessBlocked(format!(
+                        "Keychain lookup failed with status {:?}",
+                        code
+                    ))
+                } else {
+                    MacosKeychainReadOutcome::AccessBlocked(format!(
+                        "Keychain lookup failed: {}",
+                        stderr
+                    ))
+                }
+            }
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::TimedOut => {
+            MacosKeychainReadOutcome::AccessBlocked("Keychain authorization timed out".to_string())
+        }
+        Err(error) => MacosKeychainReadOutcome::AccessBlocked(format!(
+            "Failed to execute security CLI: {}",
+            error
+        )),
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn probe_macos_security_password(
+    service: &str,
+    account: Option<&str>,
+) -> MacosKeychainReadOutcome {
+    let mut cmd = Command::new("security");
+    cmd.args(["find-generic-password", "-w", "-s", service]);
+    if let Some(account_value) = account {
+        cmd.args(["-a", account_value]);
+    }
+    let result =
+        crate::modules::process_timeout::output_with_timeout(&mut cmd, MACOS_KEYCHAIN_PROMPT_TIMEOUT);
+    classify_macos_security_result(result)
+}
+
+#[cfg(target_os = "macos")]
+fn deduplicate_candidates(
+    raw_candidates: Vec<(String, Option<String>)>,
+) -> Vec<(String, Option<String>)> {
+    let mut seen = HashSet::new();
+    let mut deduped = Vec::with_capacity(raw_candidates.len());
+    for candidate in raw_candidates {
+        if seen.insert(candidate.clone()) {
+            deduped.push(candidate);
+        }
+    }
+    deduped
 }
 
 #[cfg(target_os = "macos")]
@@ -350,21 +504,21 @@ fn build_macos_safe_storage_candidates(
     mode: SafeStorageReadMode,
 ) -> Vec<(String, Option<String>)> {
     if matches!(mode, SafeStorageReadMode::AntigravityOnly) {
-        return vec![
+        return deduplicate_candidates(vec![
             (
                 "Antigravity Safe Storage".to_string(),
                 Some("Antigravity Key".to_string()),
             ),
-            ("Antigravity Safe Storage".to_string(), None),
             (
                 "Antigravity Safe Storage".to_string(),
                 Some("Antigravity Safe Storage".to_string()),
             ),
-        ];
+            ("Antigravity Safe Storage".to_string(), None),
+        ]);
     }
 
     if matches!(mode, SafeStorageReadMode::CodeBuddyOnly) {
-        return vec![
+        return deduplicate_candidates(vec![
             (
                 "CodeBuddy Safe Storage".to_string(),
                 Some("CodeBuddy".to_string()),
@@ -377,16 +531,16 @@ fn build_macos_safe_storage_candidates(
                 "CodeBuddy Safe Storage".to_string(),
                 Some("CodeBuddy Key".to_string()),
             ),
-            ("CodeBuddy Safe Storage".to_string(), None),
             (
                 "CodeBuddy Safe Storage".to_string(),
                 Some("CodeBuddy Safe Storage".to_string()),
             ),
-        ];
+            ("CodeBuddy Safe Storage".to_string(), None),
+        ]);
     }
 
     if matches!(mode, SafeStorageReadMode::CodeBuddyCnOnly) {
-        return vec![
+        return deduplicate_candidates(vec![
             (
                 "CodeBuddy CN Safe Storage".to_string(),
                 Some("CodeBuddy CN".to_string()),
@@ -399,36 +553,34 @@ fn build_macos_safe_storage_candidates(
                 "CodeBuddy CN Safe Storage".to_string(),
                 Some("CodeBuddy CN Key".to_string()),
             ),
-            ("CodeBuddy CN Safe Storage".to_string(), None),
             (
                 "CodeBuddy CN Safe Storage".to_string(),
                 Some("CodeBuddy CN Safe Storage".to_string()),
             ),
-        ];
+            ("CodeBuddy CN Safe Storage".to_string(), None),
+        ]);
     }
 
     if matches!(mode, SafeStorageReadMode::QoderOnly) {
-        return vec![
+        return deduplicate_candidates(vec![
+            ("Qoder Safe Storage".to_string(), Some("Qoder Key".to_string())),
             ("Qoder Safe Storage".to_string(), Some("Qoder".to_string())),
             (
                 "Qoder App Safe Storage".to_string(),
                 Some("Qoder App Key".to_string()),
             ),
             ("Qoder Safe Storage".to_string(), Some("qoder".to_string())),
-            ("Qoder Safe Storage".to_string(), None),
             (
                 "Qoder Safe Storage".to_string(),
                 Some("Qoder Safe Storage".to_string()),
             ),
-            (
-                "Qoder App Safe Storage".to_string(),
-                Some("Qoder App Key".to_string()),
-            ),
-        ];
+            ("Qoder Safe Storage".to_string(), None),
+            ("Qoder App Safe Storage".to_string(), None),
+        ]);
     }
 
     if matches!(mode, SafeStorageReadMode::WorkBuddyOnly) {
-        return vec![
+        return deduplicate_candidates(vec![
             (
                 "WorkBuddy Safe Storage".to_string(),
                 Some("WorkBuddy".to_string()),
@@ -441,12 +593,12 @@ fn build_macos_safe_storage_candidates(
                 "WorkBuddy Safe Storage".to_string(),
                 Some("WorkBuddy Key".to_string()),
             ),
-            ("WorkBuddy Safe Storage".to_string(), None),
             (
                 "WorkBuddy Safe Storage".to_string(),
                 Some("WorkBuddy Safe Storage".to_string()),
             ),
-        ];
+            ("WorkBuddy Safe Storage".to_string(), None),
+        ]);
     }
 
     let mut app_names: Vec<String> = Vec::new();
@@ -475,24 +627,150 @@ fn build_macos_safe_storage_candidates(
     );
 
     let mut candidates: Vec<(String, Option<String>)> = Vec::new();
-    let mut seen = HashSet::new();
-
     for app_name in app_names {
         let service = format!("{} Safe Storage", app_name);
-        let account = Some(app_name.clone());
-        if seen.insert((service.clone(), account.clone())) {
-            candidates.push((service.clone(), account));
+        candidates.push((service.clone(), Some(app_name.clone())));
+        candidates.push((service.clone(), Some(service.clone())));
+        candidates.push((service, None));
+    }
+
+    deduplicate_candidates(candidates)
+}
+
+#[cfg(target_os = "macos")]
+fn probe_macos_keychain_candidates_with<F>(
+    candidates: &[(String, Option<String>)],
+    mut probe_fn: F,
+) -> Result<(String, String), (bool, String)>
+where
+    F: FnMut(&str, Option<&str>) -> MacosKeychainReadOutcome,
+{
+    let mut missing_services = HashSet::new();
+    for (service, account) in candidates {
+        if missing_services.contains(service) {
+            continue;
         }
-        if seen.insert((service.clone(), None)) {
-            candidates.push((service.clone(), None));
+        match probe_fn(service, account.as_deref()) {
+            MacosKeychainReadOutcome::Found(password) => {
+                return Ok((password, service.clone()));
+            }
+            MacosKeychainReadOutcome::NotFound => {
+                if account.is_none() {
+                    missing_services.insert(service.clone());
+                }
+            }
+            MacosKeychainReadOutcome::EmptyPassword => {}
+            MacosKeychainReadOutcome::AccessBlocked(reason) => {
+                return Err((true, reason));
+            }
         }
-        let alt_account = Some(service.clone());
-        if seen.insert((service.clone(), alt_account.clone())) {
-            candidates.push((service, alt_account));
+    }
+    Err((
+        false,
+        "Failed to read Safe Storage password from Keychain".to_string(),
+    ))
+}
+
+#[cfg(target_os = "macos")]
+fn resolve_macos_safe_storage_password_with<F, N>(
+    cache: &Mutex<HashMap<SafeStorageCacheKey, SafeStorageCacheEntry>>,
+    probe_lock: &Mutex<()>,
+    key: SafeStorageCacheKey,
+    candidates: &[(String, Option<String>)],
+    cooldown: Duration,
+    now: N,
+    probe_fn: F,
+) -> Result<String, String>
+where
+    F: FnMut(&str, Option<&str>) -> MacosKeychainReadOutcome,
+    N: Fn() -> Instant,
+{
+    {
+        let guard = cache
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        match guard.get(&key) {
+            Some(SafeStorageCacheEntry::Password { password, .. }) => {
+                return Ok(password.clone());
+            }
+            Some(SafeStorageCacheEntry::Cooldown { failed_at, reason })
+                if now().saturating_duration_since(*failed_at) < cooldown =>
+            {
+                return Err(reason.clone());
+            }
+            _ => {}
         }
     }
 
-    candidates
+    let _probe_guard = probe_lock
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    {
+        let guard = cache
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        match guard.get(&key) {
+            Some(SafeStorageCacheEntry::Password { password, .. }) => {
+                return Ok(password.clone());
+            }
+            Some(SafeStorageCacheEntry::Cooldown { failed_at, reason })
+                if now().saturating_duration_since(*failed_at) < cooldown =>
+            {
+                return Err(reason.clone());
+            }
+            _ => {}
+        }
+    }
+
+    match probe_macos_keychain_candidates_with(candidates, probe_fn) {
+        Ok((password, service)) => {
+            let mut guard = cache
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            guard.insert(
+                key,
+                SafeStorageCacheEntry::Password {
+                    password: password.clone(),
+                    service,
+                },
+            );
+            Ok(password)
+        }
+        Err((enter_cooldown, reason)) => {
+            if enter_cooldown {
+                let mut guard = cache
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
+                guard.insert(
+                    key,
+                    SafeStorageCacheEntry::Cooldown {
+                        failed_at: now(),
+                        reason: reason.clone(),
+                    },
+                );
+            }
+            Err(reason)
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn get_macos_safe_storage_password_with_cooldown(
+    data_root: Option<&Path>,
+    mode: SafeStorageReadMode,
+    cooldown: Duration,
+) -> Result<String, String> {
+    let key = build_macos_safe_storage_cache_key(data_root, mode);
+    let candidates = build_macos_safe_storage_candidates(data_root, mode);
+    resolve_macos_safe_storage_password_with(
+        &MACOS_SAFE_STORAGE_CACHE,
+        &MACOS_KEYCHAIN_PROBE_LOCK,
+        key,
+        &candidates,
+        cooldown,
+        Instant::now,
+        probe_macos_security_password,
+    )
 }
 
 #[cfg(target_os = "macos")]
@@ -500,34 +778,119 @@ fn get_macos_safe_storage_password(
     data_root: Option<&Path>,
     mode: SafeStorageReadMode,
 ) -> Result<String, String> {
-    let candidates = build_macos_safe_storage_candidates(data_root, mode);
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(8);
-    for (service, account) in candidates {
-        if std::time::Instant::now() >= deadline {
-            break;
+    get_macos_safe_storage_password_with_cooldown(
+        data_root,
+        mode,
+        MACOS_KEYCHAIN_INTERACTIVE_COOLDOWN,
+    )
+}
+
+#[cfg(target_os = "macos")]
+fn try_decrypt_with_fallback_macos_services(
+    encrypted: &[u8],
+    prefix: &[u8],
+    data_root: Option<&Path>,
+    mode: SafeStorageReadMode,
+    cooldown: Duration,
+) -> Option<Vec<u8>> {
+    let key = build_macos_safe_storage_cache_key(data_root, mode);
+    let primary_service = {
+        let guard = MACOS_SAFE_STORAGE_CACHE
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        match guard.get(&key) {
+            Some(SafeStorageCacheEntry::Password { service, .. }) => service.clone(),
+            Some(SafeStorageCacheEntry::Cooldown { failed_at, .. })
+                if Instant::now().saturating_duration_since(*failed_at) < cooldown =>
+            {
+                return None;
+            }
+            _ => return None,
         }
-        if let Some(account_value) = account.as_deref() {
-            if let Some(password) = run_command_get_trimmed(
-                "security",
-                &[
-                    "find-generic-password",
-                    "-w",
-                    "-s",
-                    &service,
-                    "-a",
-                    account_value,
-                ],
-            ) {
-                return Ok(password);
+    };
+
+    let candidates: Vec<(String, Option<String>)> =
+        build_macos_safe_storage_candidates(data_root, mode)
+            .into_iter()
+            .filter(|(service, _)| service != &primary_service)
+            .collect();
+    if candidates.is_empty() {
+        return None;
+    }
+
+    let _probe_guard = MACOS_KEYCHAIN_PROBE_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+
+    let mut missing_services = HashSet::new();
+    for (service, account) in candidates {
+        if missing_services.contains(&service) {
+            continue;
+        }
+        {
+            let mut attempted = MACOS_FALLBACK_SERVICE_ATTEMPTS
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            if !attempted.insert((key.clone(), format!("{}:{:?}", service, account))) {
+                continue;
             }
         }
-        if let Some(password) =
-            run_command_get_trimmed("security", &["find-generic-password", "-w", "-s", &service])
-        {
-            return Ok(password);
+        match probe_macos_security_password(&service, account.as_deref()) {
+            MacosKeychainReadOutcome::Found(password) => {
+                let derived_1003 = pbkdf2_sha1_key(&password, 1003);
+                if let Ok(plaintext) = decrypt_cbc_prefixed(encrypted, prefix, &derived_1003) {
+                    let mut guard = MACOS_SAFE_STORAGE_CACHE
+                        .lock()
+                        .unwrap_or_else(|poisoned| poisoned.into_inner());
+                    guard.insert(
+                        key,
+                        SafeStorageCacheEntry::Password {
+                            password,
+                            service,
+                        },
+                    );
+                    return Some(plaintext);
+                }
+                if prefix == V11_PREFIX {
+                    let derived_1 = pbkdf2_sha1_key(&password, 1);
+                    if let Ok(plaintext) = decrypt_cbc_prefixed(encrypted, prefix, &derived_1) {
+                        let mut guard = MACOS_SAFE_STORAGE_CACHE
+                            .lock()
+                            .unwrap_or_else(|poisoned| poisoned.into_inner());
+                        guard.insert(
+                            key,
+                            SafeStorageCacheEntry::Password {
+                                password,
+                                service,
+                            },
+                        );
+                        return Some(plaintext);
+                    }
+                }
+            }
+            MacosKeychainReadOutcome::NotFound => {
+                if account.is_none() {
+                    missing_services.insert(service);
+                }
+            }
+            MacosKeychainReadOutcome::EmptyPassword => {}
+            MacosKeychainReadOutcome::AccessBlocked(reason) => {
+                let mut guard = MACOS_SAFE_STORAGE_CACHE
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
+                guard.insert(
+                    key,
+                    SafeStorageCacheEntry::Cooldown {
+                        failed_at: Instant::now(),
+                        reason,
+                    },
+                );
+                return None;
+            }
         }
     }
-    Err("Failed to read Safe Storage password from Keychain".to_string())
+
+    None
 }
 
 #[cfg(target_os = "linux")]
@@ -585,8 +948,19 @@ fn decrypt_secret_payload_with_mode(
     data_root: Option<&Path>,
     mode: SafeStorageReadMode,
 ) -> Result<Vec<u8>, String> {
+    decrypt_secret_payload_with_mode_and_cooldown(encrypted, data_root, mode, false)
+}
+
+fn decrypt_secret_payload_with_mode_and_cooldown(
+    encrypted: &[u8],
+    data_root: Option<&Path>,
+    mode: SafeStorageReadMode,
+    passive_cooldown: bool,
+) -> Result<Vec<u8>, String> {
     #[cfg(not(target_os = "windows"))]
     let _ = (data_root, mode);
+    #[cfg(not(target_os = "macos"))]
+    let _ = passive_cooldown;
 
     #[cfg(target_os = "windows")]
     {
@@ -597,9 +971,42 @@ fn decrypt_secret_payload_with_mode(
 
     #[cfg(target_os = "macos")]
     {
-        let password = get_macos_safe_storage_password(data_root, mode)?;
+        let prefix = match detect_prefix(encrypted) {
+            Some("v10") => V10_PREFIX,
+            Some("v11") => V11_PREFIX,
+            _ => {
+                return Err(format!(
+                    "Unexpected ciphertext prefix: {:?}",
+                    &encrypted[..encrypted.len().min(3)]
+                ));
+            }
+        };
+        let cooldown = if passive_cooldown {
+            MACOS_KEYCHAIN_PASSIVE_COOLDOWN
+        } else {
+            MACOS_KEYCHAIN_INTERACTIVE_COOLDOWN
+        };
+        let password =
+            get_macos_safe_storage_password_with_cooldown(data_root, mode, cooldown)?;
         let key = pbkdf2_sha1_key(&password, 1003);
-        return decrypt_cbc_prefixed(encrypted, V10_PREFIX, &key);
+        match decrypt_cbc_prefixed(encrypted, prefix, &key) {
+            Ok(plaintext) => return Ok(plaintext),
+            Err(primary_err) => {
+                if prefix == V11_PREFIX {
+                    let linux_style_key = pbkdf2_sha1_key(&password, 1);
+                    if let Ok(plaintext) = decrypt_cbc_prefixed(encrypted, prefix, &linux_style_key)
+                    {
+                        return Ok(plaintext);
+                    }
+                }
+                if let Some(plaintext) = try_decrypt_with_fallback_macos_services(
+                    encrypted, prefix, data_root, mode, cooldown,
+                ) {
+                    return Ok(plaintext);
+                }
+                return Err(primary_err);
+            }
+        }
     }
 
     #[cfg(target_os = "linux")]
@@ -895,24 +1302,159 @@ fn decode_buffer_data(buffer: &serde_json::Value) -> Result<Vec<u8>, String> {
     Ok(encrypted_bytes)
 }
 
+fn try_decode_json_byte_array(arr: &[serde_json::Value]) -> Option<Vec<u8>> {
+    let mut bytes = Vec::with_capacity(arr.len());
+    for v in arr {
+        let n = v.as_u64()?;
+        if n > 255 {
+            return None;
+        }
+        bytes.push(n as u8);
+    }
+    Some(bytes)
+}
+
+fn try_decode_prefixed_hex_ciphertext(text: &str) -> Option<Vec<u8>> {
+    let trimmed = text.trim();
+    let hex_str = trimmed
+        .strip_prefix("0x")
+        .or_else(|| trimmed.strip_prefix("0X"))
+        .unwrap_or(trimmed);
+    if hex_str.len() < 38 || hex_str.len() % 2 != 0 {
+        return None;
+    }
+    if !hex_str.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return None;
+    }
+    let mut out = Vec::with_capacity(hex_str.len() / 2);
+    for chunk in hex_str.as_bytes().chunks_exact(2) {
+        let s = std::str::from_utf8(chunk).ok()?;
+        out.push(u8::from_str_radix(s, 16).ok()?);
+    }
+    detect_prefix(&out).map(|_| out)
+}
+
+fn try_decode_prefixed_base64_ciphertext(text: &str) -> Option<Vec<u8>> {
+    let trimmed = text.trim();
+    if trimmed.len() < 24 {
+        return None;
+    }
+    let bytes = general_purpose::STANDARD.decode(trimmed).ok()?;
+    if bytes.len() < 19 {
+        return None;
+    }
+    detect_prefix(&bytes).map(|_| bytes)
+}
+
+fn is_buffer_object_value(parsed: &serde_json::Value) -> bool {
+    parsed.get("type").and_then(|value| value.as_str()) == Some("Buffer")
+        || (parsed.get("type").is_none() && parsed.get("data").is_some_and(serde_json::Value::is_array))
+}
+
+fn decode_encrypted_bytes_to_utf8(
+    encrypted_bytes: &[u8],
+    data_root: Option<&Path>,
+    mode: SafeStorageReadMode,
+    passive_cooldown: bool,
+) -> Result<String, String> {
+    if detect_prefix(encrypted_bytes).is_none() {
+        if let Ok(plain) = std::str::from_utf8(encrypted_bytes) {
+            let trimmed = plain.trim();
+            if (trimmed.starts_with('{') || trimmed.starts_with('['))
+                && serde_json::from_str::<serde_json::Value>(trimmed).is_ok()
+            {
+                return Ok(plain.to_string());
+            }
+        }
+    }
+    let decrypted = decrypt_secret_payload_with_mode_and_cooldown(
+        encrypted_bytes,
+        data_root,
+        mode,
+        passive_cooldown,
+    )?;
+    String::from_utf8(decrypted).map_err(|e| format!("Decrypted data is not valid UTF-8: {}", e))
+}
+
 fn decode_secret_storage_value_with_mode(
     raw_value: &str,
     data_root: Option<&Path>,
     mode: SafeStorageReadMode,
 ) -> Result<String, String> {
+    decode_secret_storage_value_with_mode_and_cooldown(raw_value, data_root, mode, false)
+}
+
+fn decode_secret_storage_value_with_mode_and_cooldown(
+    raw_value: &str,
+    data_root: Option<&Path>,
+    mode: SafeStorageReadMode,
+    passive_cooldown: bool,
+) -> Result<String, String> {
     let parsed: serde_json::Value = match serde_json::from_str(raw_value) {
         Ok(value) => value,
-        Err(_) => return Ok(raw_value.to_string()),
+        Err(_) => {
+            if let Some(encrypted_bytes) = try_decode_prefixed_hex_ciphertext(raw_value)
+                .or_else(|| try_decode_prefixed_base64_ciphertext(raw_value))
+            {
+                return decode_encrypted_bytes_to_utf8(
+                    &encrypted_bytes,
+                    data_root,
+                    mode,
+                    passive_cooldown,
+                );
+            }
+            return Ok(raw_value.to_string());
+        }
     };
 
-    if parsed.get("data").is_some() {
+    if is_buffer_object_value(&parsed) {
         let encrypted_bytes = decode_buffer_data(&parsed)?;
-        let decrypted = decrypt_secret_payload_with_mode(&encrypted_bytes, data_root, mode)?;
-        return String::from_utf8(decrypted)
-            .map_err(|e| format!("Decrypted data is not valid UTF-8: {}", e));
+        return decode_encrypted_bytes_to_utf8(
+            &encrypted_bytes,
+            data_root,
+            mode,
+            passive_cooldown,
+        );
+    }
+
+    if let Some(arr) = parsed.as_array() {
+        if let Some(encrypted_bytes) =
+            try_decode_json_byte_array(arr).filter(|bytes| detect_prefix(bytes).is_some())
+        {
+            return decode_encrypted_bytes_to_utf8(
+                &encrypted_bytes,
+                data_root,
+                mode,
+                passive_cooldown,
+            );
+        }
     }
 
     if let Some(value) = parsed.as_str() {
+        let trimmed = value.trim();
+        if trimmed.starts_with('{') {
+            if let Ok(inner) = serde_json::from_str::<serde_json::Value>(trimmed) {
+                if is_buffer_object_value(&inner) {
+                    let encrypted_bytes = decode_buffer_data(&inner)?;
+                    return decode_encrypted_bytes_to_utf8(
+                        &encrypted_bytes,
+                        data_root,
+                        mode,
+                        passive_cooldown,
+                    );
+                }
+            }
+        }
+        if let Some(encrypted_bytes) = try_decode_prefixed_hex_ciphertext(trimmed)
+            .or_else(|| try_decode_prefixed_base64_ciphertext(trimmed))
+        {
+            return decode_encrypted_bytes_to_utf8(
+                &encrypted_bytes,
+                data_root,
+                mode,
+                passive_cooldown,
+            );
+        }
         return Ok(value.to_string());
     }
 
@@ -1119,6 +1661,21 @@ pub(crate) fn read_qoder_secret_snapshot<const N: usize>(
     db_path: &Path,
     keys: [&str; N],
 ) -> Result<[Option<String>; N], String> {
+    read_qoder_secret_snapshot_with_cooldown(db_path, keys, false)
+}
+
+pub(crate) fn read_qoder_secret_snapshot_passive<const N: usize>(
+    db_path: &Path,
+    keys: [&str; N],
+) -> Result<[Option<String>; N], String> {
+    read_qoder_secret_snapshot_with_cooldown(db_path, keys, true)
+}
+
+fn read_qoder_secret_snapshot_with_cooldown<const N: usize>(
+    db_path: &Path,
+    keys: [&str; N],
+    passive_cooldown: bool,
+) -> Result<[Option<String>; N], String> {
     let mut values: [Option<String>; N] = std::array::from_fn(|_| None);
     if !db_path.try_exists().map_err(|error| error.to_string())? {
         return Ok(values);
@@ -1137,8 +1694,13 @@ pub(crate) fn read_qoder_secret_snapshot<const N: usize>(
     }
     tx.commit().map_err(|error| error.to_string())?;
     for value in values.iter_mut().flatten() {
-        *value = decode_secret_storage_value_with_mode(value, Some(data_root), SafeStorageReadMode::QoderOnly)
-            .map_err(|error| format!("QODER_STORAGE_UNAVAILABLE: {error}"))?;
+        *value = decode_secret_storage_value_with_mode_and_cooldown(
+            value,
+            Some(data_root),
+            SafeStorageReadMode::QoderOnly,
+            passive_cooldown,
+        )
+        .map_err(|error| format!("QODER_STORAGE_UNAVAILABLE: {error}"))?;
     }
     Ok(values)
 }
@@ -1442,13 +2004,285 @@ mod tests {
     #[test]
     fn qoder_safe_storage_includes_native_and_legacy_keychain_items() {
         let candidates = build_macos_safe_storage_candidates(None, SafeStorageReadMode::QoderOnly);
-        assert_eq!(candidates[0], ("Qoder Safe Storage".into(), Some("Qoder".into())));
         assert_eq!(
-            candidates[1],
-            ("Qoder App Safe Storage".into(), Some("Qoder App Key".into())),
+            candidates[0],
+            ("Qoder Safe Storage".into(), Some("Qoder Key".into()))
         );
+        assert!(candidates.contains(&("Qoder Safe Storage".into(), Some("Qoder".into()))));
+        assert!(candidates.contains(&(
+            "Qoder App Safe Storage".into(),
+            Some("Qoder App Key".into())
+        )));
+        assert!(candidates.contains(&("Qoder Safe Storage".into(), None)));
+        let unique: HashSet<_> = candidates.iter().collect();
+        assert_eq!(unique.len(), candidates.len());
         assert!(!build_macos_safe_storage_candidates(None, SafeStorageReadMode::Default)
-            .iter().any(|(service, _)| service.starts_with("Qoder")));
+            .iter()
+            .any(|(service, _)| service.starts_with("Qoder")));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_keychain_probe_caches_password_across_repeated_reads() {
+        let cache = Mutex::new(HashMap::new());
+        let probe_lock = Mutex::new(());
+        let key = build_macos_safe_storage_cache_key(None, SafeStorageReadMode::QoderOnly);
+        let candidates = build_macos_safe_storage_candidates(None, SafeStorageReadMode::QoderOnly);
+        let mut calls = 0usize;
+
+        let first = resolve_macos_safe_storage_password_with(
+            &cache,
+            &probe_lock,
+            key.clone(),
+            &candidates,
+            MACOS_KEYCHAIN_INTERACTIVE_COOLDOWN,
+            Instant::now,
+            |service, account| {
+                calls += 1;
+                if service == "Qoder Safe Storage" && account == Some("Qoder Key") {
+                    MacosKeychainReadOutcome::Found("cached-secret".to_string())
+                } else {
+                    MacosKeychainReadOutcome::NotFound
+                }
+            },
+        )
+        .unwrap();
+        assert_eq!(first, "cached-secret");
+        assert_eq!(calls, 1);
+
+        let second = resolve_macos_safe_storage_password_with(
+            &cache,
+            &probe_lock,
+            key,
+            &candidates,
+            MACOS_KEYCHAIN_INTERACTIVE_COOLDOWN,
+            Instant::now,
+            |_service, _account| {
+                calls += 1;
+                MacosKeychainReadOutcome::AccessBlocked("should not probe".to_string())
+            },
+        )
+        .unwrap();
+        assert_eq!(second, "cached-secret");
+        assert_eq!(calls, 1);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_keychain_probe_stops_on_access_blocked_and_enters_cooldown() {
+        let cache = Mutex::new(HashMap::new());
+        let probe_lock = Mutex::new(());
+        let key = build_macos_safe_storage_cache_key(None, SafeStorageReadMode::QoderOnly);
+        let candidates = build_macos_safe_storage_candidates(None, SafeStorageReadMode::QoderOnly);
+        let mut probed = Vec::new();
+
+        let err = resolve_macos_safe_storage_password_with(
+            &cache,
+            &probe_lock,
+            key.clone(),
+            &candidates,
+            Duration::from_secs(600),
+            Instant::now,
+            |service, account| {
+                probed.push((service.to_string(), account.map(str::to_string)));
+                if service == "Qoder Safe Storage" && account == Some("Qoder Key") {
+                    MacosKeychainReadOutcome::AccessBlocked(
+                        "Keychain access was canceled by user".to_string(),
+                    )
+                } else {
+                    MacosKeychainReadOutcome::Found("should-never-reach".to_string())
+                }
+            },
+        )
+        .unwrap_err();
+        assert!(err.contains("canceled"));
+        assert_eq!(
+            probed,
+            vec![("Qoder Safe Storage".to_string(), Some("Qoder Key".to_string()))]
+        );
+
+        let err_during_cooldown = resolve_macos_safe_storage_password_with(
+            &cache,
+            &probe_lock,
+            key.clone(),
+            &candidates,
+            Duration::from_secs(600),
+            Instant::now,
+            |service, account| {
+                probed.push((service.to_string(), account.map(str::to_string)));
+                MacosKeychainReadOutcome::Found("should-not-probe".to_string())
+            },
+        )
+        .unwrap_err();
+        assert!(err_during_cooldown.contains("canceled"));
+        assert_eq!(probed.len(), 1);
+
+        let recovered_with_zero_cooldown = resolve_macos_safe_storage_password_with(
+            &cache,
+            &probe_lock,
+            key,
+            &candidates,
+            Duration::ZERO,
+            Instant::now,
+            |service, account| {
+                probed.push((service.to_string(), account.map(str::to_string)));
+                if service == "Qoder Safe Storage" && account == Some("Qoder Key") {
+                    MacosKeychainReadOutcome::Found("recovered-secret".to_string())
+                } else {
+                    MacosKeychainReadOutcome::NotFound
+                }
+            },
+        )
+        .unwrap();
+        assert_eq!(recovered_with_zero_cooldown, "recovered-secret");
+        assert_eq!(probed.len(), 2);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_keychain_probe_continues_on_not_found_without_long_cooldown() {
+        let cache = Mutex::new(HashMap::new());
+        let probe_lock = Mutex::new(());
+        let key = build_macos_safe_storage_cache_key(None, SafeStorageReadMode::QoderOnly);
+        let candidates = build_macos_safe_storage_candidates(None, SafeStorageReadMode::QoderOnly);
+        let mut first_round = Vec::new();
+
+        let err = resolve_macos_safe_storage_password_with(
+            &cache,
+            &probe_lock,
+            key.clone(),
+            &candidates,
+            Duration::from_secs(600),
+            Instant::now,
+            |service, account| {
+                first_round.push((service.to_string(), account.map(str::to_string)));
+                MacosKeychainReadOutcome::NotFound
+            },
+        )
+        .unwrap_err();
+        assert!(err.contains("Failed to read Safe Storage password"));
+        assert!(first_round.contains(&("Qoder Safe Storage".to_string(), None)));
+
+        let skip_after_none_candidates = vec![
+            ("Test Safe Storage".to_string(), None),
+            ("Test Safe Storage".to_string(), Some("Unused".to_string())),
+        ];
+        let mut skipped_round = Vec::new();
+        let _ = probe_macos_keychain_candidates_with(
+            &skip_after_none_candidates,
+            |service, account| {
+                skipped_round.push((service.to_string(), account.map(str::to_string)));
+                MacosKeychainReadOutcome::NotFound
+            },
+        );
+        assert_eq!(
+            skipped_round,
+            vec![("Test Safe Storage".to_string(), None)]
+        );
+
+        let ok = resolve_macos_safe_storage_password_with(
+            &cache,
+            &probe_lock,
+            key,
+            &candidates,
+            Duration::from_secs(600),
+            Instant::now,
+            |service, account| {
+                if service == "Qoder Safe Storage" && account == Some("Qoder Key") {
+                    MacosKeychainReadOutcome::Found("created-secret".to_string())
+                } else {
+                    MacosKeychainReadOutcome::NotFound
+                }
+            },
+        )
+        .unwrap();
+        assert_eq!(ok, "created-secret");
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_security_output_classification_distinguishes_not_found_and_blocked() {
+        use std::os::unix::process::ExitStatusExt;
+
+        let ok_output = std::process::Output {
+            status: std::process::ExitStatus::from_raw(0),
+            stdout: b"base64pass==\n".to_vec(),
+            stderr: Vec::new(),
+        };
+        assert_eq!(
+            classify_macos_security_result(Ok(ok_output)),
+            MacosKeychainReadOutcome::Found("base64pass==".to_string())
+        );
+
+        let not_found_output = std::process::Output {
+            status: std::process::ExitStatus::from_raw(44 << 8),
+            stdout: Vec::new(),
+            stderr: b"security: SecKeychainSearchCopyNext: The specified item could not be found in the keychain.\n".to_vec(),
+        };
+        assert_eq!(
+            classify_macos_security_result(Ok(not_found_output)),
+            MacosKeychainReadOutcome::NotFound
+        );
+
+        let canceled_output = std::process::Output {
+            status: std::process::ExitStatus::from_raw(128 << 8),
+            stdout: Vec::new(),
+            stderr: b"User canceled the operation.\n".to_vec(),
+        };
+        assert!(matches!(
+            classify_macos_security_result(Ok(canceled_output)),
+            MacosKeychainReadOutcome::AccessBlocked(_)
+        ));
+
+        let timed_out = std::io::Error::new(std::io::ErrorKind::TimedOut, "timed out");
+        assert!(matches!(
+            classify_macos_security_result(Err(timed_out)),
+            MacosKeychainReadOutcome::AccessBlocked(_)
+        ));
+    }
+
+    #[test]
+    fn decode_secret_storage_value_handles_plaintext_json_with_data_and_unencrypted_buffer() {
+        let plain_api_json = r#"{"code":0,"data":{"used":12,"total":100}}"#;
+        assert_eq!(
+            decode_secret_storage_value_with_mode(
+                plain_api_json,
+                None,
+                SafeStorageReadMode::QoderOnly
+            )
+            .unwrap(),
+            plain_api_json
+        );
+
+        let plain_inner = r#"{"token":"qoder-tok","email":"user@example.com"}"#;
+        let buffer_json = serde_json::json!({
+            "type": "Buffer",
+            "data": plain_inner.as_bytes()
+        })
+        .to_string();
+        assert_eq!(
+            decode_secret_storage_value_with_mode(
+                &buffer_json,
+                None,
+                SafeStorageReadMode::QoderOnly
+            )
+            .unwrap(),
+            plain_inner
+        );
+
+        assert!(try_decode_prefixed_hex_ciphertext("deadbeef").is_none());
+        assert!(try_decode_prefixed_base64_ciphertext("eyJ0b2tlbiI6Inh5eiJ9").is_none());
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    #[test]
+    fn cbc_v10_round_trip_matches_chromium_safe_storage_parameters() {
+        let key = pbkdf2_sha1_key("sample-keychain-password==", 1003);
+        let plaintext = br#"{"token":"abc","email":"qoder@example.com"}"#;
+        let encrypted = encrypt_cbc_prefixed(V10_PREFIX, &key, plaintext).unwrap();
+        assert!(encrypted.starts_with(V10_PREFIX));
+        let decrypted = decrypt_cbc_prefixed(&encrypted, V10_PREFIX, &key).unwrap();
+        assert_eq!(decrypted, plaintext);
     }
 
     #[test]

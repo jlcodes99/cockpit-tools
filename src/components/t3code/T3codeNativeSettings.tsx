@@ -2,22 +2,11 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { RefreshCw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { SingleSelectDropdown } from '../SingleSelectDropdown';
-import { getT3codeNativeSettings, updateT3codeNativeSettings } from '../../services/t3codeService';
+import { getT3codeNativeSettings, subscribeT3codeLanguage, updateT3codeNativeSettings } from '../../services/t3codeService';
 import type { T3CodeNativeModel, T3CodeNativeSettings } from '../../types/t3code';
+import { T3codeLanguageSelect } from './T3codeLanguageSelect';
+import { T3codePrivacySettingsButton } from './T3codePrivacySettings';
 import './T3codeNativeSettings.css';
-
-const LANGUAGES = [
-  { value: 'en', label: 'English' },
-  { value: 'zh', label: '简体中文' },
-  { value: 'de', label: 'Deutsch' },
-  { value: 'es', label: 'Español' },
-  { value: 'fr', label: 'Français' },
-  { value: 'ja', label: '日本語' },
-  { value: 'ko', label: '한국어' },
-  { value: 'pt-BR', label: 'Português (Brasil)' },
-  { value: 'ru', label: 'Русский' },
-  { value: 'sv', label: 'Svenska' },
-];
 
 const modelKey = (model: Pick<T3CodeNativeModel, 'instanceId' | 'model'>) =>
   JSON.stringify([model.instanceId, model.model]);
@@ -71,6 +60,10 @@ export function T3codeNativeSettingsPanel({ compact = false }: { compact?: boole
       request.current += 1;
     };
   }, [load]);
+
+  useEffect(() => subscribeT3codeLanguage((language) => {
+    setSettings((previous) => previous ? { ...previous, language } : previous);
+  }), []);
 
   async function save(...args: UpdateArgs) {
     const version = ++request.current;
@@ -141,13 +134,11 @@ export function T3codeNativeSettingsPanel({ compact = false }: { compact?: boole
       {settings && (
         <>
           <SettingRow compact={compact} label={t('settings.general.language')}>
-            <SingleSelectDropdown
+            <T3codeLanguageSelect
               className={dropdownClass}
-              menuWidth={224}
-              ariaLabel={t('settings.general.language')}
+              label={t('settings.general.language')}
               value={settings.language}
               disabled={busy}
-              options={[{ value: 'system', label: t('settings.general.themeSystem') }, ...LANGUAGES]}
               onChange={(value) => void save('language', value)}
             />
           </SettingRow>
@@ -214,6 +205,9 @@ export function T3codeNativeSettingsPanel({ compact = false }: { compact?: boole
           </SettingRow>
         </>
       )}
+      <div className={compact ? 'qs-row' : 'settings-row'}>
+        <T3codePrivacySettingsButton compact={compact} />
+      </div>
       {feedback && (
         <div
           className={`t3-native-settings-feedback${compact ? ' is-compact qs-hint' : ' settings-row'}${error ? ' is-error' : ''}`}

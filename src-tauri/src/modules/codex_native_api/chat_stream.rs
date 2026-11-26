@@ -27,6 +27,8 @@ pub struct ChatStreamAdapter {
     tools: BTreeMap<usize, Tool>,
     service_tier: Option<Value>,
     item_indices: BTreeMap<String, usize>,
+    wire_indices: BTreeMap<usize, usize>,
+    next_output: usize,
     last_tool: Option<usize>,
     text_offsets: BTreeMap<(usize, usize), i64>,
     text_chars: i64,
@@ -46,6 +48,8 @@ impl ChatStreamAdapter {
             tools: BTreeMap::new(),
             service_tier: None,
             item_indices: BTreeMap::new(),
+            wire_indices: BTreeMap::new(),
+            next_output: 0,
             last_tool: None,
             text_offsets: BTreeMap::new(),
             text_chars: 0,
@@ -55,6 +59,23 @@ impl ChatStreamAdapter {
     }
     pub fn is_finished(&self) -> bool {
         self.finished
+    }
+    fn output_index(&mut self, id: Option<&str>, wire: Option<usize>) -> usize {
+        let index = id
+            .and_then(|id| self.item_indices.get(id).copied())
+            .or_else(|| wire.and_then(|index| self.wire_indices.get(&index).copied()))
+            .unwrap_or_else(|| {
+                let index = self.next_output;
+                self.next_output += 1;
+                index
+            });
+        if let Some(id) = id {
+            self.item_indices.entry(id.to_owned()).or_insert(index);
+        }
+        if let Some(wire) = wire {
+            self.wire_indices.entry(wire).or_insert(index);
+        }
+        index
     }
     fn chunk(&self, delta: Value, reason: Option<&str>) -> Value {
         let choice = if self.context.flavor == ChatFlavor::Completions {
@@ -358,24 +379,21 @@ impl ChatStreamAdapter {
         }
         let item_id = event["item_id"]
             .as_str()
-            .or_else(|| event.pointer("/item/id").and_then(Value::as_str));
-        let index = event["output_index"]
+            .or_else(|| event.pointer("/item/id").and_then(Value::as_str))
+            .filter(|id| !id.is_empty());
+        let wire_index = event["output_index"]
             .as_u64()
-            .map(|index| index as usize)
-            .or_else(|| item_id.and_then(|id| self.item_indices.get(id).copied()))
-            .or_else(|| {
-                if kind.contains("arguments") || kind.contains("tool_call_input") {
-                    self.last_tool
-                } else {
-                    None
-                }
-            })
-            .unwrap_or(0);
-        if let Some(id) = item_id {
-            if !self.item_indices.contains_key(id) {
-                self.item_indices.insert(id.to_owned(), index);
+            .and_then(|index| usize::try_from(index).ok());
+        let index = match (item_id, wire_index) {
+            (None, None) if kind.contains("arguments") || kind.contains("tool_call_input") => {
+                self.last_tool.unwrap_or_else(|| self.output_index(None, Some(0)))
             }
-        }
+            (None, None) if matches!(kind,
+                "response.created" | "response.queued" | "response.in_progress"
+                | "response.completed" | "response.incomplete") => 0,
+            (None, None) => self.output_index(None, Some(0)),
+            (id, wire) => self.output_index(id, wire),
+        };
         let part = event
             .get("content_index")
             .or_else(|| event.get("summary_index"))
@@ -476,8 +494,12 @@ impl ChatStreamAdapter {
                     .flatten()
                     .enumerate()
                 {
-                    chunks.extend(self.item(i, item, true)?);
-                    if let Some(annotation) = self.annotations(&json!({"item":item}), i, 0)? {
+                    let index = self.output_index(
+                        item["id"].as_str().filter(|id| !id.is_empty()),
+                        Some(i),
+                    );
+                    chunks.extend(self.item(index, item, true)?);
+                    if let Some(annotation) = self.annotations(&json!({"item":item}), index, 0)? {
                         chunks.push(annotation);
                     }
                 }

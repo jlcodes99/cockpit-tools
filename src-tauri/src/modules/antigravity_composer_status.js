@@ -45,7 +45,8 @@
     const footer = footers[0];
     const picker = footer.querySelector(pickerSelector);
     const model = picker.getAttribute('data-model-label')?.trim() ||
-      picker.innerText?.replace(/\s+/g, ' ').trim() || null;
+      picker.innerText?.replace(/\s+/g, ' ').trim() ||
+      picker.textContent?.replace(/\s+/g, ' ').trim() || null;
     for (let pane = footer.parentElement; pane && pane !== document.body; pane = pane.parentElement) {
       const views = [...pane.querySelectorAll(viewSelector)].filter(view => !view.closest(sidePanel) && visible(view));
       if (!views.length) continue;
@@ -121,7 +122,7 @@
         }, currentToken);
         const count = Number(result.numTotalGeneratorMetadata ?? result.trajectory?.generatorMetadata?.length);
         if (!Number.isSafeInteger(count) || count < 0) return;
-        offset = Math.max(0, count - 4);
+        offset = Math.max(0, count - 12);
       }
       const result = await request('GetCascadeTrajectoryGeneratorMetadata', {
         cascadeId: session.id, generatorMetadataOffset: offset, includeMessages: false,
@@ -129,10 +130,11 @@
       if (session !== active || currentToken !== token) return;
       const metadata = result.generatorMetadata ?? [];
       if (!Array.isArray(metadata)) return;
-      session.offset = !metadata.length && offset > 0 ? null : Math.max(0, offset + metadata.length - 4);
+      session.offset = !metadata.length && offset > 0 ? null : Math.max(0, offset + metadata.length - 12);
       const { context, speed, hasCompletedSample } = data.sessionMetrics(metadata, quota.status, session.model);
       if (context) session.metrics.context = context;
-      if (hasCompletedSample) session.metrics.speed = speed;
+      if (speed) session.metrics.speed = speed;
+      else if (hasCompletedSample && !session.metrics.speed) session.metrics.speed = null;
       scheduleRender();
     } catch {
       // The page can briefly restart or rotate authentication. Keep this chat's last sample.
@@ -158,7 +160,8 @@
     const session = scope?.id && scope.model ? scope : null;
     if (session?.id === active?.id && session?.model === active?.model) return;
     if (!details.hidden) setOpen(false, false);
-    active = session ? { id: session.id, model: session.model, offset: null, metrics: {} } : null;
+    const prevMetrics = session && session.id === active?.id ? active.metrics : {};
+    active = session ? { id: session.id, model: session.model, offset: null, metrics: prevMetrics } : null;
     nextMetadata = 0;
   }
 
