@@ -1737,6 +1737,27 @@
     }
 
     #[test]
+    fn windows_manual_proxy_respects_bypass_for_wakeup_target() {
+        use super::windows_proxy_url_for_request;
+
+        let target = url::Url::parse("https://daily-cloudcode-pa.googleapis.com").unwrap();
+        let server = "http=proxy.local:7890;https=127.0.0.1:7897";
+        let clash_bypass = "localhost;127.*;192.168.*;*.local;<local>";
+        assert_eq!(
+            windows_proxy_url_for_request(server, clash_bypass, &target).as_deref(),
+            Some("http://127.0.0.1:7897")
+        );
+        for bypass in [
+            "*",
+            "*.googleapis.com",
+            "DAILY-CLOUDCODE-PA.GOOGLEAPIS.COM",
+            "https://daily-cloudcode-pa.googleapis.com:443",
+        ] {
+            assert_eq!(windows_proxy_url_for_request(server, bypass, &target), None);
+        }
+    }
+
+    #[test]
     fn windows_reg_query_map_reads_proxy_fields() {
         let output = r#"
 HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings

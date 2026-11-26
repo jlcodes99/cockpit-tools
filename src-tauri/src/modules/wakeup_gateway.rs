@@ -1700,6 +1700,26 @@ fn configure_official_ls_auth(cmd: &mut Command, standalone: bool, access_token:
     }
 }
 
+#[cfg(target_os = "windows")]
+fn configure_official_ls_proxy(cmd: &mut Command, cloud_code_endpoint: &str) {
+    if std::env::var_os("HTTPS_PROXY").is_some_and(|value| !value.is_empty()) {
+        return;
+    }
+
+    // The official language server uses Go's HTTP proxy environment.
+    let proxy = std::env::var_os("ALL_PROXY")
+        .filter(|value| !value.is_empty())
+        .or_else(|| {
+            super::codex_local_access::windows_system_proxy_url_for_target_with_bypass(
+                cloud_code_endpoint,
+            )
+            .map(Into::into)
+        });
+    if let Some(proxy) = proxy {
+        cmd.env("HTTPS_PROXY", proxy);
+    }
+}
+
 async fn start_official_ls_process(
     account_id: &str,
     token: &crate::models::token::TokenData,
@@ -1749,6 +1769,7 @@ async fn start_official_ls_process(
         .kill_on_drop(true);
     #[cfg(target_os = "windows")]
     {
+        configure_official_ls_proxy(&mut cmd, cloud_code_endpoint);
         cmd.creation_flags(CREATE_NO_WINDOW);
     }
 
