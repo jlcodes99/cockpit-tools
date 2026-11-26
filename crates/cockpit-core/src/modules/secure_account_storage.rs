@@ -84,9 +84,14 @@ pub(super) fn write_at<T: Serialize>(
         if previous["id"] != next["id"] {
             return Err("账号 ID 与原详情不一致".into());
         }
+        // The guard exists so a clock skew cannot move the stamp backwards, but it
+        // compares raw values: a millisecond leftover is always larger than any
+        // second-based write, so the field would stay pinned at the stale value
+        // forever. Normalize both sides before taking the maximum.
         if let Some(timestamp) = previous["last_switched_at"]
             .as_i64()
-            .max(next["last_switched_at"].as_i64())
+            .map(super::epoch_time::epoch_seconds)
+            .max(next["last_switched_at"].as_i64().map(super::epoch_time::epoch_seconds))
         {
             next["last_switched_at"] = timestamp.into();
         }
@@ -170,6 +175,20 @@ mod tests {
         assert_eq!(current["secret"], "updated");
         assert_eq!(current["last_switched_at"], 200);
         assert_eq!(decode::<Value>(dir.path(), &backup).unwrap(), original);
+    }
+
+    #[test]
+    fn a_legacy_millisecond_switch_time_cannot_pin_the_stamp() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("millis-fixture.json");
+        fs::write(dir.path().join(KEY_FILE), FIXTURE_KEY).unwrap();
+        // Builds before 3ddcffd6 stored milliseconds on disk.
+        let legacy = json!({"id":"millis-fixture", "last_switched_at":1_795_397_283_233i64});
+        write_at(dir.path(), &path, "qoder", &legacy, &[]).unwrap();
+        let updated = json!({"id":"millis-fixture", "last_switched_at":1_795_397_300i64});
+        write_at(dir.path(), &path, "qoder", &updated, &[]).unwrap();
+        let stored: Value = decode(dir.path(), &fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(stored["last_switched_at"], 1_795_397_300i64);
     }
 
     #[test]
