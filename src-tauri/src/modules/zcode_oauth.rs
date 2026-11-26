@@ -365,13 +365,20 @@ fn parse_token_envelope(
         &[
             &["data", "bigmodel", "refresh_token"],
             &["data", "bigmodel", "refreshToken"],
+            &["data", "refresh_token"],
+            &["data", "refreshToken"],
         ],
     );
+    let expires_in = token_response
+        .pointer("/data/expires_in")
+        .or_else(|| token_response.pointer("/data/expiresIn"))
+        .or_else(|| token_response.pointer("/data/bigmodel/expires_in"))
+        .and_then(Value::as_i64);
     Ok(OAuthTokenEnvelope {
         zcode_jwt_token,
         provider_access_token,
         refresh_token,
-        expires_in: None,
+        expires_in,
         user_info: json!({}),
     })
 }
@@ -449,7 +456,7 @@ async fn exchange_callback(
         (
             envelope.provider_access_token,
             envelope.refresh_token,
-            None,
+            envelope.expires_in.map(|seconds| now_ts() + seconds),
             envelope.user_info,
         )
     };
@@ -711,6 +718,25 @@ mod tests {
         assert_eq!(parsed.provider_access_token, "business-access");
         assert_eq!(parsed.refresh_token.as_deref(), Some("refresh-token"));
         assert!(parsed.expires_in.is_none());
+    }
+
+    #[test]
+    fn parses_bigmodel_top_level_refresh_token_and_expiry() {
+        let parsed = parse_token_envelope(
+            "bigmodel",
+            &json!({
+                "data": {
+                    "token": "zcode-jwt",
+                    "accessToken": "business-access",
+                    "refreshToken": "top-level-refresh",
+                    "expiresIn": 7200
+                }
+            }),
+        )
+        .unwrap();
+        assert_eq!(parsed.provider_access_token, "business-access");
+        assert_eq!(parsed.refresh_token.as_deref(), Some("top-level-refresh"));
+        assert_eq!(parsed.expires_in, Some(7200));
     }
 
     #[test]

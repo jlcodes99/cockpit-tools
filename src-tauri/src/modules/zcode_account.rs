@@ -1047,13 +1047,20 @@ fn write_auth_mode_to_settings_path(
     let provider = normalize_provider(provider)?;
     let mut root = read_json_map(path)?;
     if !preserve_family_domain {
+        // ZCode 以 providerFamilyDomainUpdatedAt 做跨窗口 CAS；时钟回拨时也必须递增。
+        let next_updated_at = now_ms().max(
+            root.get("providerFamilyDomainUpdatedAt")
+                .and_then(Value::as_i64)
+                .unwrap_or(0)
+                .saturating_add(1),
+        );
         root.insert(
             "providerFamilyDomain".to_string(),
             Value::String(provider.clone()),
         );
         root.insert(
             "providerFamilyDomainUpdatedAt".to_string(),
-            Value::Number(now_ms().into()),
+            Value::Number(next_updated_at.into()),
         );
         root.insert(
             "providerFamilyDomainMigrated".to_string(),
@@ -1110,6 +1117,11 @@ fn write_account_to_credentials_path_with_home(
             values.remove(&format!("oauth:{}:{}", provider, suffix));
         }
     }
+    if provider == "bigmodel" {
+        // BigModel active provider 使用 direct token；linked 块属于 Z.ai 关联身份，
+        // 切号后继续保留会把旧关联带到新账号。ZCode 需要时会从 profile 重新补。
+        values.remove("oauth:linked_bigmodel");
+    }
     let mut put = |key: String, value: &str| -> Result<(), String> {
         values.insert(key, Value::String(encrypt_credential(value, home)?));
         Ok(())
@@ -1141,7 +1153,9 @@ fn write_account_to_credentials_path_with_home(
 pub fn inject_to_default(account_id: &str) -> Result<ZcodeAccount, String> {
     let mut value = load_account(account_id).ok_or_else(|| "ZCode 账号不存在".to_string())?;
     let home = dirs::home_dir().ok_or_else(|| "无法获取用户主目录".to_string())?;
-    write_default_account_for_home(&value, &home, preserve_bigmodel_oauth_domain(&value))?;
+    let preserve_family_domain =
+        should_preserve_bigmodel_family_domain(&value, &settings_path_for_home(&home));
+    write_default_account_for_home(&value, &home, preserve_family_domain)?;
     value.last_used = now_ts();
     let value = upsert_account(value)?;
     let mut index = load_index()?;
@@ -1165,16 +1179,20 @@ fn write_default_account_for_home(
             home,
         )?;
     }
+    let settings_path = settings_path_for_home(home);
     write_auth_mode_to_settings_path(
         &account.provider,
         account.auth_mode,
-        &settings_path_for_home(home),
+        &settings_path,
         preserve_family_domain,
-    )
+    )?;
+    reconcile_bigmodel_team_selection(account, &settings_path)
 }
 
 pub fn inject_to_instance_root(account_id: &str, root: &Path) -> Result<ZcodeAccount, String> {
     let value = load_account(account_id).ok_or_else(|| "ZCode 账号不存在".to_string())?;
+    let settings_path = settings_path_for_instance_root(root);
+    let preserve_family_domain = should_preserve_bigmodel_family_domain(&value, &settings_path);
     if value.auth_mode == ZcodeAuthMode::ApiKey {
         write_api_key_to_config_path(&value, &config_path_for_instance_root(root))?;
     } else {
@@ -1183,9 +1201,10 @@ pub fn inject_to_instance_root(account_id: &str, root: &Path) -> Result<ZcodeAcc
     write_auth_mode_to_settings_path(
         &value.provider,
         value.auth_mode,
-        &settings_path_for_instance_root(root),
-        preserve_bigmodel_oauth_domain(&value),
+        &settings_path,
+        preserve_family_domain,
     )?;
+    reconcile_bigmodel_team_selection(&value, &settings_path)?;
     Ok(value)
 }
 
@@ -1205,6 +1224,181 @@ fn preserve_bigmodel_oauth_domain(account: &ZcodeAccount) -> bool {
     });
     // 3.18 起，活跃 OAuth 账号和 provider family 由 ZCode 分开管理。
     !legacy_version.is_some_and(|version| version < (3, 18))
+}
+
+fn settings_family_domain<'a>(settings: &'a Map<String, Value>) -> Option<&'a str> {
+    settings
+        .get("providerFamilyDomain")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|domain| !domain.is_empty())
+}
+
+fn settings_family_mode_is_api_key(settings: &Map<String, Value>, family: &str) -> bool {
+    settings
+        .get("modelProviderFamilyModes")
+        .and_then(Value::as_object)
+        .and_then(|modes| modes.get(family))
+        .and_then(Value::as_str)
+        .is_some_and(|mode| mode.eq_ignore_ascii_case("apiKey"))
+}
+
+fn should_preserve_family_domain(provider: &str, settings: &Map<String, Value>) -> bool {
+    let Some(domain) = settings_family_domain(settings) else {
+        return false;
+    };
+    // 同一个 family 不需要改；显式 API Key 模式代表用户选择，不能因为切 OAuth 账号被抢走。
+    // 旧 OAuth family 的 token 会在切号写入时被删除，继续保留会留下不可执行的当前 family。
+    domain == provider || settings_family_mode_is_api_key(settings, domain)
+}
+
+fn should_preserve_bigmodel_family_domain(account: &ZcodeAccount, settings_path: &Path) -> bool {
+    if !preserve_bigmodel_oauth_domain(account) {
+        return false;
+    }
+    match read_json_map(settings_path) {
+        // 设置不可读时维持旧行为；后续写入会暴露真实错误，不在异常状态上改 domain。
+        Err(_) => true,
+        Ok(settings) => should_preserve_family_domain(&account.provider, &settings),
+    }
+}
+
+fn has_oauth_access_token(credentials: &Map<String, Value>, provider: &str) -> bool {
+    credentials
+        .get(&format!("oauth:{}:access_token", provider))
+        .and_then(Value::as_str)
+        .is_some_and(|value| !value.trim().is_empty())
+}
+
+fn has_linked_bigmodel(credentials: &Map<String, Value>) -> bool {
+    credentials
+        .get("oauth:linked_bigmodel")
+        .and_then(Value::as_str)
+        .is_some_and(|value| !value.trim().is_empty())
+}
+
+fn credentials_use_v2(credentials: &Map<String, Value>) -> bool {
+    credentials.values().any(|value| {
+        value
+            .as_str()
+            .is_some_and(|text| text.trim_start().starts_with(CREDENTIAL_V2_PREFIX))
+    })
+}
+
+/// 复制默认/其他实例后，凭据只剩单一 OAuth family 时把 setting.json 的 domain 收敛过去。
+/// v2 密文的 keyring 条目按 credentials 路径生成，复制后无法解密，只能跳过并交由绑定账号注入修复。
+pub(crate) fn normalize_instance_family_domain_after_copy(root: &Path) -> Result<(), String> {
+    let settings_path = settings_path_for_instance_root(root);
+    if !settings_path.exists() {
+        return Ok(());
+    }
+    let credentials = read_json_map(&credentials_path_for_instance_root(root))?;
+    if credentials_use_v2(&credentials) {
+        return Ok(());
+    }
+    let has_zai = has_oauth_access_token(&credentials, "zai");
+    let has_bigmodel = has_oauth_access_token(&credentials, "bigmodel");
+    if has_zai == has_bigmodel {
+        return Ok(());
+    }
+    let target = if has_bigmodel { "bigmodel" } else { "zai" };
+    // linked_bigmodel 只为 bigmodel 提供 material；只有 direct token 是 zai 时才可能两个 family 都可用。
+    if target == "zai" && has_linked_bigmodel(&credentials) {
+        return Ok(());
+    }
+    let mut settings = read_json_map(&settings_path)?;
+    let Some(domain) = settings_family_domain(&settings) else {
+        return Ok(());
+    };
+    if domain == target
+        || (domain != "zai" && domain != "bigmodel")
+        || settings_family_mode_is_api_key(&settings, domain)
+    {
+        return Ok(());
+    }
+    let next_updated_at = now_ms().max(
+        settings
+            .get("providerFamilyDomainUpdatedAt")
+            .and_then(Value::as_i64)
+            .unwrap_or(0)
+            .saturating_add(1),
+    );
+    settings.insert(
+        "providerFamilyDomain".to_string(),
+        Value::String(target.to_string()),
+    );
+    settings.insert(
+        "providerFamilyDomainUpdatedAt".to_string(),
+        Value::Number(next_updated_at.into()),
+    );
+    settings.insert(
+        "providerFamilyDomainMigrated".to_string(),
+        Value::Bool(true),
+    );
+    write_json_map(&settings_path, settings, SETTINGS_FILE)
+}
+
+/// BigModel 账号切换后，保存的 team 选择可能仍指向上一个账号的 org/project。
+/// 个人账号不能继承 team 选择；team 身份不匹配时移除选择，避免向错误项目发请求。
+fn reconcile_bigmodel_team_selection(
+    account: &ZcodeAccount,
+    settings_path: &Path,
+) -> Result<(), String> {
+    if account.auth_mode != ZcodeAuthMode::Oauth || account.provider != "bigmodel" {
+        return Ok(());
+    }
+    let mut settings = read_json_map(settings_path)?;
+    let changed = {
+        let Some(selections) = settings
+            .get_mut("providerFamilyConnectionSelections")
+            .and_then(Value::as_object_mut)
+        else {
+            return Ok(());
+        };
+        let Some(selection) = selections.get_mut("bigmodel") else {
+            return Ok(());
+        };
+        if selection.get("kind").and_then(Value::as_str) != Some("team-coding-plan") {
+            return Ok(());
+        }
+        match account.team_plan.as_ref() {
+            None => {
+                *selection = json!({"kind": "individual-coding-plan"});
+                true
+            }
+            Some(team) => {
+                let matches = selection.get("organizationId").and_then(Value::as_str)
+                    == Some(team.organization_id.as_str())
+                    && selection.get("projectId").and_then(Value::as_str)
+                        == Some(team.project_id.as_str());
+                if matches {
+                    false
+                } else {
+                    selections.remove("bigmodel");
+                    true
+                }
+            }
+        }
+    };
+    if !changed {
+        return Ok(());
+    }
+    let next_updated_at = now_ms().max(
+        settings
+            .get("providerFamilyDomainUpdatedAt")
+            .and_then(Value::as_i64)
+            .unwrap_or(0)
+            .saturating_add(1),
+    );
+    settings.insert(
+        "providerFamilyDomainUpdatedAt".to_string(),
+        Value::Number(next_updated_at.into()),
+    );
+    settings.insert(
+        "providerFamilyDomainMigrated".to_string(),
+        Value::Bool(true),
+    );
+    write_json_map(settings_path, settings, SETTINGS_FILE)
 }
 
 fn detect_app_version() -> String {
@@ -1716,6 +1910,15 @@ mod tests {
         path
     }
 
+    fn write_instance_json(root: &Path, file_name: &str, value: Value) {
+        let path = match file_name {
+            CREDENTIALS_FILE => credentials_path_for_instance_root(root),
+            _ => settings_path_for_instance_root(root),
+        };
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, value.to_string()).unwrap();
+    }
+
     fn sample_account() -> ZcodeAccount {
         ZcodeAccount {
             id: "zcode_fixture".to_string(),
@@ -2071,6 +2274,438 @@ mod tests {
             saved_settings["modelProviderFamilyModes"],
             json!({"zai": "apiKey", "bigmodel": "oauth"})
         );
+    }
+
+    #[test]
+    fn family_domain_switch_replaces_stale_oauth_family() {
+        let settings = json!({
+            "providerFamilyDomain": "zai",
+            "modelProviderFamilyModes": {"zai": "oauth", "bigmodel": "oauth"},
+        });
+        assert!(!should_preserve_family_domain(
+            "bigmodel",
+            settings.as_object().unwrap()
+        ));
+    }
+
+    #[test]
+    fn family_domain_switch_preserves_explicit_api_key_family() {
+        let settings = json!({
+            "providerFamilyDomain": "zai",
+            "modelProviderFamilyModes": {"zai": "apiKey", "bigmodel": "apiKey"},
+        });
+        assert!(should_preserve_family_domain(
+            "bigmodel",
+            settings.as_object().unwrap()
+        ));
+    }
+
+    #[test]
+    fn family_domain_switch_preserves_matching_provider() {
+        let settings = json!({"providerFamilyDomain": "bigmodel"});
+        assert!(should_preserve_family_domain(
+            "bigmodel",
+            settings.as_object().unwrap()
+        ));
+    }
+
+    #[test]
+    fn family_domain_switch_replaces_missing_domain() {
+        assert!(!should_preserve_family_domain(
+            "bigmodel",
+            json!({}).as_object().unwrap()
+        ));
+    }
+
+    #[test]
+    fn bigmodel_oauth_switch_rewrites_stale_oauth_domain() {
+        let home = tempfile::tempdir().unwrap();
+        let settings_path = settings_path_for_home(home.path());
+        fs::create_dir_all(settings_path.parent().unwrap()).unwrap();
+        fs::write(
+            &settings_path,
+            json!({
+                "providerFamilyDomain": "zai",
+                "providerFamilyDomainUpdatedAt": 123,
+                "providerFamilyDomainMigrated": false,
+                "modelProviderFamilyModes": {"zai": "oauth", "bigmodel": "apiKey"},
+                "unrelated-key": "keep",
+            })
+            .to_string(),
+        )
+        .unwrap();
+        let credentials_path = resolve_default_v2_dir_for_home(home.path()).join(CREDENTIALS_FILE);
+        fs::create_dir_all(credentials_path.parent().unwrap()).unwrap();
+        fs::write(
+            &credentials_path,
+            json!({
+                "oauth:zai:access_token": "obsolete",
+                "oauth:zai:refresh_token": "obsolete",
+                "oauth:zai:user_info": "obsolete",
+                "oauth:linked_bigmodel": "stale-linked",
+                "unrelated-key": "keep",
+            })
+            .to_string(),
+        )
+        .unwrap();
+
+        let mut account = sample_account();
+        account.provider = "bigmodel".into();
+        write_default_account_for_home(&account, home.path(), false).unwrap();
+
+        let saved = read_json_map(&credentials_path).unwrap();
+        assert_eq!(
+            decrypted_value(&saved, ACTIVE_PROVIDER_KEY, &credentials_path, home.path())
+                .unwrap()
+                .as_deref(),
+            Some("bigmodel"),
+        );
+        assert!(!saved.keys().any(|name| name.starts_with("oauth:zai:")));
+        assert!(!saved.contains_key("oauth:linked_bigmodel"));
+        assert_eq!(saved["unrelated-key"], "keep");
+
+        let saved_settings = read_json_map(&settings_path).unwrap();
+        assert_eq!(saved_settings["providerFamilyDomain"], "bigmodel");
+        assert!(
+            saved_settings["providerFamilyDomainUpdatedAt"]
+                .as_i64()
+                .unwrap()
+                > 123
+        );
+        assert_eq!(saved_settings["providerFamilyDomainMigrated"], true);
+        assert_eq!(
+            saved_settings["modelProviderFamilyModes"],
+            json!({"zai": "oauth", "bigmodel": "oauth"})
+        );
+        assert_eq!(saved_settings["unrelated-key"], "keep");
+    }
+
+    #[test]
+    fn family_domain_updated_at_is_monotonic_when_switching() {
+        let home = tempfile::tempdir().unwrap();
+        let settings_path = settings_path_for_home(home.path());
+        fs::create_dir_all(settings_path.parent().unwrap()).unwrap();
+        let future = now_ms() + 60_000;
+        fs::write(
+            &settings_path,
+            json!({
+                "providerFamilyDomain": "zai",
+                "providerFamilyDomainUpdatedAt": future,
+                "modelProviderFamilyModes": {"zai": "oauth"},
+            })
+            .to_string(),
+        )
+        .unwrap();
+
+        write_auth_mode_to_settings_path("bigmodel", ZcodeAuthMode::Oauth, &settings_path, false)
+            .unwrap();
+
+        let saved_settings = read_json_map(&settings_path).unwrap();
+        assert_eq!(
+            saved_settings["providerFamilyDomainUpdatedAt"].as_i64(),
+            Some(future + 1)
+        );
+    }
+
+    #[test]
+    fn instance_copy_normalization_rewrites_stale_oauth_domain() {
+        let root = make_temp_dir("zcode-instance-normalize");
+        write_instance_json(
+            &root,
+            SETTINGS_FILE,
+            json!({
+                "providerFamilyDomain": "zai",
+                "providerFamilyDomainUpdatedAt": 123,
+                "modelProviderFamilyModes": {"zai": "oauth", "bigmodel": "oauth"},
+                "providerFamilyConnectionSelections": {"zai": {"kind": "individual-coding-plan"}},
+                "locale": "zh-CN",
+            }),
+        );
+        write_instance_json(
+            &root,
+            CREDENTIALS_FILE,
+            json!({"oauth:bigmodel:access_token": "enc:v1:fixture"}),
+        );
+
+        normalize_instance_family_domain_after_copy(&root).unwrap();
+
+        let saved = read_json_map(&settings_path_for_instance_root(&root)).unwrap();
+        assert_eq!(saved["providerFamilyDomain"], "bigmodel");
+        assert!(saved["providerFamilyDomainUpdatedAt"].as_i64().unwrap() > 123);
+        assert_eq!(saved["providerFamilyDomainMigrated"], true);
+        assert_eq!(saved["locale"], "zh-CN");
+        assert_eq!(
+            saved["providerFamilyConnectionSelections"]["zai"]["kind"],
+            "individual-coding-plan"
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn instance_copy_normalization_handles_dual_and_linked_credentials() {
+        let dual_root = make_temp_dir("zcode-instance-dual");
+        write_instance_json(
+            &dual_root,
+            SETTINGS_FILE,
+            json!({"providerFamilyDomain": "zai"}),
+        );
+        write_instance_json(
+            &dual_root,
+            CREDENTIALS_FILE,
+            json!({
+                "oauth:zai:access_token": "zai-token",
+                "oauth:bigmodel:access_token": "bigmodel-token",
+            }),
+        );
+        normalize_instance_family_domain_after_copy(&dual_root).unwrap();
+        assert_eq!(
+            read_json_map(&settings_path_for_instance_root(&dual_root)).unwrap()
+                ["providerFamilyDomain"],
+            "zai"
+        );
+        fs::remove_dir_all(dual_root).unwrap();
+
+        // 只有 zai direct token + linked：两个 family 都有 material，保持原 domain。
+        let linked_zai_root = make_temp_dir("zcode-instance-linked-zai");
+        write_instance_json(
+            &linked_zai_root,
+            SETTINGS_FILE,
+            json!({"providerFamilyDomain": "zai"}),
+        );
+        write_instance_json(
+            &linked_zai_root,
+            CREDENTIALS_FILE,
+            json!({
+                "oauth:zai:access_token": "zai-token",
+                "oauth:linked_bigmodel": "linked-material",
+            }),
+        );
+        normalize_instance_family_domain_after_copy(&linked_zai_root).unwrap();
+        assert_eq!(
+            read_json_map(&settings_path_for_instance_root(&linked_zai_root)).unwrap()
+                ["providerFamilyDomain"],
+            "zai"
+        );
+        fs::remove_dir_all(linked_zai_root).unwrap();
+
+        // 只有 bigmodel direct token + linked：zai 仍无 material，必须切到 bigmodel。
+        let linked_bigmodel_root = make_temp_dir("zcode-instance-linked-bigmodel");
+        write_instance_json(
+            &linked_bigmodel_root,
+            SETTINGS_FILE,
+            json!({"providerFamilyDomain": "zai"}),
+        );
+        write_instance_json(
+            &linked_bigmodel_root,
+            CREDENTIALS_FILE,
+            json!({
+                "oauth:bigmodel:access_token": "bigmodel-token",
+                "oauth:linked_bigmodel": "linked-material",
+            }),
+        );
+        normalize_instance_family_domain_after_copy(&linked_bigmodel_root).unwrap();
+        assert_eq!(
+            read_json_map(&settings_path_for_instance_root(&linked_bigmodel_root)).unwrap()
+                ["providerFamilyDomain"],
+            "bigmodel"
+        );
+        fs::remove_dir_all(linked_bigmodel_root).unwrap();
+    }
+
+    #[test]
+    fn instance_copy_normalization_skips_encrypted_v2_credentials() {
+        let root = make_temp_dir("zcode-instance-v2");
+        write_instance_json(
+            &root,
+            SETTINGS_FILE,
+            json!({"providerFamilyDomain": "zai"}),
+        );
+        write_instance_json(
+            &root,
+            CREDENTIALS_FILE,
+            json!({"oauth:bigmodel:access_token": "enc:v2:os:fixture.payload"}),
+        );
+
+        normalize_instance_family_domain_after_copy(&root).unwrap();
+
+        assert_eq!(
+            read_json_map(&settings_path_for_instance_root(&root)).unwrap()
+                ["providerFamilyDomain"],
+            "zai"
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn instance_copy_normalization_skips_missing_domain() {
+        let root = make_temp_dir("zcode-instance-no-domain");
+        write_instance_json(&root, SETTINGS_FILE, json!({"locale": "zh-CN"}));
+        write_instance_json(
+            &root,
+            CREDENTIALS_FILE,
+            json!({"oauth:bigmodel:access_token": "bigmodel-token"}),
+        );
+
+        normalize_instance_family_domain_after_copy(&root).unwrap();
+
+        let saved = read_json_map(&settings_path_for_instance_root(&root)).unwrap();
+        assert!(saved.get("providerFamilyDomain").is_none());
+        assert_eq!(saved["locale"], "zh-CN");
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn instance_copy_normalization_skips_explicit_api_key_domain() {
+        let root = make_temp_dir("zcode-instance-api-key");
+        write_instance_json(
+            &root,
+            SETTINGS_FILE,
+            json!({
+                "providerFamilyDomain": "zai",
+                "modelProviderFamilyModes": {"zai": "apiKey"},
+            }),
+        );
+        write_instance_json(
+            &root,
+            CREDENTIALS_FILE,
+            json!({"oauth:bigmodel:access_token": "bigmodel-token"}),
+        );
+
+        normalize_instance_family_domain_after_copy(&root).unwrap();
+
+        assert_eq!(
+            read_json_map(&settings_path_for_instance_root(&root)).unwrap()
+                ["providerFamilyDomain"],
+            "zai"
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn bigmodel_personal_switch_replaces_stale_team_selection() {
+        let home = tempfile::tempdir().unwrap();
+        let settings_path = settings_path_for_home(home.path());
+        write_json_map(
+            &settings_path,
+            json!({
+                "providerFamilyDomain": "bigmodel",
+                "providerFamilyDomainUpdatedAt": 123,
+                "modelProviderFamilyModes": {"bigmodel": "oauth"},
+                "providerFamilyConnectionSelections": {
+                    "bigmodel": {
+                        "kind": "team-coding-plan",
+                        "productId": "old-product",
+                        "organizationId": "old-org",
+                        "projectId": "old-project"
+                    }
+                }
+            })
+            .as_object()
+            .unwrap()
+            .clone(),
+            SETTINGS_FILE,
+        )
+        .unwrap();
+
+        let mut account = sample_account();
+        account.provider = "bigmodel".into();
+        account.team_plan = None;
+        write_default_account_for_home(&account, home.path(), true).unwrap();
+
+        let saved = read_json_map(&settings_path).unwrap();
+        assert_eq!(
+            saved["providerFamilyConnectionSelections"]["bigmodel"]["kind"],
+            "individual-coding-plan"
+        );
+        assert!(saved["providerFamilyDomainUpdatedAt"].as_i64().unwrap() > 123);
+    }
+
+    #[test]
+    fn bigmodel_team_switch_keeps_matching_team_selection() {
+        let home = tempfile::tempdir().unwrap();
+        let settings_path = settings_path_for_home(home.path());
+        write_json_map(
+            &settings_path,
+            json!({
+                "providerFamilyDomain": "bigmodel",
+                "providerFamilyDomainUpdatedAt": 123,
+                "providerFamilyConnectionSelections": {
+                    "bigmodel": {
+                        "kind": "team-coding-plan",
+                        "productId": "product-1",
+                        "organizationId": "org-1",
+                        "projectId": "project-1"
+                    }
+                }
+            })
+            .as_object()
+            .unwrap()
+            .clone(),
+            SETTINGS_FILE,
+        )
+        .unwrap();
+
+        let mut account = sample_account();
+        account.provider = "bigmodel".into();
+        account.team_plan = Some(ZcodeTeamPlan {
+            organization_id: "org-1".into(),
+            project_id: "project-1".into(),
+        });
+        write_default_account_for_home(&account, home.path(), true).unwrap();
+
+        let saved = read_json_map(&settings_path).unwrap();
+        assert_eq!(
+            saved["providerFamilyConnectionSelections"]["bigmodel"],
+            json!({
+                "kind": "team-coding-plan",
+                "productId": "product-1",
+                "organizationId": "org-1",
+                "projectId": "project-1"
+            })
+        );
+        assert_eq!(saved["providerFamilyDomainUpdatedAt"], 123);
+    }
+
+    #[test]
+    fn bigmodel_team_switch_removes_mismatched_team_selection() {
+        let home = tempfile::tempdir().unwrap();
+        let settings_path = settings_path_for_home(home.path());
+        write_json_map(
+            &settings_path,
+            json!({
+                "providerFamilyDomain": "bigmodel",
+                "providerFamilyDomainUpdatedAt": 123,
+                "providerFamilyConnectionSelections": {
+                    "bigmodel": {
+                        "kind": "team-coding-plan",
+                        "productId": "old-product",
+                        "organizationId": "old-org",
+                        "projectId": "old-project"
+                    }
+                }
+            })
+            .as_object()
+            .unwrap()
+            .clone(),
+            SETTINGS_FILE,
+        )
+        .unwrap();
+
+        let mut account = sample_account();
+        account.provider = "bigmodel".into();
+        account.team_plan = Some(ZcodeTeamPlan {
+            organization_id: "new-org".into(),
+            project_id: "new-project".into(),
+        });
+        write_default_account_for_home(&account, home.path(), true).unwrap();
+
+        let saved = read_json_map(&settings_path).unwrap();
+        assert!(
+            saved["providerFamilyConnectionSelections"]
+                .get("bigmodel")
+                .is_none()
+        );
+        assert!(saved["providerFamilyDomainUpdatedAt"].as_i64().unwrap() > 123);
     }
 
     #[test]
