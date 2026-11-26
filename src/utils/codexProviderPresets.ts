@@ -441,6 +441,14 @@ export const CODEX_API_PROVIDER_PRESETS: readonly CodexApiProviderPreset[] = [
     apiKeyUrl: "https://console.atlascloud.ai/api-keys",
   },
   {
+    id: "trustedrouter",
+    name: "TrustedRouter",
+    baseUrls: ["https://api.trustedrouter.com/v1"],
+    modelCatalog: ["openai/gpt-6.1-terra", "deepseek/deepseek-v4-flash"],
+    website: "https://trustedrouter.com/",
+    apiKeyUrl: "https://trustedrouter.com/console/api-keys",
+  },
+  {
     id: "aigrow",
     name: "AIGROW",
     baseUrls: ["https://aigrow.gg/v1"],
