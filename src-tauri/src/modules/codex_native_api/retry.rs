@@ -733,7 +733,11 @@ async fn send_inner(
             exhausted = inspected.10.as_ref().and_then(super::quota_exhaustion::code);
             explicit_capacity = inspected.10.as_ref().is_some_and(super::overload::event);
             if explicit_capacity { tracker.observe_overload(); }
-            if prepared.route.wire_api == WireApi::Responses && !prepared.route.chatgpt_plan && inspected.10.as_ref().is_some_and(|error| tracker.field_compat.rejected_for(prepared, &body, inspected.0.status().as_u16(), error)) {
+            if match prepared.route.wire_api {
+                WireApi::Responses => !prepared.route.chatgpt_plan,
+                WireApi::Chat => !prepared.route.chatgpt,
+                WireApi::Anthropic => false,
+            } && inspected.10.as_ref().is_some_and(|error| tracker.field_compat.rejected_for(prepared, &body, inspected.0.status().as_u16(), error)) {
                 tracker.field_compat.commit_reasoning(prepared);
                 tracker.attempt_result(400, false, Some(tracker.field_compat.reason()));
                 continue;

@@ -28,6 +28,8 @@ mod tool_integrity_tests;
 mod anthropic_tests;
 #[path = "responses_external_results_http_tests.rs"]
 mod external_results_tests;
+#[path = "chat_unknown_field_http_tests.rs"]
+mod unknown_field_tests;
 #[path = "websocket_full_replay_http_tests.rs"]
 mod full_replay_tests;
 #[path = "websocket_context_seed_http_tests.rs"]

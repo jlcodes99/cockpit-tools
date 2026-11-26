@@ -29,6 +29,11 @@ fn responses_to_chat_inner(body: &Value, native: bool) -> Result<Value, ServiceE
         .ok_or_else(|| invalid("body", "expected an object"))?
         .iter().filter(|(key,_)| !matches!(key.as_str(), "input" | "instructions" | "previous_response_id" | "conversation" | "background" | "include" | "text" | "reasoning" | "max_output_tokens" | "truncation" | "store" | "tools" | "tool_choice"))
         .map(|(key,value)| (key.clone(),value.clone())).collect();
+    if !native {
+        // Codex-only correlation metadata has no Chat Completions meaning. Strict
+        // upstreams reject it, and lenient ones should not receive session ids.
+        out.remove("client_metadata");
+    }
     if body
         .get("previous_response_id")
         .is_some_and(|v| !v.is_null())
