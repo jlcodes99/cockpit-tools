@@ -111,6 +111,7 @@ impl QoderCnAccountStore {
                 Ok(None) => {}
                 // One file written by another channel must not make the whole
                 // page unusable: drop it from the list and say so in the log.
+                // lgtm[rs/cleartext-logging] 只记录账号 id，不含凭证；没有它用户无法判断哪个账号被跳过
                 Err(error) if error == "QODER_PLATFORM_MISMATCH" => logger::log_warn(&format!(
                     "[Qoder CN Account] 跳过非本渠道账号: id={}, 请重新导入",
                     summary.id
@@ -626,9 +627,10 @@ mod tests {
             &[],
         )
         .unwrap();
-        assert_eq!(
-            store.load_account(&misfiled.id).unwrap_err(),
-            "QODER_PLATFORM_MISMATCH"
+        let error = store.load_account(&misfiled.id).unwrap_err();
+        assert!(
+            error == "QODER_PLATFORM_MISMATCH",
+            "a detail filed under another channel must be rejected"
         );
     }
 

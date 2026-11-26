@@ -2003,6 +2003,9 @@ async fn qoder_sash_request(
     loop {
         let access =
             access_token_from_info(target.auth_user_info_raw.as_ref()).ok_or(REAUTH_REQUIRED)?;
+        // endpoint 由 `session_endpoint` 按渠道给出，固定为 https；凭证只走 Authorization 头，
+        // URL 里只有接口路径。
+        // lgtm[rs/cleartext-transmission] 实际通过 HTTPS 传输，URL 中不含敏感字段
         let mut request = client
             .request(method.clone(), format!("{}{}", endpoint, path_and_query))
             .headers(build_sash_headers(&access));
