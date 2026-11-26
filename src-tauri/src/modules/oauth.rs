@@ -324,3 +324,9 @@ fn token_needs_refresh(expiry_timestamp: i64, now: i64) -> bool {
 #[cfg(test)]
 #[path = "oauth_tests.rs"]
 mod tests;
+
+/// Cases that need the scope handling only this tree has; the shared test file
+/// above has to stay compilable from `cockpit-core`, which drops it.
+#[cfg(test)]
+#[path = "oauth_scope_tests.rs"]
+mod oauth_scope_tests;
