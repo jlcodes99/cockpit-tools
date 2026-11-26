@@ -1,6 +1,36 @@
 // Codex 账号模块：Account metadata mutations, OAuth binding and quota auto-switch alerts。
 // 通过 include! 保持原 modules::codex_account 作用域，完整保留私有调用关系。
 include!("codex_account_api_key_edit.rs");
+
+/// WorkBuddy credits are not Codex quota windows. Merge only the stale quota
+/// fields against the latest durable account, never a caller's older metadata.
+pub(crate) fn clear_workbuddy_codex_quota(original: &CodexAccount) -> Result<(), String> {
+    let _guard = CODEX_ACCOUNT_MUTATION_LOCK
+        .lock()
+        .map_err(|_| "CODEX_QUOTA_WRITE_LOCK_POISONED".to_string())?;
+    let mut current = load_account_checked(&original.id)?
+        .ok_or_else(|| "CODEX_STALE_ACCOUNT".to_string())?;
+    if !is_workbuddy_upstream_provider(&current)
+        || current.token_generation != original.token_generation
+        || current.api_credential_ref != original.api_credential_ref
+    {
+        return Err("CODEX_STALE_QUOTA_REQUEST".to_string());
+    }
+    let changed = current.quota.is_some()
+        || current.quota_error.is_some()
+        || current.team_quota_history.is_some()
+        || current.usage_updated_at.is_some();
+    if changed {
+        current.quota = None;
+        current.quota_error = None;
+        current.team_quota_history = None;
+        current.usage_updated_at = None;
+        save_account_with_tombstone_guard(&current)?;
+        crate::modules::codex_quota_sync::publish(&current);
+    }
+    Ok(())
+}
+
 /// 从本地文件导入 Codex 账号（支持多种 JSON 格式）
 pub async fn import_from_files(file_paths: Vec<String>) -> Result<CodexFileImportResult, String> {
     use std::path::Path;
