@@ -6529,6 +6529,8 @@
       "instructionsBytes": "指示",
       "overloadRetry": "混雑時の再試行",
       "overloadRecovery": "復旧時間",
+      "historyRejectionTitle": "履歴形式が一致しません",
+      "historyRejectionHint": "アップストリームがリクエスト履歴の形式を拒否しました。記録されるのは件数とフラグのみで、会話本文は保存されません。",
       "recordPayloads": "リクエスト本文を記録",
       "recordPayloadsHint": "初期設定はオフです。クライアントと上流の要求を長さ制限付きでローカル保存します。オフにすると新規記録を停止し、保存済み本文は別途削除できます。",
       "privacyHint": "認証フィールドは伏せられますが、会話中の機密情報は残る場合があります。コピーや共有前に確認してください。",

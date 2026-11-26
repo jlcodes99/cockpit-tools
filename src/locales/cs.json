@@ -6529,6 +6529,8 @@
       "instructionsBytes": "Pokyny",
       "overloadRetry": "Opakování při přetížení",
       "overloadRecovery": "Doba obnovení",
+      "historyRejectionTitle": "Nekompatibilní formát historie",
+      "historyRejectionHint": "Upstream odmítl formát historie požadavků. Ukládají se pouze počty a příznaky; text konverzace se neukládá.",
       "recordPayloads": "Záznam těl požadavků",
       "recordPayloadsHint": "Ve výchozím stavu vypnuto. Omezené kopie klientských a odchozích požadavků se ukládají místně. Vypnutí zastaví nové záznamy; uložená těla lze smazat zvlášť.",
       "privacyHint": "Ověřovací pole jsou skryta, ale tajné údaje v rozhovoru mohou zůstat. Před kopírováním nebo sdílením je zkontrolujte.",

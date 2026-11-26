@@ -6529,6 +6529,8 @@
       "instructionsBytes": "Talimatlar",
       "overloadRetry": "Yoğunluk denemeleri",
       "overloadRecovery": "Kurtarma süresi",
+      "historyRejectionTitle": "Geçmiş biçimi uyuşmuyor",
+      "historyRejectionHint": "Upstream istek geçmişinin biçimini reddetti. Yalnızca sayımlar ve bayraklar kaydedilir; görüşme metni saklanmaz.",
       "recordPayloads": "İstek gövdelerini kaydet",
       "recordPayloadsHint": "Varsayılan olarak kapalıdır. İstemci ve sunucu isteklerinin sınırlı kopyaları yerel olarak saklanır. Kapatmak yeni kaydı durdurur; kayıtlı gövdeler ayrıca silinebilir.",
       "privacyHint": "Kimlik doğrulama alanları gizlenir, ancak konuşma metnindeki sırlar kalabilir. Kopyalamadan veya paylaşmadan önce kontrol edin.",

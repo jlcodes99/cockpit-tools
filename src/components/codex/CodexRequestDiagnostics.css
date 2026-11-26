@@ -54,6 +54,9 @@
 .codex-request-attempt-latency { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; font-variant-numeric: tabular-nums; }
 .codex-request-attempts time { display: block; margin-top: 8px; color: var(--text-secondary); font-size: 11px; }
 .codex-request-attempt-error { margin: 10px 0 0; color: var(--danger); white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; line-height: 1.6; }
+.codex-request-history-rejection { margin-top: 8px; font-size: 12px; color: var(--text-secondary); }
+.codex-request-history-rejection > summary { cursor: pointer; }
+.codex-request-history-rejection .codex-request-attempt-meta { margin-top: 4px; }
 .codex-request-payload-empty { display: flex; align-items: center; gap: 12px; padding: 20px; border: 1px dashed var(--border); border-radius: 12px; background: var(--bg-secondary); color: var(--text-secondary); }
 .codex-request-payload-empty > svg { flex-shrink: 0; opacity: .65; }
 .codex-request-payload-empty p { margin: 0; font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }

@@ -6529,6 +6529,8 @@
       "instructionsBytes": "Instrucciones",
       "overloadRetry": "Reintentos por carga",
       "overloadRecovery": "Tiempo de recuperación",
+      "historyRejectionTitle": "Formato de historial incompatible",
+      "historyRejectionHint": "El servidor rechazó el formato del historial de solicitudes. Solo se registran recuentos e indicadores; no se guarda el texto de la conversación.",
       "recordPayloads": "Guardar cuerpos",
       "recordPayloadsHint": "Desactivado por defecto. Guarda localmente copias limitadas de solicitudes del cliente y del servidor. Al desactivarlo se detienen nuevas capturas; los cuerpos guardados pueden borrarse por separado.",
       "privacyHint": "Los campos de autenticación se ocultan, pero pueden quedar secretos en la conversación. Revisa antes de copiar o compartir.",

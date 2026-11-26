@@ -6774,6 +6774,8 @@
       "instructionsBytes": "Instructions",
       "overloadRetry": "Capacity retries",
       "overloadRecovery": "Recovery time",
+      "historyRejectionTitle": "History shape mismatch",
+      "historyRejectionHint": "The upstream rejected the request history shape. Only counts and flags are recorded; no conversation text is stored.",
       "recordPayloads": "Record request bodies",
       "recordPayloadsHint": "Off by default. Store bounded client and upstream snapshots locally. Turning this off stops new capture; saved bodies can be cleared separately.",
       "privacyHint": "Authentication fields are redacted, but secrets inside conversation text may remain. Review before copying or sharing.",
