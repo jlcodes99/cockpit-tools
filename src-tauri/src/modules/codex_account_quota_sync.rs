@@ -125,6 +125,8 @@ pub(crate) fn save_refreshed_quota(
             ));
         }
     }
+    drop(_guard);
+    crate::modules::codex_quota_sync::COMMITTED_QUOTA_CHECK.notify_one();
     Ok(current)
 }
 

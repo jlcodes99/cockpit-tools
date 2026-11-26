@@ -10,7 +10,7 @@
 
 ## [Unreleased]
 
-## [1.5.3] - 2026-11-26
+## [1.5.2] - 2026-11-26
 
 ### 新增
 
@@ -23,6 +23,8 @@
 - **Codex 模型供应商**新增 TrustedRouter 预设。 [#3300](https://github.com/jlcodes99/cockpit-tools/pull/3300)
 
 ### 修复
+- **Codex API 服务**在同一对话跨供应商切模型时，可用完整输入或有效检查点继续压缩上下文。 [#3319](https://github.com/jlcodes99/cockpit-tools/issues/3319)
+- **Codex 自动切号**在新额度成功保存后触发评估，冷启动后后台服务暂未识别到运行中的 Codex 实例时也可评估。 [#3321](https://github.com/jlcodes99/cockpit-tools/issues/3321)
 - **Codex API 服务**重试 HTTP 请求、重新建立 WebSocket 连接及执行 OAuth 生图请求时，使用当前尝试的准备时限。持续重试覆盖更多上游满载场景，包括长会话和压缩请求。 [#3304](https://github.com/jlcodes99/cockpit-tools/issues/3304) · [#3320](https://github.com/jlcodes99/cockpit-tools/pull/3320)
 - **Codex API 服务**补齐 ChatGPT OAuth 批量生图的请求张数。旧版 `/v1/responses/compact` 入口兼容当前上游压缩协议，压缩后可继续对话。
 - **Codex API 服务**保留 Responses 支持的 `include` 字段，Chat 流式回复保留各自独立的输出项。Claude Code 可通过网关发现、调用并续用延迟加载工具。文献检索被拒绝时，可用账号仍可用于其他请求。

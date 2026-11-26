@@ -23,6 +23,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **Codex model providers** include a TrustedRouter preset. [#3300](https://github.com/jlcodes99/cockpit-tools/pull/3300)
 
 ### Fixed
+- **Codex API Service** can compact a conversation after switching to a model on a different provider when complete input or a valid checkpoint is available. [#3319](https://github.com/jlcodes99/cockpit-tools/issues/3319)
+- **Codex auto-switch** evaluates fresh, saved quota even when the background service cannot discover a running Codex instance after startup. [#3321](https://github.com/jlcodes99/cockpit-tools/issues/3321)
 
 - **Codex API Service** retries HTTP requests, WebSocket openings, and OAuth image requests with a fresh preparation deadline. Continuous retries now cover more upstream overload responses, including long conversations and compaction requests. [#3304](https://github.com/jlcodes99/cockpit-tools/issues/3304) · [#3320](https://github.com/jlcodes99/cockpit-tools/pull/3320)
 - **Codex API Service** returns the full requested image count for ChatGPT OAuth batches and keeps legacy `/v1/responses/compact` clients working with the current upstream compaction protocol.

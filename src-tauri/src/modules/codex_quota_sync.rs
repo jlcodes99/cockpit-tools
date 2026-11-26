@@ -24,6 +24,7 @@ const MAX_PROBES_PER_TICK: usize = 8;
 static STARTED: AtomicBool = AtomicBool::new(false);
 static DISCOVERY_RUNNING: AtomicBool = AtomicBool::new(false);
 static SEQUENCE: AtomicU64 = AtomicU64::new(0);
+pub(crate) static COMMITTED_QUOTA_CHECK: tokio::sync::Notify = tokio::sync::Notify::const_new();
 // Store timing only, never credentials, transcript text or full quota responses.
 static OBSERVED: LazyLock<Mutex<HashMap<String, (Instant, Duration)>>> =
     LazyLock::new(Default::default);
@@ -424,20 +425,16 @@ fn finish_active_refresh(
     account_id: &str,
     state: Option<&mut RefreshState>,
     result: Result<CodexQuota, String>,
-    after_refresh: impl FnOnce(),
 ) {
     let failures = state.map_or(1, |state| {
         state.finish(Instant::now(), &result);
         state.failures
     });
-    match result {
-        Ok(_) => after_refresh(),
-        Err(error) => {
-            logger::log_warn(&format!(
-                "[Codex Quota Sync] refresh deferred/failed: account_id={account_id}, retry_in={}s",
-                failure_backoff(failures, &error).as_secs()
-            ));
-        }
+    if let Err(error) = result {
+        logger::log_warn(&format!(
+            "[Codex Quota Sync] refresh deferred/failed: account_id={account_id}, retry_in={}s",
+            failure_backoff(failures, &error).as_secs()
+        ));
     }
 }
 
@@ -445,6 +442,19 @@ pub(crate) fn ensure_started() {
     if STARTED.swap(true, Ordering::AcqRel) {
         return;
     }
+    // Quotas can be refreshed by another scheduler while runtime discovery
+    // has no eligible profile. A committed quota wakes this independent task.
+    tauri::async_runtime::spawn(async {
+        loop {
+            COMMITTED_QUOTA_CHECK.notified().await;
+            let settings = config::get_user_config();
+            if settings.codex_auto_switch_enabled || settings.codex_quota_alert_enabled {
+                if let Some(app) = crate::get_app_handle() {
+                    crate::commands::codex::run_codex_post_refresh_checks(app).await;
+                }
+            }
+        }
+    });
     tauri::async_runtime::spawn(async {
         let mut discovery = Discovery::default();
         let mut states: HashMap<String, RefreshState> = HashMap::new();
@@ -456,13 +466,7 @@ pub(crate) fn ensure_started() {
             tokio::select! {
                 Some(completed) = jobs.join_next(), if !jobs.is_empty() => {
                     if let Ok((id, result)) = completed {
-                        finish_active_refresh(&id, states.get_mut(&id), result, || {
-                            if let Some(app) = crate::get_app_handle() {
-                                tauri::async_runtime::spawn(async move {
-                                    Box::pin(crate::commands::codex::run_codex_post_refresh_checks(app)).await;
-                                });
-                            }
-                        });
+                        finish_active_refresh(&id, states.get_mut(&id), result);
                     }
                 }
                 _ = tick.tick() => {
