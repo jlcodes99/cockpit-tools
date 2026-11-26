@@ -749,6 +749,7 @@ async fn apply_bound_account_to_initialized_profile(
     model_routing: Option<&CodexInstanceModelRouting>,
     context: &str,
 ) -> Result<(), String> {
+    modules::codex_account::reject_workbuddy_client_binding(bind_account_id)?;
     if !is_profile_initialized(&profile_dir.to_string_lossy()) {
         return Ok(());
     }
@@ -2177,6 +2178,9 @@ async fn codex_start_instance_internal(
     ensure_codex_instance_start_not_cancelled(&instance_id)?;
     // Check after waiting for the launch lock, but before credentials, profile
     // writes or stopping the previous client. A skipped step cannot bypass this.
+    modules::codex_account::reject_workbuddy_client_binding(
+        launch_target.bind_account_id.as_deref(),
+    )?;
     launch_target.preflight_desktop_proxy(Some(&app)).await?;
     ensure_codex_instance_start_not_cancelled(&instance_id)?;
     let discovered_models = if should_skip_launch_step(skip_failed_step, "writeProfile") {

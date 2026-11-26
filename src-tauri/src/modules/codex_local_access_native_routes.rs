@@ -5,6 +5,10 @@ mod native_zcode;
 #[path = "codex_local_access_native_workbuddy.rs"]
 mod native_workbuddy;
 
+#[cfg(test)]
+#[path = "codex_local_access_native_workbuddy_route_tests.rs"]
+mod native_workbuddy_route_tests;
+
 // Native provider selection, credentials and model catalogs. No legacy wire executor.
 
 fn native_is_chatgpt_plan_account(account: &CodexAccount) -> bool {
@@ -756,6 +760,7 @@ async fn native_account_credentials(
                 headers = auth;
                 "https://chatgpt.com/backend-api/codex".to_string()
             } else if codex_account::is_workbuddy_upstream_provider(&account) {
+                native_workbuddy::validate_reference(&account)?;
                 let source = codex_account::workbuddy_upstream_account(&account)
                     .ok_or_else(|| "WorkBuddy account is unavailable".to_string())?;
                 if source.access_token.trim().is_empty()
@@ -836,6 +841,11 @@ async fn native_account_credentials(
 
 fn native_credential_error(error: &str) -> native_contract::ServiceError {
     match error {
+        "WORKBUDDY_INVALID_REFERENCE" => native_error(
+            400,
+            "invalid_workbuddy_account",
+            "WorkBuddy ACP requires a linked account with the native internal route",
+        ),
         "ZCODE_OAUTH_REAUTH_REQUIRED" => native_error(
             401,
             "zcode_oauth_reauthorization_required",
@@ -2181,8 +2191,29 @@ async fn native_route_for_reserved_account(
     http1_only: bool,
 ) -> Result<native_contract::Route, native_contract::ServiceError> {
     let account = native_prepare_account(account, force_refresh).await?;
-    let (account, mut headers, base_url, official_authorization_revision) =
-        native_account_credentials(account, force_refresh).await?;
+    let credentials = native_account_credentials(account, force_refresh).await?;
+    native_route_for_prepared_account(
+        host,
+        collection,
+        credentials,
+        upstream_model,
+        permit,
+        http1_only,
+    )
+    .await
+}
+
+// Share the complete transport-dispatch path with deterministic tests without
+// loading a user's linked WorkBuddy account or credentials from disk.
+async fn native_route_for_prepared_account(
+    host: &NativeHostBridge,
+    collection: &CodexLocalAccessCollection,
+    credentials: (CodexAccount, axum::http::HeaderMap, String, Option<String>),
+    upstream_model: String,
+    permit: Option<Arc<dyn Send + Sync>>,
+    http1_only: bool,
+) -> Result<native_contract::Route, native_contract::ServiceError> {
+    let (account, mut headers, base_url, official_authorization_revision) = credentials;
     if account.official_registration_id.is_some()
         && !host
             .selected_authorization_current(
@@ -2213,6 +2244,11 @@ async fn native_route_for_reserved_account(
                     .with_retry_after(Some(Duration::from_secs(5))),
             );
         }
+    }
+    if codex_account::is_workbuddy_upstream_provider(&account) {
+        // ACP owns its session/client lifecycle. Never feed its internal marker
+        // to HTTP URL validation, installation rewriting, or proxy URL setup.
+        return native_workbuddy::route(&account, &base_url, upstream_model, permit);
     }
     let chatgpt_plan = native_is_chatgpt_plan_account(&account);
     let chatgpt = !account.is_api_key_auth() && !chatgpt_plan;
@@ -2368,6 +2404,10 @@ fn native_chatgpt_plan_auxiliary_error(operation: &str) -> native_contract::Serv
 }
 
 fn native_auxiliary_eligible(account: &CodexAccount, operation: Option<&str>) -> bool {
+    if codex_account::is_workbuddy_upstream_provider(account) {
+        // The ACP MVP only implements stateless text Responses over HTTP/SSE.
+        return operation.is_none();
+    }
     if native_is_chatgpt_plan_account(account) {
         // A client Responses socket is bridged to public HTTP/SSE. It does not
         // grant access to any additional upstream endpoint or hosted tool.
@@ -2395,6 +2435,11 @@ fn native_operation_model(
     operation: Option<&str>,
     image_input: bool,
 ) -> Option<String> {
+    if codex_account::is_workbuddy_upstream_provider(account) && image_input {
+        // Do not let generic provider vision fallback silently strip images
+        // before the text-only ACP executor can enforce its capability limit.
+        return None;
+    }
     let provider_search_model = operation == Some("search") && account.is_api_key_auth();
     // Only the existing OAuth search accepts an omitted model. A provider
     // could otherwise choose an upstream default outside the caller's scope.

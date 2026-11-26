@@ -1172,6 +1172,11 @@ fn parse_quota_from_usage(usage: &UsageResponse, raw_body: &str) -> Result<Codex
 }
 
 fn is_new_api_account(account: &CodexAccount) -> bool {
+    // Older WorkBuddy links carry the generic Cockpit Api plan label, but
+    // their credentials and credits do not belong to the relay quota API.
+    if codex_account::is_workbuddy_upstream_provider(account) {
+        return false;
+    }
     account
         .api_provider_id
         .as_deref()
@@ -1205,6 +1210,25 @@ pub(crate) fn account_relay_balance_disabled(account: &CodexAccount) -> bool {
 
 pub fn supports_quota_refresh(account: &CodexAccount) -> bool {
     !account.is_api_key_auth() || (is_new_api_account(account) && !relay_balance_disabled())
+}
+
+// Manual refresh remains a successful no-op for this provider. Explicit
+// presence flags mean callers cannot interpret zeroes as exhausted windows.
+fn workbuddy_quota_unavailable() -> CodexQuota {
+    CodexQuota {
+        hourly_percentage: 0,
+        hourly_reset_time: None,
+        hourly_window_minutes: None,
+        hourly_window_present: Some(false),
+        weekly_percentage: 0,
+        weekly_reset_time: None,
+        weekly_window_minutes: None,
+        weekly_window_present: Some(false),
+        reset_credits_available: None,
+        reset_credits: Vec::new(),
+        reset_credits_next_expires_at: None,
+        raw_data: None,
+    }
 }
 
 fn normalize_api_base_url_for_match(raw: Option<&str>) -> Option<String> {
@@ -1877,6 +1901,10 @@ async fn refresh_account_quota_once(
             return Err(error);
         }
     };
+    if codex_account::is_workbuddy_upstream_provider(&account) {
+        codex_account::clear_workbuddy_codex_quota(&account)?;
+        return Ok(workbuddy_quota_unavailable());
+    }
     if account.is_api_key_auth() {
         if is_new_api_account(&account) {
             if account_relay_balance_disabled(&account) {
@@ -2127,6 +2155,9 @@ pub async fn probe_import_account_quota(account: &CodexAccount) -> Result<CodexQ
 }
 
 async fn probe_import_account_quota_at(account: &CodexAccount, usage_url: &str) -> Result<CodexQuota, String> {
+    if codex_account::is_workbuddy_upstream_provider(account) {
+        return Ok(workbuddy_quota_unavailable());
+    }
     if account.is_agent_identity_auth() {
         return fetch_quota_at(account, usage_url, true).await.map(|result| result.quota);
     }
@@ -3242,6 +3273,195 @@ mod tests {
                 && !lower.contains("referer:")
                 && !lower.contains("sec-fetch-site:")
         }));
+    }
+}
+
+#[cfg(test)]
+mod workbuddy_quota_tests {
+    use super::*;
+    use crate::models::codex::{CodexApiProviderMode, CodexTokens};
+
+    struct Storage {
+        _directory: tempfile::TempDir,
+        previous: Option<std::ffi::OsString>,
+    }
+
+    impl Storage {
+        fn new() -> Self {
+            let directory = tempfile::tempdir().unwrap();
+            let previous = std::env::var_os("COCKPIT_TOOLS_TEST_DATA_DIR");
+            std::env::set_var("COCKPIT_TOOLS_TEST_DATA_DIR", directory.path());
+            Self {
+                _directory: directory,
+                previous,
+            }
+        }
+    }
+
+    impl Drop for Storage {
+        fn drop(&mut self) {
+            match self.previous.take() {
+                Some(previous) => std::env::set_var("COCKPIT_TOOLS_TEST_DATA_DIR", previous),
+                None => std::env::remove_var("COCKPIT_TOOLS_TEST_DATA_DIR"),
+            }
+        }
+    }
+
+    fn linked_account() -> CodexAccount {
+        let mut account = CodexAccount::new_api_key(
+            format!("workbuddy-quota-{}", uuid::Uuid::new_v4()),
+            "fixture@example.invalid".into(),
+            String::new(),
+            CodexApiProviderMode::Custom,
+            Some(codex_account::WORKBUDDY_ACP_BASE_URL.into()),
+            Some("workbuddy_acp".into()),
+            Some("WorkBuddy".into()),
+            vec!["workbuddy-default".into()],
+        );
+        account.openai_api_key = None;
+        account.api_credential_kind = Some("workbuddy_acp".into());
+        account.api_credential_ref = Some("fixture-source".into());
+        account.plan_type = Some("Cockpit Api".into());
+        account
+    }
+
+    fn stale_quota(account: &mut CodexAccount) {
+        account.quota = Some(
+            serde_json::from_value(json!({
+                "hourly_percentage": 83,
+                "weekly_percentage": 41,
+                "raw_data": {"provider_usage": {"credits": 123}}
+            }))
+            .unwrap(),
+        );
+        account.quota_error = Some(CodexQuotaErrorInfo {
+            code: None,
+            message: "Cockpit Api 账号缺少 OPENAI_API_KEY".into(),
+            timestamp: 1,
+        });
+        account.usage_updated_at = Some(1);
+        account.team_quota_history = Some(
+            serde_json::from_value(json!({
+                "user_id": "old-user", "account_id": "old-workspace", "observed_at": 1,
+                "hourly_percentage": 83, "weekly_percentage": 41
+            }))
+            .unwrap(),
+        );
+    }
+
+    fn assert_no_windows(quota: &CodexQuota) {
+        assert_eq!(quota.hourly_window_present, Some(false));
+        assert_eq!(quota.weekly_window_present, Some(false));
+        assert!(quota.hourly_reset_time.is_none());
+        assert!(quota.weekly_reset_time.is_none());
+        assert!(quota.hourly_window_minutes.is_none());
+        assert!(quota.weekly_window_minutes.is_none());
+        assert!(quota.reset_credits_available.is_none());
+        assert!(quota.reset_credits.is_empty());
+        assert!(quota.raw_data.is_none());
+    }
+
+    #[test]
+    fn workbuddy_legacy_cockpit_plan_is_not_relay_quota() {
+        let mut account = linked_account();
+        assert!(!is_new_api_account(&account));
+        assert!(!supports_quota_refresh(&account));
+        assert!(!account_relay_balance_disabled(&account));
+        account.plan_type = Some("WorkBuddy".into());
+        assert!(!is_new_api_account(&account));
+        assert!(!supports_quota_refresh(&account));
+    }
+
+    #[test]
+    fn workbuddy_exclusion_preserves_ordinary_relay_and_oauth_classification() {
+        let mut relay = linked_account();
+        relay.api_credential_kind = None;
+        relay.api_credential_ref = None;
+        relay.api_base_url = Some("https://relay.example.invalid/v1".into());
+        relay.api_provider_id = Some("custom".into());
+        assert!(is_new_api_account(&relay));
+        relay.plan_type = None;
+        relay.api_provider_id = Some("new_api".into());
+        assert!(is_new_api_account(&relay));
+        relay.api_provider_id = Some("cockpit_api".into());
+        assert!(is_new_api_account(&relay));
+        relay.api_provider_id = Some("custom".into());
+        assert!(!is_new_api_account(&relay));
+        let oauth = CodexAccount::new(
+            "oauth-fixture".into(),
+            "fixture@example.invalid".into(),
+            CodexTokens {
+                id_token: String::new(),
+                access_token: String::new(),
+                refresh_token: None,
+            },
+        );
+        assert!(supports_quota_refresh(&oauth));
+    }
+
+    #[tokio::test]
+    async fn workbuddy_manual_refresh_clears_stale_quota_without_openai_key() {
+        let _lock = crate::modules::test_support::env_lock()
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let _storage = Storage::new();
+        let mut account = linked_account();
+        stale_quota(&mut account);
+        codex_account::save_account(&account).unwrap();
+        let quota = refresh_account_quota_once(
+            &account.id,
+            &codex_account::CodexQuotaRuntimeSnapshot::empty(),
+        )
+        .await
+        .unwrap();
+        assert_no_windows(&quota);
+        let current = codex_account::load_account(&account.id).unwrap();
+        assert!(current.quota.is_none());
+        assert!(current.quota_error.is_none());
+        assert!(current.team_quota_history.is_none());
+        assert!(current.usage_updated_at.is_none());
+        assert!(current.openai_api_key.is_none());
+        assert_eq!(current.api_credential_ref, account.api_credential_ref);
+        assert_eq!(current.plan_type.as_deref(), Some("Cockpit Api"));
+    }
+
+    #[tokio::test]
+    async fn workbuddy_import_probe_has_no_codex_windows_or_network_dependency() {
+        let quota = probe_import_account_quota_at(&linked_account(), "invalid-fixture-url")
+            .await
+            .unwrap();
+        assert_no_windows(&quota);
+    }
+
+    #[test]
+    fn workbuddy_quota_cleanup_merges_metadata_and_rejects_rebound_accounts() {
+        let _lock = crate::modules::test_support::env_lock()
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let _storage = Storage::new();
+        let original = linked_account();
+        let mut current = original.clone();
+        stale_quota(&mut current);
+        current.account_note = Some("newer metadata".into());
+        current.egress_proxy_disabled = true;
+        codex_account::save_account(&current).unwrap();
+        codex_account::clear_workbuddy_codex_quota(&original).unwrap();
+        let current = codex_account::load_account(&original.id).unwrap();
+        assert!(current.quota.is_none());
+        assert!(current.quota_error.is_none());
+        assert_eq!(current.account_note.as_deref(), Some("newer metadata"));
+        assert!(current.egress_proxy_disabled);
+        let mut rebound = current;
+        stale_quota(&mut rebound);
+        rebound.api_credential_ref = Some("different-source".into());
+        codex_account::save_account(&rebound).unwrap();
+        assert_eq!(
+            codex_account::clear_workbuddy_codex_quota(&original).unwrap_err(),
+            "CODEX_STALE_QUOTA_REQUEST"
+        );
+        let current = codex_account::load_account(&original.id).unwrap();
+        assert!(current.quota.is_some());
+        assert!(current.quota_error.is_some());
     }
 }
 

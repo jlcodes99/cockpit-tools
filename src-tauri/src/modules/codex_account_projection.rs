@@ -137,6 +137,7 @@ fn build_merged_auth_file_value(
 
 fn build_auth_file_value(account: &CodexAccount) -> Result<serde_json::Value, String> {
     reject_chatgpt_plan_client_injection(account)?;
+    reject_workbuddy_client_injection(account)?;
     if account.is_api_key_auth() {
         let api_key = normalize_optional_ref(account.openai_api_key.as_deref())
             .ok_or("API Key 账号缺少 OPENAI_API_KEY")?;
@@ -792,6 +793,7 @@ fn write_auth_file_to_dir_with_after_commit_and_bridge(
     after_commit: impl FnOnce(),
     bridge_url: Option<String>,
 ) -> Result<(), String> {
+    reject_workbuddy_client_injection(account)?;
     let auth_path = base_dir.join("auth.json");
     logger::log_info(&format!(
         "[Codex切号] 准备写入登录信息: account_id={}, email={}, target_dir={}, target_file={}",
@@ -903,6 +905,7 @@ pub(crate) fn write_saved_account_bundle_to_dir(
     base_dir: &Path, account_id: &str,
 ) -> Result<(), String> {
     let account = load_account(account_id).ok_or_else(|| format!("账号不存在: {account_id}"))?;
+    reject_workbuddy_client_injection(&account)?;
     if account.is_api_key_auth() {
         if let Some(oauth) = load_optional_bound_oauth_account_for_api_key(&account)? {
             return write_api_key_account_bundle_with_oauth_to_dir(base_dir, &account, &oauth);
@@ -950,6 +953,7 @@ fn write_prepared_account_bundle(
     credentials_changed: &std::cell::Cell<bool>,
 ) -> Result<(), String> {
     reject_chatgpt_plan_client_injection(account)?;
+    reject_workbuddy_client_injection(account)?;
     let account = resolve_account_for_bundle_write(base_dir, account)?;
     write_auth_file_to_dir_with_after_commit(base_dir, &account, || credentials_changed.set(true))?;
     write_managed_projection_to_dir(base_dir, &account)?;
@@ -1054,6 +1058,7 @@ pub(crate) fn write_api_key_account_bundle_with_oauth_to_dir(
     api_key_account: &CodexAccount,
     oauth_account: &CodexAccount,
 ) -> Result<(), String> {
+    reject_workbuddy_client_injection(api_key_account)?;
     if !api_key_account.is_api_key_auth() {
         return Err("仅 API Key 账号支持 OAuth 绑定写入".to_string());
     }
@@ -1102,6 +1107,7 @@ pub(crate) fn write_api_key_account_bundle_with_oauth_to_dir(
 }
 
 pub fn write_account_bundle_to_dir(base_dir: &Path, account: &CodexAccount) -> Result<(), String> {
+    reject_workbuddy_client_injection(account)?;
     if account.is_api_key_auth() {
         if let Some(oauth_account) = load_optional_bound_oauth_account_for_api_key(account)? {
             return write_api_key_account_bundle_with_oauth_to_dir(

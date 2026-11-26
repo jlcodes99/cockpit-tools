@@ -573,6 +573,7 @@ pub async fn prepare_account_for_instance_launch_preflight(
     account_id: &str,
 ) -> Result<CodexAccount, String> {
     let account = load_account(account_id).ok_or_else(|| format!("账号不存在: {}", account_id))?;
+    reject_workbuddy_client_injection(&account)?;
     if account.is_agent_identity_auth() {
         return Err("Agent Identity 账号仅支持 API 服务，无法用于客户端或 CLI 启动".to_string());
     }
@@ -604,6 +605,7 @@ pub async fn project_preflighted_account_for_instance_launch(
     auth_dir: &Path,
 ) -> Result<CodexAccount, String> {
     let account = load_account(account_id).ok_or_else(|| format!("账号不存在: {}", account_id))?;
+    reject_workbuddy_client_injection(&account)?;
     if account.is_agent_identity_auth() {
         return Err("Agent Identity 账号仅支持 API 服务，无法用于客户端或 CLI 启动".to_string());
     }
@@ -659,6 +661,7 @@ async fn prepare_account_for_injection_from_auth_dir_impl(
 ) -> Result<CodexAccount, String> {
     let mut account =
         load_account(account_id).ok_or_else(|| format!("账号不存在: {}", account_id))?;
+    reject_workbuddy_client_injection(&account)?;
     if account.is_agent_identity_auth() {
         return Err("Agent Identity 账号仅支持 API 服务，无法用于客户端或 CLI 启动".to_string());
     }
@@ -1118,6 +1121,7 @@ where
     let _switch_guard = CODEX_ACCOUNT_SWITCH_LOCK.lock().await;
     if let Some(account) = load_account(account_id) {
         reject_chatgpt_plan_client_injection(&account)?;
+        reject_workbuddy_client_injection(&account)?;
     }
     sync_active_official_account_before_switch().await?;
 

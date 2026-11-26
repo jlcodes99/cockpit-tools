@@ -22,9 +22,16 @@ pub(super) fn is_route(route: &super::contract::Route) -> bool {
 pub(super) async fn open_text_stream(
     state: &Arc<AppState>,
     prepared: &Prepared,
-    _compact: bool,
+    compact: bool,
     deadline: super::deadline::Deadline,
 ) -> Result<HttpResponseStream, super::contract::ServiceError> {
+    if compact {
+        return Err(error(
+            400,
+            "workbuddy_text_only",
+            "WorkBuddy ACP MVP does not support /responses/compact; only stateless text Responses requests are supported",
+        ));
+    }
     let prompt = extract_text_prompt(&prepared.body)?;
     let model = prepared.route.model.trim();
     if model.is_empty() {
@@ -331,6 +338,101 @@ fn map_error(value: String) -> super::contract::ServiceError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn workbuddy_compact_endpoint_is_rejected_before_loading_credentials() {
+        use crate::modules::codex_native_api::{
+            contract::{Caller, Host, RequestReport, Route, RouteRequest, ServiceError, WireApi},
+            server::{start, Options},
+        };
+        use futures_util::future::BoxFuture;
+        use std::time::Duration;
+
+        struct CompactHost;
+        impl Host for CompactHost {
+            fn authorize<'a>(&'a self, _: &'a str) -> BoxFuture<'a, Result<Caller, ServiceError>> {
+                Box::pin(async {
+                    Ok(Caller {
+                        id: "compact-fixture".into(),
+                        label: "fixture".into(),
+                    })
+                })
+            }
+            fn route<'a>(
+                &'a self,
+                _: &'a Caller,
+                request: RouteRequest,
+            ) -> BoxFuture<'a, Result<Route, ServiceError>> {
+                Box::pin(async move {
+                    Ok(Route {
+                        // Deliberately has no real linked source. Compact must
+                        // fail before this ID can trigger account-store reads.
+                        account_id: "dummy-workbuddy-compact-source".into(),
+                        continuity_account_id: None,
+                        owner_id: "compact-fixture-owner".into(),
+                        installation_profile: None,
+                        transport_identity: None,
+                        official_authorization_revision: None,
+                        official_registration_id: None,
+                        official_fallback_registration_id: None,
+                        official_fallback_authorization_revision: None,
+                        authorization_scope_fingerprint: None,
+                        official_fallback_failure: None,
+                        base_url: codex_account::WORKBUDDY_ACP_BASE_URL.into(),
+                        model: request.model,
+                        headers: HeaderMap::new(),
+                        client: reqwest::Client::builder().no_proxy().build().unwrap(),
+                        proxy_url: None,
+                        proxy_route: None,
+                        chatgpt: false,
+                        chatgpt_plan: false,
+                        wire_api: WireApi::Responses,
+                        compact_endpoint: None,
+                        websocket_endpoint: None,
+                        default_service_tier: None,
+                        permit: None,
+                    })
+                })
+            }
+            fn models<'a>(&'a self, _: &'a Caller) -> BoxFuture<'a, Result<Value, ServiceError>> {
+                Box::pin(async { Ok(json!({"data":[{"id":"workbuddy-default"}]})) })
+            }
+            fn record(&self, _: RequestReport) -> BoxFuture<'_, ()> {
+                Box::pin(async {})
+            }
+        }
+
+        let directory = tempfile::tempdir().unwrap();
+        let mut handle = start(
+            "127.0.0.1:0".parse().unwrap(),
+            Arc::new(CompactHost),
+            directory.path().join("identity.sqlite"),
+            Options::default(),
+        )
+        .await
+        .unwrap();
+        let client = reqwest::Client::builder()
+            .no_proxy()
+            .timeout(Duration::from_secs(5))
+            .build()
+            .unwrap();
+        let response = client
+            .post(format!("http://{}/v1/responses/compact", handle.addr))
+            .bearer_auth("dummy-local-key")
+            .json(&json!({"model":"workbuddy-default","input":"hello"}))
+            .send()
+            .await
+            .unwrap();
+        let status = response.status();
+        let body: Value = response.json().await.unwrap();
+        handle.shutdown(Duration::from_secs(5)).await.unwrap();
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+        assert_eq!(body["error"]["code"], "workbuddy_text_only", "{body}");
+        assert!(body["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("/responses/compact"));
+    }
 
     #[test]
     fn extracts_responses_text_input_without_secret_material() {
