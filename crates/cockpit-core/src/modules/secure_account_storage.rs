@@ -73,6 +73,20 @@ pub(super) fn write_at<T: Serialize>(
     account: &T,
     desktop_fields: &[(&str, &[&str])],
 ) -> Result<(), String> {
+    write_at_checked(root, path, kind, account, desktop_fields, |_| Ok(()))
+}
+
+/// Same write, but only while the stored detail still satisfies `check_current`.
+/// The check runs under the file lock and after the read, so a concurrent
+/// renewal or a deleted account cannot be overwritten by a stale snapshot.
+pub(super) fn write_at_checked<T: Serialize>(
+    root: &Path,
+    path: &Path,
+    kind: &str,
+    account: &T,
+    desktop_fields: &[(&str, &[&str])],
+    check_current: impl FnOnce(Option<&Value>) -> Result<(), String>,
+) -> Result<(), String> {
     let _lock = lock_account_file_for_write(path)?;
     let mut next = serde_json::to_value(account).map_err(|error| error.to_string())?;
     let current: Option<Value> = match fs::read_to_string(path) {
@@ -80,13 +94,19 @@ pub(super) fn write_at<T: Serialize>(
         Err(error) if error.kind() == ErrorKind::NotFound => None,
         Err(error) => return Err(format!("读取待更新账号详情失败: {error}")),
     };
+    check_current(current.as_ref())?;
     if let Some(previous) = &current {
         if previous["id"] != next["id"] {
             return Err("账号 ID 与原详情不一致".into());
         }
+        // The guard exists so a clock skew cannot move the stamp backwards, but it
+        // compares raw values: a millisecond leftover is always larger than any
+        // second-based write, so the field would stay pinned at the stale value
+        // forever. Normalize both sides before taking the maximum.
         if let Some(timestamp) = previous["last_switched_at"]
             .as_i64()
-            .max(next["last_switched_at"].as_i64())
+            .map(super::epoch_time::epoch_seconds)
+            .max(next["last_switched_at"].as_i64().map(super::epoch_time::epoch_seconds))
         {
             next["last_switched_at"] = timestamp.into();
         }
@@ -142,6 +162,47 @@ pub(crate) fn write_account_file_preserving_fields<T: Serialize>(
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn pending_renewal_recovers_from_detail_contention_without_loading_the_index() {
+        use crate::models::qoder::QoderAccount;
+        use crate::modules::{account_file_crypto, qoder_token_renewal::TokenRenewal};
+        use serde_json::json;
+
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let path = root.join("fixture.json");
+        let old: QoderAccount = serde_json::from_value(json!({
+            "id": "fixture", "email": "fixture@example.invalid", "created_at": 1, "last_used": 1,
+            "auth_user_info_raw": { "token": "old-synthetic-token" },
+        })).unwrap();
+        let next = json!({ "token": "new-synthetic-token" });
+        write_at(root, &path, "qoder", &old, &[]).unwrap();
+        let blocked_index = root.join("qoder_accounts.json");
+        fs::create_dir(&blocked_index).unwrap();
+        let save = |expected: &QoderAccount, updated: &QoderAccount| {
+            write_at_checked(root, &path, "qoder", updated, &[], |raw| {
+                TokenRenewal::check_current(expected, raw)
+            })
+        };
+
+        {
+            let renewal = TokenRenewal::open(root.to_path_buf(), &path).unwrap();
+            let _lock = account_file_crypto::lock_account_file(&path).unwrap();
+            let error = renewal
+                .commit(&old, next.clone(), None, || read_at(root, &path), save)
+                .unwrap_err();
+            assert!(error.starts_with("QODER_RENEWAL_PERSIST_FAILED: "));
+        }
+        // Reopen as the next process would, using only encrypted files on disk.
+        let stored: QoderAccount = read_at(root, &path).unwrap();
+        assert_eq!(stored.auth_user_info_raw, old.auth_user_info_raw);
+        let renewal = TokenRenewal::open(root.to_path_buf(), &path).unwrap();
+        renewal.recover(stored, save).unwrap();
+        let stored: QoderAccount = read_at(root, &path).unwrap();
+        assert_eq!(stored.auth_user_info_raw, Some(next));
+        assert!(blocked_index.is_dir());
+    }
 
     const FIXTURE_KEY: &str = "KioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKio=";
     // AES-GCM reference fixture generated independently of the Rust codec.

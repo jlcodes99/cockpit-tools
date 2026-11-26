@@ -235,6 +235,14 @@ provider_index!(
 );
 
 provider_index!(
+    crate::models::qoder::QoderCnAccountIndex,
+    crate::models::qoder::QoderAccountSummary,
+    "qoder_cn",
+    false,
+    None
+);
+
+provider_index!(
     crate::models::workbuddy::WorkbuddyAccountIndex,
     crate::models::workbuddy::WorkbuddyAccountSummary,
     "workbuddy",
