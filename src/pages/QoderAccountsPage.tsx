@@ -1289,7 +1289,10 @@ export function QoderAccountsPage() {
 
   const resolveUpdatedText = useCallback(
     (account: QoderAccount) => {
-      const updatedAt = account.last_used || account.created_at || 0;
+      // `usage_updated_at` is stamped whenever a quota fetch succeeds, so it is the
+      // only field that moves when the user hits refresh. `last_used` only moves on
+      // import/tag/switch, which made a freshly refreshed card keep its old time.
+      const updatedAt = account.usage_updated_at || account.last_used || account.created_at || 0;
       const secondsAgo = Math.max(0, Math.floor(Date.now() / 1000) - updatedAt);
       return t('common.shared.updated.label', '更新于 {{relative}}前', {
         relative: formatRelativeDuration(secondsAgo),
@@ -1488,7 +1491,7 @@ export function QoderAccountsPage() {
             {renderQuotaSection(account)}
 
             <div className="card-footer">
-              <AccountLastUsed accountId={account.id} lastSwitchedAt={account.last_switched_at} createdAt={account.created_at} formatDate={formatDateTime} />
+              <AccountLastUsed accountId={account.id} lastSwitchedAt={account.last_switched_at} refreshAt={account.usage_updated_at} createdAt={account.created_at} formatDate={formatDateTime} />
               <div className="card-actions">
                 <button
                   className="card-action-btn success"
@@ -1643,7 +1646,7 @@ export function QoderAccountsPage() {
               </div>
             </td>
             <td>
-              <AccountLastUsed accountId={account.id} lastSwitchedAt={account.last_switched_at} createdAt={account.created_at} formatDate={formatDateTime} />
+              <AccountLastUsed accountId={account.id} lastSwitchedAt={account.last_switched_at} refreshAt={account.usage_updated_at} createdAt={account.created_at} formatDate={formatDateTime} />
             </td>
             <td className="sticky-action-cell table-action-cell">
               <div className="action-buttons">
