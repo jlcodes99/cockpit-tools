@@ -202,6 +202,21 @@ pub(crate) async fn retry(state: &AppState, prepared: &mut Prepared) -> Result<b
     if !prepared.capability_fallback_enabled {
         return Ok(false);
     }
+    let execution = prepared.execution.renew_open();
+    let switched = execution
+        .clone()
+        .run(super::super::execution::prepare(
+            state,
+            retry_inner(state, prepared),
+        ))
+        .await?;
+    if switched {
+        prepared.execution = execution;
+    }
+    Ok(switched)
+}
+
+async fn retry_inner(state: &AppState, prepared: &mut Prepared) -> Result<bool, ServiceError> {
     let body = prepared.replay_body().clone();
     let headers = prepared.replay_headers().clone();
     let context = inspect_mode(state, &prepared.caller, &headers, &body, true).await?;

@@ -92,8 +92,9 @@ pub(super) async fn request(
         return Ok((request, None));
     };
     let plain = plain.to_vec();
+    let level = if plain.len() > 4 * 1024 * 1024 { 1 } else { 3 };
     let compressed = super::blocking::run_prepared(state, move || {
-        zstd::stream::encode_all(plain.as_slice(), 3).map_err(compression_error)
+        zstd::stream::encode_all(plain.as_slice(), level).map_err(compression_error)
     })
     .await?;
     if compressed.len()

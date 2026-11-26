@@ -1,0 +1,382 @@
+.t3code-privacy-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 36px;
+  min-width: 0;
+  padding-inline: 12px 10px;
+  border-radius: var(--radius-md);
+}
+
+.t3code-privacy-trigger.is-compact {
+  min-height: 32px;
+  padding-inline: 10px 8px;
+}
+
+.t3code-privacy-trigger > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.t3code-privacy-trigger > svg {
+  flex-shrink: 0;
+}
+
+.t3code-privacy-trigger-arrow {
+  opacity: 0.65;
+  transition: transform 0.16s ease, opacity 0.16s ease;
+}
+
+.t3code-privacy-trigger:hover:not(:disabled) .t3code-privacy-trigger-arrow {
+  transform: translateX(2px);
+  opacity: 1;
+}
+
+.modal-overlay.t3code-privacy-overlay {
+  z-index: 10000;
+  padding: 16px;
+}
+
+.modal-content.t3code-privacy-dialog {
+  width: min(100%, 600px);
+  max-height: calc(100vh - 32px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.t3code-privacy-dialog > .modal-header,
+.t3code-privacy-dialog > .modal-footer {
+  flex-shrink: 0;
+}
+
+.t3code-privacy-header {
+  padding: 18px 22px;
+}
+
+.t3code-privacy-title-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.t3code-privacy-title-group h2 {
+  font-size: 17px;
+  font-weight: 700;
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.t3code-privacy-title-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 12%, var(--bg-tertiary));
+  border: 1px solid color-mix(in srgb, var(--primary) 24%, transparent);
+}
+
+.t3code-privacy-dialog > .modal-body.t3code-privacy-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 18px 22px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.t3code-privacy-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 16px;
+  padding: 13px 15px;
+  border-radius: var(--radius-md);
+  border: 1px solid color-mix(in srgb, var(--primary) 22%, var(--border));
+  background: color-mix(in srgb, var(--primary) 7%, var(--bg-tertiary));
+}
+
+.t3code-privacy-heading.is-protected {
+  border-color: color-mix(in srgb, var(--success) 28%, var(--border));
+  background: color-mix(in srgb, var(--success) 8%, var(--bg-tertiary));
+}
+
+.t3code-privacy-heading-copy {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+.t3code-privacy-heading-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--primary);
+}
+
+.t3code-privacy-heading.is-protected .t3code-privacy-heading-icon {
+  color: var(--success);
+}
+
+.t3code-privacy-heading p,
+.t3code-privacy-copy p,
+.t3code-privacy-scope {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.t3code-privacy-heading p {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.t3code-privacy-quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.t3code-privacy-quick-btn {
+  min-height: 34px;
+  padding-inline: 14px;
+  max-width: 100%;
+  white-space: normal;
+}
+
+.t3code-privacy-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.t3code-privacy-option {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 16px;
+  padding: 13px 15px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--bg-tertiary);
+  transition: border-color 0.16s ease, background-color 0.16s ease;
+}
+
+.t3code-privacy-option:hover {
+  border-color: var(--border-hover, var(--border));
+}
+
+.t3code-privacy-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.t3code-privacy-option-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.t3code-privacy-option-head strong {
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--text-primary);
+}
+
+.t3code-privacy-status-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+}
+
+.t3code-privacy-status-pill.is-on {
+  color: var(--primary);
+  border-color: color-mix(in srgb, var(--primary) 30%, var(--border));
+  background: color-mix(in srgb, var(--primary) 10%, var(--bg-surface));
+}
+
+.t3code-privacy-status-pill.is-off {
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+}
+
+.t3code-privacy-desc {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+}
+
+.t3code-privacy-note {
+  font-size: 12px;
+  color: var(--text-muted);
+  padding-top: 2px;
+}
+
+.t3code-privacy-note.is-blocked {
+  color: var(--text-caution);
+  font-weight: 500;
+}
+
+.t3code-privacy-control {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  align-self: center;
+}
+
+/* Self-contained toggle switch for privacy modal */
+.t3code-privacy-switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.t3code-privacy-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+  position: absolute;
+  margin: 0;
+}
+
+.t3code-privacy-slider {
+  position: absolute;
+  cursor: pointer;
+  inset: 0;
+  background-color: color-mix(in srgb, var(--text-muted) 35%, var(--border));
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  transition: background-color 0.22s cubic-bezier(0.25, 0.8, 0.25, 1),
+    border-color 0.22s cubic-bezier(0.25, 0.8, 0.25, 1);
+  border-radius: 999px;
+}
+
+.t3code-privacy-slider::before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 2px;
+  top: 2px;
+  background-color: #ffffff;
+  transition: transform 0.22s cubic-bezier(0.25, 0.8, 0.25, 1);
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22);
+}
+
+.t3code-privacy-switch input:checked + .t3code-privacy-slider {
+  background-color: var(--primary);
+  border-color: var(--primary);
+}
+
+.t3code-privacy-switch input:checked + .t3code-privacy-slider::before {
+  transform: translateX(20px);
+}
+
+.t3code-privacy-switch input:focus-visible + .t3code-privacy-slider {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.t3code-privacy-switch input:disabled + .t3code-privacy-slider {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.t3code-privacy-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.t3code-privacy-scope {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.t3code-privacy-scope > svg {
+  flex-shrink: 0;
+}
+
+.t3code-privacy-restart-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid color-mix(in srgb, var(--warning) 38%, var(--border));
+  background: color-mix(in srgb, var(--warning) 10%, var(--bg-tertiary));
+  color: var(--text-caution);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.t3code-privacy-restart-notice > svg {
+  flex-shrink: 0;
+}
+
+.t3code-privacy-footer {
+  padding: 14px 22px;
+  align-items: center;
+}
+
+.t3code-privacy-loading-status {
+  margin-inline-end: auto;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+@media (max-width: 480px) {
+  .t3code-privacy-option {
+    column-gap: 10px;
+    padding: 11px 12px;
+  }
+
+  .t3code-privacy-heading {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .t3code-privacy-quick-btn {
+    flex: 1 1 130px;
+    min-width: 0;
+    justify-content: center;
+  }
+}

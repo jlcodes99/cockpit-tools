@@ -56,24 +56,14 @@ pub(super) async fn inspect(
             Ok(value) => {
                 !bootstrap::http_execution_observed(&value)
                     && (status.as_u16() == 415
-                        || value
-                            .get("error")
-                            .is_some_and(|v| v.is_object() || v.is_string()))
+                        || encoding_rejection(&value))
             }
             Err(_) => {
                 let message = String::from_utf8_lossy(&prefix).to_ascii_lowercase();
-                let message = message.trim();
+                let message = message.trim_start();
                 !message.starts_with("data:")
                     && !message.starts_with("event:")
-                    && (status.as_u16() == 415
-                        || [
-                            "unsupported content-encoding",
-                            "unsupported encoding",
-                            "failed to decompress",
-                            "invalid zstd",
-                        ]
-                        .iter()
-                        .any(|part| message.starts_with(part)))
+                    && (status.as_u16() == 415 || compression_message(message))
             }
         };
     let replay = stream::iter(
@@ -87,4 +77,27 @@ pub(super) async fn inspect(
     *restored.version_mut() = version;
     *restored.headers_mut() = headers;
     Ok((reqwest::Response::from(restored), safe))
+}
+
+fn encoding_rejection(value: &serde_json::Value) -> bool {
+    let error = value.get("error").unwrap_or(value);
+    let code = error.get("code").and_then(serde_json::Value::as_str);
+    let message = error.as_str().or_else(|| error["message"].as_str());
+    matches!(
+        code,
+        Some("unsupported_content_encoding" | "unsupported_encoding" | "invalid_zstd" | "decompression_failed")
+    ) || message.is_some_and(compression_message)
+}
+
+fn compression_message(message: &str) -> bool {
+    let message = message.trim().to_ascii_lowercase();
+    [
+        "unsupported content-encoding",
+        "unsupported content encoding",
+        "unsupported encoding",
+        "failed to decompress",
+        "invalid zstd",
+    ]
+    .iter()
+    .any(|prefix| message.starts_with(prefix))
 }

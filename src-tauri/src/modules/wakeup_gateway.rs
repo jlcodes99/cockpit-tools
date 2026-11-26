@@ -26,8 +26,10 @@ pub const INTERNAL_HEALTH_CHECK_PATH: &str = "/__ag_internal__/wakeup/health";
 
 const REQUEST_READ_TIMEOUT: Duration = Duration::from_secs(10);
 const MAX_HTTP_REQUEST_BYTES: usize = 512 * 1024;
-// 对齐官方扩展 waitForLanguageServerStart 的 60s 等待窗口，降低冷启动慢时误判失败。
-const OFFICIAL_LS_START_TIMEOUT: Duration = Duration::from_secs(60);
+// 低于唤醒客户端 30s HTTP 请求超时窗口，保证极端卡死时网关能先返回明确超时原因。
+const OFFICIAL_LS_START_TIMEOUT: Duration = Duration::from_secs(25);
+const OFFICIAL_LS_STDERR_CALLBACK_GRACE: Duration = Duration::from_millis(150);
+const OFFICIAL_LS_STDERR_INIT_FALLBACK_DELAY: Duration = Duration::from_millis(2500);
 const OFFICIAL_LS_EXTENSION_BIND_TIMEOUT: Duration = Duration::from_secs(8);
 const LOCAL_GATEWAY_BIND_TIMEOUT: Duration = Duration::from_secs(8);
 const LOCAL_GATEWAY_TLS_SETUP_TIMEOUT: Duration = Duration::from_secs(8);
@@ -700,6 +702,13 @@ fn standalone_ls_binary(root: &std::path::Path) -> std::path::PathBuf {
     })
 }
 
+fn standalone_ls_root(binary: &std::path::Path) -> Option<&std::path::Path> {
+    binary
+        .ancestors()
+        .nth(if cfg!(target_os = "macos") { 4 } else { 3 })
+        .filter(|root| standalone_ls_binary(root) == binary)
+}
+
 struct OfficialLsRuntime {
     binary: std::path::PathBuf,
     standalone: bool,
@@ -742,10 +751,7 @@ fn official_ls_runtime() -> Result<OfficialLsRuntime, String> {
         let trimmed = v.trim();
         if !trimmed.is_empty() {
             let binary = std::path::PathBuf::from(trimmed);
-            let standalone = binary
-                .ancestors()
-                .nth(if cfg!(target_os = "macos") { 4 } else { 3 })
-                .is_some_and(|root| standalone_ls_binary(root) == binary);
+            let standalone = standalone_ls_root(&binary).is_some();
             return Ok(OfficialLsRuntime { binary, standalone });
         }
     }
@@ -1547,7 +1553,75 @@ async fn start_official_ls_extension_server(
     })
 }
 
-fn spawn_ls_log_task<R>(reader: R, tag: &'static str) -> tokio::task::JoinHandle<()>
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+struct OfficialLsLogProgress {
+    https_port: Option<u16>,
+    http_port: Option<u16>,
+    lsp_port: Option<u16>,
+    server_initialized: bool,
+    standalone_state_refreshed: bool,
+}
+
+impl OfficialLsLogProgress {
+    fn observe_line(&mut self, line: &str) -> bool {
+        let mut changed = false;
+        if let Some((_, after)) = line
+            .split_once("listening on random port at ")
+            .or_else(|| line.split_once("listening on port "))
+        {
+            let trimmed = after.trim_start();
+            let digits_len = trimmed.bytes().take_while(|b| b.is_ascii_digit()).count();
+            if digits_len > 0 {
+                if let Ok(port) = trimmed[..digits_len].parse::<u16>() {
+                    if port > 0 {
+                        let rest = &trimmed[digits_len..];
+                        if rest.contains("HTTPS") {
+                            if self.https_port != Some(port) {
+                                self.https_port = Some(port);
+                                changed = true;
+                            }
+                        } else if rest.contains("HTTP") {
+                            if self.http_port != Some(port) {
+                                self.http_port = Some(port);
+                                changed = true;
+                            }
+                        } else if rest.contains("LSP") && self.lsp_port != Some(port) {
+                            self.lsp_port = Some(port);
+                            changed = true;
+                        }
+                    }
+                }
+            }
+        }
+        if line.contains("initialized server successfully") && !self.server_initialized {
+            self.server_initialized = true;
+            changed = true;
+        }
+        if (line.contains("State refresh took ")
+            || line.contains("Finished refreshing state")
+            || line.contains("Failed to refresh state"))
+            && !self.standalone_state_refreshed
+        {
+            self.standalone_state_refreshed = true;
+            changed = true;
+        }
+        changed
+    }
+
+    fn started_info(&self) -> Option<OfficialLsStartedInfo> {
+        Some(OfficialLsStartedInfo {
+            https_port: self.https_port?,
+            http_port: self.http_port.unwrap_or(0),
+            lsp_port: self.lsp_port.unwrap_or(0),
+        })
+    }
+}
+
+fn spawn_ls_log_task<R>(
+    reader: R,
+    tag: &'static str,
+    progress_tx: Option<tokio::sync::watch::Sender<OfficialLsLogProgress>>,
+) -> tokio::task::JoinHandle<()>
 where
     R: AsyncRead + Unpin + Send + 'static,
 {
@@ -1558,12 +1632,43 @@ where
             if trimmed.is_empty() {
                 continue;
             }
+            if let Some(ref tx) = progress_tx {
+                tx.send_if_modified(|progress| progress.observe_line(trimmed));
+            }
             crate::modules::logger::log_info(&format!(
                 "[WakeupGateway][OfficialLS][{}] {}",
                 tag, trimmed
             ));
         }
     })
+}
+
+async fn wait_for_official_ls_log_readiness(
+    mut progress_rx: tokio::sync::watch::Receiver<OfficialLsLogProgress>,
+) -> Result<OfficialLsStartedInfo, String> {
+    loop {
+        let snapshot = *progress_rx.borrow_and_update();
+        if let Some(info) = snapshot.started_info() {
+            if snapshot.standalone_state_refreshed {
+                tokio::time::sleep(OFFICIAL_LS_STDERR_CALLBACK_GRACE).await;
+                return Ok(info);
+            }
+            if snapshot.server_initialized {
+                match timeout(
+                    OFFICIAL_LS_STDERR_INIT_FALLBACK_DELAY,
+                    progress_rx.changed(),
+                )
+                .await
+                {
+                    Ok(Ok(())) => continue,
+                    _ => return Ok(progress_rx.borrow().started_info().unwrap_or(info)),
+                }
+            }
+        }
+        if progress_rx.changed().await.is_err() {
+            return std::future::pending().await;
+        }
+    }
 }
 
 impl OfficialLsProcessHandle {
@@ -1599,10 +1704,12 @@ async fn start_official_ls_process(
     account_id: &str,
     token: &crate::models::token::TokenData,
 ) -> Result<OfficialLsProcessHandle, String> {
-    let (runtime, metadata) = tokio::task::spawn_blocking(|| {
+    let (runtime, metadata, standalone_version) = tokio::task::spawn_blocking(|| {
         let runtime = official_ls_runtime()?;
         let metadata = (!runtime.standalone).then(build_official_ls_metadata_bytes);
-        Ok::<_, String>((runtime, metadata))
+        let standalone_version = standalone_ls_root(&runtime.binary)
+            .and_then(crate::commands::system::antigravity_desktop_version_at);
+        Ok::<_, String>((runtime, metadata, standalone_version))
     })
     .await
     .map_err(|error| error.to_string())??;
@@ -1613,6 +1720,20 @@ async fn start_official_ls_process(
 
     let mut cmd = Command::new(&runtime.binary);
     configure_official_ls_auth(&mut cmd, runtime.standalone, &token.access_token);
+    if let Some(version) = standalone_version.as_deref() {
+        // Match the installed desktop client's hub launch identity. The wakeup
+        // account token and isolated app data directory are managed separately.
+        cmd.args([
+            "--override_ide_name",
+            "antigravity",
+            "--subclient_type",
+            "hub",
+            "--override_ide_version",
+            version,
+            "--override_user_agent_name",
+            "antigravity",
+        ]);
+    }
     cmd.arg("--csrf_token")
         .arg(&ls_csrf)
         .arg("--extension_server_port")
@@ -1640,11 +1761,13 @@ async fn start_official_ls_process(
             "[WakeupGateway] 官方 LS 已启动进程，等待回调: account_id={}",
             account_id
         ));
-        let stdout_task = spawn_ls_log_task(stdout, "stdout");
+        let (progress_tx, progress_rx) =
+            tokio::sync::watch::channel(OfficialLsLogProgress::default());
+        let stdout_task = spawn_ls_log_task(stdout, "stdout", Some(progress_tx.clone()));
         let stderr_task = child
             .stderr
             .take()
-            .map(|stderr| spawn_ls_log_task(stderr, "stderr"));
+            .map(|stderr| spawn_ls_log_task(stderr, "stderr", Some(progress_tx)));
 
         if let (Some(metadata), Some(mut stdin)) = (metadata, child.stdin.take()) {
             stdin
@@ -1657,6 +1780,13 @@ async fn start_official_ls_process(
         let started = tokio::select! {
             result = &mut extension_server.started_receiver => {
                 result.map_err(|_| "官方 LS LanguageServerStarted 通知通道已关闭".to_string())?
+            }
+            Ok(info) = wait_for_official_ls_log_readiness(progress_rx) => {
+                crate::modules::logger::log_info(&format!(
+                    "[WakeupGateway] 官方 LS 通过日志输出确认就绪（无 LanguageServerStarted 回调）: https_port={}",
+                    info.https_port
+                ));
+                info
             }
             status = child.wait() => {
                 return Err(match status {
@@ -1909,6 +2039,28 @@ fn build_tls_acceptor() -> Result<TlsAcceptor, String> {
 #[test]
 fn cold_wakeup_gateway_builds_tls_acceptor() {
     build_tls_acceptor().expect("wakeup gateway TLS must initialize on first use");
+}
+
+#[tokio::test]
+async fn official_ls_stderr_readiness_resolves_when_hub_bootstrap_omits_started_callback() {
+    let (tx, rx) = tokio::sync::watch::channel(OfficialLsLogProgress::default());
+    for line in [
+        "I1115 03:49:10.371202 8892056 main.go:1164] Starting language server process with pid 21671",
+        "I1115 03:49:10.371261 8892056 server.go:292] Language server will attempt to listen on host 127.0.0.1",
+        "I1115 03:49:10.377050 8892056 server.go:309] Language server listening on random port at 51447 for HTTPS (gRPC)",
+        "I1115 03:49:10.422750 8892056 server.go:258] initialized server successfully in 45.141917ms",
+        "I1115 03:49:11.613061 8892074 auth_manager.go:258] Auth succeeded, refreshing features and managers",
+        "I1115 03:49:11.797268 8892056 standalone_auth_provider.go:147] State refresh took 1.374448041s",
+    ] {
+        tx.send_if_modified(|progress| progress.observe_line(line));
+    }
+    let info = timeout(Duration::from_secs(1), wait_for_official_ls_log_readiness(rx))
+        .await
+        .expect("stderr readiness must resolve without hanging for 60s")
+        .unwrap();
+    assert_eq!(info.https_port, 51447);
+    assert_eq!(info.http_port, 0);
+    assert_eq!(info.lsp_port, 0);
 }
 
 async fn run_gateway_server(listener: TcpListener, tls_acceptor: TlsAcceptor) {

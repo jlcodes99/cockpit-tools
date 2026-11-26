@@ -3398,14 +3398,8 @@ pub async fn refresh_account_quota(account_id: &str) -> Result<ClaudeAccount, St
         return save_account_and_index(account);
     }
     if account.auth_mode == ClaudeAuthMode::DesktopOAuth {
-        let snapshot_dir = resolve_valid_desktop_profile_dir(&mut account)?;
-        let local_profile_applied = apply_desktop_local_profile(&mut account, &snapshot_dir);
-        let silent_result = fetch_desktop_web_profile_silent(&snapshot_dir).await;
-        let web_profile_result =
-            resolve_desktop_web_profile_with_hidden_probe(account_id, silent_result, || {
-                probe_desktop_web_profile_hidden_with_cooldown(account_id, &snapshot_dir)
-            })
-            .await;
+        let (local_profile_applied, web_profile_result) =
+            refresh_desktop_oauth_web_profile(&mut account).await?;
         match web_profile_result {
             Ok(web_profile) => {
                 let web_quota_available = desktop_web_usage_to_quota(&web_profile).is_some();

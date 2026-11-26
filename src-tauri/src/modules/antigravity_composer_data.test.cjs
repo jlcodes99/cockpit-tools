@@ -148,6 +148,10 @@ test('composer quotas follow the selected model’s reported pool and retain rea
 
   assert.deepEqual(quotaWindows(summary, status, '4 Hydrogen High · 1M').map(({ period, percent }) => [period, percent]),
     [['5h', 99], ['weekly', 0]]);
+  assert.deepEqual(quotaWindows(summary, status, 'Gemini 4 Hydrogen Extra High').map(({ period, percent }) => [period, percent]),
+    [['5h', 99], ['weekly', 0]]);
+  assert.deepEqual(quotaWindows(summary, status, 'Gemini 4 Hydrogen (Extra High)').map(({ period, percent }) => [period, percent]),
+    [['5h', 99], ['weekly', 0]]);
   assert.deepEqual(quotaWindows(summary, status, 'Claude Opus 5.5 Medium').map(({ percent }) => percent), [49]);
   assert.deepEqual(quotaWindows(summary, status, 'Gemini 4 Argon'), []);
 });
@@ -196,6 +200,12 @@ test('composer speed ignores failed, partial, and other-model samples', () => {
       first: 1.25, outputTokens: 156, elapsedSeconds: 3.25 },
     hasCompletedSample: true,
   });
+  assert.deepEqual(sessionMetrics(rows, null, 'Gemini 4 Hydrogen Extra High'), {
+    context: { used: 124000, max: 200000 },
+    speed: { rate: 48, overallRate: 184 / 3.25, streamingRate: 92,
+      first: 1.25, outputTokens: 156, elapsedSeconds: 3.25 },
+    hasCompletedSample: true,
+  });
   assert.equal(sessionMetrics([{ chatModel: { ...chatModel, streamingDuration: undefined } }], null, '4 Hydrogen').speed, null);
 });
 
@@ -222,15 +232,33 @@ test('composer derives three speeds from the same completed model request', () =
   assert.equal(speed.overallRate, null);
   assert.equal(speed.streamingRate, null);
 
-  for (const incomplete of [
-    { ...model, timeToFirstToken: undefined },
-    { ...model, streamingDuration: '0.039647417s' },
-    { ...model, usage: { outputTokens: 328, thinkingOutputTokens: 229, responseOutputTokens: 99 } },
-  ]) {
-    const metrics = sessionMetrics([{ chatModel: model }, { chatModel: incomplete }], null, 'Gemini 4 Hydrogen High');
-    assert.equal(metrics.speed, null);
-    assert.equal(metrics.hasCompletedSample, true);
-  }
+  // Short replies (< 100 tokens) and steps without timeToFirstToken still compute speed,
+  // while trailing unmeasurable steps fall back to the previous valid sample in the window.
+  const shortReply = sessionMetrics([
+    { chatModel: { ...model, usage: { outputTokens: 328, thinkingOutputTokens: 229, responseOutputTokens: 99 } } },
+  ], null, 'Gemini 4 Hydrogen High');
+  assert.equal(shortReply.speed.outputTokens, 99);
+  assert.equal(shortReply.speed.rate.toFixed(1), '28.5');
+
+  const noTtft = sessionMetrics([
+    { chatModel: { ...model, timeToFirstToken: undefined } },
+  ], null, 'Gemini 4 Hydrogen High');
+  assert.equal(noTtft.speed.first, null);
+  assert.equal(noTtft.speed.rate.toFixed(1), '338.3');
+
+  const fallbackFromTooBriefStream = sessionMetrics([
+    { chatModel: model },
+    { chatModel: { ...model, streamingDuration: '0.039647417s' } },
+  ], null, 'Gemini 4 Hydrogen High');
+  assert.equal(fallbackFromTooBriefStream.speed.rate.toFixed(1), '63.7');
+  assert.equal(fallbackFromTooBriefStream.hasCompletedSample, true);
+
+  const fallbackFromToolOnlyStep = sessionMetrics([
+    { chatModel: model },
+    { chatModel: { ...model, usage: { outputTokens: '120', thinkingOutputTokens: '120', responseOutputTokens: '0' } } },
+  ], null, 'Gemini 4 Hydrogen High');
+  assert.equal(fallbackFromToolOnlyStep.speed.outputTokens, 221);
+  assert.equal(fallbackFromToolOnlyStep.speed.rate.toFixed(1), '63.7');
 });
 
 test('the Antigravity capsule displays response speed and opens all three readings', async () => {

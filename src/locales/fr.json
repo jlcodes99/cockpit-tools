@@ -8274,7 +8274,10 @@
       "recovered": "{{model}} de nouveau disponible à {{time}}",
       "until": "{{model}} limité au dernier test, réinitialisation {{time}}",
       "unavailable": "{{model}} limité au dernier test",
-      "failed": "Dernier test de {{model}} échoué"
+      "failed": "Dernier test de {{model}} échoué",
+      "logUntil": "{{model}} limité dans les journaux client, réinit. {{time}}",
+      "logUnknownUntil": "Limite détectée dans les journaux client, réinit. {{time}}",
+      "logHits": "{{count}} occurrences dans les journaux"
     },
     "exposeToCodex": {
       "title": "Se connecte via la passerelle Native Rust sans copier le jeton WorkBuddy"
@@ -9746,7 +9749,9 @@
       "conversations": "Discussions",
       "turns": "Tours de réponse",
       "coverage": "Couverture exacte",
-      "avgPerDay": "Moy. / jour actif"
+      "avgPerDay": "Moy. / jour actif",
+      "refCost": "Coût équiv. API",
+      "cacheSavingsHint": "Cache : ~{{savings}} économisés"
     },
     "estimated": {
       "notice": "{{turns}} tours sans mesures API brutes ont été estimés séparément (jamais ajoutés au cumul exact) :"
@@ -9785,6 +9790,32 @@
     "errors": {
       "loadFailed": "Impossible de charger la consommation : {{error}}",
       "syncFailed": "Échec de l’analyse des jetons : {{error}}"
+    },
+    "heatmap": {
+      "title": "Carte d'activité sur 365 jours",
+      "activeDays": "{{count}} jours actifs",
+      "peak": "Pic {{date}} ({{tokens}})",
+      "less": "Moins",
+      "more": "Plus"
+    },
+    "rehydrate": {
+      "title": "Hook de réhydratation post-compaction",
+      "enabledBadge": "Activé",
+      "disabledBadge": "Désactivé",
+      "desc": "Réinjecte automatiquement la chronologie des demandes, les fichiers modifiés et les décisions clés après une compaction de contexte (CHECKPOINT).",
+      "noPython": "python3 introuvable",
+      "enableBtn": "Activer le hook",
+      "disableBtn": "Désactiver le hook"
+    },
+    "audit": {
+      "title": "Audit du contexte et d'exécution",
+      "peakContext": "Contexte pic par étape",
+      "compactions": "{{count}} compactions",
+      "userPrompts": "Requêtes",
+      "toolCalls": "Outils",
+      "fileOps": "Fichiers L/É",
+      "commands": "Commandes",
+      "subagents": "Sous-agents"
     }
   },
   "t3code": {
@@ -9792,6 +9823,45 @@
       "title": "Configuration des comptes",
       "providers": "Comptes des fournisseurs",
       "codexCatalogPending": "Clés tierces en attente de synchronisation des modèles : {{count}}"
+    },
+    "commonSettings": {
+      "title": "Réglages courants",
+      "language": "Langue de T3 Code"
+    },
+    "platformOrder": {
+      "title": "Ordre des plateformes",
+      "hint": "Faites glisser les poignées pour réorganiser les groupes de plateformes dans la vue des comptes.",
+      "saveFailed": "Impossible d’enregistrer l’ordre des plateformes. Réessayez. {{error}}"
+    },
+    "desktopPrivacy": {
+      "title": "Confidentialité de T3 Code",
+      "enableAll": "Tout activer",
+      "disableAll": "Désactiver la télémétrie",
+      "statusOn": "Activé",
+      "statusOff": "Désactivé",
+      "connection": "Même si la télémétrie est désactivée, le téléphone peut être associé et communiquer en temps réel avec l’ordinateur.",
+      "launchScope": "Ces réglages de télémétrie s’appliquent à l’instance par défaut lancée depuis Cockpit Tools.",
+      "restartPending": "Réglages enregistrés. Redémarrez T3 Code pour appliquer les changements de télémétrie.",
+      "environmentBlocked": "Désactivé par la variable d’environnement {{variable}}.",
+      "policyBlocked": "Désactivé par la stratégie système.",
+      "linked": "Désactiver les statistiques d’usage désactive aussi le suivi des connexions.",
+      "statusPending": "Inactif",
+      "doNotTrack": {
+        "label": "Ne pas suivre",
+        "description": "DO_NOT_TRACK suspend les statistiques d’utilisation et le suivi des connexions. Vos choix restent enregistrés."
+      },
+      "analytics": {
+        "label": "Statistiques d’usage",
+        "description": "Envoie la version de l’app, la plateforme et les statistiques d’usage à T3 Code."
+      },
+      "tracing": {
+        "label": "Suivi des connexions",
+        "description": "Envoie les délais de connexion et les types d’erreurs. Ce réglage contrôle aussi les exports OpenTelemetry."
+      },
+      "agentActivity": {
+        "label": "Notifications d’activité de l’agent",
+        "description": "Envoie les noms des projets et des modèles, les titres des conversations et l’état des tâches à T3 Connect. Désactiver ce réglage coupe les activités en direct et les notifications hors connexion sur le téléphone."
+      }
     },
     "nativeSettings": {
       "defaultModel": "Modèle des nouveaux chats",

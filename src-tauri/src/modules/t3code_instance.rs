@@ -815,13 +815,14 @@ pub fn start_default(extra_args: &[String]) -> Result<u32, String> {
     }
     let injection_enabled = modules::t3code_app_injection::enabled_for_app();
     let launch = modules::t3code_app_injection::build_launch_args(extra_args, injection_enabled)?;
+    let environment = modules::t3code_privacy::launch_environment()?;
     #[cfg(target_os = "macos")]
     let pid = match app_root {
-        Some(app_root) => launch_default_app_bundle(&app_root, &launch.args)?,
-        None => launch_default_executable(&executable, &launch.args)?,
+        Some(app_root) => launch_default_app_bundle(&app_root, &launch.args, &environment)?,
+        None => launch_default_executable(&executable, &launch.args, &environment)?,
     };
     #[cfg(not(target_os = "macos"))]
-    let pid = launch_default_executable(&executable, &launch.args)?;
+    let pid = launch_default_executable(&executable, &launch.args, &environment)?;
     if let Some(port) = launch.port {
         let state_dir = modules::t3code_account::default_state_dir()?;
         modules::t3code_app_injection::start_for_launched_instance("__default__", &state_dir, port);
@@ -830,8 +831,17 @@ pub fn start_default(extra_args: &[String]) -> Result<u32, String> {
 }
 
 #[cfg(target_os = "macos")]
-fn launch_default_app_bundle(app_root: &str, args: &[String]) -> Result<u32, String> {
-    let launcher_pid = modules::process::spawn_open_app_with_options(app_root, args, true)?;
+fn launch_default_app_bundle(
+    app_root: &str,
+    args: &[String],
+    environment: &HashMap<String, String>,
+) -> Result<u32, String> {
+    let env_pairs: Vec<_> = environment
+        .iter()
+        .map(|(key, value)| (key.as_str(), value.as_str()))
+        .collect();
+    let launcher_pid =
+        modules::process::spawn_open_app_with_options_and_env(app_root, args, true, &env_pairs)?;
     let started = std::time::Instant::now();
     while started.elapsed() < std::time::Duration::from_secs(6) {
         if let Some(pid) = resolve_pid(None, None) {
@@ -844,9 +854,16 @@ fn launch_default_app_bundle(app_root: &str, args: &[String]) -> Result<u32, Str
     ))
 }
 
-fn launch_default_executable(executable: &Path, args: &[String]) -> Result<u32, String> {
+fn launch_default_executable(
+    executable: &Path,
+    args: &[String],
+    environment: &HashMap<String, String>,
+) -> Result<u32, String> {
     let mut command = base_command(executable);
-    command.args(args);
+    command
+        .args(args)
+        .env_remove("COCKPIT_T3CODE_PRIVACY")
+        .envs(environment);
     let child = command
         .spawn()
         .map_err(|error| format!("启动 T3 Code 失败: {}", error))?;

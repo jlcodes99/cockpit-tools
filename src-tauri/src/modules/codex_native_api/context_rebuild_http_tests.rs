@@ -96,6 +96,11 @@ impl Host for TestHost {
     ) -> BoxFuture<'a, Result<Route, ServiceError>> {
         Box::pin(async move {
             self.selections.lock().unwrap().push(request.clone());
+            let candidates: &[&str] = match request.model.as_str() {
+                "provider-a-model" => &["a"],
+                "provider-b-model" => &["b"],
+                _ => &["a", "b"],
+            };
             {
                 let mut recovery = self.capacity_recovery_checks.lock().unwrap();
                 if let Some(checks) = recovery.as_mut() {
@@ -110,11 +115,17 @@ impl Host for TestHost {
                 }
             }
             let account = if let Some(preferred) = request.preferred_account_id.as_deref() {
-                if preferred == "a" && self.removed_a.load(Ordering::SeqCst) {
+                if !candidates.contains(&preferred)
+                    || (preferred == "a" && self.removed_a.load(Ordering::SeqCst))
+                {
                     return Err(ServiceError::new(
-                        self.missing_owner_status.load(Ordering::SeqCst),
+                        if candidates.contains(&preferred) {
+                            self.missing_owner_status.load(Ordering::SeqCst)
+                        } else {
+                            409
+                        },
                         "account_binding_unavailable",
-                        "Synthetic account A removed",
+                        "No authorized route for the original owner and requested model",
                     ));
                 }
                 if request
@@ -130,8 +141,9 @@ impl Host for TestHost {
                 }
                 preferred
             } else {
-                ["a", "b"]
-                    .into_iter()
+                candidates
+                    .iter()
+                    .copied()
                     .find(|candidate| {
                         !(*candidate == "a" && self.removed_a.load(Ordering::SeqCst))
                             && !request
@@ -386,6 +398,7 @@ impl Fixture {
         let app = Router::new()
             .route("/a/responses", post(upstream_http).get(upstream_ws))
             .route("/b/responses", post(upstream_http).get(upstream_ws))
+            .route("/b/responses/compact", post(upstream_http))
             .with_state(upstream.clone());
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
@@ -644,6 +657,86 @@ async fn context_rebuild_a_b_a_uses_new_a_generation_and_does_not_reassign_old_c
     for (previous, account) in [("a-root", "a"), ("b-rebuilt", "b"), ("a-again", "a")] {
         fixture.assert_owner(previous, account);
     }
+    fixture.finish().await;
+}
+
+#[tokio::test]
+async fn cross_provider_model_switch_rebuilds_for_legacy_compact_and_continues_on_new_model() {
+    let compact_output = json!({"type":"compaction","encrypted_content":"synthetic-compaction"});
+    let fixture = Fixture::new(
+        true,
+        vec![Step::Complete("a-root", None)],
+        vec![
+            Step::CompleteItems("b-compact", vec![compact_output.clone()]),
+            Step::CompleteItems("b-compact-full", vec![compact_output]),
+            Step::Complete("b-reply", None),
+        ],
+    )
+    .await;
+    let mut request = body(vec![message("user", "first")], None, false);
+    request["model"] = json!("provider-a-model");
+    let response = fixture.post(&request, None).await;
+    assert_eq!(response.status(), 200);
+    response.bytes().await.unwrap();
+
+    let expected = json!([
+        message("user", "first"),
+        message("assistant", "answer-a-root"),
+        message("user", "prompt on provider B"),
+    ]);
+    let mut request = body(vec![message("user", "prompt on provider B")], Some("a-root"), false);
+    request["model"] = json!("provider-b-model");
+    let post_compact = |request: &Value| {
+        client()
+            .post(format!("http://{}/v1/responses/compact", fixture.handle.addr))
+            .bearer_auth("synthetic-caller")
+            .json(request)
+            .send()
+    };
+    fixture.host.local_quota_preparation_denied.lock().unwrap().push("a".into());
+    let mut same_model = request.clone();
+    same_model["model"] = json!("provider-a-model");
+    let reserved = post_compact(&same_model).await.unwrap();
+    assert_eq!(reserved.status(), 429);
+    assert_eq!(reserved.json::<Value>().await.unwrap()["error"]["code"], "quota_reserved");
+    assert_eq!(fixture.sent().len(), 1);
+    fixture.host.local_quota_preparation_denied.lock().unwrap().clear();
+
+    let response = post_compact(&request).await.unwrap();
+    let status = response.status();
+    let output = response.text().await.unwrap();
+    assert_eq!(status, 200, "{output}");
+
+    // Compaction must not replace the active generation or transfer A's response ID.
+    assert_eq!(fixture.active().unwrap().0, "a");
+    fixture.assert_owner("a-root", "a");
+    Connection::open(fixture.path()).unwrap()
+        .execute("DELETE FROM native_rebuild_checkpoints_v1 WHERE response = 'a-root'", [])
+        .unwrap();
+    let rejected = post_compact(&request).await.unwrap();
+    assert_eq!(rejected.status(), 409);
+    assert_eq!(rejected.json::<Value>().await.unwrap()["error"]["code"], "account_binding_unavailable");
+    assert_eq!(fixture.sent().len(), 2);
+
+    request.as_object_mut().unwrap().remove("previous_response_id");
+    request["input"] = expected.clone();
+    let response = post_compact(&request).await.unwrap();
+    let status = response.status();
+    let output = response.text().await.unwrap();
+    assert_eq!(status, 200, "{output}");
+    assert_eq!(fixture.active().unwrap().0, "a");
+    let response = fixture.post(&request, None).await;
+    assert_eq!(response.status(), 200);
+    assert_eq!(response.json::<Value>().await.unwrap()["id"], "b-reply");
+    let sent = fixture.sent();
+    assert_eq!(sent.len(), 4);
+    for request in &sent[1..] {
+        assert_eq!(request.account, "b");
+        assert_eq!(request.body["model"], "provider-b-model");
+        assert_rebuilt_request(request, expected.clone());
+    }
+    assert_eq!(fixture.active().unwrap().0, "b");
+    fixture.assert_owner("b-reply", "b");
     fixture.finish().await;
 }
 

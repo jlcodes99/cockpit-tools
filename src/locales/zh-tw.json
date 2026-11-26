@@ -8274,7 +8274,10 @@
       "recovered": "{{model}} 已恢復（{{time}}）",
       "until": "{{model}} 上次探測受限，恢復時間 {{time}}",
       "unavailable": "{{model}} 上次探測受限",
-      "failed": "{{model}} 上次探測失敗"
+      "failed": "{{model}} 上次探測失敗",
+      "logUntil": "{{model}} 用戶端日誌受限，恢復時間 {{time}}",
+      "logUnknownUntil": "用戶端日誌偵測到限流，恢復時間 {{time}}",
+      "logHits": "日誌命中 {{count}} 次"
     },
     "exposeToCodex": {
       "title": "僅透過 Native Rust 閘道接入，不會複製 WorkBuddy Token"
@@ -9746,7 +9749,9 @@
       "conversations": "工作階段數",
       "turns": "回應輪次",
       "coverage": "精確覆蓋率",
-      "avgPerDay": "活躍日均"
+      "avgPerDay": "活躍日均",
+      "refCost": "API 等價參考",
+      "cacheSavingsHint": "Prompt 快取約節省 {{savings}}"
     },
     "estimated": {
       "notice": "另有 {{turns}} 輪缺少原始 API 用量，已單獨估算（不計入精確合計）："
@@ -9785,6 +9790,32 @@
     "errors": {
       "loadFailed": "讀取 Token 用量失敗：{{error}}",
       "syncFailed": "掃描 Token 用量失敗：{{error}}"
+    },
+    "heatmap": {
+      "title": "365 天活躍熱力圖",
+      "activeDays": "{{count}} 活躍天",
+      "peak": "峰值 {{date}} ({{tokens}})",
+      "less": "少",
+      "more": "多"
+    },
+    "rehydrate": {
+      "title": "壓縮後記憶回灌 (Rehydrate Hook)",
+      "enabledBadge": "已啟用",
+      "disabledBadge": "未啟用",
+      "desc": "當工作階段觸發上下文壓縮 (CHECKPOINT) 後，自動在下一次呼叫前注入使用者請求時間線、最近編輯檔案與關鍵結論，防止 AI 失憶或重做已完成工作。",
+      "noPython": "未偵測到 python3",
+      "enableBtn": "一鍵啟用",
+      "disableBtn": "停用鉤子"
+    },
+    "audit": {
+      "title": "上下文與工具執行稽核",
+      "peakContext": "單步峰值上下文",
+      "compactions": "壓縮 {{count}} 次",
+      "userPrompts": "使用者提問",
+      "toolCalls": "工具呼叫",
+      "fileOps": "檔案讀 / 寫",
+      "commands": "命令執行",
+      "subagents": "子代理呼叫"
     }
   },
   "t3code": {
@@ -9792,6 +9823,45 @@
       "title": "帳號設定",
       "providers": "供應商帳號",
       "codexCatalogPending": "第三方金鑰等待同步模型目錄：{{count}} 個"
+    },
+    "commonSettings": {
+      "title": "常用設定",
+      "language": "T3 Code 語言"
+    },
+    "platformOrder": {
+      "title": "平台排序",
+      "hint": "拖曳把手，調整帳號總覽中的平台分組順序。",
+      "saveFailed": "無法儲存平台順序，請重試。{{error}}"
+    },
+    "desktopPrivacy": {
+      "title": "T3 Code 隱私設定",
+      "enableAll": "一鍵開啟遙測",
+      "disableAll": "一鍵關閉遙測",
+      "statusOn": "已開啟",
+      "statusOff": "已關閉",
+      "connection": "關閉遙測後，手機仍可配對並與電腦即時通訊。",
+      "launchScope": "遙測設定適用於由 Cockpit Tools 啟動的 T3 Code 預設執行個體。",
+      "restartPending": "設定已儲存。重新啟動 T3 Code 後，遙測設定生效。",
+      "environmentBlocked": "已由環境變數 {{variable}} 關閉。",
+      "policyBlocked": "已由系統原則關閉。",
+      "linked": "關閉產品使用分析時，連線追蹤也會關閉。",
+      "statusPending": "暫未生效",
+      "doNotTrack": {
+        "label": "禁止追蹤",
+        "description": "DO_NOT_TRACK 開啟時暫停產品使用分析和桌面連線追蹤。各項開關的選擇會保留。"
+      },
+      "analytics": {
+        "label": "產品使用分析",
+        "description": "向 T3 Code 傳送應用程式版本、平台和使用統計。"
+      },
+      "tracing": {
+        "label": "桌面連線追蹤",
+        "description": "傳送連線耗時和錯誤類型。此開關也控制 OpenTelemetry 匯出。"
+      },
+      "agentActivity": {
+        "label": "Agent 活動推播",
+        "description": "向 T3 Connect 中繼傳送專案名稱、對話標題、模型名稱和工作狀態。關閉後，手機鎖定畫面即時動態和離線通知會停用。"
+      }
     },
     "nativeSettings": {
       "defaultModel": "新對話預設模型",

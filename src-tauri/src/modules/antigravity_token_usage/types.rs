@@ -23,6 +23,23 @@ impl ConversationKind {
     }
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ClientSourceKind {
+    #[default]
+    Desktop,
+    Cli,
+}
+
+impl ClientSourceKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Desktop => "desktop",
+            Self::Cli => "cli",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DataSourceKind {
@@ -106,7 +123,7 @@ pub struct EstimatedTokenTotals {
     pub estimated_turn_count: usize,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TurnUsageRecord {
     pub step_index: usize,
@@ -123,11 +140,13 @@ pub struct TurnUsageRecord {
     pub status: i32,
     pub exact: ExactTokenTotals,
     pub estimated: TurnEstimatedTotals,
+    pub estimated_cost_usd: f64,
+    pub cache_savings_usd: f64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub message_id: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ConversationModelSlice {
     pub model_id: String,
@@ -136,6 +155,8 @@ pub struct ConversationModelSlice {
     pub turn_count: usize,
     pub exact: ExactTokenTotals,
     pub estimated_total_tokens: u64,
+    pub estimated_cost_usd: f64,
+    pub cache_savings_usd: f64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -149,7 +170,7 @@ pub struct ChildConversationRef {
     pub estimated_total_tokens: u64,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ConversationSummaryItem {
     pub conversation_id: String,
@@ -157,6 +178,8 @@ pub struct ConversationSummaryItem {
     pub display_title: String,
     pub preview: String,
     pub kind: ConversationKind,
+    #[serde(default)]
+    pub client_source: ClientSourceKind,
     pub has_swarm_children: bool,
     pub agent_name: String,
     pub parent_conversation_id: String,
@@ -180,9 +203,40 @@ pub struct ConversationSummaryItem {
     pub data_source: DataSourceKind,
     pub exact: ExactTokenTotals,
     pub estimated: EstimatedTokenTotals,
+    #[serde(default)]
+    pub estimated_cost_usd: f64,
+    #[serde(default)]
+    pub cache_savings_usd: f64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolCallSummary {
+    pub tool_name: String,
+    pub count: usize,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConversationContextAudit {
+    pub peak_context_tokens: u64,
+    pub latest_context_tokens: u64,
+    pub context_limit_tokens: u64,
+    pub peak_context_percent: f64,
+    pub user_prompt_count: usize,
+    pub assistant_turn_count: usize,
+    pub tool_call_count: usize,
+    pub command_execution_count: usize,
+    pub file_read_count: usize,
+    pub file_edit_count: usize,
+    pub subagent_spawn_count: usize,
+    pub compaction_count: usize,
+    pub compaction_steps: Vec<usize>,
+    pub top_tools: Vec<ToolCallSummary>,
+    pub active_files: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ConversationDetail {
     #[serde(flatten)]
@@ -190,6 +244,7 @@ pub struct ConversationDetail {
     pub model_breakdown: Vec<ConversationModelSlice>,
     pub turns: Vec<TurnUsageRecord>,
     pub children: Vec<ChildConversationRef>,
+    pub audit: ConversationContextAudit,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -205,6 +260,8 @@ pub struct ModelUsageSummary {
     pub exact: ExactTokenTotals,
     pub estimated_total_tokens: u64,
     pub share_percent: f64,
+    pub estimated_cost_usd: f64,
+    pub cache_savings_usd: f64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -218,6 +275,7 @@ pub struct WorkspaceUsageSummary {
     pub exact: ExactTokenTotals,
     pub estimated_total_tokens: u64,
     pub share_percent: f64,
+    pub estimated_cost_usd: f64,
     pub last_active_time: Option<String>,
 }
 
@@ -230,9 +288,10 @@ pub struct KindUsageSummary {
     pub exact: ExactTokenTotals,
     pub estimated_total_tokens: u64,
     pub share_percent: f64,
+    pub estimated_cost_usd: f64,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TimeBucketPoint {
     pub bucket_key: String,
@@ -243,6 +302,23 @@ pub struct TimeBucketPoint {
     pub conversation_count: usize,
     pub exact: ExactTokenTotals,
     pub estimated_total_tokens: u64,
+    pub estimated_cost_usd: f64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HeatmapDayPoint {
+    pub date: String,
+    pub total_tokens: u64,
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+    pub thinking_tokens: u64,
+    pub cache_tokens: u64,
+    pub turn_count: usize,
+    pub conversation_count: usize,
+    pub estimated_cost_usd: f64,
+    /// 0 (none) ..= 4 (peak)
+    pub level: u8,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -257,6 +333,8 @@ pub struct ScanMetadata {
     pub cache_misses: usize,
     pub rpc_cache_sessions_found: usize,
     pub brain_dirs_found: usize,
+    #[serde(default)]
+    pub cli_sessions_found: usize,
     pub warnings: Vec<String>,
 }
 
@@ -295,6 +373,8 @@ pub struct KpiSummary {
     pub main_conversations: usize,
     pub swarm_conversations: usize,
     pub subagent_conversations: usize,
+    pub desktop_conversations: usize,
+    pub cli_conversations: usize,
     pub total_steps: usize,
     pub total_turns: usize,
     pub exact_turns: usize,
@@ -303,6 +383,8 @@ pub struct KpiSummary {
     pub active_days: usize,
     pub avg_exact_tokens_per_active_day: u64,
     pub avg_exact_tokens_per_conversation: u64,
+    pub estimated_cost_usd: f64,
+    pub cache_savings_usd: f64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -328,6 +410,7 @@ pub struct DashboardSummaryResponse {
     pub catalog: FilterOptionsCatalog,
     pub kpi: KpiSummary,
     pub time_series: Vec<TimeBucketPoint>,
+    pub heatmap: Vec<HeatmapDayPoint>,
     pub by_model: Vec<ModelUsageSummary>,
     pub by_workspace: Vec<WorkspaceUsageSummary>,
     pub by_kind: Vec<KindUsageSummary>,
@@ -343,6 +426,7 @@ pub enum ConversationSortField {
     CombinedOutputTokens,
     ThinkingTokens,
     CacheReadTokens,
+    EstimatedCostUsd,
     StepCount,
     TurnCount,
     Title,
@@ -358,7 +442,7 @@ pub enum SortDirection {
     Desc,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ConversationListResponse {
     pub items: Vec<ConversationSummaryItem>,
@@ -370,11 +454,23 @@ pub struct ConversationListResponse {
     pub order: SortDirection,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ConversationDetailResponse {
     pub scan: ScanMetadata,
     pub conversation: ConversationDetail,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AntigravityRehydrateStatus {
+    pub enabled: bool,
+    pub script_installed: bool,
+    pub python_available: bool,
+    pub python_command: Option<String>,
+    pub python_version: Option<String>,
+    pub hooks_config_path: String,
+    pub script_path: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -384,6 +480,8 @@ pub struct AntigravityTokenUsageSettings {
     pub effective_data_dir: String,
     pub default_data_dir: String,
     pub is_custom_data_dir: bool,
+    #[serde(default)]
+    pub rehydrate: AntigravityRehydrateStatus,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -440,6 +538,7 @@ pub struct ScannedConversation {
 pub struct ScanResult {
     pub scan: ScanMetadata,
     pub data_dir: std::path::PathBuf,
+    pub cli_data_dir: Option<std::path::PathBuf>,
     pub dynamic_enum_map: HashMap<String, String>,
     pub conversations: Vec<ScannedConversation>,
     pub index_by_id: HashMap<String, usize>,

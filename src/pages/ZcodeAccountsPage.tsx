@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Plug, RefreshCw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import {
   PlatformOverviewTabsHeader,
@@ -188,15 +189,16 @@ export function ZcodeAccountsPage() {
     renderCardActionExtra: (account) => account.auth_mode === 'api_key' || account.auth_mode === 'oauth' ? (
       <button
         type="button"
-        className="btn btn-secondary"
+        className="card-action-btn"
         disabled={codexBindingId !== null}
         aria-busy={codexBindingId === account.id}
+        aria-label={t('common.shared.exposeToCodex.action', '接入 Codex')}
         title={t('zcode.exposeToCodex.title', '仅在 Native Rust 网关中接入，不会复制 ZCode API Key 或 OAuth Token 到 Codex 配置')}
         onClick={() => { void handleExposeToCodex(account); }}
       >
         {codexBindingId === account.id
-          ? t('common.shared.exposeToCodex.inProgress', '接入中…')
-          : t('common.shared.exposeToCodex.action', '接入 Codex')}
+          ? <RefreshCw size={14} className="loading-spinner" aria-hidden="true" />
+          : <Plug size={14} aria-hidden="true" />}
       </button>
     ) : null,
     usagePrefix: 'zcode',

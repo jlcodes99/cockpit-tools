@@ -3,6 +3,37 @@ use super::*;
 use std::io::Write;
 
 #[tokio::test]
+async fn literature_search_403_is_request_scoped_and_keeps_the_original_response() {
+    for (detail, request_scoped) in [
+        ("Literature search is unavailable.", true),
+        ("Workspace has been deactivated.", false),
+    ] {
+        let app = Router::new().route(
+            "/v1/alpha/search",
+            post(move || async move {
+                (StatusCode::FORBIDDEN, Json(json!({"detail":detail})))
+            }),
+        );
+        let (handle, host, upstream, root) = fixture(app, true, Options::default()).await;
+        let response = client()
+            .post(format!("http://{}/v1/alpha/search", handle.addr))
+            .bearer_auth("local-a")
+            .json(&json!({"model":"m","input":"query"}))
+            .send().await.unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        assert_eq!(response.json::<Value>().await.unwrap(), json!({"detail":detail}));
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while host.reports.lock().unwrap().is_empty() {
+                tokio::task::yield_now().await;
+            }
+        }).await.unwrap();
+        assert_eq!(host.reports.lock().unwrap()[0].diagnostics.as_ref().unwrap()
+            .upstream_request_scoped, request_scoped);
+        cleanup(handle, upstream, root).await;
+    }
+}
+
+#[tokio::test]
 async fn compressed_search_rebuilds_json_without_the_original_encoding_header() {
     let seen = Arc::new(Mutex::new(None::<Value>));
     let app = Router::new()

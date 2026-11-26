@@ -184,6 +184,27 @@ fn native_chat_completed_only_stream_flushes_text() {
     ));
 }
 #[test]
+fn native_chat_stream_keeps_distinct_ids_when_output_indices_are_missing() {
+    let mut edge = ChatStreamAdapter::new(ctx());
+    let items = [("msg_first", "first"), ("msg_second", "second")];
+    let mut chunks = Vec::new();
+    for (id, text) in items {
+        chunks.extend(edge.push(&json!({"type":"response.output_text.delta",
+            "item_id":id,"content_index":0,"delta":text})).unwrap());
+        chunks.extend(edge.push(&json!({"type":"response.output_text.done",
+            "item_id":id,"content_index":0,"text":text})).unwrap());
+    }
+    let output: Vec<_> = items.into_iter().map(|(id, text)| json!({"type":"message","id":id,
+        "content":[{"type":"output_text","text":text}]})).collect();
+    chunks.extend(edge.push(&json!({"type":"response.completed","response":{"id":"r","output":output}})).unwrap());
+    let text: String = chunks.iter().filter_map(|part| match part {
+        StreamOutput::Event(value) => value.pointer("/choices/0/delta/content").and_then(Value::as_str),
+        StreamOutput::Done => None,
+    }).collect();
+    assert_eq!(text, "firstsecond");
+    assert_eq!(chunks.last(), Some(&StreamOutput::Done));
+}
+#[test]
 fn native_chat_upstream_rejects_opaque_state() {
     assert!(
         chat_upstream::responses_to_chat(&json!({"input":[],"previous_response_id":"other"}))

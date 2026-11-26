@@ -8274,7 +8274,10 @@
       "recovered": "{{model}} {{time}} itibarıyla yeniden kullanılabilir",
       "until": "{{model}} son testte sınırlıydı, yenileme {{time}}",
       "unavailable": "{{model}} son testte sınırlıydı",
-      "failed": "{{model}} son testi başarısız"
+      "failed": "{{model}} son testi başarısız",
+      "logUntil": "{{model}} istemci günlüklerinde sınırlandı, sıfırlama {{time}}",
+      "logUnknownUntil": "İstemci günlüklerinde hız sınırı algılandı, sıfırlama {{time}}",
+      "logHits": "Günlükte {{count}} eşleşme"
     },
     "exposeToCodex": {
       "title": "WorkBuddy belirtecini kopyalamadan Native Rust ağ geçidi üzerinden bağlanır"
@@ -9746,7 +9749,9 @@
       "conversations": "Sohbetler",
       "turns": "Yanıt Turları",
       "coverage": "Kesin Kapsam",
-      "avgPerDay": "Ort. / Aktif Gün"
+      "avgPerDay": "Ort. / Aktif Gün",
+      "refCost": "API Eşdeğer Maliyet",
+      "cacheSavingsHint": "Önbellek ~{{savings}} tasarruf sağladı"
     },
     "estimated": {
       "notice": "Ham API verisi bulunmayan {{turns}} tur ayrıca tahmin edildi (Kesin Toplama eklenmez):"
@@ -9785,6 +9790,32 @@
     "errors": {
       "loadFailed": "Token kullanımı yüklenemedi: {{error}}",
       "syncFailed": "Token kullanımı taranamadı: {{error}}"
+    },
+    "heatmap": {
+      "title": "365 Günlük Etkinlik Haritası",
+      "activeDays": "{{count}} aktif gün",
+      "peak": "Zirve {{date}} ({{tokens}})",
+      "less": "Az",
+      "more": "Çok"
+    },
+    "rehydrate": {
+      "title": "Sıkıştırma Sonrası Bellek Kancası",
+      "enabledBadge": "Etkin",
+      "disabledBadge": "Devre dışı",
+      "desc": "Bağlam sıkıştırmasından (CHECKPOINT) sonra istek geçmişini, düzenlenen dosyaları ve temel kararları otomatik olarak yeniden ekler.",
+      "noPython": "python3 bulunamadı",
+      "enableBtn": "Kancayı Etkinleştir",
+      "disableBtn": "Kancayı Kapat"
+    },
+    "audit": {
+      "title": "Bağlam ve Yürütme Denetimi",
+      "peakContext": "Adım Zirve Bağlamı",
+      "compactions": "{{count}} sıkıştırma",
+      "userPrompts": "İstemler",
+      "toolCalls": "Araç Çağrısı",
+      "fileOps": "Dosya O/Y",
+      "commands": "Komutlar",
+      "subagents": "Alt Ajanlar"
     }
   },
   "t3code": {
@@ -9792,6 +9823,45 @@
       "title": "Hesap yapılandırması",
       "providers": "Sağlayıcı hesapları",
       "codexCatalogPending": "Model eşitlemesi bekleyen üçüncü taraf anahtarları: {{count}}"
+    },
+    "commonSettings": {
+      "title": "Sık kullanılan ayarlar",
+      "language": "T3 Code dili"
+    },
+    "platformOrder": {
+      "title": "Platform sırası",
+      "hint": "Hesap özetindeki platform gruplarını yeniden sıralamak için tutamaçları sürükleyin.",
+      "saveFailed": "Platform sırası kaydedilemedi. Tekrar deneyin. {{error}}"
+    },
+    "desktopPrivacy": {
+      "title": "T3 Code gizlilik ayarları",
+      "enableAll": "Tümünü aç",
+      "disableAll": "Telemetriyi kapat",
+      "statusOn": "Açık",
+      "statusOff": "Kapalı",
+      "connection": "Telemetri kapalıyken telefon yine de bilgisayarla eşleşebilir ve gerçek zamanlı iletişim kurabilir.",
+      "launchScope": "Telemetri ayarları Cockpit Tools üzerinden başlatılan varsayılan örneğe uygulanır.",
+      "restartPending": "Ayarlar kaydedildi. Telemetri değişiklikleri için T3 Code’u yeniden başlatın.",
+      "environmentBlocked": "{{variable}} ortam değişkeniyle kapatıldı.",
+      "policyBlocked": "Sistem ilkesiyle kapatıldı.",
+      "linked": "Kullanım analizini kapatmak bağlantı izlemeyi de kapatır.",
+      "statusPending": "Etkin değil",
+      "doNotTrack": {
+        "label": "Takip etme",
+        "description": "DO_NOT_TRACK kullanım analizini ve bağlantı izlemeyi duraklatır. Seçimleriniz kaydedilir."
+      },
+      "analytics": {
+        "label": "Kullanım analizi",
+        "description": "Uygulama sürümünü, platformu ve kullanım istatistiklerini T3 Code’a gönderir."
+      },
+      "tracing": {
+        "label": "Bağlantı izleme",
+        "description": "Bağlantı sürelerini ve hata türlerini gönderir. OpenTelemetry dışa aktarımlarını da denetler."
+      },
+      "agentActivity": {
+        "label": "Aracı etkinliği bildirimleri",
+        "description": "Proje adlarını, konuşma başlıklarını, model adlarını ve görev durumunu T3 Connect’e gönderir. Kapatıldığında telefondaki canlı etkinlikler ve çevrimdışı bildirimler durur."
+      }
     },
     "nativeSettings": {
       "defaultModel": "Yeni sohbet modeli",

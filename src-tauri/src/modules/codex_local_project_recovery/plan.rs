@@ -147,6 +147,17 @@ fn cloud_root(path: &str) -> bool {
 fn projectless(state: &Value) -> HashSet<String> {
     let mut result = ids(&state["projectless-thread-ids"]);
     result.extend(object(&state["thread-projectless-output-directories"]).into_keys());
+    if let Some(map) = state.as_object() {
+        for (key, value) in map {
+            if key.starts_with("electron-owner-value:projectless-thread-ids:") {
+                result.extend(ids(value));
+            } else if key
+                .starts_with("electron-owner-value:thread-projectless-output-directories:")
+            {
+                result.extend(object(value).into_keys());
+            }
+        }
+    }
     result
 }
 
@@ -321,7 +332,29 @@ fn scan_impl(
     exists: &dyn Fn(&str) -> bool,
 ) -> Result<Plan, String> {
     let before_bytes = read_bytes(&home.join(STATE))?;
-    let before = decode(before_bytes.as_deref())?;
+    let mut before = decode(before_bytes.as_deref())?;
+    if let Some(mut sqlite_state) =
+        crate::modules::ssh_server_desktop_state::load_optional_sqlite_state(home)?
+    {
+        if sqlite_state.get("local-projects").is_some()
+            || crate::modules::ssh_server_identity::has_scoped_owner_state(&sqlite_state)
+        {
+            let owner = crate::modules::ssh_server_identity::renderer_owner(&sqlite_state)
+                .unwrap_or(crate::modules::ssh_server_identity::SIGNED_OUT_OWNER)
+                .to_owned();
+            crate::modules::ssh_server_identity::inherit_scoped_owner_local_state(
+                &mut sqlite_state,
+                &owner,
+            );
+            if let (Some(before_map), Some(sqlite_map)) =
+                (before.as_object_mut(), sqlite_state.as_object())
+            {
+                for (key, value) in sqlite_map {
+                    before_map.insert(key.clone(), value.clone());
+                }
+            }
+        }
+    }
     for key in ["local-projects", MAP, ASSIGN, HOSTS, MIGRATION] {
         if before.get(key).is_some_and(|value| !value.is_object()) {
             return Err("CODEX_PROJECT_SCHEMA_UNSUPPORTED".into());
@@ -366,6 +399,13 @@ fn scan_impl(
             .iter()
             .filter(|(id, v)| v.as_str() == Some(&project.id) && saved.contains_key(*id))
             .map(|(id, _)| id.clone())
+            .chain(
+                (!mapping.contains_key(&project.id)
+                    && saved
+                        .get(&project.id)
+                        .is_some_and(|p| !roots.is_empty() && root_set(&p["rootPaths"]) == roots))
+                .then(|| project.id.clone()),
+            )
             .collect();
         let by_roots: Vec<_> = saved
             .iter()
@@ -388,6 +428,13 @@ fn scan_impl(
                         .is_some_and(|p| !cloud(p) && root_set(&p["rootPaths"]) == roots)
             })
             .map(|(id, _)| id.clone())
+            .chain(
+                (!old_mapping.contains_key(&project.id)
+                    && old_projects
+                        .get(&project.id)
+                        .is_some_and(|p| !cloud(p) && root_set(&p["rootPaths"]) == roots))
+                .then(|| project.id.clone()),
+            )
             .collect();
         let legacy = current
             .or_else(|| {
@@ -501,10 +548,26 @@ fn scan_impl(
             if assignment["projectKind"] != "local" {
                 continue;
             }
-            assignment["projectId"]
+            let assigned_pid = assignment["projectId"]
                 .as_str()
                 .filter(|id| allowed.contains_key(*id))
-                .map(str::to_string)
+                .map(str::to_string);
+            if let Some(server) = &thread.project {
+                if assigned_pid
+                    .as_ref()
+                    .is_some_and(|id| allowed.get(id) == Some(server))
+                {
+                    assigned_pid
+                } else {
+                    allowed
+                        .iter()
+                        .find(|(_, s)| *s == server)
+                        .map(|(id, _)| id.clone())
+                        .or(assigned_pid)
+                }
+            } else {
+                assigned_pid
+            }
         } else if let Some(server) = &thread.project {
             allowed
                 .iter()

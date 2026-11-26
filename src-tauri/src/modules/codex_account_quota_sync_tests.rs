@@ -204,16 +204,28 @@ fn deleted_account_is_not_resurrected_by_quota_response() {
 }
 
 #[test]
-fn older_in_flight_request_cannot_overwrite_newer_committed_quota() {
+fn only_committed_quota_wakes_post_refresh_checks_without_runtime_discovery() {
+    use futures_util::FutureExt;
+    let check_pending = || {
+        crate::modules::codex_quota_sync::COMMITTED_QUOTA_CHECK
+            .notified()
+            .now_or_never()
+            .is_some()
+    };
     let _lock = crate::modules::test_support::env_lock()
         .lock()
         .unwrap_or_else(|e| e.into_inner());
     let _storage = Storage::new();
     let original = seed();
+    let _ = check_pending();
     let old_request = Instant::now();
     let new_request = old_request + Duration::from_millis(1);
+    save_quota_sync_failure(&original, "network timeout".into(), old_request).unwrap();
+    assert!(!check_pending());
     save_refreshed_quota(&original, quota(15), None, new_request).unwrap();
+    assert!(check_pending());
     assert!(save_refreshed_quota(&original, quota(30), None, old_request).is_err());
+    assert!(!check_pending());
     assert_eq!(
         load_account(&original.id)
             .unwrap()

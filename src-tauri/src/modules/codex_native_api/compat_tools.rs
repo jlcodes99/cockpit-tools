@@ -17,6 +17,12 @@ pub(super) fn map(body: &mut Value) -> BTreeMap<String, String> {
         for item in input {
             if item["type"] == "function_call" {
                 collect_name(item, &mut originals);
+            } else if item["type"] == "tool_search_output" {
+                if let Some(tools) = item["tools"].as_array() {
+                    for tool in tools {
+                        collect_name(tool, &mut originals);
+                    }
+                }
             }
         }
     }
@@ -65,6 +71,12 @@ pub(super) fn map(body: &mut Value) -> BTreeMap<String, String> {
         for item in input {
             if item["type"] == "function_call" {
                 rewrite_name(item, &forward);
+            } else if item["type"] == "tool_search_output" {
+                if let Some(tools) = item["tools"].as_array_mut() {
+                    for tool in tools {
+                        rewrite_name(tool, &forward);
+                    }
+                }
             }
         }
     }

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronRight, Crosshair, Sparkles } from 'lucide-react';
+import { ChevronRight, Crosshair, Plug, RefreshCw, Sparkles } from 'lucide-react';
 import { PlatformOverviewTabsHeader, PlatformOverviewTab } from '../components/platform/PlatformOverviewTabsHeader';
 import { WorkbuddyInstancesContent } from './WorkbuddyInstancesPage';
 import { useWorkbuddyAccountStore } from '../stores/useWorkbuddyAccountStore';
@@ -25,6 +25,10 @@ import { getWorkbuddyCredits, getWorkbuddyExpiringCredits, hasWorkbuddyExpiringC
 import {
   subscribeWorkbuddyProbeStatus,
 } from '../utils/workbuddyProbeStatus';
+import {
+  refreshWorkbuddyLogLimits,
+  subscribeWorkbuddyLogLimits,
+} from '../utils/workbuddyLogLimits';
 import { WorkbuddyProbeNotice } from '../components/workbuddy/WorkbuddyProbeNotice';
 import { WorkbuddyModelProbeModal } from '../components/workbuddy/WorkbuddyModelProbeModal';
 
@@ -98,8 +102,17 @@ export function WorkbuddyAccountsPage() {
   const [probeVersion, setProbeVersion] = useState(0);
   const store = useWorkbuddyAccountStore();
 
-  // 探测结果变化时刷新卡片上的受限标识
-  useEffect(() => subscribeWorkbuddyProbeStatus(() => setProbeVersion((v) => v + 1)), []);
+  // 探测结果或客户端日志限流变化时刷新卡片上的受限标识
+  useEffect(() => {
+    const bump = () => setProbeVersion((v) => v + 1);
+    const unsubProbe = subscribeWorkbuddyProbeStatus(bump);
+    const unsubLog = subscribeWorkbuddyLogLimits(bump);
+    void refreshWorkbuddyLogLimits();
+    return () => {
+      unsubProbe();
+      unsubLog();
+    };
+  }, []);
 
   // 恢复时间过后自动复测：确认恢复则在卡片提示后标注「已恢复」
   useWorkbuddyProbeAutoRecheck(store.accounts);
@@ -201,12 +214,13 @@ export function WorkbuddyAccountsPage() {
           className="card-action-btn"
           disabled={codexBindingId !== null}
           aria-busy={codexBindingId === account.id}
+          aria-label={page.t('common.shared.exposeToCodex.action', '接入 Codex')}
           onClick={() => { void handleExposeToCodex(account); }}
           title={page.t('workbuddy.exposeToCodex.title', '仅在 Native Rust 网关中接入，不会复制 WorkBuddy Token')}
         >
           {codexBindingId === account.id
-            ? page.t('common.shared.exposeToCodex.inProgress', '接入中…')
-            : page.t('common.shared.exposeToCodex.action', '接入 Codex')}
+            ? <RefreshCw size={14} className="loading-spinner" aria-hidden="true" />
+            : <Plug size={14} aria-hidden="true" />}
         </button>
         <button
           type="button"
@@ -277,7 +291,10 @@ export function WorkbuddyAccountsPage() {
             page={page}
             platformConfig={platformConfig}
             onSelectionChange={setSelectedAccountIds}
-            onRefreshAccounts={() => { store.fetchAccounts(); }}
+            onRefreshAccounts={() => {
+              store.fetchAccounts();
+              void refreshWorkbuddyLogLimits(true);
+            }}
           />
         </>
       )}

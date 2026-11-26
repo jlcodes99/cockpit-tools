@@ -1,10 +1,13 @@
+import { T3codeCommonSettings } from './T3codeCommonSettings';
 import { useMemo, useState, type ReactNode } from 'react';
 import { CheckCircle2, Eye, EyeOff, Play, Plus, RefreshCw, RotateCw, Search } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { QuickSettingsPopover } from '../QuickSettingsPopover';
+import { useDurableUiSetting } from '../../hooks/useDurableUiSetting';
 import type { T3CodeDriverKind, T3CodeProviderInstanceView, T3CodeProviderWorkspaceView } from '../../types/t3code';
+import { T3CODE_PLATFORM_ORDER_STORAGE_KEY } from '../../utils/durableUiSettings';
 import { renderPlatformIcon } from '../../utils/platformMeta';
-import { T3CODE_PLATFORM_SPECS, getAccountsForDriver } from './t3codePlatformRegistry';
+import { getOrderedT3codePlatforms } from './t3codePlatformRegistry';
 import { T3codeQuotaSection } from './t3codePresentation';
 import type { T3codeProviderRowView } from './useT3codeWorkspaceController';
 
@@ -37,13 +40,14 @@ export function T3codeOverviewSection({
 }: T3codeOverviewSectionProps) {
   const { t } = useTranslation();
   const [search, setSearch] = useState('');
+  const savedOrder = useDurableUiSetting(T3CODE_PLATFORM_ORDER_STORAGE_KEY);
   const busy = Boolean(busyInstanceId) || restarting;
 
   const groups = useMemo(() => {
     const query = search.trim().toLowerCase();
-    return T3CODE_PLATFORM_SPECS.flatMap((spec) => {
+    return getOrderedT3codePlatforms(savedOrder).flatMap((spec) => {
       const instances = providers.filter(({ instance }) => instance.driver === spec.driver);
-      const accounts = getAccountsForDriver(workspace, spec.driver);
+      const accounts = spec.getAccounts(workspace);
       if (!instances.length && !accounts.length) return [];
       const rows = instances.flatMap((row) => {
         const { instance } = row;
@@ -70,7 +74,7 @@ export function T3codeOverviewSection({
       visible.sort((a, b) => Number(b.isDefault) - Number(a.isDefault));
       return [{ spec, count: rows.length, rows: visible }];
     });
-  }, [gatewayName, maskAccountText, providers, search, workspace]);
+  }, [gatewayName, maskAccountText, providers, savedOrder, search, workspace]);
 
   const privacyLabel = t(privacyModeEnabled ? 'privacy.showSensitive' : 'privacy.hideSensitive');
   const refreshLabel = t('common.shared.refreshAll');
@@ -93,7 +97,7 @@ export function T3codeOverviewSection({
             />
           </div>
           {workspace && (
-            <span className={`pill ${t3Running ? 'pill-success' : 'pill-secondary'}`}>
+            <span className={`pill t3code-runtime-pill ${t3Running ? 'pill-success' : 'pill-secondary'}`}>
               <span className="t3code-runtime-dot" aria-hidden="true" />
               {t(t3Running ? 'instances.status.running' : 'instances.status.stopped')}
               {t3Running && injectionConnected && ` · ${t('t3code.providerWorkspace.injectionConnected')}`}
@@ -103,7 +107,7 @@ export function T3codeOverviewSection({
         <div className="toolbar-right">
           <button
             type="button"
-            className="btn btn-secondary btn-sm t3code-overview-launch"
+            className="btn btn-primary btn-sm t3code-overview-launch"
             disabled={busy || !workspace}
             aria-busy={restarting}
             onClick={onStartOrRestart}
@@ -111,17 +115,19 @@ export function T3codeOverviewSection({
             <LaunchIcon size={14} className={restarting ? 'loading-spinner' : undefined} aria-hidden="true" />
             {launchLabel}
           </button>
-          <button type="button" className="btn btn-secondary icon-only"
+          <button type="button" className="btn btn-secondary icon-only t3code-toolbar-icon-btn"
             disabled={loading || refreshingAll || busy} title={refreshLabel} aria-label={refreshLabel} onClick={onRefreshAll}>
             <RefreshCw size={14} className={refreshingAll ? 'loading-spinner' : undefined} />
           </button>
-          <button type="button" className="btn btn-secondary icon-only"
+          <button type="button" className="btn btn-secondary icon-only t3code-toolbar-icon-btn"
             onClick={onTogglePrivacyMode} title={privacyLabel} aria-label={privacyLabel}>
             {privacyModeEnabled ? <EyeOff size={14} /> : <Eye size={14} />}
           </button>
           <QuickSettingsPopover type="t3code" />
         </div>
       </div>
+
+      <T3codeCommonSettings />
 
       {loading && !workspace && (
         <div className="loading-container" role="status">
@@ -143,14 +149,18 @@ export function T3codeOverviewSection({
             <span>{t('t3code.overview.actions')}</span>
           </div>
           {groups.map(({ spec, count, rows }) => (
-            <section key={spec.driver} className="t3code-overview-group" aria-label={spec.label}>
+            <section
+              key={spec.driver}
+              className={`t3code-overview-group ${rows.length > 0 ? 'has-accounts' : 'is-empty'}`}
+              aria-label={spec.label}
+            >
               <header className="t3code-overview-group-header">
                 <h3 className="t3code-overview-heading">
                   <span className="t3code-group-icon" aria-hidden="true">{renderPlatformIcon(spec.platformId, 16)}</span>
                   <span className="t3code-overview-platform-name" title={spec.label}>{spec.label}</span>
-                  <span className="t3code-overview-count">{count}</span>
+                  <span className={`t3code-overview-count${count > 0 ? ' is-active' : ''}`}>{count}</span>
                 </h3>
-                <button type="button" className="btn btn-ghost btn-sm t3code-overview-action"
+                <button type="button" className="btn btn-secondary btn-sm t3code-overview-action t3code-overview-add-btn"
                   disabled={busy} onClick={() => onAdd(spec.driver)}>
                   <Plus size={14} />
                   {t('t3code.providerWorkspace.addAccount')}
@@ -164,7 +174,10 @@ export function T3codeOverviewSection({
                 const setDefaultLabel = t('t3code.overview.setDefaultAccount');
                 const removeLabel = t('t3code.overview.removeAccount');
                 return (
-                  <div key={instance.instanceId} className="t3code-overview-entry t3code-overview-aligned">
+                  <div
+                    key={instance.instanceId}
+                    className={`t3code-overview-entry t3code-overview-aligned${isDefault ? ' is-default' : ''}`}
+                  >
                     <div className="t3code-overview-account">
                       <div className="t3code-overview-account-heading">
                         <span className="t3code-overview-account-name" title={primary}>{primary}</span>
@@ -189,7 +202,7 @@ export function T3codeOverviewSection({
                         <span>{status.text}</span>
                       </span>
                       {status.pathTarget && (
-                        <button type="button" className="btn btn-ghost btn-sm t3code-overview-action"
+                        <button type="button" className="btn btn-secondary btn-sm t3code-overview-action"
                           disabled={busy} onClick={() => onConfigureRuntime(instance)}>
                           {t('appPath.missing.configurePath')}
                         </button>
@@ -199,7 +212,7 @@ export function T3codeOverviewSection({
                       {isDefault ? (
                         <span className="tag-pill t3code-overview-default-tag" title={defaultLabel}>{defaultLabel}</span>
                       ) : instance.boundAccountId && (
-                        <button type="button" className="btn btn-ghost btn-sm t3code-overview-action"
+                        <button type="button" className="btn btn-secondary btn-sm t3code-overview-action t3code-overview-default-btn"
                           disabled={busy} aria-busy={pending} title={t('t3code.overview.defaultAffectsExisting')}
                           aria-label={`${setDefaultLabel} · ${primary}`} onClick={() => onSetDefault(instance)}>
                           {pending && <RefreshCw size={13} className="loading-spinner" />}

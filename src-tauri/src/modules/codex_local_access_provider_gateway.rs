@@ -768,6 +768,12 @@ pub(crate) fn provider_model_slots_for_account(
     account: &CodexAccount,
     models: &[String],
 ) -> Vec<ProviderGatewayModelSlot> {
+    if account_requires_responses_compatibility_gateway(account)
+        && !account.api_sync_model_catalog_to_codex
+        && !crate::modules::codex_remote_service::is_known_account(account)
+    {
+        return Vec::new();
+    }
     if !is_official_deepseek_account(account)
         && !codex_account::account_uses_raw_provider_model_ids(account)
     {
@@ -1238,6 +1244,22 @@ fn is_chat_completions_api_key_account(account: &CodexAccount) -> bool {
         && matches!(provider_gateway_wire_api_for_account(account).as_str(), "chat_completions" | "anthropic")
 }
 
+fn account_requires_responses_compatibility_gateway(account: &CodexAccount) -> bool {
+    account.is_api_key_auth()
+        && account.api_provider_mode == CodexApiProviderMode::Custom
+        && !is_local_access_runtime_account_id(&account.id)
+        && !codex_account::account_uses_provider_direct_access(account)
+        && !codex_account::account_uses_cdp_model_injection(account)
+        && provider_gateway_wire_api_for_account(account) == "responses"
+        && !account.api_supports_websockets
+        && provider_gateway_bound_oauth_account_id_for_account(account).is_some()
+        && account
+            .api_base_url
+            .as_deref()
+            .and_then(|url| Url::parse(url.trim()).ok())
+            .is_some_and(|url| url.host_str().is_some_and(|host| host != "api.openai.com"))
+}
+
 pub fn account_requires_provider_gateway(account: &CodexAccount) -> bool {
     if codex_account::account_uses_provider_direct_access(account) {
         return false;
@@ -1255,7 +1277,9 @@ pub fn account_requires_provider_gateway(account: &CodexAccount) -> bool {
     if is_chat_completions_api_key_account(account) {
         return true;
     }
-    if account_uses_synced_model_shell_gateway(account) {
+    if account_requires_responses_compatibility_gateway(account)
+        || account_uses_synced_model_shell_gateway(account)
+    {
         return true;
     }
     // 生图转发需要本地网关拦截 gpt-image 请求；账号选了生图账号池时强制启用网关。
@@ -1884,6 +1908,13 @@ fn build_provider_gateway_collection_for_profile(
     let is_remote_service = crate::modules::codex_remote_service::is_known_account(account);
     if is_remote_service {
         collection.session_identity_mapping_enabled = false;
+    }
+    if is_remote_service
+        || (account_requires_responses_compatibility_gateway(account)
+            && !is_official_deepseek_account(account)
+            && !account_uses_synced_model_shell_gateway(account))
+    {
+        // A previously direct provider does not inherit API Service model rules.
         collection.model_aliases.clear();
         collection.excluded_models.clear();
     }
@@ -2784,6 +2815,37 @@ pub fn cleanup_provider_gateway_profile_model_overrides(profile_dir: &Path) -> R
     Ok(())
 }
 
+async fn write_provider_gateway_profile_takeover_with_provider_name(
+    profile_dir: &Path,
+    collection: &CodexLocalAccessCollection,
+    key: &str,
+    preserve_catalog: bool,
+    provider_name: Option<&str>,
+    prepared_oauth: Option<&CodexAccount>,
+) -> Result<(), String> {
+    if preserve_catalog {
+        write_local_access_profile_credentials(
+            profile_dir,
+            collection,
+            Some(key),
+            provider_name,
+            prepared_oauth,
+        )
+        .await?;
+        Ok(())
+    } else {
+        write_local_access_profile_takeover_with_provider_name(
+            profile_dir,
+            collection,
+            Some(key),
+            false,
+            provider_name,
+            prepared_oauth,
+        )
+        .await
+    }
+}
+
 pub async fn activate_provider_gateway_for_dir(
     profile_dir: &Path,
     account_id: &str,
@@ -2813,11 +2875,11 @@ pub(crate) async fn activate_provider_gateway_for_dir_with_prepared_oauth(
             build_provider_gateway_collection_for_profile(profile_dir, &account)?;
         let model_slots = provider_model_slots_for_account(&account, &provider_gateway.upstream_models);
         save_profile_takeover_backup(profile_dir, &key)?;
-        runtime.block_on(write_local_access_profile_takeover_with_provider_name(
+        runtime.block_on(write_provider_gateway_profile_takeover_with_provider_name(
             profile_dir,
             &collection,
-            Some(&key),
-            false,
+            &key,
+            model_slots.is_empty() && account_requires_responses_compatibility_gateway(&account),
             account.api_provider_name.as_deref(),
             prepared_oauth.as_ref(),
         ))?;

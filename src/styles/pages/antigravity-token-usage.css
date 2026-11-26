@@ -847,6 +847,268 @@
   background: color-mix(in srgb, var(--primary) 8%, var(--bg-card));
 }
 
+/* Rehydrate Hook Bar */
+.ag-rehydrate-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-card) 90%, transparent);
+  font-size: 12px;
+}
+
+.ag-rehydrate-bar__info {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  min-width: 0;
+  flex: 1 1 320px;
+}
+
+.ag-rehydrate-bar__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.ag-rehydrate-bar__title svg {
+  color: var(--primary);
+}
+
+.ag-rehydrate-bar__badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+.ag-rehydrate-bar__badge.is-on {
+  background: color-mix(in srgb, var(--success) 15%, transparent);
+  color: var(--success);
+}
+
+.ag-rehydrate-bar__badge.is-off {
+  background: color-mix(in srgb, var(--text-muted) 15%, transparent);
+  color: var(--text-secondary);
+}
+
+.ag-rehydrate-bar__desc {
+  color: var(--text-secondary);
+  font-size: 11.5px;
+}
+
+.ag-rehydrate-bar__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Activity Heatmap Card */
+.ag-heatmap-card {
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--bg-card) 94%, transparent);
+}
+
+.ag-heatmap-head__title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.ag-heatmap-head__title svg {
+  color: var(--primary);
+}
+
+.ag-heatmap-head__meta {
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+.ag-heatmap-head__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.ag-heatmap-clear-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ag-heatmap-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.ag-heatmap-grid-wrap {
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.ag-heatmap-grid {
+  display: inline-flex;
+  gap: 4px;
+  min-width: max-content;
+}
+
+.ag-heatmap-col {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ag-heatmap-cell {
+  appearance: none;
+  -webkit-appearance: none;
+  display: inline-block;
+  width: 13px;
+  height: 13px;
+  padding: 0;
+  margin: 0;
+  border: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
+  border-radius: var(--radius-xs, 3px);
+  background: color-mix(in srgb, var(--bg-tertiary) 85%, transparent);
+  cursor: pointer;
+  transition: transform 0.12s ease, border-color 0.12s ease;
+}
+
+button.ag-heatmap-cell:hover {
+  transform: scale(1.15);
+  border-color: var(--primary);
+}
+
+.ag-heatmap-cell.is-future {
+  opacity: 0.25;
+  cursor: default;
+}
+
+.ag-heatmap-cell.is-level-1 {
+  background: color-mix(in srgb, var(--primary) 24%, var(--bg-tertiary));
+  border-color: color-mix(in srgb, var(--primary) 32%, var(--border));
+}
+
+.ag-heatmap-cell.is-level-2 {
+  background: color-mix(in srgb, var(--primary) 46%, var(--bg-tertiary));
+  border-color: color-mix(in srgb, var(--primary) 52%, var(--border));
+}
+
+.ag-heatmap-cell.is-level-3 {
+  background: color-mix(in srgb, var(--primary) 72%, var(--bg-tertiary));
+  border-color: color-mix(in srgb, var(--primary) 78%, var(--border));
+}
+
+.ag-heatmap-cell.is-level-4 {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+
+.ag-heatmap-cell.is-selected {
+  outline: 2px solid var(--accent, var(--primary));
+  outline-offset: 1px;
+}
+
+/* Source Badge (Desktop / CLI) */
+.ag-source-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.ag-source-badge.is-cli {
+  background: color-mix(in srgb, var(--warning) 16%, transparent);
+  color: var(--warning);
+}
+
+.ag-source-badge.is-desktop {
+  background: color-mix(in srgb, var(--text-muted) 14%, transparent);
+  color: var(--text-secondary);
+}
+
+/* Session Context & Execution Audit Section */
+.ag-conv-audit {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-secondary) 80%, transparent);
+}
+
+.ag-conv-audit__bar-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.ag-conv-audit__bar-track {
+  width: 100%;
+  height: 7px;
+  overflow: hidden;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--border) 80%, transparent);
+}
+
+.ag-conv-audit__bar-fill {
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: var(--primary);
+}
+
+.ag-conv-audit__pills {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.ag-conv-audit__pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--bg-tertiary) 92%, transparent);
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.ag-conv-audit__pill strong {
+  color: var(--text-primary);
+}
+
+.ag-conv-audit__pill.is-compaction {
+  background: color-mix(in srgb, var(--warning) 15%, transparent);
+  color: var(--warning);
+}
+
 @media (max-width: 860px) {
   .ag-token-usage__cards {
     grid-template-columns: repeat(2, minmax(0, 1fr));

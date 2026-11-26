@@ -1,8 +1,6 @@
 //! Read the Desktop setting store used by the native SSH connections.
 use super::ssh_server_identity as identity;
-use rusqlite::{
-    Connection, ErrorCode, OpenFlags, OptionalExtension, Statement, TransactionBehavior,
-};
+use rusqlite::{Connection, ErrorCode, OpenFlags, TransactionBehavior};
 use serde_json::{Map, Value};
 use std::{fs, path::Path, time::Duration};
 
@@ -43,37 +41,17 @@ fn open_sqlite(profile: &Path, flags: OpenFlags) -> StateResult<Option<Connectio
     }
 }
 
-fn setting(statement: &mut Statement<'_>, key: &str) -> StateResult<Option<Value>> {
-    let raw: Option<String> = statement
-        .query_row([key], |row| row.get(0))
-        .optional()
-        .map_err(sqlite_error)?;
-    raw.map(|value| serde_json::from_str(&value).map_err(|_| INVALID))
-        .transpose()
-}
-
-fn read_sqlite_state(db: &Connection, next_owner: Option<&str>) -> StateResult<Value> {
+fn read_sqlite_state(db: &Connection, _next_owner: Option<&str>) -> StateResult<Value> {
     let mut statement = db
-        .prepare("SELECT value FROM settings WHERE scope = 'global' AND key = ?1")
+        .prepare("SELECT key, value FROM settings WHERE scope = 'global' ORDER BY key")
         .map_err(sqlite_error)?;
-    let owner = setting(&mut statement, identity::RENDERER_OWNER)?;
-    let active_owner = owner.as_ref().and_then(Value::as_str);
+    let mut rows = statement.query([]).map_err(sqlite_error)?;
     let mut snapshot = Map::new();
-    let keys = [
-        Some(identity::CONNECTIONS.to_owned()),
-        Some(identity::AUTO_CONNECT.to_owned()),
-        active_owner.map(identity::scoped_auto_connect_key),
-        next_owner
-            .filter(|next| Some(*next) != active_owner)
-            .map(identity::scoped_auto_connect_key),
-    ];
-    for key in keys.into_iter().flatten() {
-        if let Some(value) = setting(&mut statement, &key)? {
-            snapshot.insert(key, value);
-        }
-    }
-    if let Some(owner) = owner {
-        snapshot.insert(identity::RENDERER_OWNER.to_owned(), owner);
+    while let Some(row) = rows.next().map_err(sqlite_error)? {
+        let key: String = row.get(0).map_err(sqlite_error)?;
+        let raw: String = row.get(1).map_err(sqlite_error)?;
+        let value: Value = serde_json::from_str(&raw).map_err(|_| INVALID)?;
+        snapshot.insert(key, value);
     }
     Ok(Value::Object(snapshot))
 }
@@ -101,19 +79,127 @@ pub(super) fn prepare_sqlite_startup(
         .transaction_with_behavior(TransactionBehavior::Immediate)
         .map_err(sqlite_error)?;
     let mut state = read_sqlite_state(&transaction, Some(next_owner))?;
-    let changed = identity::inherit_scoped_auto_connect(&mut state, next_owner);
-    if changed {
-        let key = identity::scoped_auto_connect_key(next_owner);
+    let mut changed_keys = identity::inherit_scoped_owner_local_state(&mut state, next_owner);
+    if identity::inherit_scoped_auto_connect(&mut state, next_owner) {
+        changed_keys.push(identity::scoped_auto_connect_key(next_owner));
+    }
+    for key in &changed_keys {
         transaction
             .execute(
                 "INSERT INTO settings (scope, key, value) VALUES ('global', ?1, ?2)
                  ON CONFLICT (scope, key) DO UPDATE SET value = excluded.value",
-                (&key, state[&key].to_string()),
+                (key, state[key].to_string()),
             )
             .map_err(sqlite_error)?;
     }
     transaction.commit().map_err(sqlite_error)?;
-    Ok(Some((state, changed)))
+    Ok(Some((state, !changed_keys.is_empty())))
+}
+
+pub(super) fn load_optional_sqlite_state(profile: &Path) -> Result<Option<Value>, String> {
+    let Some(mut db) = open_sqlite(profile, OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .map_err(|e| e.to_string())?
+    else {
+        return Ok(None);
+    };
+    let snapshot = db.transaction().map_err(|e| e.to_string())?;
+    read_sqlite_state(&snapshot, None)
+        .map(Some)
+        .map_err(|e| e.to_string())
+}
+
+pub(super) fn sync_repaired_project_state_to_sqlite(
+    profile: &Path,
+    before: &Value,
+    after: &Value,
+) -> Result<(), String> {
+    let Some(mut db) = open_sqlite(profile, OpenFlags::SQLITE_OPEN_READ_WRITE)
+        .map_err(|e| e.to_string())?
+    else {
+        return Ok(());
+    };
+    let transaction = db
+        .transaction_with_behavior(TransactionBehavior::Immediate)
+        .map_err(|e| e.to_string())?;
+    let mut sqlite_state =
+        read_sqlite_state(&transaction, None).map_err(|e| e.to_string())?;
+    let mut changed_keys = Vec::new();
+    if let (Some(after_map), Some(sqlite_map)) =
+        (after.as_object(), sqlite_state.as_object_mut())
+    {
+        for (key, value) in after_map {
+            if before.get(key) != Some(value) && sqlite_map.get(key) != Some(value) {
+                sqlite_map.insert(key.clone(), value.clone());
+                changed_keys.push(key.clone());
+            }
+        }
+    }
+    let owner = identity::renderer_owner(&sqlite_state)
+        .unwrap_or(identity::SIGNED_OUT_OWNER)
+        .to_owned();
+    let owner_changed = identity::inherit_scoped_owner_local_state(&mut sqlite_state, &owner);
+    for key in owner_changed {
+        if !changed_keys.contains(&key) {
+            changed_keys.push(key);
+        }
+    }
+    for key in &changed_keys {
+        if let Some(val) = sqlite_state.get(key) {
+            transaction
+                .execute(
+                    "INSERT INTO settings (scope, key, value) VALUES ('global', ?1, ?2)
+                     ON CONFLICT (scope, key) DO UPDATE SET value = excluded.value",
+                    (key, val.to_string()),
+                )
+                .map_err(|e| e.to_string())?;
+        }
+    }
+    transaction.commit().map_err(|e| e.to_string())
+}
+
+pub(super) fn rollback_repaired_project_state_in_sqlite(
+    profile: &Path,
+    before: &Value,
+    after: &Value,
+) -> Result<(), String> {
+    let Some(mut db) = open_sqlite(profile, OpenFlags::SQLITE_OPEN_READ_WRITE)
+        .map_err(|e| e.to_string())?
+    else {
+        return Ok(());
+    };
+    let transaction = db
+        .transaction_with_behavior(TransactionBehavior::Immediate)
+        .map_err(|e| e.to_string())?;
+    let current = read_sqlite_state(&transaction, None).map_err(|e| e.to_string())?;
+    let Some(after_map) = after.as_object() else {
+        return Ok(());
+    };
+    for (key, written) in after_map {
+        let original = before.get(key);
+        if original == Some(written) || current.get(key) != Some(written) {
+            continue;
+        }
+        match original {
+            Some(orig_val) => {
+                transaction
+                    .execute(
+                        "INSERT INTO settings (scope, key, value) VALUES ('global', ?1, ?2)
+                         ON CONFLICT (scope, key) DO UPDATE SET value = excluded.value",
+                        (key, orig_val.to_string()),
+                    )
+                    .map_err(|e| e.to_string())?;
+            }
+            None => {
+                transaction
+                    .execute(
+                        "DELETE FROM settings WHERE scope = 'global' AND key = ?1",
+                        [key],
+                    )
+                    .map_err(|e| e.to_string())?;
+            }
+        }
+    }
+    transaction.commit().map_err(|e| e.to_string())
 }
 
 #[cfg(test)]

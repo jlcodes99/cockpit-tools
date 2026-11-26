@@ -65,6 +65,22 @@ impl Prepared {
     }
 }
 
+fn json_byte_len(value: &Value) -> usize {
+    struct Counter(usize);
+    impl std::io::Write for Counter {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.0 = self.0.saturating_add(buf.len());
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    let mut counter = Counter(0);
+    serde_json::to_writer(&mut counter, value).expect("count JSON bytes");
+    counter.0
+}
+
 pub(super) async fn prepare(
     state: &AppState,
     caller: &Caller,
@@ -219,23 +235,25 @@ async fn prepare_excluding_inner(
         .to_string();
     let (prepared_body, boundary_tools_prepared) = super::multi_agent_transport::ingress(state, caller, incoming, body, &model).await?;
     body = prepared_body;
-    let requested_rebuild = !compact
-        && super::execution::current()
-            .is_some_and(|execution| execution.policy.account_switch_rebuild);
+    let requested_rebuild = super::execution::current()
+        .is_some_and(|execution| execution.policy.account_switch_rebuild);
     let mut context =
         inspect_mode(state, caller, incoming, &body, requested_rebuild || compact).await?;
     if let Some(owner) = partial_owner { context.prefer_partial_owner(owner)?; }
     // A preferred owner supplied by the partial-HTTP continuation path is a
     // transport constraint, not a replaceable affinity hint.
-    let enabled = requested_rebuild && preferred.is_none();
-    let (context_next, rebuild_plan) = if enabled {
+    // A standalone compact request needs a replay plan only when history
+    // pins it to an account that may not serve the requested model.
+    let enabled = requested_rebuild
+        && preferred.is_none()
+        && (!compact || context.state_account_id.is_some());
+    let (context_next, rebuild_plan, body) = if enabled {
         let identity = state.identity.clone();
         let headers_copy = incoming.clone();
-        let body_copy = body.clone();
         let max_body_bytes = state.options.max_body_bytes;
         super::blocking::run_prepared(state, move || {
             let mut plan =
-                identity.configure_rebuild(&mut context, &headers_copy, &body_copy, enabled)?;
+                identity.configure_rebuild(&mut context, &headers_copy, &body, enabled)?;
             if plan.is_none() {
                 // Account selection must know a complete cached continuation
                 // is available even before the selected HTTP transport applies
@@ -243,20 +261,20 @@ async fn prepare_excluding_inner(
                 plan = identity.preview_rebuild_with_checkpoint_parameters(
                     &context,
                     &headers_copy,
-                    &body_copy,
+                    &body,
                 )?;
             }
             let plan = plan.filter(|plan| {
-                max_body_bytes == usize::MAX || plan.body.to_string().len() <= max_body_bytes
+                max_body_bytes == usize::MAX || json_byte_len(&plan.body) <= max_body_bytes
             });
-            if enabled && plan.is_none() {
+            if !compact && plan.is_none() {
                 identity.protect_unrebuildable(&mut context)?;
             }
-            Ok::<_, ServiceError>((context, plan))
+            Ok::<_, ServiceError>((context, plan, body))
         })
         .await?
     } else {
-        (context, None)
+        (context, None, body)
     };
     let mut context = context_next;
     if preferred.is_some_and(|account| {
@@ -297,7 +315,7 @@ async fn prepare_excluding_inner(
         && request.target_account_id.is_none()
         && request.capability_fallback_from.is_none()
         && local_quota_replay_is_portable(incoming, &body);
-    let selected = if rebuild_plan.is_some() && request.preferred_account_id.is_some() {
+    let selected = if !compact && rebuild_plan.is_some() && request.preferred_account_id.is_some() {
         super::execution::within(state, state.host.route_for_rebuild(caller, request.clone())).await
     } else {
         route_skipping_local_quota(state, caller, &mut request, allow_local_reselect).await
@@ -308,7 +326,8 @@ async fn prepare_excluding_inner(
             if matches!(
                 error.code,
                 "account_cooling" | "account_binding_unavailable" | "no_available_account"
-            ) && rebuild_plan.is_some()
+            ) && (!compact || (error.status == 409 && error.code == "account_binding_unavailable"))
+                && rebuild_plan.is_some()
                 && request.preferred_account_id.is_some() =>
         {
             let mut excluded = request.excluded_account_ids.clone();
@@ -322,11 +341,13 @@ async fn prepare_excluding_inner(
                 excluded,
                 request.capability_fallback_from.clone(),
                 websocket,
+                compact,
             )
             .await;
         }
         Err(error)
-            if error.code == "quota_reserved"
+            if !compact
+                && error.code == "quota_reserved"
                 && error.upstream_not_sent
                 && error.local_rejected_account_id.is_some()
                 && rebuild_plan.as_ref().is_some_and(|plan| {
@@ -358,6 +379,7 @@ async fn prepare_excluding_inner(
                 excluded,
                 request.capability_fallback_from.clone(),
                 websocket,
+                false,
             )
             .await;
             return match replacement {
@@ -425,7 +447,7 @@ async fn prepare_excluding_inner(
             } else {
                 identity.configure_rebuild(&mut context, &original_headers, &normalized, enabled)?
             };
-            if max_body_bytes != usize::MAX && plan.as_ref().map_or(&normalized, |plan| &plan.body).to_string().len() > max_body_bytes {
+            if max_body_bytes != usize::MAX && json_byte_len(plan.as_ref().map_or(&normalized, |plan| &plan.body)) > max_body_bytes {
                 return Err(ServiceError::new(413, "continuation_history_too_large",
                     "Expanded conversation exceeds the request size limit; existing history was preserved"));
             }
@@ -471,7 +493,8 @@ async fn prepare_excluding_inner(
         boundary_tools_prepared,
     )
     .await?;
-    if prepared.route.wire_api == super::contract::WireApi::Responses
+    if !compact
+        && prepared.route.wire_api == super::contract::WireApi::Responses
         && prepared.rebuild_plan.is_none()
     {
         prepared.rebuild_plan = rebuild_plan;
@@ -1042,6 +1065,7 @@ async fn prepare_rebuilt(
     excluded: Vec<String>,
     capability_fallback_from: Option<String>,
     websocket: bool,
+    compact: bool,
 ) -> Result<Prepared, ServiceError> {
     let model = plan.body["model"].as_str().unwrap_or_default().to_owned();
     let (body, boundary_tools_prepared) = super::multi_agent_transport::ingress(
@@ -1071,7 +1095,7 @@ async fn prepare_rebuilt(
         image_input: image_input(&plan.body),
         excluded_account_ids: excluded,
         requires_permit: true,
-        required_capabilities: super::capabilities::collect(&plan.body, false),
+        required_capabilities: super::capabilities::collect(&plan.body, compact),
         capability_fallback_from,
         auxiliary: websocket.then(|| "responses.websocket".to_owned()),
     };
@@ -1095,14 +1119,16 @@ async fn prepare_rebuilt(
         selected,
         request,
         None,
-        false,
+        compact,
         false,
         boundary_tools_prepared,
     )
     .await?;
-    next.source_headers = original_headers.clone();
-    next.source_body = original_body.clone();
-    next.rebuild_plan = Some(plan);
+    if !compact {
+        next.source_headers = original_headers.clone();
+        next.source_body = original_body.clone();
+        next.rebuild_plan = Some(plan);
+    }
     next.rebuild_applied = true;
     Ok(next)
 }
@@ -1249,14 +1275,16 @@ pub(super) async fn prepare_control(
 }
 
 async fn refresh_route(state: &AppState, prepared: &mut Prepared, force_refresh: bool) -> Result<(), ServiceError> {
-    prepared.execution = prepared.execution.renew_open();
-    let execution = prepared.execution.clone();
+    let execution = prepared.execution.renew_open();
     execution
+        .clone()
         .run(super::execution::prepare(
             state,
             refresh_inner(state, prepared, force_refresh),
         ))
-        .await
+        .await?;
+    prepared.execution = execution;
+    Ok(())
 }
 
 async fn refresh_inner(state: &AppState, prepared: &mut Prepared, force_refresh: bool) -> Result<(), ServiceError> {
@@ -1475,14 +1503,16 @@ pub(super) async fn retry_other_account(
     state: &AppState,
     prepared: &mut Prepared,
 ) -> Result<(), ServiceError> {
-    prepared.execution = prepared.execution.renew_open();
-    let execution = prepared.execution.clone();
+    let execution = prepared.execution.renew_open();
     execution
+        .clone()
         .run(super::execution::prepare(
             state,
             retry_other_account_inner(state, prepared),
         ))
-        .await
+        .await?;
+    prepared.execution = execution;
+    Ok(())
 }
 
 /// The local quota gate has not sent a request. Keep the current opening budget
@@ -1523,6 +1553,7 @@ async fn retry_other_account_inner(
             excluded,
             prepared.request.capability_fallback_from.clone(),
             prepared.request.auxiliary.as_deref() == Some("responses.websocket"),
+            false,
         )
         .await?;
         inherit_capability_trace(prepared, &mut next);
@@ -1596,13 +1627,16 @@ pub(super) async fn retry_cooldown_round(
     prepared: &mut Prepared,
     excluded: Vec<String>,
 ) -> Result<(), ServiceError> {
-    let execution = prepared.execution.clone();
+    let execution = prepared.execution.renew_open();
     execution
+        .clone()
         .run(super::execution::prepare(
             state,
             retry_cooldown_round_inner(state, prepared, excluded),
         ))
-        .await
+        .await?;
+    prepared.execution = execution;
+    Ok(())
 }
 
 async fn retry_cooldown_round_inner(
@@ -1629,6 +1663,7 @@ async fn retry_cooldown_round_inner(
             excluded,
             prepared.request.capability_fallback_from.clone(),
             prepared.request.auxiliary.as_deref() == Some("responses.websocket"),
+            false,
         )
         .await?;
         return Ok(());

@@ -130,14 +130,35 @@ pub(super) fn retry<'a>(
     Box::pin(async move {
         let continuous = policy.continuous_overload_retry;
         let maximum_wait = policy.retry_max_delay;
-        if prepared.compact
+        if (prepared.compact && !continuous)
             || prepared.raw_chat.is_some()
             || prepared.image_route_request.is_some()
-            || prepared.route.chatgpt_plan
+            || (prepared.route.chatgpt_plan && !continuous)
             || prepared.route.wire_api != WireApi::Responses
-            || prepared.request.capability_fallback_from.is_some()
+            || (prepared.request.capability_fallback_from.is_some() && !continuous)
             || (!continuous && tracker.overload.retries >= u32::from(MAX_RETRIES))
         {
+            let reason = if prepared.compact && !continuous {
+                "compact_without_continuous_overload"
+            } else if prepared.raw_chat.is_some() {
+                "raw_chat_unreplayable"
+            } else if prepared.image_route_request.is_some() {
+                "image_route_unreplayable"
+            } else if prepared.route.chatgpt_plan && !continuous {
+                "chatgpt_plan_overload_disabled"
+            } else if prepared.route.wire_api != WireApi::Responses {
+                "non_responses_wire_api"
+            } else if prepared.request.capability_fallback_from.is_some() && !continuous {
+                "capability_fallback_overload_disabled"
+            } else {
+                "overload_retry_budget_exhausted"
+            };
+            tracing::info!(
+                target: "codex_api",
+                "[NativeAPI][recovery] request_id={} status=503 early_exit_reason={}",
+                tracker.diagnostic_request_id(),
+                reason
+            );
             return Ok(None);
         }
         let start = *tracker
@@ -150,6 +171,17 @@ pub(super) fn retry<'a>(
         }
         let deadline = tracker.overload.deadline(deadline);
         if !continuous && (maximum_wait.is_zero() || wait.is_some_and(|hint| hint > maximum_wait)) {
+            let reason = if maximum_wait.is_zero() {
+                "retry_max_delay_zero"
+            } else {
+                "retry_after_exceeds_max_delay"
+            };
+            tracing::info!(
+                target: "codex_api",
+                "[NativeAPI][recovery] request_id={} status=503 early_exit_reason={}",
+                tracker.diagnostic_request_id(),
+                reason
+            );
             return Ok(None);
         }
         let maximum_wait = if continuous {
@@ -163,13 +195,26 @@ pub(super) fn retry<'a>(
         let mut backoff_step = tracker.overload.retries;
         let mut waited = Duration::ZERO;
         let result = tokio::select! {
-            _ = stop.wait() => return Err(stopping_error()),
+            _ = stop.wait() => {
+                tracing::info!(
+                    target: "codex_api",
+                    "[NativeAPI][recovery] request_id={} status=503 early_exit_reason=service_stopping",
+                    tracker.diagnostic_request_id()
+                );
+                return Err(stopping_error());
+            }
             result = deadline::timeout_at(deadline, async {
                 loop {
                     let backoff = Duration::from_millis(300 * (1u64 << backoff_step.min(8)));
                     let jitter = Duration::from_millis(u64::from(rand::random::<u8>()) % 151);
                     let delay = wait.unwrap_or_default().max((backoff + jitter).min(maximum_wait));
                     if deadline.instant().is_some_and(|end| delay >= end.saturating_duration_since(tokio::time::Instant::now())) {
+                        tracing::info!(
+                            target: "codex_api",
+                            "[NativeAPI][recovery] request_id={} status=503 early_exit_reason=deadline_insufficient_for_backoff delay_ms={}",
+                            tracker.diagnostic_request_id(),
+                            delay.as_millis() as u64
+                        );
                         return Ok(None);
                     }
                     tokio::time::sleep(delay).await;
@@ -192,12 +237,46 @@ pub(super) fn retry<'a>(
                     ).await;
                     match refreshed {
                         Ok(Ok(())) => return Ok(Some(RetryRoute::Same)),
-                        Ok(Err(error)) if continuous && matches!(error.code, "account_busy" | "account_cooling") => {
+                        Ok(Err(error))
+                            if continuous
+                                && matches!(
+                                    error.code,
+                                    "account_busy"
+                                        | "account_cooling"
+                                        | "chatgpt_plan_temporarily_unavailable"
+                                ) =>
+                        {
                             wait = error.retry_after;
                             backoff_step = backoff_step.saturating_add(1);
                         }
-                        Ok(Err(error)) if continuous => return Err(error),
-                        _ => return Ok(None),
+                        Ok(Err(error)) if continuous => {
+                            tracing::info!(
+                                target: "codex_api",
+                                "[NativeAPI][recovery] request_id={} status={} early_exit_reason=refresh_transport_error code={}",
+                                tracker.diagnostic_request_id(),
+                                error.status,
+                                error.code
+                            );
+                            return Err(error);
+                        }
+                        Ok(Err(error)) => {
+                            tracing::info!(
+                                target: "codex_api",
+                                "[NativeAPI][recovery] request_id={} status={} early_exit_reason=refresh_transport_non_continuous_error code={}",
+                                tracker.diagnostic_request_id(),
+                                error.status,
+                                error.code
+                            );
+                            return Ok(None);
+                        }
+                        Err(_) => {
+                            tracing::info!(
+                                target: "codex_api",
+                                "[NativeAPI][recovery] request_id={} status=504 early_exit_reason=refresh_transport_timeout",
+                                tracker.diagnostic_request_id()
+                            );
+                            return Ok(None);
+                        }
                     }
                 }
             }) => result,
@@ -213,9 +292,24 @@ pub(super) fn retry<'a>(
                 Ok(Some(route))
             }
             // Keep the original upstream error when local preparation cannot recover.
-            _ if state.stop.stopped() => Err(stopping_error()),
+            _ if state.stop.stopped() => {
+                tracing::info!(
+                    target: "codex_api",
+                    "[NativeAPI][recovery] request_id={} status=503 early_exit_reason=service_stopping",
+                    tracker.diagnostic_request_id()
+                );
+                Err(stopping_error())
+            }
             Ok(Err(error)) => Err(error),
-            _ => Ok(None),
+            Err(_) => {
+                tracing::info!(
+                    target: "codex_api",
+                    "[NativeAPI][recovery] request_id={} status=504 early_exit_reason=overload_deadline_expired",
+                    tracker.diagnostic_request_id()
+                );
+                Ok(None)
+            }
+            Ok(Ok(None)) => Ok(None),
         }
     })
 }

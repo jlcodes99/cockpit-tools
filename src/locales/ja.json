@@ -8274,7 +8274,10 @@
       "recovered": "{{model}} は {{time}} に利用可能になりました",
       "until": "{{model}} の前回確認は制限中、解除 {{time}}",
       "unavailable": "{{model}} の前回確認は制限中",
-      "failed": "{{model}} の前回確認に失敗"
+      "failed": "{{model}} の前回確認に失敗",
+      "logUntil": "{{model}} クライアントログで制限検出、リセット {{time}}",
+      "logUnknownUntil": "クライアントログでレート制限を検出、リセット {{time}}",
+      "logHits": "ログ一致 {{count}} 回"
     },
     "exposeToCodex": {
       "title": "WorkBuddy トークンをコピーせずに Native Rust ゲートウェイ経由で接続します"
@@ -9746,7 +9749,9 @@
       "conversations": "会話数",
       "turns": "ターン数",
       "coverage": "正確カバレッジ",
-      "avgPerDay": "稼働日平均"
+      "avgPerDay": "稼働日平均",
+      "refCost": "API 換算参考額",
+      "cacheSavingsHint": "キャッシュで約 {{savings}} 節約"
     },
     "estimated": {
       "notice": "API 使用量が未記録の {{turns}} ターンは別途推定されました（正確合計には加算されません）："
@@ -9785,6 +9790,32 @@
     "errors": {
       "loadFailed": "トークン使用量の読み込みに失敗しました：{{error}}",
       "syncFailed": "トークン使用量のスキャンに失敗しました：{{error}}"
+    },
+    "heatmap": {
+      "title": "365日アクティビティヒートマップ",
+      "activeDays": "稼働 {{count}} 日",
+      "peak": "ピーク {{date}} ({{tokens}})",
+      "less": "少",
+      "more": "多"
+    },
+    "rehydrate": {
+      "title": "圧縮後の記憶復元フック (Rehydrate)",
+      "enabledBadge": "有効",
+      "disabledBadge": "無効",
+      "desc": "コンテキスト圧縮 (CHECKPOINT) 後の最初の呼び出し前に、リクエスト履歴・編集ファイル・重要な決定事項を自動注入し、AIの記憶喪失を防ぎます。",
+      "noPython": "python3 未検出",
+      "enableBtn": "フック有効化",
+      "disableBtn": "フック無効化"
+    },
+    "audit": {
+      "title": "コンテキスト・ツール実行監査",
+      "peakContext": "最大ステップコンテキスト",
+      "compactions": "圧縮 {{count}} 回",
+      "userPrompts": "質問回数",
+      "toolCalls": "ツール呼出",
+      "fileOps": "ファイル読/書",
+      "commands": "コマンド実行",
+      "subagents": "サブエージェント"
     }
   },
   "t3code": {
@@ -9792,6 +9823,45 @@
       "title": "アカウント設定",
       "providers": "プロバイダーアカウント",
       "codexCatalogPending": "モデル同期を待つ外部キー：{{count}} 件"
+    },
+    "commonSettings": {
+      "title": "よく使う設定",
+      "language": "T3 Code の言語"
+    },
+    "platformOrder": {
+      "title": "プラットフォームの順序",
+      "hint": "ハンドルをドラッグして、アカウント一覧のプラットフォームの順序を変更します。",
+      "saveFailed": "プラットフォームの順序を保存できませんでした。もう一度お試しください。{{error}}"
+    },
+    "desktopPrivacy": {
+      "title": "T3 Code のプライバシー設定",
+      "enableAll": "すべてオン",
+      "disableAll": "テレメトリを一括オフ",
+      "statusOn": "オン",
+      "statusOff": "オフ",
+      "connection": "テレメトリをオフにしても、スマートフォンのペアリングとパソコンとのリアルタイム通信は利用できます。",
+      "launchScope": "テレメトリー設定は Cockpit Tools から起動した既定のインスタンスに適用されます。",
+      "restartPending": "設定を保存しました。T3 Code を再起動すると反映されます。",
+      "environmentBlocked": "環境変数 {{variable}} により無効です。",
+      "policyBlocked": "システムポリシーにより無効です。",
+      "linked": "利用状況分析をオフにすると、接続トレースもオフになります。",
+      "statusPending": "未適用",
+      "doNotTrack": {
+        "label": "トラッキングを拒否",
+        "description": "DO_NOT_TRACK は利用状況の分析と接続トレースを一時停止します。設定内容は保持されます。"
+      },
+      "analytics": {
+        "label": "利用状況分析",
+        "description": "アプリのバージョン、プラットフォーム、利用統計を T3 Code に送信します。"
+      },
+      "tracing": {
+        "label": "デスクトップ接続トレース",
+        "description": "接続時間とエラーの種類を送信します。OpenTelemetry のエクスポートにも適用されます。"
+      },
+      "agentActivity": {
+        "label": "エージェント活動通知",
+        "description": "プロジェクト名、会話タイトル、モデル名、タスクの状態を T3 Connect に送信します。オフにすると、スマートフォンのライブアクティビティとオフライン通知が停止します。"
+      }
     },
     "nativeSettings": {
       "defaultModel": "新しいチャットのモデル",

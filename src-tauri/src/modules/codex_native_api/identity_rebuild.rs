@@ -1088,7 +1088,18 @@ impl IdentityStore {
             std::borrow::Cow::Owned(replay) => (replay, Some(Arc::new(transcript))),
         };
         let mut upstream_headers = headers.clone();
-        let mut upstream_body = body.clone();
+        let mut upstream_body = match body.as_object() {
+            Some(fields) => {
+                let mut copy = serde_json::Map::with_capacity(fields.len());
+                for (key, value) in fields {
+                    if key != "input" {
+                        copy.insert(key.clone(), value.clone());
+                    }
+                }
+                Value::Object(copy)
+            }
+            None => body.clone(),
+        };
         if !context.portable_body {
             for item in &mut fresh_input {
                 item.as_object_mut().unwrap().remove("id");

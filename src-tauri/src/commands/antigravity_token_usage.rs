@@ -1,8 +1,8 @@
 use crate::modules::antigravity_token_usage::{
     self,
     types::{
-        AntigravityTokenUsageSettings, ConversationDetailResponse, DashboardBundleResponse,
-        DashboardQueryRequest,
+        AntigravityRehydrateStatus, AntigravityTokenUsageSettings, ConversationDetailResponse,
+        DashboardBundleResponse, DashboardQueryRequest,
     },
 };
 
@@ -56,4 +56,13 @@ pub async fn antigravity_set_token_usage_data_dir(
     })
     .await
     .map_err(|e| format!("Antigravity set token usage data dir task failed: {e}"))?
+}
+
+#[tauri::command]
+pub async fn antigravity_set_rehydrate_enabled(
+    enabled: bool,
+) -> Result<AntigravityRehydrateStatus, String> {
+    tokio::task::spawn_blocking(move || antigravity_token_usage::toggle_rehydrate_hook(enabled))
+        .await
+        .map_err(|e| format!("Antigravity rehydrate hook toggle task failed: {e}"))?
 }

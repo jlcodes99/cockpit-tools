@@ -1,0 +1,97 @@
+.t3code-platform-order-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 36px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.t3code-platform-order-trigger.qs-btn {
+  min-height: 32px;
+}
+
+.t3code-platform-order-trigger > svg,
+.t3code-platform-order-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.t3code-platform-order-trigger > span,
+.t3code-platform-order-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.modal-overlay.t3code-platform-order-overlay {
+  padding: 16px;
+}
+
+.modal.t3code-platform-order-dialog {
+  max-width: 440px;
+  max-height: calc(100vh - 32px);
+}
+
+.t3code-platform-order-dialog > .modal-header,
+.t3code-platform-order-dialog > .modal-footer {
+  padding: 14px 18px;
+}
+
+.t3code-platform-order-dialog > .modal-header {
+  gap: 8px;
+}
+
+.t3code-platform-order-dialog .modal-close {
+  flex-shrink: 0;
+}
+
+.t3code-platform-order-dialog > .modal-body {
+  padding: 14px 18px;
+  min-height: 0;
+}
+
+.t3code-platform-order-hint {
+  margin: 0 0 8px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.t3code-platform-order-list.sortable-layout-list {
+  gap: 0;
+}
+
+.t3code-platform-order-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border-light);
+  background: var(--bg-surface);
+}
+
+.t3code-platform-order-item:last-child {
+  border-bottom-color: transparent;
+}
+
+.t3code-platform-order-name {
+  flex: 1;
+  font-size: 13px;
+}
+
+.t3code-platform-order-item .t3code-platform-order-handle {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  touch-action: none;
+  cursor: grab;
+}
+
+.sortable-layout-preview > .t3code-platform-order-item {
+  border: 1px solid var(--primary);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg);
+}

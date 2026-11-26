@@ -26,12 +26,79 @@ pub struct ModelResolutionInput<'a> {
 pub fn is_builtin_enum_u64(raw_num: u64) -> bool {
     matches!(
         raw_num,
-        1318 | 1319 | 1320 | 1322 | 1401 | 1402 | 1417 | 1427 | 1528 | 1667 | 1669
+        246 | 281
+            | 282
+            | 290
+            | 291
+            | 312
+            | 313
+            | 327
+            | 329
+            | 330
+            | 331
+            | 332
+            | 333
+            | 334
+            | 340
+            | 341
+            | 342
+            | 1007
+            | 1008
+            | 1012
+            | 1018
+            | 1026
+            | 1035
+            | 1036
+            | 1037
+            | 1318
+            | 1319
+            | 1320
+            | 1322
+            | 1400
+            | 1401
+            | 1402
+            | 1403
+            | 1404
+            | 1405
+            | 1417
+            | 1418
+            | 1419
+            | 1427
+            | 1437
+            | 1438
+            | 1525
+            | 1526
+            | 1527
+            | 1528
+            | 1530
+            | 1531
+            | 1578
+            | 1667
+            | 1668
+            | 1669
+            | 1670
+            | 1681
     )
 }
 
 pub fn lookup_builtin_enum_model(raw_key: &str) -> Option<&'static str> {
     match raw_key.trim() {
+        "246" | "327" | "331" => Some("gemini-2.5-pro"),
+        "281" | "282" => Some("claude-sonnet-4"),
+        "290" | "291" => Some("claude-opus-4"),
+        "312" | "313" | "329" | "332" => Some("gemini-2.5-flash"),
+        "330" => Some("gemini-2.5-flash-lite"),
+        "333" | "334" => Some("claude-sonnet-4-5-thinking"),
+        "340" | "341" => Some("claude-haiku-4-5"),
+        "342" | "MODEL_OPENAI_GPT_OSS_120B_MEDIUM" => Some("gpt-oss-120b-medium"),
+        "1007" | "MODEL_PLACEHOLDER_M7" => Some("gemini-3-pro-high"),
+        "1008" | "MODEL_PLACEHOLDER_M8" => Some("gemini-3-pro-low"),
+        "1012" | "MODEL_PLACEHOLDER_M12" => Some("claude-opus-4-5-thinking"),
+        "1018" | "MODEL_PLACEHOLDER_M18" => Some("gemini-3-flash"),
+        "1026" | "MODEL_PLACEHOLDER_M26" => Some("claude-opus-4-6-thinking"),
+        "1035" | "MODEL_PLACEHOLDER_M35" => Some("claude-sonnet-4-6-thinking"),
+        "1036" | "MODEL_PLACEHOLDER_M36" => Some("gemini-3.1-pro-low"),
+        "1037" | "MODEL_PLACEHOLDER_M37" => Some("gemini-3.1-pro-high"),
         "1318"
         | "1319"
         | "1320"
@@ -39,12 +106,33 @@ pub fn lookup_builtin_enum_model(raw_key: &str) -> Option<&'static str> {
         | "MODEL_PLACEHOLDER_M319"
         | "MODEL_PLACEHOLDER_M320" => Some("gemini-3.8-flash-high"),
         "1322" | "MODEL_PLACEHOLDER_M322" => Some("gemini-3.8-flash-tiered"),
+        "1400" | "MODEL_PLACEHOLDER_M400" => Some("claude-opus-5-5-low"),
         "1401" | "MODEL_PLACEHOLDER_M401" => Some("claude-opus-5-5-medium"),
         "1402" | "MODEL_PLACEHOLDER_M402" => Some("claude-opus-5-5-high"),
+        "1403" | "MODEL_PLACEHOLDER_M403" => Some("claude-sonnet-5-5-low"),
+        "1404" | "MODEL_PLACEHOLDER_M404" => Some("claude-sonnet-5-5-medium"),
+        "1405" | "MODEL_PLACEHOLDER_M405" => Some("claude-sonnet-5-5-high"),
         "1417" | "MODEL_PLACEHOLDER_M417" => Some("gemini-4-argon-high"),
-        "1427" | "MODEL_PLACEHOLDER_M427" => Some("gemini-4-carbon-high"),
-        "1528" | "MODEL_PLACEHOLDER_M528" => Some("gemini-4-hydrogen"),
+        "1418" | "MODEL_PLACEHOLDER_M418" => Some("gemini-4-argon-medium"),
+        "1419" | "MODEL_PLACEHOLDER_M419" => Some("gemini-4-argon-low"),
+        "1427" | "1670" | "MODEL_PLACEHOLDER_M427" | "MODEL_PLACEHOLDER_M670" => {
+            Some("gemini-4-carbon-high")
+        }
+        "1437" | "MODEL_PLACEHOLDER_M437" => Some("gemini-4-neon-high"),
+        "1438" | "MODEL_PLACEHOLDER_M438" => Some("gemini-4-neon-medium"),
+        "1525" | "1530" | "MODEL_PLACEHOLDER_M525" | "MODEL_PLACEHOLDER_M530" => {
+            Some("gemini-4-hydrogen-high")
+        }
+        "1526" | "MODEL_PLACEHOLDER_M526" => Some("gemini-4-hydrogen-medium"),
+        "1527" | "MODEL_PLACEHOLDER_M527" => Some("gemini-4-hydrogen-low"),
+        "1528" | "1578" | "MODEL_PLACEHOLDER_M528" | "MODEL_PLACEHOLDER_M578" => {
+            Some("gemini-4-hydrogen")
+        }
+        "1531" | "MODEL_PLACEHOLDER_M531" => Some("gemini-4-hydrogen-xhigh"),
         "1667" | "MODEL_PLACEHOLDER_M667" => Some("gemini-pro-orchestrator"),
+        "1668" | "1681" | "MODEL_PLACEHOLDER_M668" | "MODEL_PLACEHOLDER_M681" => {
+            Some("gemini-argon-orchestrator")
+        }
         "1669" | "MODEL_PLACEHOLDER_M669" => Some("gemini-flash-worker-agy"),
         _ => None,
     }
@@ -58,9 +146,31 @@ pub fn lookup_response_model(response_model: &str) -> Option<&'static str> {
         "gemini-3.8-flash-tiered" => Some("gemini-3.8-flash-tiered"),
         "gemini-4-argon" => Some("gemini-4-argon-high"),
         "gemini-4-carbon" => Some("gemini-4-carbon-high"),
+        "gemini-4-hydrogen-extra-high"
+        | "gemini-4-hydrogen-tiered-xhigh"
+        | "gemini 4 hydrogen extra high"
+        | "gemini 4 hydrogen (extra high)"
+        | "gemini 4 hydrogen (xhigh)" => Some("gemini-4-hydrogen-xhigh"),
+        "gemini-4-hydrogen-tiered-high"
+        | "gemini 4 hydrogen high"
+        | "gemini 4 hydrogen (high)" => Some("gemini-4-hydrogen-high"),
         "claude-opus-5-5-medium" => Some("claude-opus-5-5-medium"),
         "claude-opus-5-5-high" => Some("claude-opus-5-5-high"),
         _ => None,
+    }
+}
+
+pub fn resolve_model_context_limit(model_id: &str) -> u64 {
+    let lower = model_id.trim().to_ascii_lowercase();
+    if lower.starts_with("claude-") {
+        200_000
+    } else if lower.starts_with("gpt-") {
+        128_000
+    } else if lower.contains("argon") || lower.contains("hydrogen") || lower.contains("neon") || lower.contains("carbon") || lower.starts_with("gemini-") {
+        // Default Antigravity desktop checkpoint clamp is 256,000 tokens
+        256_000
+    } else {
+        256_000
     }
 }
 

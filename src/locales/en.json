@@ -8208,6 +8208,45 @@
       "providers": "Provider accounts",
       "codexCatalogPending": "Third-party keys awaiting model sync: {{count}}"
     },
+    "commonSettings": {
+      "title": "Common settings",
+      "language": "T3 Code language"
+    },
+    "platformOrder": {
+      "title": "Platform order",
+      "hint": "Drag the handles to reorder platform groups in the account overview.",
+      "saveFailed": "Could not save the platform order. Try again. {{error}}"
+    },
+    "desktopPrivacy": {
+      "title": "T3 Code privacy settings",
+      "enableAll": "Enable all telemetry",
+      "disableAll": "Disable all telemetry",
+      "statusOn": "On",
+      "statusOff": "Off",
+      "connection": "Phones can still pair and communicate with the computer in real time when telemetry is off.",
+      "launchScope": "Telemetry settings apply to the default instance launched from Cockpit Tools.",
+      "restartPending": "Settings saved. Restart T3 Code to apply the telemetry changes.",
+      "environmentBlocked": "Disabled by {{variable}}.",
+      "policyBlocked": "Disabled by system policy.",
+      "linked": "Turning off usage analytics also turns off connection tracing.",
+      "statusPending": "Inactive",
+      "doNotTrack": {
+        "label": "Do Not Track",
+        "description": "DO_NOT_TRACK pauses usage analytics and connection tracing. Your choices stay saved."
+      },
+      "analytics": {
+        "label": "Usage analytics",
+        "description": "Sends app version, platform and usage statistics to T3 Code."
+      },
+      "tracing": {
+        "label": "Desktop connection tracing",
+        "description": "Sends connection timings and error types. This switch also controls OpenTelemetry exports."
+      },
+      "agentActivity": {
+        "label": "Agent activity notifications",
+        "description": "Sends project names, conversation titles, model names and task status to T3 Connect. Turning it off disables phone Live Activities and offline notifications."
+      }
+    },
     "nativeSettings": {
       "defaultModel": "New-chat model",
       "reasoning": "Reasoning effort",
@@ -8843,7 +8882,10 @@
       "recovered": "{{model}} available again at {{time}}",
       "until": "{{model}} was limited at last probe, resets {{time}}",
       "unavailable": "{{model}} was limited at last probe",
-      "failed": "Last probe of {{model}} failed"
+      "failed": "Last probe of {{model}} failed",
+      "logUntil": "{{model}} limited in client logs, resets {{time}}",
+      "logUnknownUntil": "Rate limited in client logs, resets {{time}}",
+      "logHits": "Matched {{count}} times in logs"
     },
     "exposeToCodex": {
       "title": "Connects through the Native Rust gateway without copying the WorkBuddy token"
@@ -9936,7 +9978,9 @@
       "conversations": "Conversations",
       "turns": "Turns",
       "coverage": "Exact Coverage",
-      "avgPerDay": "Avg / Active Day"
+      "avgPerDay": "Avg / Active Day",
+      "refCost": "API Equiv. Cost",
+      "cacheSavingsHint": "Prompt cache saved ~{{savings}}"
     },
     "estimated": {
       "notice": "{{turns}} turns lacked raw API usage and were estimated separately (never added to Exact Total):"
@@ -9975,6 +10019,32 @@
     "errors": {
       "loadFailed": "Failed to load token usage: {{error}}",
       "syncFailed": "Failed to scan token usage: {{error}}"
+    },
+    "heatmap": {
+      "title": "365-Day Activity Heatmap",
+      "activeDays": "{{count}} active days",
+      "peak": "Peak {{date}} ({{tokens}})",
+      "less": "Less",
+      "more": "More"
+    },
+    "rehydrate": {
+      "title": "Post-Compact Rehydration Hook",
+      "enabledBadge": "Enabled",
+      "disabledBadge": "Disabled",
+      "desc": "Automatically re-injects user request timeline, edited files, and key decisions on the first turn after context compaction (CHECKPOINT).",
+      "noPython": "python3 not found",
+      "enableBtn": "Enable Hook",
+      "disableBtn": "Disable Hook"
+    },
+    "audit": {
+      "title": "Context & Execution Audit",
+      "peakContext": "Peak Step Context",
+      "compactions": "{{count}} compactions",
+      "userPrompts": "User Prompts",
+      "toolCalls": "Tool Calls",
+      "fileOps": "File R / W",
+      "commands": "Commands",
+      "subagents": "Subagents"
     }
   }
 }

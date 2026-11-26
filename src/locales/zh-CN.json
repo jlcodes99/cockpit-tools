@@ -8208,6 +8208,45 @@
       "providers": "提供方账号",
       "codexCatalogPending": "第三方 Key 待同步模型目录：{{count}} 个"
     },
+    "commonSettings": {
+      "title": "常用设置",
+      "language": "T3 Code 语言"
+    },
+    "platformOrder": {
+      "title": "平台排序",
+      "hint": "拖动把手，调整账号总览中的平台分组顺序。",
+      "saveFailed": "无法保存平台顺序，请重试。{{error}}"
+    },
+    "desktopPrivacy": {
+      "title": "T3 Code 隐私设置",
+      "enableAll": "一键开启遥测",
+      "disableAll": "一键关闭遥测",
+      "statusOn": "已开启",
+      "statusOff": "已关闭",
+      "connection": "关闭遥测后，手机仍可配对并与电脑实时通信。",
+      "launchScope": "遥测设置适用于由 Cockpit Tools 启动的 T3 Code 默认实例。",
+      "restartPending": "设置已保存。重启 T3 Code 后，遥测设置生效。",
+      "environmentBlocked": "已由环境变量 {{variable}} 关闭。",
+      "policyBlocked": "已由系统策略关闭。",
+      "linked": "产品使用分析关闭时，连接追踪也会关闭。",
+      "statusPending": "暂未生效",
+      "doNotTrack": {
+        "label": "禁止追踪",
+        "description": "DO_NOT_TRACK 开启时暂停产品使用分析和桌面连接追踪。各项开关的选择会保留。"
+      },
+      "analytics": {
+        "label": "产品使用分析",
+        "description": "向 T3 Code 发送应用版本、平台和使用统计。"
+      },
+      "tracing": {
+        "label": "桌面连接追踪",
+        "description": "发送连接耗时和错误类型。此开关也控制 OpenTelemetry 导出。"
+      },
+      "agentActivity": {
+        "label": "Agent 活动推送",
+        "description": "向 T3 Connect 中继发送项目名、对话标题、模型名和任务状态。关闭后，手机锁屏动态和离线通知会停用。"
+      }
+    },
     "nativeSettings": {
       "defaultModel": "新对话默认模型",
       "reasoning": "推理强度",
@@ -8843,7 +8882,10 @@
       "recovered": "{{model}} 已恢复（{{time}}）",
       "until": "{{model}} 上次探测受限，恢复时间 {{time}}",
       "unavailable": "{{model}} 上次探测受限",
-      "failed": "{{model}} 上次探测失败"
+      "failed": "{{model}} 上次探测失败",
+      "logUntil": "{{model}} 客户端日志受限，恢复时间 {{time}}",
+      "logUnknownUntil": "客户端日志检测到限流，恢复时间 {{time}}",
+      "logHits": "日志命中 {{count}} 次"
     },
     "exposeToCodex": {
       "title": "仅在 Native Rust 网关中接入，不会复制 WorkBuddy Token"
@@ -9936,7 +9978,9 @@
       "conversations": "会话数",
       "turns": "响应轮次",
       "coverage": "精确覆盖率",
-      "avgPerDay": "活跃日均"
+      "avgPerDay": "活跃日均",
+      "refCost": "API 等价参考",
+      "cacheSavingsHint": "Prompt 缓存约节省 {{savings}}"
     },
     "estimated": {
       "notice": "另有 {{turns}} 轮缺少原始 API 用量，已单独估算（不计入精确合计）："
@@ -9975,6 +10019,32 @@
     "errors": {
       "loadFailed": "读取 Token 用量失败：{{error}}",
       "syncFailed": "扫描 Token 用量失败：{{error}}"
+    },
+    "heatmap": {
+      "title": "365 天活跃热力图",
+      "activeDays": "{{count}} 活跃天",
+      "peak": "峰值 {{date}} ({{tokens}})",
+      "less": "少",
+      "more": "多"
+    },
+    "rehydrate": {
+      "title": "压缩后记忆回灌 (Rehydrate Hook)",
+      "enabledBadge": "已启用",
+      "disabledBadge": "未启用",
+      "desc": "当会话触发上下文压缩 (CHECKPOINT) 后，自动在下一次调用前注入用户请求时间线、最近编辑文件与关键结论，防止 AI 失忆或重做已完成工作。",
+      "noPython": "未检测到 python3",
+      "enableBtn": "一键启用",
+      "disableBtn": "停用钩子"
+    },
+    "audit": {
+      "title": "上下文与工具执行审计",
+      "peakContext": "单步峰值上下文",
+      "compactions": "压缩 {{count}} 次",
+      "userPrompts": "用户提问",
+      "toolCalls": "工具调用",
+      "fileOps": "文件读 / 写",
+      "commands": "命令执行",
+      "subagents": "子代理调用"
     }
   }
 }

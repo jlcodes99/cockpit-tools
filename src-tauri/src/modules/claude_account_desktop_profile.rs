@@ -612,7 +612,138 @@ fn decrypt_chromium_v10_cookie(
     String::from_utf8(plaintext).map_err(|e| format!("解析 Claude Cookie 失败: {}", e))
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "windows", test))]
+fn decrypt_windows_v10_cookie(
+    host_key: &str,
+    encrypted_value: &[u8],
+    key: &[u8],
+) -> Result<String, String> {
+    const V10_PREFIX: &[u8] = b"v10";
+    const V20_PREFIX: &[u8] = b"v20";
+    if encrypted_value.starts_with(V20_PREFIX) {
+        return Err("Claude Cookie 使用了 v20 应用绑定加密，无法直接静默解密。".to_string());
+    }
+    if !encrypted_value.starts_with(V10_PREFIX) {
+        return Err("Claude Cookie 使用了暂不支持的加密格式。".to_string());
+    }
+    if encrypted_value.len() < 3 + 12 + 16 {
+        return Err("Claude Cookie 加密数据长度无效。".to_string());
+    }
+    if key.len() != 32 {
+        return Err(format!("Claude Cookie 解密密钥长度无效: {}", key.len()));
+    }
+    let cipher = Aes256Gcm::new(AesGcmGenericArray::from_slice(key));
+    let nonce = AesGcmNonce::from_slice(&encrypted_value[3..15]);
+    let mut plaintext = cipher
+        .decrypt(nonce, &encrypted_value[15..])
+        .map_err(|e| format!("解密 Windows Claude Cookie 失败: {}", e))?;
+
+    // Chromium DB schema >= 24 prefixes encrypted cookie plaintext with SHA256(host_key).
+    let host_digest = Sha256::digest(host_key.as_bytes());
+    if plaintext.len() > 32 && plaintext[..32] == host_digest[..] {
+        plaintext = plaintext[32..].to_vec();
+    }
+
+    if plaintext.iter().any(|byte| !(0x20..=0x7e).contains(byte)) {
+        return Err("解密后的 Claude Cookie 含有非法字符。".to_string());
+    }
+    String::from_utf8(plaintext).map_err(|e| format!("解析 Claude Cookie 失败: {}", e))
+}
+
+#[cfg(target_os = "windows")]
+fn dpapi_decrypt_desktop_cookie_key(encrypted: &[u8]) -> Result<Vec<u8>, String> {
+    unsafe {
+        let mut input = CRYPT_INTEGER_BLOB {
+            cbData: encrypted.len() as u32,
+            pbData: encrypted.as_ptr() as *mut u8,
+        };
+        let mut output = CRYPT_INTEGER_BLOB {
+            cbData: 0,
+            pbData: std::ptr::null_mut(),
+        };
+        CryptUnprotectData(&mut input, None, None, None, None, 0, &mut output)
+            .map_err(|e| format!("DPAPI 解密 Claude Cookie 密钥失败: {}", e))?;
+        let result = std::slice::from_raw_parts(output.pbData, output.cbData as usize).to_vec();
+        let _ = LocalFree(HLOCAL(output.pbData as *mut _));
+        Ok(result)
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn read_windows_local_state_cookie_key(profile_dir: &Path) -> Result<Vec<u8>, String> {
+    let local_state_path = profile_dir.join("Local State");
+    let content = fs::read_to_string(&local_state_path).map_err(|e| {
+        format!(
+            "读取 Claude Local State 失败: path={}, error={}",
+            local_state_path.display(),
+            e
+        )
+    })?;
+    let json: Value = serde_json::from_str(&content)
+        .map_err(|e| format!("解析 Claude Local State 失败: {}", e))?;
+    let encrypted_key_b64 = json
+        .get("os_crypt")
+        .and_then(|value| value.get("encrypted_key"))
+        .and_then(Value::as_str)
+        .ok_or_else(|| "Claude Local State 缺少 os_crypt.encrypted_key。".to_string())?;
+    let encrypted_key_bytes = base64::engine::general_purpose::STANDARD
+        .decode(encrypted_key_b64)
+        .map_err(|e| format!("解码 Claude Local State 密钥失败: {}", e))?;
+    if encrypted_key_bytes.len() <= 5 || &encrypted_key_bytes[..5] != b"DPAPI" {
+        return Err("Claude Local State 密钥未使用 DPAPI 前缀。".to_string());
+    }
+    let key = dpapi_decrypt_desktop_cookie_key(&encrypted_key_bytes[5..])?;
+    if key.len() != 32 {
+        return Err(format!("解密后的 Claude Local State 密钥长度异常: {}", key.len()));
+    }
+    Ok(key)
+}
+
+enum DesktopCookieDecryptKey {
+    #[cfg(target_os = "macos")]
+    MacOsSafeStorage(String),
+    #[cfg(target_os = "windows")]
+    WindowsDpapiAes256Gcm(Vec<u8>),
+}
+
+fn load_desktop_cookie_decrypt_key(_profile_dir: &Path) -> Result<DesktopCookieDecryptKey, String> {
+    #[cfg(target_os = "macos")]
+    {
+        return read_claude_safe_storage_password().map(DesktopCookieDecryptKey::MacOsSafeStorage);
+    }
+    #[cfg(target_os = "windows")]
+    {
+        return read_windows_local_state_cookie_key(_profile_dir)
+            .map(DesktopCookieDecryptKey::WindowsDpapiAes256Gcm);
+    }
+    #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
+    {
+        Err("当前平台不支持解密已加密的 Claude Cookies。".to_string())
+    }
+}
+
+fn decrypt_desktop_cookie_row(
+    domain: &str,
+    encrypted_value: &[u8],
+    key: &DesktopCookieDecryptKey,
+) -> Result<String, String> {
+    #[cfg(target_os = "macos")]
+    {
+        let DesktopCookieDecryptKey::MacOsSafeStorage(password) = key;
+        return decrypt_chromium_v10_cookie(domain, encrypted_value, password);
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let DesktopCookieDecryptKey::WindowsDpapiAes256Gcm(aes_key) = key;
+        return decrypt_windows_v10_cookie(domain, encrypted_value, aes_key);
+    }
+    #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
+    {
+        let _ = (domain, encrypted_value, key);
+        Err("当前平台不支持解密已加密的 Claude Cookies。".to_string())
+    }
+}
+
 fn read_decrypted_desktop_cookie_export(
     profile_dir: &Path,
 ) -> Result<ClaudeDesktopAuthCookieExport, String> {
@@ -620,7 +751,6 @@ fn read_decrypted_desktop_cookie_export(
     if !cookies_path.exists() {
         return Err(format!("Claude Cookies 不存在: {}", cookies_path.display()));
     }
-    let password = read_claude_safe_storage_password()?;
     let conn = open_desktop_cookie_snapshot(&cookies_path).map_err(|e| {
         format!(
             "读取 Claude Cookies 失败: path={}, error={}",
@@ -652,6 +782,8 @@ fn read_decrypted_desktop_cookie_export(
         .map_err(|e| format!("读取 Claude Cookies 失败: {}", e))?;
 
     let mut cookies = Vec::new();
+    let mut decrypt_key: Option<Result<DesktopCookieDecryptKey, String>> = None;
+    let mut decrypt_errors = Vec::new();
     for row in rows {
         let (domain, path, name, value, encrypted_value, expires_utc, is_secure, is_httponly) =
             row.map_err(|e| format!("读取 Claude Cookie 行失败: {}", e))?;
@@ -661,7 +793,21 @@ fn read_decrypted_desktop_cookie_export(
         let cookie_value = if !value.is_empty() {
             value
         } else if !encrypted_value.is_empty() {
-            decrypt_chromium_v10_cookie(&domain, &encrypted_value, &password)?
+            let key_result = decrypt_key
+                .get_or_insert_with(|| load_desktop_cookie_decrypt_key(profile_dir));
+            match key_result {
+                Ok(key) => match decrypt_desktop_cookie_row(&domain, &encrypted_value, key) {
+                    Ok(decrypted) => decrypted,
+                    Err(error) => {
+                        decrypt_errors.push(error);
+                        continue;
+                    }
+                },
+                Err(error) => {
+                    decrypt_errors.push(error.clone());
+                    continue;
+                }
+            }
         } else {
             String::new()
         };
@@ -684,7 +830,12 @@ fn read_decrypted_desktop_cookie_export(
         cookies,
         web_profile: None,
     };
-    ensure_desktop_auth_export_logged_in(&export)?;
+    if let Err(login_error) = ensure_desktop_auth_export_logged_in(&export) {
+        if let Some(decrypt_error) = decrypt_errors.into_iter().next() {
+            return Err(decrypt_error);
+        }
+        return Err(login_error);
+    }
     Ok(export)
 }
 
@@ -866,11 +1017,71 @@ fn should_attempt_desktop_hidden_probe_at(
     true
 }
 
-fn should_attempt_desktop_hidden_probe(account_id: &str) -> bool {
+fn begin_desktop_hidden_probe_attempt_at(
+    attempts: &mut HashMap<String, DesktopHiddenProbeAttempt>,
+    account_id: &str,
+    now: Instant,
+    initial_cooldown: Duration,
+) -> Result<Option<DesktopHiddenProbeAttempt>, u64> {
+    if let Some(previous) = attempts.get(account_id) {
+        if now.duration_since(previous.attempted_at) < previous.cooldown {
+            return Err(previous.cooldown.as_secs());
+        }
+    }
+    let previous = attempts.insert(
+        account_id.to_string(),
+        DesktopHiddenProbeAttempt {
+            attempted_at: now,
+            cooldown: initial_cooldown,
+        },
+    );
+    Ok(previous)
+}
+
+fn finish_desktop_hidden_probe_attempt_at(
+    attempts: &mut HashMap<String, DesktopHiddenProbeAttempt>,
+    account_id: &str,
+    previous: Option<DesktopHiddenProbeAttempt>,
+    succeeded: bool,
+    launched_electron: bool,
+    finished_at: Instant,
+    success_cooldown: Duration,
+    failure_cooldown: Duration,
+) {
+    if succeeded {
+        attempts.insert(
+            account_id.to_string(),
+            DesktopHiddenProbeAttempt {
+                attempted_at: finished_at,
+                cooldown: success_cooldown,
+            },
+        );
+        return;
+    }
+    if !launched_electron {
+        if let Some(prev) = previous {
+            attempts.insert(account_id.to_string(), prev);
+        } else {
+            attempts.remove(account_id);
+        }
+        return;
+    }
+    attempts.insert(
+        account_id.to_string(),
+        DesktopHiddenProbeAttempt {
+            attempted_at: finished_at,
+            cooldown: failure_cooldown,
+        },
+    );
+}
+
+fn begin_desktop_hidden_probe_attempt(
+    account_id: &str,
+) -> Result<Option<DesktopHiddenProbeAttempt>, u64> {
     let Ok(mut attempts) = CLAUDE_DESKTOP_HIDDEN_PROBE_ATTEMPTS.lock() else {
-        return true;
+        return Ok(None);
     };
-    should_attempt_desktop_hidden_probe_at(
+    begin_desktop_hidden_probe_attempt_at(
         &mut attempts,
         account_id,
         Instant::now(),
@@ -878,20 +1089,25 @@ fn should_attempt_desktop_hidden_probe(account_id: &str) -> bool {
     )
 }
 
-async fn probe_desktop_web_profile_hidden_with_cooldown(
+fn finish_desktop_hidden_probe_attempt(
     account_id: &str,
-    profile_dir: &Path,
-) -> Result<Value, String> {
-    if !should_attempt_desktop_hidden_probe(account_id) {
-        return Err(format!(
-            "隐藏 Electron Cookie 刷新过于频繁，{} 秒内不会重复尝试",
-            CLAUDE_DESKTOP_HIDDEN_PROBE_COOLDOWN_SECONDS
-        ));
-    }
-    let profile_dir = profile_dir.to_path_buf();
-    tauri::async_runtime::spawn_blocking(move || probe_desktop_web_profile(&profile_dir))
-        .await
-        .map_err(|error| format!("隐藏 Electron Cookie 刷新任务失败: {}", error))?
+    previous: Option<DesktopHiddenProbeAttempt>,
+    succeeded: bool,
+    launched_electron: bool,
+) {
+    let Ok(mut attempts) = CLAUDE_DESKTOP_HIDDEN_PROBE_ATTEMPTS.lock() else {
+        return;
+    };
+    finish_desktop_hidden_probe_attempt_at(
+        &mut attempts,
+        account_id,
+        previous,
+        succeeded,
+        launched_electron,
+        Instant::now(),
+        Duration::from_secs(CLAUDE_DESKTOP_HIDDEN_PROBE_COOLDOWN_SECONDS),
+        Duration::from_secs(CLAUDE_DESKTOP_HIDDEN_PROBE_FAILURE_COOLDOWN_SECONDS),
+    );
 }
 
 async fn resolve_desktop_web_profile_with_hidden_probe<F, Fut>(
@@ -959,17 +1175,28 @@ fn write_desktop_cookie_probe_file(
     Ok(())
 }
 
-#[cfg(target_os = "macos")]
-fn probe_desktop_web_profile_with_decrypted_cookies(profile_dir: &Path) -> Result<Value, String> {
-    let cookie_export = read_decrypted_desktop_cookie_export(profile_dir)?;
-    let probe_root = get_desktop_login_root_dir()?
-        .join(format!("cookie_probe_{}", generate_random_url_token(18)));
+fn probe_desktop_web_profile_with_decrypted_cookies_and_launch_state(
+    profile_dir: &Path,
+) -> (Result<Value, String>, bool) {
+    let cookie_export = match read_decrypted_desktop_cookie_export(profile_dir) {
+        Ok(export) => export,
+        Err(error) => return (Err(error), false),
+    };
+    let probe_root = match get_desktop_login_root_dir() {
+        Ok(dir) => dir.join(format!("cookie_probe_{}", generate_random_url_token(18))),
+        Err(error) => return (Err(error), false),
+    };
     let user_data_dir = probe_root.join("profile");
     let status_file = user_data_dir.join(CLAUDE_DESKTOP_AUTH_STATUS_FILE);
     let export_file = user_data_dir.join(CLAUDE_DESKTOP_AUTH_EXPORT_FILE);
     let cookie_file = probe_root.join(CLAUDE_DESKTOP_COOKIE_EXPORT_FILE);
-    fs::create_dir_all(&user_data_dir)
-        .map_err(|e| format!("创建 Claude Cookie 探测目录失败: {}", e))?;
+    if let Err(e) = fs::create_dir_all(&user_data_dir) {
+        return (
+            Err(format!("创建 Claude Cookie 探测目录失败: {}", e)),
+            false,
+        );
+    }
+    let mut launched_electron = false;
     let result = (|| {
         write_desktop_cookie_probe_file(&cookie_file, &cookie_export)?;
         let helper_pid = launch_platform_desktop_auth_helper_with_args(
@@ -979,6 +1206,7 @@ fn probe_desktop_web_profile_with_decrypted_cookies(profile_dir: &Path) -> Resul
             "cookie_probe",
             &[("--cookie-file", cookie_file.as_path())],
         )?;
+        launched_electron = true;
         let result = wait_for_desktop_web_profile_export(&user_data_dir, Duration::from_secs(24))
             .and_then(|export| {
                 export
@@ -989,12 +1217,7 @@ fn probe_desktop_web_profile_with_decrypted_cookies(profile_dir: &Path) -> Resul
         result
     })();
     let _ = remove_path_if_exists(&probe_root);
-    result
-}
-
-#[cfg(not(target_os = "macos"))]
-fn probe_desktop_web_profile_with_decrypted_cookies(_profile_dir: &Path) -> Result<Value, String> {
-    Err("当前平台不支持解密 Claude Cookies。".to_string())
+    (result, launched_electron)
 }
 
 fn stage_desktop_web_probe(profile_dir: &Path) -> Result<tempfile::TempDir, String> {
@@ -1005,7 +1228,12 @@ fn stage_desktop_web_probe(profile_dir: &Path) -> Result<tempfile::TempDir, Stri
     for relative in ["Local State", "Preferences", "Default/Preferences"] {
         let source = profile_dir.join(relative);
         if source.is_file() {
-            copy_path_overwrite(&source, &staged.path().join(relative))?;
+            let destination = staged.path().join(relative);
+            if let Some(parent) = destination.parent() {
+                fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+            }
+            remove_path_if_exists(&destination)?;
+            copy_readonly_snapshot_file(&source, &destination)?;
         }
     }
     for source in desktop_cookie_path_candidates(profile_dir) {
@@ -1024,8 +1252,11 @@ fn stage_desktop_web_probe(profile_dir: &Path) -> Result<tempfile::TempDir, Stri
     Ok(staged)
 }
 
-fn probe_desktop_web_profile(profile_dir: &Path) -> Result<Value, String> {
-    ensure_desktop_profile_logged_in(profile_dir)?;
+fn probe_desktop_web_profile_with_launch_state(profile_dir: &Path) -> (Result<Value, String>, bool) {
+    if let Err(error) = ensure_desktop_profile_logged_in(profile_dir) {
+        return (Err(error), false);
+    }
+    let mut launched_electron = false;
     let result = (|| {
         // Chromium may refresh or replace cookies on startup. Keep its writes and
         // the probe's status/export files away from the saved sign-in snapshot.
@@ -1034,6 +1265,7 @@ fn probe_desktop_web_profile(profile_dir: &Path) -> Result<Value, String> {
         let export_file = desktop_auth_export_path(staged.path());
         let helper_pid =
             launch_platform_desktop_auth_helper(staged.path(), &status_file, &export_file, "probe")?;
+        launched_electron = true;
         let result = wait_for_desktop_web_profile_export(staged.path(), Duration::from_secs(18))
             .and_then(|export| {
                 export
@@ -1048,26 +1280,43 @@ fn probe_desktop_web_profile(profile_dir: &Path) -> Result<Value, String> {
             if desktop_web_usage_to_quota(&profile).is_some()
                 || !desktop_web_profile_has_usage_error(&profile) =>
         {
-            Ok(profile)
+            (Ok(profile), launched_electron)
         }
-        Ok(profile) => match probe_desktop_web_profile_with_decrypted_cookies(profile_dir) {
-            Ok(fallback) => Ok(fallback),
-            Err(error) => {
-                logger::log_warn(&format!(
-                    "[Claude] Cookie 页面上下文刷新失败，保留原始资料结果: {}",
-                    error
-                ));
-                Ok(profile)
+        Ok(profile) => {
+            let (fallback_result, fallback_launched) =
+                probe_desktop_web_profile_with_decrypted_cookies_and_launch_state(profile_dir);
+            launched_electron |= fallback_launched;
+            match fallback_result {
+                Ok(fallback) => (Ok(fallback), launched_electron),
+                Err(error) => {
+                    logger::log_warn(&format!(
+                        "[Claude] Cookie 页面上下文刷新失败，保留原始资料结果: {}",
+                        error
+                    ));
+                    (Ok(profile), launched_electron)
+                }
             }
-        },
-        Err(error) => match probe_desktop_web_profile_with_decrypted_cookies(profile_dir) {
-            Ok(fallback) => Ok(fallback),
-            Err(fallback_error) => Err(format!(
-                "{}；Cookie 页面上下文刷新也失败: {}",
-                error, fallback_error
-            )),
-        },
+        }
+        Err(error) => {
+            let (fallback_result, fallback_launched) =
+                probe_desktop_web_profile_with_decrypted_cookies_and_launch_state(profile_dir);
+            launched_electron |= fallback_launched;
+            match fallback_result {
+                Ok(fallback) => (Ok(fallback), launched_electron),
+                Err(fallback_error) => (
+                    Err(format!(
+                        "{}；Cookie 页面上下文刷新也失败: {}",
+                        error, fallback_error
+                    )),
+                    launched_electron,
+                ),
+            }
+        }
     }
+}
+
+fn probe_desktop_web_profile(profile_dir: &Path) -> Result<Value, String> {
+    probe_desktop_web_profile_with_launch_state(profile_dir).0
 }
 
 fn read_desktop_cookie_export_for_silent_refresh(
@@ -1075,7 +1324,6 @@ fn read_desktop_cookie_export_for_silent_refresh(
 ) -> Result<ClaudeDesktopAuthCookieExport, String> {
     let mut errors = Vec::new();
 
-    #[cfg(target_os = "macos")]
     match read_decrypted_desktop_cookie_export(profile_dir) {
         Ok(export) => return Ok(export),
         Err(error) => errors.push(format!("解密本地 Cookies 失败: {}", error)),
@@ -1331,9 +1579,355 @@ async fn fetch_desktop_web_profile_with_cookies(
 }
 
 async fn fetch_desktop_web_profile_silent(profile_dir: &Path) -> Result<Value, String> {
-    ensure_desktop_profile_logged_in(profile_dir)?;
+    if !profile_dir.exists() {
+        return Err(format!("Claude profile 不存在: {}", profile_dir.display()));
+    }
     let export = read_desktop_cookie_export_for_silent_refresh(profile_dir)?;
     fetch_desktop_web_profile_with_cookies(&export.cookies).await
+}
+
+fn is_current_desktop_account(account_id: &str) -> bool {
+    crate::modules::provider_current_state::get_current_account_id("claude_desktop_account")
+        .ok()
+        .flatten()
+        .as_deref()
+        == Some(account_id)
+}
+
+fn desktop_local_profile_conflicts_with_account(
+    account: &ClaudeAccount,
+    profile_dir: &Path,
+) -> bool {
+    let Some(local_profile) = read_desktop_local_profile(profile_dir) else {
+        return false;
+    };
+    if let Some(expected_uuid) = normalized_account_uuid(account) {
+        if let Some(actual_uuid) = local_profile
+            .account_uuid
+            .as_deref()
+            .and_then(|value| normalize_non_empty(Some(value)))
+            .filter(|value| uuid::Uuid::parse_str(value).is_ok())
+        {
+            return !actual_uuid.eq_ignore_ascii_case(&expected_uuid);
+        }
+    }
+    if let Some(expected_email) =
+        normalized_account_email(account).filter(|email| is_real_email(email))
+    {
+        if let Some(actual_email) = local_profile
+            .email
+            .as_deref()
+            .and_then(|value| normalize_non_empty(Some(value)))
+            .filter(|value| is_real_email(value))
+        {
+            return !actual_email.eq_ignore_ascii_case(&expected_email);
+        }
+    }
+    false
+}
+
+fn desktop_web_profile_identity(profile: &Value) -> (Option<String>, Option<String>) {
+    let account_uuid = first_string_path_candidates(
+        Some(profile),
+        &[
+            &["endpoints", "accountProfile", "account", "uuid"],
+            &["endpoints", "accountProfile", "uuid"],
+            &["endpoints", "account", "uuid"],
+            &["endpoints", "account", "account", "uuid"],
+            &["endpoints", "bootstrapAppStart", "account", "uuid"],
+        ],
+    )
+    .filter(|value| uuid::Uuid::parse_str(value).is_ok())
+    .map(|value| value.to_ascii_lowercase());
+    let email = first_string_path_candidates(
+        Some(profile),
+        &[
+            &["endpoints", "accountProfile", "account", "email"],
+            &["endpoints", "accountProfile", "account", "email_address"],
+            &["endpoints", "accountProfile", "email"],
+            &["endpoints", "accountProfile", "email_address"],
+            &["endpoints", "account", "account", "email"],
+            &["endpoints", "account", "account", "email_address"],
+            &["endpoints", "account", "email"],
+            &["endpoints", "account", "email_address"],
+            &["endpoints", "bootstrapAppStart", "account", "email"],
+            &["endpoints", "bootstrapAppStart", "user", "email"],
+        ],
+    )
+    .filter(|value| is_real_email(value))
+    .map(|value| value.to_ascii_lowercase());
+    (account_uuid, email)
+}
+
+fn desktop_web_profile_matches_account_for_fallback(
+    account: &ClaudeAccount,
+    profile: &Value,
+    is_current_desktop_account: bool,
+) -> bool {
+    let (actual_uuid, actual_email) = desktop_web_profile_identity(profile);
+    if let Some(expected_uuid) = normalized_account_uuid(account) {
+        if let Some(actual_uuid) = actual_uuid {
+            return actual_uuid == expected_uuid;
+        }
+        if let Some(expected_email) =
+            normalized_account_email(account).filter(|email| is_real_email(email))
+        {
+            return actual_email.as_deref() == Some(expected_email.as_str());
+        }
+        return false;
+    }
+    if let Some(expected_email) =
+        normalized_account_email(account).filter(|email| is_real_email(email))
+    {
+        return actual_email.as_deref() == Some(expected_email.as_str());
+    }
+    is_current_desktop_account
+}
+
+fn desktop_web_profile_is_better_for_refresh(candidate: &Value, current: &Value) -> bool {
+    let candidate_has_quota = desktop_web_usage_to_quota(candidate).is_some();
+    let current_has_quota = desktop_web_usage_to_quota(current).is_some();
+    if candidate_has_quota && !current_has_quota {
+        return true;
+    }
+    if !candidate_has_quota && current_has_quota {
+        return false;
+    }
+    !desktop_web_profile_needs_hidden_probe(candidate)
+        && desktop_web_profile_needs_hidden_probe(current)
+}
+
+fn desktop_profile_has_auth_export(profile_dir: &Path) -> bool {
+    read_desktop_auth_cookie_export(profile_dir)
+        .and_then(|export| ensure_desktop_auth_export_logged_in(&export).map(|_| export))
+        .is_ok()
+}
+
+fn build_hidden_probe_candidates(
+    snapshot_dir: Option<&Path>,
+    preferred_dir: Option<&Path>,
+    fallback_dirs: &[PathBuf],
+) -> Vec<(PathBuf, bool)> {
+    let mut ordered: Vec<(PathBuf, bool)> = Vec::new();
+    let mut seen = HashSet::new();
+    let mut push_unique = |path: &Path, require_identity_match: bool| {
+        let key = fs::canonicalize(path)
+            .unwrap_or_else(|_| path.to_path_buf())
+            .to_string_lossy()
+            .to_string();
+        #[cfg(target_os = "windows")]
+        let key = key.to_ascii_lowercase();
+        if seen.insert(key) {
+            ordered.push((path.to_path_buf(), require_identity_match));
+        }
+    };
+
+    if let Some(preferred) = preferred_dir {
+        let is_snapshot = snapshot_dir.is_some_and(|snap| snap == preferred);
+        push_unique(preferred, !is_snapshot);
+    }
+    if let Some(snapshot) = snapshot_dir {
+        push_unique(snapshot, false);
+    }
+    for dir in fallback_dirs {
+        push_unique(dir, true);
+    }
+    ordered
+}
+
+async fn probe_desktop_web_profile_hidden_with_cooldown_candidates(
+    account: &ClaudeAccount,
+    is_current_desktop_account: bool,
+    snapshot_dir: Option<&Path>,
+    preferred_dir: Option<&Path>,
+    fallback_dirs: &[PathBuf],
+) -> Result<Value, String> {
+    let candidates = build_hidden_probe_candidates(snapshot_dir, preferred_dir, fallback_dirs);
+    if candidates.is_empty() {
+        return Err("Claude 账号缺少可用的 profile 目录，无法执行隐藏 Electron 刷新。".to_string());
+    }
+    let account_id = account.id.clone();
+    let previous = match begin_desktop_hidden_probe_attempt(&account_id) {
+        Ok(previous) => previous,
+        Err(cooldown_seconds) => {
+            return Err(format!(
+                "隐藏 Electron Cookie 刷新过于频繁，{} 秒内不会重复尝试",
+                cooldown_seconds
+            ));
+        }
+    };
+
+    let account_clone = account.clone();
+    let task_result = tauri::async_runtime::spawn_blocking(move || {
+        let mut launched_any = false;
+        let mut errors = Vec::new();
+        for (dir, require_identity_match) in candidates {
+            let (probe_result, launched) = probe_desktop_web_profile_with_launch_state(&dir);
+            launched_any |= launched;
+            match probe_result {
+                Ok(profile) => {
+                    if require_identity_match
+                        && !desktop_web_profile_matches_account_for_fallback(
+                            &account_clone,
+                            &profile,
+                            is_current_desktop_account,
+                        )
+                    {
+                        errors.push(format!(
+                            "活跃 Claude Desktop 目录 ({}) 当前登录账号与目标账号不一致",
+                            dir.display()
+                        ));
+                        continue;
+                    }
+                    return (Ok(profile), launched_any);
+                }
+                Err(error) => {
+                    errors.push(error);
+                }
+            }
+        }
+        (
+            Err(errors
+                .into_iter()
+                .next()
+                .unwrap_or_else(|| "隐藏 Electron Cookie 刷新失败".to_string())),
+            launched_any,
+        )
+    })
+    .await;
+
+    match task_result {
+        Ok((result, launched_electron)) => {
+            finish_desktop_hidden_probe_attempt(
+                &account_id,
+                previous,
+                result.is_ok(),
+                launched_electron,
+            );
+            result
+        }
+        Err(error) => {
+            finish_desktop_hidden_probe_attempt(&account_id, previous, false, true);
+            Err(format!("隐藏 Electron Cookie 刷新任务失败: {}", error))
+        }
+    }
+}
+
+async fn refresh_desktop_oauth_web_profile(
+    account: &mut ClaudeAccount,
+) -> Result<(bool, Result<Value, String>), String> {
+    let account_id = account.id.clone();
+    let is_current = is_current_desktop_account(&account_id);
+    let raw_profile_dir = account
+        .desktop_profile_dir
+        .as_deref()
+        .and_then(|value| normalize_non_empty(Some(value)))
+        .map(PathBuf::from);
+
+    let (snapshot_dir, resolve_error) = match resolve_valid_desktop_profile_dir(account) {
+        Ok(dir) => (Some(dir), None),
+        Err(error) => {
+            let export_dir = raw_profile_dir
+                .as_ref()
+                .filter(|dir| desktop_profile_has_auth_export(dir));
+            if let Some(dir) = export_dir {
+                (Some(dir.clone()), None)
+            } else {
+                (None, Some(error))
+            }
+        }
+    };
+
+    let local_profile_applied = snapshot_dir
+        .as_deref()
+        .map(|dir| apply_desktop_local_profile(account, dir))
+        .unwrap_or(false);
+
+    let mut silent_result = match snapshot_dir.as_deref() {
+        Some(dir) => fetch_desktop_web_profile_silent(dir).await,
+        None => Err(resolve_error
+            .clone()
+            .unwrap_or_else(|| "Claude 账号缺少 profile 快照，请重新登录或重新导入。".to_string())),
+    };
+
+    let mut preferred_probe_dir = snapshot_dir.clone();
+    let mut fallback_probe_dirs: Vec<PathBuf> = Vec::new();
+    let needs_default_fallback = match &silent_result {
+        Ok(profile) => desktop_web_profile_needs_hidden_probe(profile),
+        Err(_) => true,
+    };
+
+    if needs_default_fallback {
+        for candidate_dir in candidate_default_claude_desktop_user_data_dirs(snapshot_dir.as_deref())
+        {
+            if desktop_local_profile_conflicts_with_account(account, &candidate_dir) {
+                continue;
+            }
+            if ensure_desktop_profile_logged_in(&candidate_dir).is_ok()
+                || desktop_profile_has_auth_export(&candidate_dir)
+            {
+                fallback_probe_dirs.push(candidate_dir.clone());
+            }
+
+            if let Ok(export) = read_desktop_cookie_export_for_silent_refresh(&candidate_dir) {
+                if let Ok(candidate_profile) =
+                    fetch_desktop_web_profile_with_cookies(&export.cookies).await
+                {
+                    if !desktop_web_profile_matches_account_for_fallback(
+                        account,
+                        &candidate_profile,
+                        is_current,
+                    ) {
+                        continue;
+                    }
+                    let should_adopt = match &silent_result {
+                        Ok(current) => {
+                            desktop_web_profile_is_better_for_refresh(&candidate_profile, current)
+                        }
+                        Err(_) => true,
+                    };
+                    if should_adopt {
+                        logger::log_info(&format!(
+                            "[Claude] 已从活跃 Claude Desktop 目录回退读取资料: account_id={}, dir={}",
+                            account_id,
+                            candidate_dir.display()
+                        ));
+                        let done = !desktop_web_profile_needs_hidden_probe(&candidate_profile);
+                        silent_result = Ok(candidate_profile);
+                        preferred_probe_dir = Some(candidate_dir.clone());
+                        if done {
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if snapshot_dir.is_none() && silent_result.is_err() && fallback_probe_dirs.is_empty() {
+        if let Some(error) = resolve_error {
+            return Err(error);
+        }
+    }
+
+    let account_snapshot = account.clone();
+    let web_profile_result = resolve_desktop_web_profile_with_hidden_probe(
+        &account_id,
+        silent_result,
+        || async move {
+            probe_desktop_web_profile_hidden_with_cooldown_candidates(
+                &account_snapshot,
+                is_current,
+                snapshot_dir.as_deref(),
+                preferred_probe_dir.as_deref(),
+                &fallback_probe_dirs,
+            )
+            .await
+        },
+    )
+    .await;
+
+    Ok((local_profile_applied, web_profile_result))
 }
 
 fn rewrite_desktop_cookies_with_exported_plaintext(

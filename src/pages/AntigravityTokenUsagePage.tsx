@@ -34,11 +34,16 @@ import {
 } from '../components/SingleSelectDropdown';
 import { AntigravityUsageTrend } from '../components/antigravity/AntigravityUsageTrend';
 import {
+  AntigravityActivityHeatmap,
+  formatUsdShort,
+} from '../components/antigravity/AntigravityActivityHeatmap';
+import {
   getAntigravityConversationTokenDetail,
   hasRecentAntigravityTokenSync,
   normalizeAntigravityUsageRange,
   peekCachedAntigravityTokenUsage,
   queryAntigravityTokenUsage,
+  setAntigravityRehydrateEnabled,
   setAntigravityTokenUsageDataDir,
   syncAntigravityTokenUsage,
   useAntigravityUsageRange,
@@ -159,6 +164,10 @@ export function AntigravityTokenUsagePage({
   const [convDetail, setConvDetail] = useState<ConversationDetail | null>(null);
   const [convDetailLoading, setConvDetailLoading] = useState<boolean>(false);
   const [convDetailError, setConvDetailError] = useState<string>('');
+  const [selectedHeatmapDate, setSelectedHeatmapDate] = useState<string | null>(
+    null,
+  );
+  const [rehydrateBusy, setRehydrateBusy] = useState<boolean>(false);
 
   const queryVersionRef = useRef(0);
   const syncVersionRef = useRef(0);
@@ -176,7 +185,9 @@ export function AntigravityTokenUsagePage({
 
   const queryPayload = useMemo<DashboardQueryRequest>(
     () => ({
-      preset: range,
+      preset: selectedHeatmapDate ? 'custom' : range,
+      from: selectedHeatmapDate ?? undefined,
+      to: selectedHeatmapDate ?? undefined,
       granularity,
       kind: kindFilter,
       model: modelFilter,
@@ -194,6 +205,7 @@ export function AntigravityTokenUsagePage({
       modelFilter,
       page,
       range,
+      selectedHeatmapDate,
       sortField,
       sortOrder,
       workspaceFilter,
@@ -360,6 +372,31 @@ export function AntigravityTokenUsagePage({
       }
     }
   }, [queryPayload]);
+
+  const handleToggleRehydrate = useCallback(async () => {
+    if (!bundle?.settings) return;
+    const nextEnabled = !(bundle.settings.rehydrate?.enabled ?? false);
+    setRehydrateBusy(true);
+    setError('');
+    try {
+      const nextStatus = await setAntigravityRehydrateEnabled(nextEnabled);
+      setBundle((prev) =>
+        prev
+          ? {
+              ...prev,
+              settings: {
+                ...prev.settings,
+                rehydrate: nextStatus,
+              },
+            }
+          : prev,
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setRehydrateBusy(false);
+    }
+  }, [bundle?.settings]);
 
   const openConversationDetail = useCallback(async (conversationId: string) => {
     const seq = ++detailReqRef.current;
@@ -554,6 +591,60 @@ export function AntigravityTokenUsagePage({
                 {t('antigravityTokenUsage.dataDir.reset', 'Reset Default')}
               </button>
             ) : null}
+          </div>
+        ) : null}
+
+        {settings?.rehydrate ? (
+          <div className="ag-rehydrate-bar">
+            <div className="ag-rehydrate-bar__info">
+              <span className="ag-rehydrate-bar__title">
+                <Brain size={14} />
+                {t(
+                  'antigravityTokenUsage.rehydrate.title',
+                  'Post-Compact Context Rehydration Hook',
+                )}
+              </span>
+              <span
+                className={`ag-rehydrate-bar__badge ${
+                  settings.rehydrate.enabled ? 'is-on' : 'is-off'
+                }`}
+              >
+                {settings.rehydrate.enabled
+                  ? t('antigravityTokenUsage.rehydrate.enabledBadge', 'Active')
+                  : t('antigravityTokenUsage.rehydrate.disabledBadge', 'Off')}
+              </span>
+              <span
+                className="ag-rehydrate-bar__desc"
+                title={settings.rehydrate.hooksConfigPath}
+              >
+                {t(
+                  'antigravityTokenUsage.rehydrate.desc',
+                  'Auto-restores key request timeline & recent files via PreInvocation hook after context compaction (zero binary patch).',
+                )}
+              </span>
+            </div>
+            <div className="ag-rehydrate-bar__actions">
+              <button
+                type="button"
+                className={`btn btn-sm ${
+                  settings.rehydrate.enabled ? 'btn-secondary' : 'btn-primary'
+                }`}
+                onClick={() => void handleToggleRehydrate()}
+                disabled={rehydrateBusy || !settings.rehydrate.pythonAvailable}
+                title={
+                  !settings.rehydrate.pythonAvailable
+                    ? t(
+                        'antigravityTokenUsage.rehydrate.noPython',
+                        'Requires Python 3.10+ on PATH',
+                      )
+                    : settings.rehydrate.scriptPath
+                }
+              >
+                {settings.rehydrate.enabled
+                  ? t('antigravityTokenUsage.rehydrate.disableBtn', 'Disable Hook')
+                  : t('antigravityTokenUsage.rehydrate.enableBtn', 'Enable Hook')}
+              </button>
+            </div>
           </div>
         ) : null}
 
@@ -822,6 +913,19 @@ export function AntigravityTokenUsagePage({
                       1,
                     )}
                   </strong>
+
+                  <span>
+                    <Zap size={13} />
+                    {t('antigravityTokenUsage.cards.refCost', 'API Equiv. Cost')}
+                  </span>
+                  <strong
+                    title={t('antigravityTokenUsage.cards.cacheSavingsHint', {
+                      savings: formatUsdShort(kpi?.cacheSavingsUsd),
+                      defaultValue: 'Prompt cache saved ≈ {{savings}}',
+                    })}
+                  >
+                    ≈ {formatUsdShort(kpi?.estimatedCostUsd)}
+                  </strong>
                 </div>
               </div>
 
@@ -925,6 +1029,16 @@ export function AntigravityTokenUsagePage({
 
             <AntigravityUsageTrend series={summary?.timeSeries ?? []} />
 
+            <AntigravityActivityHeatmap
+              points={summary?.heatmap ?? []}
+              selectedDate={selectedHeatmapDate}
+              onSelectDate={(nextDate) => {
+                setPage(1);
+                setSelectedHeatmapDate(nextDate);
+              }}
+              lang={lang}
+            />
+
             <div className="ag-token-usage__grids">
               <section className="ag-token-section">
                 <div className="ag-token-section__head">
@@ -955,13 +1069,16 @@ export function AntigravityTokenUsagePage({
                         <th className="is-num">
                           {t('antigravityTokenUsage.tables.total', 'Total')}
                         </th>
+                        <th className="is-num">
+                          {t('antigravityTokenUsage.cards.refCost', 'API Equiv. Cost')}
+                        </th>
                         <th className="is-num">%</th>
                       </tr>
                     </thead>
                     <tbody>
                       {(summary?.byModel ?? []).length === 0 ? (
                         <tr>
-                          <td colSpan={8}>
+                          <td colSpan={9}>
                             {t(
                               'antigravityTokenUsage.empty.noRows',
                               'No matching data',
@@ -1034,6 +1151,9 @@ export function AntigravityTokenUsagePage({
                               />
                             </td>
                             <td className="is-num">
+                              ≈ {formatUsdShort(row.estimatedCostUsd)}
+                            </td>
+                            <td className="is-num">
                               <div className="ag-share-bar">
                                 <div className="ag-share-bar__track">
                                   <div
@@ -1085,13 +1205,19 @@ export function AntigravityTokenUsagePage({
                         <th className="is-num">
                           {t('antigravityTokenUsage.tables.total', 'Total')}
                         </th>
+                        <th className="is-num">
+                          {t(
+                            'antigravityTokenUsage.cards.refCost',
+                            'API Equiv. Cost',
+                          )}
+                        </th>
                         <th className="is-num">%</th>
                       </tr>
                     </thead>
                     <tbody>
                       {(summary?.byWorkspace ?? []).length === 0 ? (
                         <tr>
-                          <td colSpan={8}>
+                          <td colSpan={9}>
                             {t(
                               'antigravityTokenUsage.empty.noRows',
                               'No matching data',
@@ -1159,6 +1285,9 @@ export function AntigravityTokenUsagePage({
                                 value={row.exact.totalTokens}
                                 lang={lang}
                               />
+                            </td>
+                            <td className="is-num">
+                              ≈ {formatUsdShort(row.estimatedCostUsd)}
                             </td>
                             <td className="is-num">
                               <div className="ag-share-bar">
@@ -1399,6 +1528,16 @@ export function AntigravityTokenUsagePage({
                         <button
                           type="button"
                           className="ag-sort-th-btn"
+                          onClick={() => handleSortColumn('estimatedCostUsd')}
+                        >
+                          {t('antigravityTokenUsage.cards.refCost', 'API Equiv. Cost')}
+                          {renderSortIcon('estimatedCostUsd')}
+                        </button>
+                      </th>
+                      <th className="is-num">
+                        <button
+                          type="button"
+                          className="ag-sort-th-btn"
                           onClick={() => handleSortColumn('lastModifiedTime')}
                         >
                           {t(
@@ -1413,7 +1552,7 @@ export function AntigravityTokenUsagePage({
                   <tbody>
                     {(conversations?.items ?? []).length === 0 ? (
                       <tr>
-                        <td colSpan={10}>
+                        <td colSpan={11}>
                           {t(
                             'antigravityTokenUsage.empty.noRows',
                             'No matching data',
@@ -1448,6 +1587,14 @@ export function AntigravityTokenUsagePage({
                           </td>
                           <td>
                             <KindBadge kind={conv.kind} />
+                            {conv.clientSource === 'cli' ? (
+                              <>
+                                {' '}
+                                <span className="ag-source-badge is-cli">
+                                  CLI
+                                </span>
+                              </>
+                            ) : null}
                           </td>
                           <td title={conv.modelDisplayNames.join(', ')}>
                             {conv.primaryModelDisplayName || '—'}
@@ -1487,6 +1634,9 @@ export function AntigravityTokenUsagePage({
                               value={conv.exact.totalTokens}
                               lang={lang}
                             />
+                          </td>
+                          <td className="is-num">
+                            ≈ {formatUsdShort(conv.estimatedCostUsd)}
                           </td>
                           <td className="is-num">
                             {formatDateTimeShort(conv.lastModifiedTime, lang)}
@@ -1695,7 +1845,154 @@ export function AntigravityTokenUsagePage({
                             {convDetail.turnCount} / {convDetail.stepCount}
                           </strong>
                         </div>
+                        <div className="ag-conv-modal__kpi">
+                          <span>
+                            {t(
+                              'antigravityTokenUsage.cards.refCost',
+                              'API Equiv. Cost',
+                            )}
+                          </span>
+                          <strong
+                            title={t(
+                              'antigravityTokenUsage.cards.cacheSavingsHint',
+                              {
+                                savings: formatUsdShort(
+                                  convDetail.cacheSavingsUsd,
+                                ),
+                                defaultValue:
+                                  'Prompt cache saved ≈ {{savings}}',
+                              },
+                            )}
+                          >
+                            ≈ {formatUsdShort(convDetail.estimatedCostUsd)}
+                          </strong>
+                        </div>
                       </div>
+
+                      {convDetail.audit ? (
+                        <section className="ag-token-section">
+                          <h4>
+                            {t(
+                              'antigravityTokenUsage.audit.title',
+                              'Session Context & Execution Audit',
+                            )}
+                          </h4>
+                          <div className="ag-conv-audit">
+                            {convDetail.audit.peakContextTokens > 0 ? (
+                              <>
+                                <div className="ag-conv-audit__bar-row">
+                                  <span>
+                                    {t(
+                                      'antigravityTokenUsage.audit.peakContext',
+                                      'Peak Context Footprint',
+                                    )}
+                                    :{' '}
+                                    <strong>
+                                      {formatSessionUsageCount(
+                                        convDetail.audit.peakContextTokens,
+                                      )}{' '}
+                                      /{' '}
+                                      {formatSessionUsageCount(
+                                        convDetail.audit.contextLimitTokens,
+                                      )}{' '}
+                                      (
+                                      {convDetail.audit.peakContextPercent.toFixed(
+                                        1,
+                                      )}
+                                      %)
+                                    </strong>
+                                  </span>
+                                  {convDetail.audit.compactionCount > 0 ? (
+                                    <span className="ag-conv-audit__pill is-compaction">
+                                      {t(
+                                        'antigravityTokenUsage.audit.compactions',
+                                        {
+                                          count:
+                                            convDetail.audit.compactionCount,
+                                          defaultValue:
+                                            '{{count}} Compaction(s)',
+                                        },
+                                      )}
+                                    </span>
+                                  ) : null}
+                                </div>
+                                <div className="ag-conv-audit__bar-track">
+                                  <div
+                                    className="ag-conv-audit__bar-fill"
+                                    style={{
+                                      width: `${Math.min(100, Math.max(2, convDetail.audit.peakContextPercent))}%`,
+                                    }}
+                                  />
+                                </div>
+                              </>
+                            ) : null}
+
+                            <div className="ag-conv-audit__pills">
+                              <span className="ag-conv-audit__pill">
+                                {t(
+                                  'antigravityTokenUsage.audit.userPrompts',
+                                  'User Prompts',
+                                )}
+                                :{' '}
+                                <strong>
+                                  {convDetail.audit.userPromptCount}
+                                </strong>
+                              </span>
+                              <span className="ag-conv-audit__pill">
+                                {t(
+                                  'antigravityTokenUsage.audit.toolCalls',
+                                  'Tool Calls',
+                                )}
+                                :{' '}
+                                <strong>
+                                  {convDetail.audit.toolCallCount}
+                                </strong>
+                              </span>
+                              <span className="ag-conv-audit__pill">
+                                {t(
+                                  'antigravityTokenUsage.audit.fileOps',
+                                  'File R/W',
+                                )}
+                                :{' '}
+                                <strong>
+                                  {convDetail.audit.fileReadCount} /{' '}
+                                  {convDetail.audit.fileEditCount}
+                                </strong>
+                              </span>
+                              <span className="ag-conv-audit__pill">
+                                {t(
+                                  'antigravityTokenUsage.audit.commands',
+                                  'Commands',
+                                )}
+                                :{' '}
+                                <strong>
+                                  {convDetail.audit.commandExecutionCount}
+                                </strong>
+                              </span>
+                              {convDetail.audit.subagentSpawnCount > 0 ? (
+                                <span className="ag-conv-audit__pill">
+                                  {t(
+                                    'antigravityTokenUsage.audit.subagents',
+                                    'Subagents',
+                                  )}
+                                  :{' '}
+                                  <strong>
+                                    {convDetail.audit.subagentSpawnCount}
+                                  </strong>
+                                </span>
+                              ) : null}
+                              {convDetail.audit.topTools.map((tool) => (
+                                <span
+                                  key={tool.toolName}
+                                  className="ag-conv-audit__pill"
+                                >
+                                  <code>{tool.toolName}</code> ×{tool.count}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        </section>
+                      ) : null}
 
                       {convDetail.children.length > 0 ? (
                         <section className="ag-token-section">

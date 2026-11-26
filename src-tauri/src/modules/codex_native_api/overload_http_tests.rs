@@ -9,10 +9,13 @@ struct SingleHost {
     first_refresh_error: Option<&'static str>,
     allow_alternates: bool,
     alternates_after_refresh: bool,
+    chatgpt_plan: bool,
+    chatgpt: bool,
     refreshes: AtomicUsize,
     rejected: tokio::sync::Notify,
     overload_attempts: Mutex<Vec<(String, u32)>>,
     overload_outcomes: Mutex<Vec<String>>,
+    official_failures: Mutex<Vec<(String, u16)>>,
 }
 impl Host for SingleHost {
     fn authorize<'a>(&'a self, token: &'a str) -> BoxFuture<'a, Result<Caller, ServiceError>> {
@@ -37,6 +40,13 @@ impl Host for SingleHost {
             }
             if request.preferred_account_id.is_some() {
                 let refresh = self.refreshes.fetch_add(1, Ordering::SeqCst);
+                if self.chatgpt_plan && !self.official_failures.lock().unwrap().is_empty() {
+                    return Err(ServiceError::new(
+                        409,
+                        "account_binding_unavailable",
+                        "Official route was prematurely paused before overload recovery",
+                    ));
+                }
                 if self.revoke_on_refresh {
                     return Err(ServiceError::new(
                         403,
@@ -50,7 +60,29 @@ impl Host for SingleHost {
                 }
             }
             if !alternatives_allowed { request.preferred_account_id = Some("0".into()); }
-            self.inner.route(caller, request).await
+            let mut route = self.inner.route(caller, request).await?;
+            if self.chatgpt_plan {
+                route.chatgpt_plan = true;
+                route.chatgpt = false;
+                route.official_registration_id = Some("official-reg".into());
+                route.continuity_account_id = Some("chatgpt_plan_official-reg".into());
+            } else if self.chatgpt {
+                route.chatgpt = true;
+            }
+            Ok(route)
+        })
+    }
+    fn observe_official_failure<'a>(
+        &'a self,
+        route: &'a Route,
+        _model: &'a str,
+        failure: &'a OfficialFallbackFailure,
+    ) -> BoxFuture<'a, ()> {
+        Box::pin(async move {
+            self.official_failures
+                .lock()
+                .unwrap()
+                .push((route.account_id.clone(), failure.status));
         })
     }
     fn execution_policy(&self) -> BoxFuture<'_, Result<ExecutionPolicy, ServiceError>> {
@@ -90,6 +122,8 @@ struct Scenario {
     continuous: bool,
     allow_alternates: bool,
     alternates_after_refresh: bool,
+    chatgpt_plan: bool,
+    chatgpt: bool,
 }
 impl Default for Scenario {
     fn default() -> Self {
@@ -108,6 +142,8 @@ impl Default for Scenario {
             continuous: false,
             allow_alternates: false,
             alternates_after_refresh: false,
+            chatgpt_plan: false,
+            chatgpt: false,
         }
     }
 }
@@ -144,10 +180,13 @@ async fn fixture(
         first_refresh_error: case.first_refresh_error,
         allow_alternates: case.allow_alternates,
         alternates_after_refresh: case.alternates_after_refresh,
+        chatgpt_plan: case.chatgpt_plan,
+        chatgpt: case.chatgpt,
         refreshes: AtomicUsize::new(0),
         rejected: tokio::sync::Notify::new(),
         overload_attempts: Mutex::new(Vec::new()),
         overload_outcomes: Mutex::new(Vec::new()),
+        official_failures: Mutex::new(Vec::new()),
     });
     let upstream_host = host.clone();
     let app = Router::new().fallback(
@@ -552,5 +591,154 @@ async fn continuous_capacity_reselects_the_same_owner_after_temporary_contention
         assert_eq!(sent[0].2, sent[1].2);
         handle.shutdown(Duration::from_secs(2)).await.unwrap();
         task.abort();
+    }
+}
+
+#[tokio::test]
+async fn continuous_capacity_recovers_large_echoed_handshake_and_compact_requests() {
+    let echoed_instructions = "I".repeat(40 * 1024);
+    let mut large_created = created();
+    large_created["response"]["instructions"] = json!(echoed_instructions);
+    let mut large_in_progress = json!({"type":"response.in_progress","response":{"id":"r1","status":"in_progress","output":[],"usage":{"output_tokens":0}}});
+    large_in_progress["response"]["instructions"] = json!(echoed_instructions);
+    let mut large_failure = overload();
+    large_failure["response"]["instructions"] = json!(echoed_instructions);
+    for delayed in [false, true] {
+        let (host, mut handle, task, _temp) = fixture(Scenario {
+            continuous: true,
+            delayed,
+            prefix: vec![large_created.clone(), large_in_progress.clone()],
+            error: large_failure.clone(),
+            ..Default::default()
+        }).await;
+        let mut body = input(true);
+        body["input"] = json!([{"role":"user","content":"H".repeat(96 * 1024)}]);
+        let response = client().post(format!("http://{}/v1/responses", handle.addr))
+            .bearer_auth("fixture").json(&body).send().await.unwrap();
+        assert_eq!(response.status(), 200);
+        let text = response.text().await.unwrap();
+        assert!(text.contains("completed") && !text.contains("server_is_overloaded"), "{text}");
+        handle.shutdown(Duration::from_secs(2)).await.unwrap();
+        task.abort();
+        assert_eq!(host.inner.calls[0].load(Ordering::SeqCst), 2);
+    }
+    let (host, mut handle, task, _temp) = fixture(Scenario {
+        continuous: true,
+        http_status: 503,
+        delayed: false,
+        ..Default::default()
+    }).await;
+    let compact_response = client().post(format!("http://{}/v1/responses/compact", handle.addr))
+        .bearer_auth("fixture").json(&json!({"model":"model","input":[{"role":"user","content":"H".repeat(96 * 1024)}]}))
+        .send().await.unwrap();
+    assert_eq!(compact_response.status(), 200);
+    handle.shutdown(Duration::from_secs(2)).await.unwrap();
+    task.abort();
+    assert_eq!(host.inner.calls[0].load(Ordering::SeqCst), 2);
+}
+
+#[tokio::test]
+async fn continuous_capacity_recovers_chatgpt_plan_http_and_sse_overloads() {
+    for (http_status, delayed, streaming) in [
+        (503, false, false),
+        (503, false, true),
+        (200, false, true),
+        (200, true, true),
+    ] {
+        let (host, mut handle, task, _temp) = fixture(Scenario {
+            continuous: true,
+            chatgpt_plan: true,
+            http_status,
+            delayed,
+            failures: 2,
+            prefix: vec![
+                json!({"type":"responsesapi.timing","timing":{"ms":1}}),
+                created(),
+            ],
+            total_timeout: Duration::from_secs(10),
+            ..Default::default()
+        })
+        .await;
+        let response = client()
+            .post(format!("http://{}/v1/responses", handle.addr))
+            .bearer_auth("fixture")
+            .json(&input(streaming))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), 200);
+        let text = response.text().await.unwrap();
+        assert!(
+            text.contains("completed") && !text.contains("server_is_overloaded"),
+            "status={http_status} delayed={delayed} streaming={streaming}: {text}"
+        );
+        handle.shutdown(Duration::from_secs(2)).await.unwrap();
+        task.abort();
+        assert_eq!(host.inner.calls[0].load(Ordering::SeqCst), 3);
+        assert!(host.official_failures.lock().unwrap().is_empty());
+        assert_eq!(*host.overload_outcomes.lock().unwrap(), ["recovered"]);
+    }
+
+    // Without continuous_overload_retry, chatgpt_plan keeps its non-overload behavior.
+    let (host, mut handle, task, _temp) = fixture(Scenario {
+        continuous: false,
+        chatgpt_plan: true,
+        http_status: 503,
+        delayed: false,
+        failures: 2,
+        ..Default::default()
+    })
+    .await;
+    let response = client()
+        .post(format!("http://{}/v1/responses", handle.addr))
+        .bearer_auth("fixture")
+        .json(&input(true))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), 503);
+    handle.shutdown(Duration::from_secs(2)).await.unwrap();
+    task.abort();
+    assert_eq!(host.inner.calls[0].load(Ordering::SeqCst), 1);
+    assert_eq!(host.official_failures.lock().unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn continuous_capacity_recovers_after_responsesapi_and_subscription_usage_metadata() {
+    for streaming in [false, true] {
+        let (host, mut handle, task, _temp) = fixture(Scenario {
+            continuous: true,
+            chatgpt: true,
+            delayed: true,
+            failures: 2,
+            prefix: vec![
+                json!({"type":"responsesapi.timing","private_marker":"timing"}),
+                json!({"type":"response.subscription_usage","private_marker":"billing"}),
+                created(),
+                json!({"type":"response.in_progress","response":{"id":"temporary","status":"in_progress"}}),
+            ],
+            total_timeout: Duration::from_secs(10),
+            ..Default::default()
+        })
+        .await;
+        let response = client()
+            .post(format!("http://{}/v1/responses", handle.addr))
+            .bearer_auth("fixture")
+            .json(&input(streaming))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), 200);
+        let text = response.text().await.unwrap();
+        assert!(
+            text.contains("completed")
+                && !text.contains("server_is_overloaded")
+                && !text.contains("private_marker"),
+            "streaming={streaming}: {text}"
+        );
+        handle.shutdown(Duration::from_secs(2)).await.unwrap();
+        task.abort();
+        assert_eq!(host.inner.calls[0].load(Ordering::SeqCst), 3);
+        assert_eq!(*host.overload_outcomes.lock().unwrap(), ["recovered"]);
     }
 }

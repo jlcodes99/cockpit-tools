@@ -384,11 +384,13 @@ async fn native_ensure_provider_profile(
                 let profile = profile_owned.as_path();
                 let account = &account_owned;
                 save_profile_takeover_backup(profile, &key_owned)?;
-                runtime.block_on(write_local_access_profile_takeover_with_provider_name(
+                let preserve_catalog =
+                    slots.is_empty() && account_requires_responses_compatibility_gateway(account);
+                runtime.block_on(write_provider_gateway_profile_takeover_with_provider_name(
                     profile,
                     &published,
-                    Some(&key_owned),
-                    false,
+                    &key_owned,
+                    preserve_catalog,
                     account.api_provider_name.as_deref(),
                     None,
                 ))?;
@@ -417,6 +419,9 @@ async fn native_ensure_provider_profile(
                 if !crate::modules::codex_remote_service::is_known_account(account)
                     && slots.iter().any(|slot| codex_protocol::deepseek_model_template(&slot.upstream_model).is_some()) {
                     ensure_profile_max_reasoning_effort(profile)?;
+                }
+                if preserve_catalog {
+                    return Ok(());
                 }
                 runtime.block_on(native_sync_profile_catalog_tool_capabilities(
                     profile,

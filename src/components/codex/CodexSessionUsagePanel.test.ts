@@ -284,6 +284,7 @@ test('request pages keep the cursor and show unknown prices without a zero charg
     instanceName: 'Fixture', sessionId: 'thread', sessionTitle: 'Conversation',
     projectPath: '/work/project', model: 'unpriced', inputTokens: 20,
     cachedInputTokens: 15, outputTokens: 4, estimatedCostUsd: null,
+    firstResponseMs: 520, tokensPerSecond: 64.5,
   };
   const next = { timestamp: row.timestamp, requestId: row.requestId };
   const reads: unknown[] = [];
@@ -310,6 +311,10 @@ test('request pages keep the cursor and show unknown prices without a zero charg
   const click = (label: string) => find((node) => node.type === 'button' && node.props.children === label).props.onClick();
   assert.equal(find((node) => node.type === 'td'
     && node.props.className === 'codex-session-usage__col-cost').props.children, '—');
+  assert.equal(find((node) => node.type === 'td'
+    && node.props.className === 'codex-session-usage__col-firstResponse').props.children, '520 ms');
+  assert.equal(find((node) => node.type === 'td'
+    && node.props.className === 'codex-session-usage__col-tps').props.children, '64.5 tok/s');
   find((node) => node.type === 'button' && node.props['aria-expanded'] === false).props.onClick();
   click('codex.sessionUsage.analysis.viewSession');
   assert.deepEqual(selected, ['thread']);

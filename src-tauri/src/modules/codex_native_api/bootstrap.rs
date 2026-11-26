@@ -10,17 +10,28 @@ use serde_json::{json, Value};
 use std::sync::Arc;
 
 pub(super) const MAX_EVENTS: usize = 16;
-pub(super) const MAX_BYTES: usize = 64 << 10;
+pub(super) const MAX_BYTES: usize = 512 << 10;
 // A peer may wait for an interrupt after response.created. Never hide its ID
 // indefinitely while waiting for a second event.
 pub(super) const MAX_HOLD: std::time::Duration = std::time::Duration::from_millis(250);
 
 /// Only known metadata with no model output or tool execution can be replayed.
 pub(super) fn handshake(event: &Value) -> bool {
-    matches!(event.get("type").and_then(Value::as_str), Some(
-        "response.created" | "response.queued" | "response.in_progress" | "keepalive" | "codex.rate_limits"
-        | "codex.response.metadata" | "response.metadata"
-    )) && pre_execution(event) || empty_output_event(event)
+    let kind = event.get("type").and_then(Value::as_str);
+    (kind.is_some_and(|kind| {
+        matches!(
+            kind,
+            "response.created"
+                | "response.queued"
+                | "response.in_progress"
+                | "keepalive"
+                | "codex.rate_limits"
+                | "codex.response.metadata"
+                | "response.metadata"
+                | "response.subscription_usage"
+        ) || kind.starts_with("responsesapi.")
+    }) && pre_execution(event))
+        || empty_output_event(event)
 }
 
 fn empty_output_event(event: &Value) -> bool {
@@ -92,12 +103,15 @@ impl Fence {
     pub(super) fn active(&self) -> bool { self.active }
     pub(super) fn observe(&mut self, event: Option<&Value>, bytes: usize, grok: bool) -> Option<(u16,Value)> {
         if !self.active { return None; }
-        self.bytes=self.bytes.saturating_add(bytes);
-        if self.bytes>=MAX_BYTES { self.active=false;return None; }
-        let Some(event)=event else {return None};
+        let Some(event)=event else {
+            self.bytes=self.bytes.saturating_add(bytes);
+            if self.bytes>=MAX_BYTES { self.active=false; }
+            return None;
+        };
         if handshake(event) {
+            self.bytes=self.bytes.saturating_add(bytes);
             self.events+=1;
-            if self.events>=MAX_EVENTS {self.active=false;}
+            if self.bytes>=MAX_BYTES || self.events>=MAX_EVENTS {self.active=false;}
             return None;
         }
         self.active=false;
@@ -712,8 +726,12 @@ async fn probe_inner(
                         if official {
                             super::official_fallback::normalize_sharing_quota_error(&mut value);
                         }
-                        if super::quota_exhaustion::code(&value).is_some() && !http_execution_observed(&value) {
-                            reject = Some((429, value));
+                        if !http_execution_observed(&value) {
+                            if super::quota_exhaustion::code(&value).is_some() {
+                                reject = Some((429, value));
+                            } else if policy.continuous_overload_retry && super::overload::event(&value) {
+                                reject = rejection(&value).or_else(|| Some((503, value)));
+                            }
                         }
                         break 'read;
                     }

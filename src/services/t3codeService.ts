@@ -176,13 +176,67 @@ export function refreshT3codeProviderAccountQuota(params: {
 }
 
 
+type T3codeClientSettings = Pick<T3CodeNativeSettings, 'language' | 'clientConnected'>;
+const languageListeners = new Set<(language: string) => void>();
+
+export function subscribeT3codeLanguage(listener: (language: string) => void) {
+  languageListeners.add(listener);
+  return () => { languageListeners.delete(listener); };
+}
+
+function publishT3codeLanguage(language: string) {
+  languageListeners.forEach((listener) => listener(language));
+}
+
+export function getT3codeNativeLanguage(): Promise<T3codeClientSettings> {
+  return invoke('get_t3code_native_settings', { clientOnly: true });
+}
+
+export async function updateT3codeNativeLanguage(value: string): Promise<T3codeClientSettings> {
+  const result = await invoke<T3codeClientSettings>('update_t3code_native_settings', {
+    field: 'language',
+    value,
+    clientOnly: true,
+  });
+  publishT3codeLanguage(result.language);
+  return result;
+}
+
 export function getT3codeNativeSettings(): Promise<T3CodeNativeSettings> {
   return invoke('get_t3code_native_settings');
 }
 
-export function updateT3codeNativeSettings(
+export async function updateT3codeNativeSettings(
   field: 'language' | 'notificationMode' | 'defaultModelSelection',
   value: string | null | { instanceId: string; model: string; effort?: string },
 ): Promise<T3CodeNativeSettings> {
-  return invoke('update_t3code_native_settings', { field, value });
+  const result = await invoke<T3CodeNativeSettings>('update_t3code_native_settings', { field, value });
+  if (field === 'language') publishT3codeLanguage(result.language);
+  return result;
+}
+
+export interface T3codePrivacyOption {
+  enabled: boolean;
+  selected: boolean;
+  blockedBy: string | null;
+}
+
+export interface T3codePrivacySettings {
+  doNotTrack: boolean;
+  analytics: T3codePrivacyOption;
+  tracing: T3codePrivacyOption;
+  agentActivity: boolean;
+  restartRequired: boolean;
+  privacyModeSaved: boolean;
+  allEnabledSaved: boolean;
+}
+
+export type T3codePrivacyPatch = Partial<Record<'doNotTrack' | 'analytics' | 'tracing' | 'agentActivity', boolean>>;
+
+export function getT3codePrivacySettings(): Promise<T3codePrivacySettings> {
+  return invoke('get_t3code_privacy_settings');
+}
+
+export function updateT3codePrivacySettings(patch: T3codePrivacyPatch): Promise<T3codePrivacySettings> {
+  return invoke('update_t3code_privacy_settings', { patch });
 }

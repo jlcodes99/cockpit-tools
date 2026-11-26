@@ -16,6 +16,7 @@ struct PreparationHost {
     policy: ExecutionPolicy,
     delays: Vec<Duration>,
     body_delay: Duration,
+    reasoning_delay_ms: AtomicUsize,
     denied: bool,
     oauth: bool,
     selections: Mutex<Vec<RouteRequest>>,
@@ -32,6 +33,18 @@ impl Host for PreparationHost {
     }
     fn execution_policy(&self) -> BoxFuture<'_, Result<ExecutionPolicy, ServiceError>> {
         Box::pin(async { Ok(self.policy.clone()) })
+    }
+    fn reasoning_ceiling<'a>(
+        &'a self,
+        _: &'a Caller,
+    ) -> BoxFuture<'a, Result<Option<crate::models::codex_local_access::CodexReasoningLevel>, ServiceError>> {
+        Box::pin(async move {
+            let delay = self.reasoning_delay_ms.load(Ordering::SeqCst);
+            if delay > 0 {
+                tokio::time::sleep(Duration::from_millis(delay as u64)).await;
+            }
+            Ok(None)
+        })
     }
     fn route<'a>(
         &'a self,
@@ -241,6 +254,7 @@ async fn preparation_fixture_with_oauth(
         policy,
         delays,
         body_delay,
+        reasoning_delay_ms: AtomicUsize::new(0),
         denied,
         oauth,
         selections: Mutex::new(vec![]),
@@ -464,6 +478,31 @@ async fn immediate_sse_preserves_actual_upstream_json_plaintext_and_retry_after_
         assert_eq!(source.requests.load(Ordering::SeqCst),1);
         handle.shutdown(Duration::from_secs(2)).await.unwrap();task.abort();
     }
+}
+
+#[tokio::test]
+async fn opening_timeout_retry_uses_the_next_attempts_preparation_budget() {
+    let policy = ExecutionPolicy {
+        open_timeout: Duration::from_millis(300),
+        stream_open_max_attempts: 2,
+        ..preparation_policy()
+    };
+    let source = PreparationSource {
+        first_delay: Duration::from_secs(1),
+        ..preparation_ok()
+    };
+    let (mut handle, host, source, task, _dir) =
+        preparation_fixture_with_oauth(policy, vec![], Duration::ZERO, false, source, true).await;
+    host.reasoning_delay_ms.store(35, Ordering::SeqCst);
+    let response = preparation_request(&handle, true).await;
+    let status = response.status();
+    let body = response.text().await.unwrap();
+    assert_eq!(status, 200, "{body}");
+    assert!(body.contains("response.completed"), "{body}");
+    assert_eq!(source.requests.load(Ordering::SeqCst), 2);
+    assert_eq!(host.selections.lock().unwrap().len(), 2);
+    handle.shutdown(Duration::from_secs(2)).await.unwrap();
+    task.abort();
 }
 
 #[tokio::test]

@@ -209,7 +209,7 @@ async fn handle_prepared(
         if route.chatgpt && !audio.native {
             let bytes = read_until_limited(&state, response, audio_deadline, if status.is_success() { 4 * 1024 * 1024 } else { usize::MAX }).await?;
             if !status.is_success() {
-                capture_auxiliary_error(tracker, status.as_u16(), &response_headers, &bytes);
+                capture_auxiliary_error(tracker, status.as_u16(), &response_headers, &bytes, false);
                 tracker
                     .complete(
                         status.as_u16(),
@@ -256,6 +256,7 @@ async fn handle_prepared(
             route,
             audio_deadline,
             usize::MAX,
+            false,
         );
     }
     if path.ends_with("/alpha/search") {
@@ -312,6 +313,7 @@ async fn handle_prepared(
                 .take()
                 .expect("HTTP request tracker is present"),
             route,
+            true,
         );
     }
     if path.ends_with("/hangup") {
@@ -358,6 +360,7 @@ async fn handle_prepared(
                 .take()
                 .expect("HTTP request tracker is present"),
             route,
+            false,
         );
     }
     let mut body =
@@ -426,7 +429,7 @@ async fn handle_prepared(
     let mut response_headers = response.headers().clone();
     let bytes = read(&state, response).await?;
     if !status.is_success() {
-        capture_auxiliary_error(tracker, status.as_u16(), &response_headers, &bytes);
+        capture_auxiliary_error(tracker, status.as_u16(), &response_headers, &bytes, false);
     }
     if status.is_success() {
         let id = response_headers
@@ -1088,8 +1091,9 @@ fn stream_response(
     response: reqwest::Response,
     tracker: RequestTracker,
     route: Route,
+    alpha_search: bool,
 ) -> Result<Response, ServiceError> {
-    stream_response_until(state, response, tracker, route, None, 32 * 1024 * 1024)
+    stream_response_until(state, response, tracker, route, None, 32 * 1024 * 1024, alpha_search)
 }
 fn stream_response_until(
     state: Arc<AppState>,
@@ -1098,6 +1102,7 @@ fn stream_response_until(
     route: Route,
     deadline: Option<Instant>,
     limit: usize,
+    alpha_search: bool,
 ) -> Result<Response, ServiceError> {
     // The downstream body is polled after the preparation task-local scope ends.
     // Capture its absolute total budget now, including time spent selecting an account.
@@ -1184,6 +1189,7 @@ fn stream_response_until(
                             status.as_u16(),
                             &error_headers,
                             &body,
+                            alpha_search,
                         );
                     }
                     tracker
@@ -1229,6 +1235,7 @@ fn capture_auxiliary_error(
     status: u16,
     headers: &HeaderMap,
     bytes: &[u8],
+    alpha_search: bool,
 ) {
     let value = serde_json::from_slice::<Value>(bytes)
         .unwrap_or_else(|_| Value::String(String::from_utf8_lossy(bytes).into_owned()));
@@ -1247,5 +1254,13 @@ fn capture_auxiliary_error(
     {
         tracker.capture_response_error(Some("cloudflare challenge"), false);
         tracker.capture_request_fault(false);
+    } else if alpha_search
+        && status == 403
+        && value["detail"].as_str().is_some_and(|detail| {
+            detail.trim().eq_ignore_ascii_case("Literature search is unavailable.")
+        })
+    {
+        tracker.capture_response_error(value["detail"].as_str(), false);
+        tracker.capture_request_fault(true);
     }
 }

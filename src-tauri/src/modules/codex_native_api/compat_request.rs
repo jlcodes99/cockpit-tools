@@ -50,6 +50,9 @@ pub fn prepare_request(
     );
     response["model"] = json!(model);
     response["stream"] = json!(is_stream);
+    if flavor == CompatFlavor::Claude {
+        super::tool_search::prepare(&body, &mut response)?;
+    }
     let tool_names = super::tools::map(&mut response);
     Ok(CompatRequest {
         responses: response,
@@ -192,7 +195,10 @@ fn claude_parts(content: &Value, role: &str, input: &mut Vec<Value>) -> Result<(
             "image" if role!="assistant"=>parts.push(source_part(block,true)?),
             "document" if role!="assistant"=>{if block.pointer("/citations/enabled").and_then(Value::as_bool)==Some(true){return Err(unsupported("document.citations"));}parts.push(source_part(block,false)?);},
             "tool_use"=>{message_parts(role,&mut parts,input);let args=block.get("input").filter(|v|v.is_object()).ok_or_else(||invalid("tool_use.input","expected an object"))?;input.push(json!({"type":"function_call","call_id":required(block,"id")?,"name":required(block,"name")?,"arguments":serde_json::to_string(args).unwrap()}));},
-            "tool_result"=>{message_parts(role,&mut parts,input);let mut output=Vec::new();match block.get("content"){None=>{},Some(Value::String(s))=>output.push(json!({"type":"input_text","text":s})),Some(Value::Array(blocks))=>for b in blocks{match b["type"].as_str(){Some("text")=>output.push(json!({"type":"input_text","text":b["text"]})),Some("image")=>output.push(source_part(b,true)?),Some("document")=>output.push(source_part(b,false)?),_=>return Err(unsupported("tool_result.content.type"))}},_=>return Err(invalid("tool_result.content","expected text or content blocks"))};if block["is_error"].as_bool()==Some(true){output.insert(0,json!({"type":"input_text","text":"Tool execution failed:"}));}let output=if block["is_error"].as_bool()!=Some(true) { match block.get("content") { None=>json!(""),Some(Value::String(text))=>json!(text),_=>json!(output) } }else{json!(output)};input.push(json!({"type":"function_call_output","call_id":required(block,"tool_use_id")?,"output":output}));},
+            "tool_result" => {
+                message_parts(role, &mut parts, input);
+                input.push(claude_tool_result(block)?);
+            }
             "thinking"=>{if role!="assistant"{return Err(invalid("thinking","expected assistant history"));}message_parts(role,&mut parts,input);if block["signature"].as_str().map(str::trim) == Some(super::commentary::MARKER) { input.push(json!({"type":"message","role":"assistant","phase":"commentary","content":[{"type":"output_text","text":block["thinking"].as_str().unwrap_or("")}]}));continue;}let mut item=json!({"type":"reasoning","summary":[{"type":"summary_text","text":block["thinking"].as_str().unwrap_or("")} ]});if let Some(value)=signature::input(block.get("signature"))?{item["encrypted_content"]=json!(value);}input.push(item);},
             "redacted_thinking" if role == "assistant" => {
                 message_parts(role, &mut parts, input);
@@ -207,6 +213,40 @@ fn claude_parts(content: &Value, role: &str, input: &mut Vec<Value>) -> Result<(
     message_parts(role, &mut parts, input);
     Ok(())
 }
+
+fn claude_tool_result(block: &Value) -> Result<Value, ServiceError> {
+    let failed = block["is_error"] == true;
+    let mut parts = Vec::new();
+    if failed {
+        parts.push(json!({"type":"input_text","text":"Tool execution failed:"}));
+    }
+    let output = match block.get("content") {
+        None if !failed => json!(""),
+        None => json!(parts),
+        Some(Value::String(text)) if !failed => json!(text),
+        Some(Value::String(text)) => {
+            parts.push(json!({"type":"input_text","text":text}));
+            json!(parts)
+        }
+        Some(Value::Array(content)) => {
+            for part in content {
+                parts.push(match part["type"].as_str() {
+                    Some("text") => json!({"type":"input_text","text":part["text"]}),
+                    Some("image") => source_part(part, true)?,
+                    Some("document") => source_part(part, false)?,
+                    Some("tool_reference") => json!({"type":"tool_reference",
+                        "tool_name":required(part, "tool_name")?}),
+                    _ => return Err(unsupported("tool_result.content.type")),
+                });
+            }
+            json!(parts)
+        }
+        _ => return Err(invalid("tool_result.content", "expected text or content blocks")),
+    };
+    Ok(json!({"type":"function_call_output","call_id":required(block,"tool_use_id")?,
+        "output":output}))
+}
+
 fn claude(body: &Value) -> Result<Value, ServiceError> {
     for k in [
         "stop_sequences",

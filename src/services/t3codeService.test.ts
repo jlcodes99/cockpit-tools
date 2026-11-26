@@ -72,3 +72,31 @@ test('account linking reads and writes the registered T3 Code commands with thei
     { command: 'refresh_t3code_provider_account_quota', args: { t3InstanceId: null, providerInstanceId: 'google-work' } },
   ]);
 });
+
+
+test('T3 Code language updates use only client settings and notify other settings surfaces', async () => {
+  const calls: Array<{ command: string; args: unknown }> = [];
+  const changes: string[] = [];
+  const { exports: service } = loadHookModule(new URL('./t3codeService.ts', import.meta.url), {
+    '@tauri-apps/api/core': {
+      async invoke(command: string, args: { value?: string }) {
+        calls.push({ command, args });
+        return { language: args.value ?? 'en', clientConnected: false };
+      },
+    },
+  });
+  const unsubscribe = service.subscribeT3codeLanguage((language: string) => changes.push(language));
+
+  assert.equal((await service.getT3codeNativeLanguage()).language, 'en');
+  assert.equal((await service.updateT3codeNativeLanguage('zh')).language, 'zh');
+  await service.updateT3codeNativeSettings('language', 'ja');
+  unsubscribe();
+  await service.updateT3codeNativeLanguage('en');
+
+  assert.deepEqual(changes, ['zh', 'ja']);
+  assert.deepEqual(JSON.parse(JSON.stringify(calls.slice(0, 3))), [
+    { command: 'get_t3code_native_settings', args: { clientOnly: true } },
+    { command: 'update_t3code_native_settings', args: { field: 'language', value: 'zh', clientOnly: true } },
+    { command: 'update_t3code_native_settings', args: { field: 'language', value: 'ja' } },
+  ]);
+});

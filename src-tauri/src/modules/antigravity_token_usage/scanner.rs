@@ -31,20 +31,22 @@ use rusqlite::types::ValueRef;
 use rusqlite::{Connection, OpenFlags};
 use serde::{Deserialize, Serialize};
 
+use super::audit::build_conversation_context_audit;
 use super::models::{
     canonicalize_model_id, format_model_display_name, is_builtin_enum_u64, resolve_model_info,
     ModelResolutionInput, ResolvedModelInfo,
 };
+use super::pricing::estimate_exact_cost_usd;
 use super::protobuf::{
     estimate_tokens_from_bytes, extract_readable_utf8_bytes, format_utc_ms, format_utc_secs_nanos,
     parse_gen_metadata_proto, parse_gen_metadata_slim, parse_step_metadata_proto,
     parse_step_metadata_slim, ParsedGenMetadataProto, SlimGenMetadataProto, SlimStepMetadataProto,
 };
 use super::types::{
-    ChildConversationRef, ConversationDetail, ConversationKind, ConversationModelSlice,
-    ConversationSummaryItem, DataSourceKind, EstimatedTokenTotals, ExactTokenTotals,
-    ResolvedTurnGroup, ScanMetadata, ScanResult, ScannedConversation, TurnEstimatedTotals,
-    TurnUsageRecord,
+    ChildConversationRef, ClientSourceKind, ConversationDetail, ConversationKind,
+    ConversationModelSlice, ConversationSummaryItem, DataSourceKind, EstimatedTokenTotals,
+    ExactTokenTotals, ResolvedTurnGroup, ScanMetadata, ScanResult, ScannedConversation,
+    TurnEstimatedTotals, TurnUsageRecord,
 };
 
 const READ_ONLY_SQLITE_FLAGS: OpenFlags =
@@ -1846,20 +1848,22 @@ pub fn build_conversation_detail(
         .copied()
         .ok_or_else(|| format!("Conversation not found: {conversation_id}"))?;
     let conv = &scan.conversations[idx];
+    let effective_root = if conv.summary.client_source == ClientSourceKind::Cli {
+        scan.cli_data_dir.as_deref().unwrap_or(&scan.data_dir)
+    } else {
+        scan.data_dir.as_path()
+    };
 
-    let db_path = scan
-        .data_dir
+    let db_path = effective_root
         .join("conversations")
         .join(format!("{conversation_id}.db"));
-    let rpc_path = scan
-        .data_dir
+    let rpc_path = effective_root
         .join(".token-monitor")
         .join("rpc-cache")
         .join("v1")
         .join(conversation_id)
         .join("usage.jsonl");
-    let tr_path = scan
-        .data_dir
+    let tr_path = effective_root
         .join("brain")
         .join(conversation_id)
         .join(".system_generated")
@@ -1907,6 +1911,11 @@ pub fn build_conversation_detail(
                 });
             }
         }
+        let (estimated_cost_usd, cache_savings_usd) = if rt.is_exact {
+            estimate_exact_cost_usd(&resolved.model_id, &rt.exact)
+        } else {
+            (0.0, 0.0)
+        };
         turns.push(TurnUsageRecord {
             step_index: rt.step_index,
             timestamp: rt.timestamp,
@@ -1920,15 +1929,26 @@ pub fn build_conversation_detail(
             status: rt.status,
             exact: rt.exact,
             estimated: rt.estimated,
+            estimated_cost_usd,
+            cache_savings_usd,
             message_id: rt.message_id,
         });
     }
+
+    let audit = build_conversation_context_audit(
+        effective_root,
+        conversation_id,
+        &conv.summary.primary_model_id,
+        &turns,
+        conv.children.len(),
+    );
 
     Ok(ConversationDetail {
         summary: conv.summary.clone(),
         model_breakdown: conv.model_breakdown.clone(),
         turns,
         children: conv.children.clone(),
+        audit,
     })
 }
 
@@ -2816,9 +2836,11 @@ impl AntigravityScanner {
                     cache_misses: 0,
                     rpc_cache_sessions_found: 0,
                     brain_dirs_found: 0,
+                    cli_sessions_found: 0,
                     warnings: Vec::new(),
                 },
                 data_dir: self.data_dir.clone(),
+                cli_data_dir: None,
                 dynamic_enum_map: HashMap::new(),
                 conversations: Vec::new(),
                 index_by_id: HashMap::new(),
@@ -3277,6 +3299,8 @@ impl AntigravityScanner {
                         turn_count: 0,
                         exact: ExactTokenTotals::default(),
                         estimated_total_tokens: 0,
+                        estimated_cost_usd: 0.0,
+                        cache_savings_usd: 0.0,
                     });
                 slice.turn_count += group_turns;
 
@@ -3310,6 +3334,17 @@ impl AntigravityScanner {
 
             let mut model_breakdown: Vec<ConversationModelSlice> =
                 slices_by_model.into_values().collect();
+            let mut conv_cost_usd = 0.0f64;
+            let mut conv_savings_usd = 0.0f64;
+            for slice in &mut model_breakdown {
+                let (c, s) = estimate_exact_cost_usd(&slice.model_id, &slice.exact);
+                slice.estimated_cost_usd = c;
+                slice.cache_savings_usd = s;
+                conv_cost_usd += c;
+                conv_savings_usd += s;
+            }
+            conv_cost_usd = (conv_cost_usd * 10_000.0).round() / 10_000.0;
+            conv_savings_usd = (conv_savings_usd * 10_000.0).round() / 10_000.0;
             model_breakdown.sort_by(|a, b| {
                 b.exact
                     .total_tokens
@@ -3406,6 +3441,7 @@ impl AntigravityScanner {
                 display_title,
                 preview: sum.map(|s| s.preview.clone()).unwrap_or_default(),
                 kind,
+                client_source: ClientSourceKind::Desktop,
                 has_swarm_children: swarm_coordinators.contains(id),
                 agent_name,
                 parent_conversation_id,
@@ -3434,6 +3470,8 @@ impl AntigravityScanner {
                     total_tokens: conv_est_total,
                     estimated_turn_count,
                 },
+                estimated_cost_usd: conv_cost_usd,
+                cache_savings_usd: conv_savings_usd,
             };
 
             conversations.push(ScannedConversation {
@@ -3506,9 +3544,11 @@ impl AntigravityScanner {
                 cache_misses,
                 rpc_cache_sessions_found,
                 brain_dirs_found,
+                cli_sessions_found: 0,
                 warnings,
             },
             data_dir: self.data_dir.clone(),
+            cli_data_dir: None,
             dynamic_enum_map: self.dynamic_enum_map.clone(),
             conversations,
             index_by_id,

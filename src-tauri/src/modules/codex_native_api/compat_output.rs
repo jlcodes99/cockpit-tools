@@ -148,6 +148,12 @@ pub fn response_from_responses(
     for item in items {
         let commentary = (context.flavor == CompatFlavor::Claude).then(|| super::commentary::item(item)).flatten();
         let item = commentary.as_ref().unwrap_or(item);
+        let search_call = if context.flavor == CompatFlavor::Claude {
+            super::tool_search::function_call(item)?
+        } else {
+            None
+        };
+        let item = search_call.as_ref().unwrap_or(item);
         match item["type"].as_str().unwrap_or("") {
             "message" => {
                 for content in item["content"].as_array().into_iter().flatten() {
@@ -236,6 +242,7 @@ pub fn response_from_responses(
                 }
             }
             "file_search_call" | "code_interpreter_call" | "mcp_list_tools" | "mcp_call" => {}
+            "tool_search_call" | "tool_search_output" if context.flavor == CompatFlavor::Claude => {}
             _ => {
                 return Err(upstream(
                     "This Responses output item is not representable in the client protocol",

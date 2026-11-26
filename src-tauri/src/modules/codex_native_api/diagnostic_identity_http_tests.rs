@@ -125,6 +125,14 @@ async fn identity_http(State(source): State<Arc<IdentitySource>>, request: Reque
     if parts.uri.path().contains("audio/") || parts.uri.path().ends_with("/transcribe") {
         return Json(json!({"text":"ok"})).into_response();
     }
+    if value["input"].as_array().and_then(|items| items.last()).is_some_and(|item| {
+        item["type"] == "compaction_trigger"
+    }) {
+        return Json(json!({
+            "id": format!("response-{id}"), "status": "completed",
+            "output": [{"type": "compaction", "encrypted_content": "fixture-cipher"}],
+        })).into_response();
+    }
     if value["tools"]
         .as_array()
         .is_some_and(|tools| tools.iter().any(|tool| tool["type"] == "image_generation"))
@@ -545,7 +553,12 @@ async fn http_identity_metadata_matches_wire_with_payload_logging_disabled_and_n
             Some("client-workspace")
         );
         let seen = source.seen.lock().unwrap();
-        assert_eq!(seen[index].path, format!("/v1/{path}"));
+        assert_eq!(seen[index].path, "/v1/responses");
+        assert_eq!(
+            seen[index].body["input"].as_array().and_then(|items| items.last())
+                .is_some_and(|item| item["type"] == "compaction_trigger"),
+            *path == "responses/compact"
+        );
         assert_sent(
             &values[index],
             &seen[index],

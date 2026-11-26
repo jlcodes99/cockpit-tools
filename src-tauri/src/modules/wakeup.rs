@@ -1063,7 +1063,7 @@ fn encode_wakeup_ui_error_payload(detail: &GatewayTrajectoryErrorDetail) -> Stri
 fn extract_wakeup_response_from_gateway_trajectory(
     get_resp: &serde_json::Value,
     duration_ms: u64,
-) -> Option<WakeupResponse> {
+) -> Option<Result<WakeupResponse, String>> {
     let steps = get_resp
         .get("trajectory")
         .and_then(|v| v.get("steps"))
@@ -1103,8 +1103,13 @@ fn extract_wakeup_response_from_gateway_trajectory(
         if reply.is_empty() {
             continue;
         }
+        if reply.starts_with("This version of Antigravity is no longer supported.")
+            && reply.contains("https://antigravity.google/download")
+        {
+            return Some(Err(reply.to_string()));
+        }
 
-        return Some(WakeupResponse {
+        return Some(Ok(WakeupResponse {
             reply: reply.to_string(),
             prompt_tokens: None,
             completion_tokens: None,
@@ -1112,7 +1117,7 @@ fn extract_wakeup_response_from_gateway_trajectory(
             trace_id: None,
             response_id: None,
             duration_ms,
-        });
+        }));
     }
 
     None
@@ -1447,6 +1452,12 @@ async fn trigger_wakeup_via_client_gateway_once(
                 &get_resp,
                 started_at.elapsed().as_millis() as u64,
             ) {
+                let parsed = parsed.inspect_err(|error| {
+                    crate::modules::logger::log_warn(&format!(
+                        "[Wakeup] 官方 LS 拒绝客户端版本: cascade_id={}, message={}",
+                        cascade_id, error
+                    ));
+                })?;
                 if last_running_error.is_some() {
                     crate::modules::logger::log_info(&format!(
                         "[Wakeup] 网关轨迹在中间错误后恢复成功: cascade_id={}",
@@ -2124,6 +2135,28 @@ pub async fn fetch_available_models() -> Result<Vec<AvailableModel>, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn client_gateway_reports_upgrade_notice_as_wakeup_failure() {
+        let notice = "This version of Antigravity is no longer supported. Please download and install the latest version at https://antigravity.google/download to continue using the agent.";
+        let trajectory = |reply| {
+            json!({ "trajectory": { "steps": [{ "plannerResponse": { "modifiedResponse": reply } }] } })
+        };
+        assert_eq!(
+            extract_wakeup_response_from_gateway_trajectory(&trajectory(notice), 0)
+                .unwrap()
+                .err()
+                .as_deref(),
+            Some(notice)
+        );
+        assert_eq!(
+            extract_wakeup_response_from_gateway_trajectory(&trajectory("WAKEUP_OK"), 0)
+                .unwrap()
+                .unwrap()
+                .reply,
+            "WAKEUP_OK"
+        );
+    }
 
     #[test]
     fn clientless_wakeup_omits_the_project_field_for_consumer_accounts() {

@@ -500,7 +500,7 @@ async fn handle_connection(
     let request = observed_entry.request();
     let upstream = tokio::time::timeout(CONNECT_TIMEOUT, async {
         diagnostic.phase("resolve_route");
-        let direct_hosts = super::config::get_codex_proxy_direct_hosts();
+        let direct_hosts = effective_direct_hosts_for_account(account_id);
         let target = if super::codex_proxy_direct_hosts::matches(&direct_hosts, &destination.host) {
             None
         } else {
@@ -548,6 +548,38 @@ async fn handle_connection(
 
 /// 每条新连接都重新解析当前生效出口：换节点、换策略、解绑或统一代理变化都会在
 /// 下一批新连接上立即生效，不需要重启已经运行中的客户端。
+fn effective_direct_hosts_for_account(account_id: &str) -> Vec<String> {
+    let direct_hosts = super::config::get_codex_proxy_direct_hosts();
+    let Ok(store) = super::codex_instance::load_instance_store() else {
+        return direct_hosts;
+    };
+    let mut extra_rules = Vec::new();
+    let default_matches = account_id == "__client__"
+        || store
+            .default_settings
+            .bind_account_id
+            .as_deref()
+            .map(str::trim)
+            == Some(account_id);
+    if default_matches && !store.default_settings.extra_args.trim().is_empty() {
+        let parsed = super::process::parse_extra_args(&store.default_settings.extra_args);
+        extra_rules.extend(super::codex_proxy_direct_hosts::extract_from_electron_args(&parsed));
+    }
+    for instance in &store.instances {
+        let matches_account = account_id == "__client__"
+            || instance.bind_account_id.as_deref().map(str::trim) == Some(account_id);
+        if matches_account && !instance.extra_args.trim().is_empty() {
+            let parsed = super::process::parse_extra_args(&instance.extra_args);
+            extra_rules
+                .extend(super::codex_proxy_direct_hosts::extract_from_electron_args(&parsed));
+        }
+    }
+    if extra_rules.is_empty() {
+        direct_hosts
+    } else {
+        super::codex_proxy_direct_hosts::merge_rules(&direct_hosts, &extra_rules)
+    }
+}
 async fn resolve_desktop_target(
     account_id: &str,
 ) -> Result<Option<(String, Option<Arc<DesktopTunnel>>)>, String> {

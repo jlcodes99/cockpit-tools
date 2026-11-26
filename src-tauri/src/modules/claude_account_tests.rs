@@ -1061,3 +1061,345 @@ fn desktop_login_component_cleanup_removes_only_owned_cache_dirs() {
             );
         }
     }
+
+    fn create_test_desktop_cookies_db(cookies_path: &Path, rows: &[(&str, &str, &str, &[u8])]) {
+        if let Some(parent) = cookies_path.parent() {
+            fs::create_dir_all(parent).expect("create cookies parent dir");
+        }
+        let conn = Connection::open(cookies_path).expect("open test cookies db");
+        conn.execute_batch(
+            "CREATE TABLE cookies (
+                host_key TEXT NOT NULL,
+                path TEXT NOT NULL,
+                name TEXT NOT NULL,
+                value TEXT NOT NULL,
+                encrypted_value BLOB NOT NULL,
+                expires_utc INTEGER NOT NULL,
+                is_secure INTEGER NOT NULL,
+                is_httponly INTEGER NOT NULL
+            );",
+        )
+        .expect("create cookies table");
+        for (host_key, name, value, encrypted_value) in rows {
+            conn.execute(
+                "INSERT INTO cookies (host_key, path, name, value, encrypted_value, expires_utc, is_secure, is_httponly)
+                 VALUES (?1, '/', ?2, ?3, ?4, 0, 1, 1)",
+                params![host_key, name, value, encrypted_value],
+            )
+            .expect("insert cookie row");
+        }
+    }
+
+    #[test]
+    fn silent_refresh_reads_plaintext_cookies_db_when_auth_export_missing() {
+        let profile_dir = make_profile_dir("silent-plaintext-db");
+        let cookies_path = profile_dir.join("Network").join("Cookies");
+        create_test_desktop_cookies_db(
+            &cookies_path,
+            &[
+                (".claude.ai", "sessionKeyV3", "sk-ant-sid01-plaintext", b""),
+                (".claude.ai", "lastActiveOrg", "11111111-1111-4111-8111-111111111111", b""),
+            ],
+        );
+        assert!(!desktop_auth_export_path(&profile_dir).exists());
+
+        let export = read_desktop_cookie_export_for_silent_refresh(&profile_dir)
+            .expect("silent refresh should read plaintext Cookies DB without export file");
+        assert_eq!(
+            desktop_cookie_value(&export.cookies, "sessionKeyV3").as_deref(),
+            Some("sk-ant-sid01-plaintext")
+        );
+        assert_eq!(
+            desktop_cookie_value(&export.cookies, "lastActiveOrg").as_deref(),
+            Some("11111111-1111-4111-8111-111111111111")
+        );
+
+        let _ = fs::remove_dir_all(&profile_dir);
+    }
+
+    #[test]
+    fn decrypt_windows_v10_cookie_supports_schema_v24_host_digest_and_rejects_v20() {
+        let key = [0x42u8; 32];
+        let nonce_bytes = [0x11u8; 12];
+        let cipher = Aes256Gcm::new(AesGcmGenericArray::from_slice(&key));
+        let nonce = AesGcmNonce::from_slice(&nonce_bytes);
+
+        let mut payload_with_digest = Sha256::digest(b".claude.ai").to_vec();
+        payload_with_digest.extend_from_slice(b"sk-ant-sid01-win-v10");
+        let ciphertext_with_digest = cipher
+            .encrypt(nonce, payload_with_digest.as_slice())
+            .expect("encrypt v10 cookie with host digest");
+        let mut encrypted_with_digest = b"v10".to_vec();
+        encrypted_with_digest.extend_from_slice(&nonce_bytes);
+        encrypted_with_digest.extend_from_slice(&ciphertext_with_digest);
+
+        let decrypted = decrypt_windows_v10_cookie(".claude.ai", &encrypted_with_digest, &key)
+            .expect("Windows v10 cookie with schema v24 host digest should decrypt");
+        assert_eq!(decrypted, "sk-ant-sid01-win-v10");
+
+        let ciphertext_plain = cipher
+            .encrypt(nonce, b"sk-ant-sid01-win-plain".as_slice())
+            .expect("encrypt plain v10 cookie");
+        let mut encrypted_plain = b"v10".to_vec();
+        encrypted_plain.extend_from_slice(&nonce_bytes);
+        encrypted_plain.extend_from_slice(&ciphertext_plain);
+        assert_eq!(
+            decrypt_windows_v10_cookie(".claude.ai", &encrypted_plain, &key)
+                .expect("Windows v10 cookie without host digest should decrypt"),
+            "sk-ant-sid01-win-plain"
+        );
+
+        let v20_error = decrypt_windows_v10_cookie(".claude.ai", b"v200123456789abcdef0123456789abcdef", &key)
+            .expect_err("v20 cookie should fail with explicit diagnostic");
+        assert!(v20_error.contains("v20"), "{v20_error}");
+
+        // A single v20 non-auth cookie must not block reading plaintext auth cookies.
+        let profile_dir = make_profile_dir("v20-non-auth-cookie");
+        create_test_desktop_cookies_db(
+            &profile_dir.join("Network").join("Cookies"),
+            &[
+                (".claude.ai", "__cf_bm", "", b"v20encryptedcfcookiepayload1234567890"),
+                (".claude.ai", "sessionKey", "sk-ant-sid01-ok", b""),
+                (".claude.ai", "lastActiveOrg", "22222222-2222-4222-8222-222222222222", b""),
+            ],
+        );
+        let export = read_decrypted_desktop_cookie_export(&profile_dir)
+            .expect("plaintext auth cookies should still be readable alongside v20 cookie");
+        assert_eq!(
+            desktop_cookie_value(&export.cookies, "sessionKey").as_deref(),
+            Some("sk-ant-sid01-ok")
+        );
+        let _ = fs::remove_dir_all(&profile_dir);
+    }
+
+    #[test]
+    fn readonly_cookie_snapshot_recovers_windows_sharing_and_efs_errors() {
+        let dir = make_profile_dir("readonly-snapshot-copy");
+        let source = dir.join("Cookies");
+        fs::write(&source, b"sqlite-cookie-snapshot").expect("write source");
+
+        for code in [32, 33, 6000] {
+            let dest = dir.join(format!("Cookies-copy-{code}"));
+            copy_readonly_snapshot_file_with_fallback(&source, &dest, |_, _| {
+                Err(std::io::Error::from_raw_os_error(code))
+            })
+            .expect("sharing/lock/EFS error should fall back to shared read");
+            assert_eq!(fs::read(&dest).expect("read dest"), b"sqlite-cookie-snapshot");
+        }
+
+        let denied = dir.join("Cookies-denied");
+        assert!(copy_readonly_snapshot_file_with_fallback(&source, &denied, |_, _| {
+            Err(std::io::Error::from_raw_os_error(5))
+        })
+        .is_err());
+        assert!(copy_readonly_snapshot_file_with_fallback(&source, &source, |_, _| {
+            Err(std::io::Error::from_raw_os_error(32))
+        })
+        .is_err());
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn default_desktop_fallback_verifies_account_identity_and_rejects_mismatch() {
+        let alice = test_desktop_account(
+            "claude_desktop_alice",
+            "alice@testmail.dev",
+            Some("11111111-1111-4111-8111-111111111111"),
+            Some("/tmp/alice"),
+            10,
+            20,
+        );
+        let alice_profile = json!({
+            "endpoints": {
+                "accountProfile": {
+                    "account": {
+                        "uuid": "11111111-1111-4111-8111-111111111111",
+                        "email_address": "alice@testmail.dev"
+                    }
+                }
+            }
+        });
+        let bob_profile = json!({
+            "endpoints": {
+                "accountProfile": {
+                    "account": {
+                        "uuid": "22222222-2222-4222-8222-222222222222",
+                        "email_address": "bob@testmail.dev"
+                    }
+                }
+            }
+        });
+
+        assert!(desktop_web_profile_matches_account_for_fallback(
+            &alice,
+            &alice_profile,
+            false
+        ));
+        assert!(!desktop_web_profile_matches_account_for_fallback(
+            &alice,
+            &bob_profile,
+            true
+        ));
+
+        let mut alice_email_only = alice.clone();
+        alice_email_only.account_uuid = None;
+        assert!(desktop_web_profile_matches_account_for_fallback(
+            &alice_email_only,
+            &alice_profile,
+            false
+        ));
+        assert!(!desktop_web_profile_matches_account_for_fallback(
+            &alice_email_only,
+            &bob_profile,
+            true
+        ));
+
+        let placeholder = test_desktop_account(
+            "claude_desktop_placeholder",
+            "Claude 2026-11-26 17:00",
+            None,
+            Some("/tmp/placeholder"),
+            10,
+            20,
+        );
+        assert!(!desktop_web_profile_matches_account_for_fallback(
+            &placeholder,
+            &bob_profile,
+            false
+        ));
+        assert!(desktop_web_profile_matches_account_for_fallback(
+            &placeholder,
+            &bob_profile,
+            true
+        ));
+
+        let conflict_dir = make_profile_dir("local-profile-conflict");
+        let leveldb_dir = conflict_dir.join("Local Storage").join("leveldb");
+        fs::create_dir_all(&leveldb_dir).expect("create leveldb dir");
+        fs::write(
+            leveldb_dir.join("000001.ldb"),
+            br#"account uuid"22222222-2222-4222-8222-222222222222" email_address"bob@testmail.dev" display_name"Bob""#,
+        )
+        .expect("write local profile fixture");
+        assert!(desktop_local_profile_conflicts_with_account(&alice, &conflict_dir));
+        let _ = fs::remove_dir_all(&conflict_dir);
+    }
+
+    #[test]
+    fn hidden_probe_cooldown_distinguishes_preflight_launch_failure_and_success() {
+        let mut attempts = HashMap::new();
+        let t0 = Instant::now();
+        let success_cd = Duration::from_secs(600);
+        let failure_cd = Duration::from_secs(30);
+
+        // Preflight failure before Electron launch must not trigger a 600s lockout.
+        let prev = begin_desktop_hidden_probe_attempt_at(&mut attempts, "acc-1", t0, success_cd)
+            .expect("initial attempt allowed");
+        finish_desktop_hidden_probe_attempt_at(
+            &mut attempts,
+            "acc-1",
+            prev,
+            false,
+            false,
+            t0 + Duration::from_secs(1),
+            success_cd,
+            failure_cd,
+        );
+        assert!(
+            begin_desktop_hidden_probe_attempt_at(
+                &mut attempts,
+                "acc-1",
+                t0 + Duration::from_secs(2),
+                success_cd,
+            )
+            .is_ok()
+        );
+
+        // Post-launch failure uses short failure cooldown instead of 600s.
+        finish_desktop_hidden_probe_attempt_at(
+            &mut attempts,
+            "acc-1",
+            None,
+            false,
+            true,
+            t0 + Duration::from_secs(3),
+            success_cd,
+            failure_cd,
+        );
+        assert_eq!(
+            begin_desktop_hidden_probe_attempt_at(
+                &mut attempts,
+                "acc-1",
+                t0 + Duration::from_secs(32),
+                success_cd,
+            ),
+            Err(30)
+        );
+        assert!(
+            begin_desktop_hidden_probe_attempt_at(
+                &mut attempts,
+                "acc-1",
+                t0 + Duration::from_secs(33),
+                success_cd,
+            )
+            .is_ok()
+        );
+
+        // Successful probe enforces full 600s cooldown.
+        finish_desktop_hidden_probe_attempt_at(
+            &mut attempts,
+            "acc-1",
+            None,
+            true,
+            true,
+            t0 + Duration::from_secs(34),
+            success_cd,
+            failure_cd,
+        );
+        assert_eq!(
+            begin_desktop_hidden_probe_attempt_at(
+                &mut attempts,
+                "acc-1",
+                t0 + Duration::from_secs(633),
+                success_cd,
+            ),
+            Err(600)
+        );
+        assert!(
+            begin_desktop_hidden_probe_attempt_at(
+                &mut attempts,
+                "acc-1",
+                t0 + Duration::from_secs(634),
+                success_cd,
+            )
+            .is_ok()
+        );
+    }
+
+    #[test]
+    fn candidate_default_claude_desktop_dirs_respects_env_override_and_excludes_snapshot() {
+        const DESKTOP_DIR_ENV: &str = "CLAUDE_DESKTOP_USER_DATA_DIR";
+        struct RestoreDesktopDir(Option<std::ffi::OsString>);
+        impl Drop for RestoreDesktopDir {
+            fn drop(&mut self) {
+                match self.0.take() {
+                    Some(value) => std::env::set_var(DESKTOP_DIR_ENV, value),
+                    None => std::env::remove_var(DESKTOP_DIR_ENV),
+                }
+            }
+        }
+
+        let _lock = crate::modules::test_support::env_lock().lock().unwrap();
+        let _restore = RestoreDesktopDir(std::env::var_os(DESKTOP_DIR_ENV));
+        let default_dir = make_profile_dir("default-desktop-override");
+        let snapshot_dir = make_profile_dir("snapshot-dir");
+        std::env::set_var(DESKTOP_DIR_ENV, &default_dir);
+
+        let candidates = candidate_default_claude_desktop_user_data_dirs(Some(&snapshot_dir));
+        assert_eq!(candidates, vec![default_dir.clone()]);
+        assert!(candidate_default_claude_desktop_user_data_dirs(Some(&default_dir)).is_empty());
+
+        let _ = fs::remove_dir_all(&default_dir);
+        let _ = fs::remove_dir_all(&snapshot_dir);
+    }
