@@ -559,7 +559,7 @@ mod tests {
         let switched = loaded.last_switched_at.expect("last_switched_at");
         assert!(
             (1_600_000_000..2_000_000_000).contains(&switched),
-            "expected epoch seconds after load, got {switched}"
+            "expected epoch seconds after load"
         );
     }
 
@@ -578,7 +578,7 @@ mod tests {
         // showed up as year 58863.
         assert!(
             (1_600_000_000..2_000_000_000).contains(&switched),
-            "expected epoch seconds, got {switched}"
+            "expected epoch seconds"
         );
     }
 

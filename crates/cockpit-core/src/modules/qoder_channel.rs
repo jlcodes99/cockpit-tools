@@ -244,9 +244,8 @@ mod tests {
         assert_eq!(channel.openapi_base_url(), "https://openapi.qoder.com.cn");
 
         let sign_in = url::Url::parse(
-            // lgtm[rs/hardcoded-credentials] nonce/challenge 是单元测试占位值，不参与生产认证
             &channel
-                .sign_in_url("nonce-test", "challenge-test", "S256", Some("machine-test"))
+                .sign_in_url("nonce-test", "challenge-test", "S256", Some("machine-test")) // lgtm[rs/hardcoded-credentials] 单元测试占位值，不参与生产认证
                 .unwrap(),
         )
         .unwrap();

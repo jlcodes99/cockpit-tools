@@ -233,7 +233,7 @@ fn encode(root: &Path, client: NativeClient, profile: &Value) -> Result<Vec<u8>,
     let bytes = match client {
         NativeClient::Desktop => {
             use aes_gcm::aead::{rand_core::RngCore, OsRng};
-            let mut nonce = [0u8; 12];
+            let mut nonce = [0u8; 12]; // lgtm[rs/hardcoded-credentials] 仅作缓冲区，下一行由 OsRng 填满
             OsRng.fill_bytes(&mut nonce);
             let cipher = Aes256Gcm::new_from_slice(&desktop_key(root)?)
                 .map_err(|_| "QODER_NATIVE_KEY_INVALID")?
