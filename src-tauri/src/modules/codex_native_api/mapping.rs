@@ -346,6 +346,33 @@ async fn prepare_excluding_inner(
             .await;
         }
         Err(error)
+            if !websocket
+                && error.status == 409
+                && error.code == "account_binding_unavailable"
+                && rebuild_plan.is_none()
+                && preferred.is_none()
+                && request.preferred_account_id.is_some()
+                && context.state_account_id.as_deref()
+                    == request.preferred_account_id.as_deref()
+                && context.replay_without_owner()
+                && body
+                    .get("input")
+                    .and_then(Value::as_array)
+                    .is_some_and(|items| {
+                        !items.is_empty()
+                            && super::responses_custom_results::replayable(items)
+                    }) =>
+        {
+            // The durable binding is advisory when the complete conversation is
+            // already inline: replayable encrypted content, detached turn and
+            // parent anchors carry no owner transfer. Re-route without the pin
+            // so a model served by another account cannot strand the thread
+            // with 409 account_binding_unavailable; the selected account
+            // republishes affinity and accepted history on success.
+            request.preferred_account_id = None;
+            route_skipping_local_quota(state, caller, &mut request, allow_local_reselect).await?
+        }
+        Err(error)
             if !compact
                 && error.code == "quota_reserved"
                 && error.upstream_not_sent

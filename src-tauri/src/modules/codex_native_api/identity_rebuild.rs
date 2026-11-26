@@ -1315,6 +1315,24 @@ impl RequestIdentity {
         self.forwarding && !self.opaque.is_empty()
     }
 
+    /// Every upstream reference in the request is detached from owner binding:
+    /// replayable encrypted content, or turn/parent anchors already detached
+    /// because the body carries the complete conversation inline. The durable
+    /// binding is advisory for such a body, and a 409 pin rejection may fall
+    /// back to another account instead of stranding the conversation.
+    pub(crate) fn replay_without_owner(&self) -> bool {
+        !self.requires_forwarding_account_pin()
+            && self.opaque.iter().all(|reference| {
+                reference.kind == "encrypted"
+                    || (reference.kind == "turn_state"
+                        && self
+                            .detached_turn_states
+                            .iter()
+                            .any(|detached| detached.digest == reference.digest))
+                    || (reference.kind == "parent_response" && self.detached_parent)
+            })
+    }
+
     pub(crate) fn start_rebuild_generation(&mut self, plan: &Plan) {
         self.rebuild_base_revision = Some(plan.base_revision);
         self.rebuild_new_generation = true;
