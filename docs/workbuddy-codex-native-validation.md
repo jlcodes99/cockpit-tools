@@ -65,7 +65,17 @@ Broader pre-integration runs found two existing-area failures, not hidden by the
 - Native API suite: 1419 passed / 1 failed / 8 ignored. The failure is the unchanged legacy archive-maintenance fixture (`QueryReturnedNoRows` while expecting salvage of an old checkpoint); it also fails in isolation. No passing pristine-base reproduction is claimed here.
 - All WorkBuddy tests: 161 passed / 1 failed / 2 ignored. The failure is the unchanged installed-process path probe under the outer process-inspection sandbox. It is not a model/quota failure.
 
-Final post-upstream-integration build/test results are recorded in the PR description.
+## Final upstream-integration checks
+
+Rebased the independent feature commit onto the upstream squash merge of #3301 (`d4b7de66`), without repeating the original repair commit.
+
+- Final WorkBuddy Rust regression run: **166 passed, 0 failed, 2 ignored**. Explicitly excluded only the already identified installed-process path probe, which needs process inspection outside the outer sandbox; ignored live checks were not invoked.
+- Final selected frontend run, including the new production-modal tests: **50 passed, 0 failed**.
+- Full TypeScript typecheck and feature-only `git diff --check`: passed.
+- Final exact-token audit of all **41 committed feature files**: no WorkBuddy access-token matches.
+- No additional real inference was used for integration or final regression.
+
+The broader pre-integration failure disclosures above remain applicable; they were not silently converted into passing results.
 
 ## Claims deliberately not made
 

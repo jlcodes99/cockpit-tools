@@ -25,6 +25,7 @@ Each profile permits only its selected WorkBuddy source and public model. There 
 - The native WorkBuddy session is retained between tool handoffs and subsequent user turns. The original pending tool callback receives the actual Codex tool result at most once.
 - Service/process restart, source credential changes, expired sessions, changed tools or model/effort mismatches can invalidate a live conversation. Start a new conversation after an explicit expired/conflict error; the bridge never reconstructs a pending tool execution by replaying history to another account.
 - Resource limits include eight total actors, two per caller/source, eight pending calls per actor, bounded frames/history/results, and bounded startup/turn/idle lifetimes. Idle completed sessions expire after three minutes; actors expire absolutely after thirty minutes.
+- Codex 0.172 can warn that the custom public model has no built-in metadata and use its generic capability metadata. This is not account/provider fallback; the actual tested route remains pinned. The acceptance task passed with that warning; richer Codex model-metadata integration is not claimed.
 - Usage is not invented. Some CLI versions report usage only in ACP notifications that this initial adapter does not map to Responses usage; those responses omit usage. See WorkBuddy's account page for the authoritative credit information.
 - Direct WorkBuddy account injection into Codex and Provider Gateway binding remain unsupported. The older **接入 Codex（纯文本）** action retains its existing text-only semantics.
 
