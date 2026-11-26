@@ -3107,6 +3107,36 @@ pub async fn restore_codex_active_takeover_if_enabled(app: AppHandle) -> Result<
     Ok(reapply_catalog_result)
 }
 
+/// Read live CLI model/effort metadata only; never starts a model prompt.
+#[tauri::command]
+pub async fn get_codex_workbuddy_delegate_catalog(
+    workbuddy_account_id: String,
+    model_id: Option<String>,
+) -> Result<crate::modules::codex_local_access::CodexWorkbuddyDelegateCatalog, String> {
+    crate::modules::codex_local_access::get_workbuddy_delegate_catalog(workbuddy_account_id, model_id).await
+}
+
+#[tauri::command]
+pub async fn create_codex_workbuddy_delegate_profile(
+    workbuddy_account_id: String,
+    model_id: String,
+    reasoning_effort: String,
+) -> Result<crate::modules::codex_local_access::CodexWorkbuddyDelegateProfile, String> {
+    crate::modules::codex_local_access::create_workbuddy_delegate_profile(workbuddy_account_id, model_id, reasoning_effort).await
+}
+
+#[tauri::command]
+pub async fn list_codex_workbuddy_delegate_profiles(
+) -> Result<Vec<crate::modules::codex_local_access::CodexWorkbuddyDelegateProfile>, String> {
+    tokio::task::spawn_blocking(crate::modules::codex_local_access::list_workbuddy_delegate_profiles)
+        .await.map_err(|_| "WORKBUDDY_DELEGATE_PROFILE_READ_FAILED".to_string())?
+}
+
+#[tauri::command]
+pub async fn restore_codex_workbuddy_delegate_profile(profile_id: String) -> Result<(), String> {
+    crate::modules::codex_local_access::restore_workbuddy_delegate_profile(profile_id).await
+}
+
 // ─── Codex 账号分组持久化 ────────────────────────────────────────────
 
 #[cfg(test)]

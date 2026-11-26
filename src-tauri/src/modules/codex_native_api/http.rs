@@ -137,6 +137,38 @@ pub(super) async fn dispatch(
     mut input: Input,
     compact: bool,
 ) -> Result<Response, ServiceError> {
+    // Native-delegate grants must be resolved before *any* generic execution,
+    // identity rebuild, account selection or fallback policy. The actor owns
+    // live upstream awaits and may not be reconstructed from conversation text.
+    let public_model = input.body.get("model").and_then(Value::as_str).unwrap_or_default();
+    let mut native_stop = state.stop.clone();
+    let selected = tokio::select! {
+        _ = native_stop.wait() => Err(stopping_error()),
+        selected = tokio::time::timeout(
+            state.options.request_timeout,
+            state.host.workbuddy_delegate_route(&input.caller, public_model),
+        ) => selected.unwrap_or_else(|_| Err(ServiceError::new(504, "workbuddy_grant_timeout", "Dedicated native grant lookup timed out"))),
+    };
+    match selected {
+        Ok(Some(selection)) => {
+            return super::workbuddy_delegate::dispatch(state, input, selection, compact).await;
+        }
+        Err(error) => {
+            input.tracker.fail(&error).await;
+            return Err(error);
+        }
+        Ok(None) => {
+            if super::workbuddy_delegate::has_native_reference(&input.body) {
+                let error = ServiceError::new(
+                    409,
+                    "workbuddy_delegate_grant_unavailable",
+                    "This conversation belongs to a native-delegate session whose dedicated grant is no longer available; it cannot be routed or replayed elsewhere",
+                );
+                input.tracker.fail(&error).await;
+                return Err(error);
+            }
+        }
+    }
     let mut policy = match super::retry::execution_policy(&state).await {
         Ok(policy) => policy,
         Err(error) => {

@@ -1,0 +1,58 @@
+.workbuddy-codex-native-modal {
+  width: min(640px, calc(100vw - 32px));
+  max-width: 640px;
+  max-height: calc(100dvh - 32px);
+}
+
+.workbuddy-codex-native-modal .modal-body {
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.workbuddy-codex-native-modal .modal-body > p {
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin: 0 0 16px;
+}
+
+.workbuddy-codex-native-modal .form-control {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.workbuddy-codex-native-modal .form-control:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.workbuddy-codex-native-modal .form-control:disabled {
+  opacity: 0.6;
+}
+
+.workbuddy-codex-native-modal .help-text {
+  font-size: 12px;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.workbuddy-codex-native-modal section {
+  border-top: 1px solid var(--border-light);
+  padding-top: 16px;
+}
+
+.workbuddy-codex-native-modal section p {
+  margin: 8px 0;
+  line-height: 1.5;
+}
+
+.workbuddy-codex-native-modal pre {
+  padding: 12px;
+  border-radius: var(--radius-md);
+  background: var(--bg-tertiary);
+  font-size: 12px;
+}

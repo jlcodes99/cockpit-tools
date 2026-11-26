@@ -27,6 +27,7 @@ import {
 } from '../utils/workbuddyProbeStatus';
 import { WorkbuddyProbeNotice } from '../components/workbuddy/WorkbuddyProbeNotice';
 import { WorkbuddyModelProbeModal } from '../components/workbuddy/WorkbuddyModelProbeModal';
+import { WorkbuddyCodexNativeModal } from '../components/workbuddy/WorkbuddyCodexNativeModal';
 
 const WORKBUDDY_FLOW_NOTICE_COLLAPSED_KEY = 'agtools.workbuddy.flow_notice_collapsed';
 
@@ -92,6 +93,8 @@ export function WorkbuddyAccountsPage() {
   const [activeTab, setActiveTab] = useState<PlatformOverviewTab>('overview');
   const [creditAccountId, setCreditAccountId] = useState<string | null>(null);
   const [codexBindingId, setCodexBindingId] = useState<string | null>(null);
+  const [nativeCodexOpen, setNativeCodexOpen] = useState(false);
+  const [nativeCodexAccountId, setNativeCodexAccountId] = useState<string | null>(null);
   const [probeOpen, setProbeOpen] = useState(false);
   const [probeAccountId, setProbeAccountId] = useState<string | null>(null);
   const [selectedAccountIds, setSelectedAccountIds] = useState<string[]>([]);
@@ -202,11 +205,19 @@ export function WorkbuddyAccountsPage() {
           disabled={codexBindingId !== null}
           aria-busy={codexBindingId === account.id}
           onClick={() => { void handleExposeToCodex(account); }}
-          title={page.t('workbuddy.exposeToCodex.title', '仅在 Native Rust 网关中接入，不会复制 WorkBuddy Token')}
+          title={page.t('workbuddy.exposeToCodex.textOnlyTitle', '旧式 Native ACP 仅支持纯文本；需要读写文件和运行命令，请使用「Codex 工具桥」')}
         >
           {codexBindingId === account.id
             ? page.t('common.shared.exposeToCodex.inProgress', '接入中…')
-            : page.t('common.shared.exposeToCodex.action', '接入 Codex')}
+            : page.t('workbuddy.exposeToCodex.textOnlyAction', '接入 Codex（纯文本）')}
+        </button>
+        <button
+          type="button"
+          className="card-action-btn"
+          onClick={() => { setNativeCodexAccountId(account.id); setNativeCodexOpen(true); }}
+          title={page.t('workbuddy.nativeCodex.title', 'WorkBuddy → Codex 原生工具桥')}
+        >
+          {page.t('workbuddy.nativeCodex.open', 'Codex 工具桥')}
         </button>
         <button
           type="button"
@@ -265,6 +276,13 @@ export function WorkbuddyAccountsPage() {
             <button
               type="button"
               className="btn btn-secondary btn-sm"
+              onClick={() => { setNativeCodexAccountId(store.currentAccountId ?? null); setNativeCodexOpen(true); }}
+            >
+              {page.t('workbuddy.nativeCodex.open', 'Codex 工具桥')}
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
               onClick={() => setProbeOpen(true)}
             >
               <Crosshair size={14} aria-hidden="true" />
@@ -287,6 +305,13 @@ export function WorkbuddyAccountsPage() {
           account={creditAccount}
           accountLabel={page.maskAccountText(getWorkbuddyAccountDisplayEmail(creditAccount))}
           onClose={() => setCreditAccountId(null)}
+        />
+      )}
+      {nativeCodexOpen && (
+        <WorkbuddyCodexNativeModal
+          accounts={store.accounts}
+          initialAccountId={nativeCodexAccountId}
+          onClose={() => { setNativeCodexOpen(false); setNativeCodexAccountId(null); }}
         />
       )}
       {probeOpen && (

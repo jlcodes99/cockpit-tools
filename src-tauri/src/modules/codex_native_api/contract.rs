@@ -365,7 +365,27 @@ pub struct OfficialFallbackFailure {
     pub retry_after: Option<Duration>,
 }
 
+/// An explicitly configured, single-source WorkBuddy native-delegate grant.
+/// Deliberately not Debug/Serialize: the credential is passed only to the private CLI bootstrap.
+pub struct WorkbuddyDelegateSelection {
+    pub route: Route,
+    pub source_generation: String,
+    pub access_token: String,
+    pub domestic: bool,
+    pub effort: String,
+}
+
 pub trait Host: Send + Sync + 'static {
+    /// Resolve an explicit native-delegate grant before generic routing, history
+    /// rebuilding, account reselection or retry policy can run. None preserves
+    /// the existing cloud/text and ordinary provider paths.
+    fn workbuddy_delegate_route<'a>(
+        &'a self,
+        _caller: &'a Caller,
+        _public_model: &'a str,
+    ) -> BoxFuture<'a, Result<Option<WorkbuddyDelegateSelection>, ServiceError>> {
+        Box::pin(async { Ok(None) })
+    }
     /// Retire only the failed client generation. Fast in-memory work only;
     /// existing streams keep their client clones and must not be cancelled.
     fn invalidate_transport(&self, _identity: &str) -> bool {

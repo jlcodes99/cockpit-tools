@@ -1816,6 +1816,7 @@ fn build_mixed_model_gateway_collection_for_profile(
     let now = now_ms();
     collection.api_key = key.clone();
     collection.api_keys.push(CodexLocalAccessApiKey {
+        workbuddy_delegate: None,
         max_reasoning_effort: None,
         id: mixed_model_routing_api_key_id(),
         label: "Mixed Model Routing".to_string(),
@@ -1948,6 +1949,7 @@ fn build_provider_gateway_collection_for_profile(
     // 参与调度，因此这里不写 Provider Gateway（那是直连上游 Base URL 的路径）。
     let uses_grok_upstream = codex_account::is_grok_upstream_provider(account);
     collection.api_keys.push(CodexLocalAccessApiKey {
+        workbuddy_delegate: None,
         max_reasoning_effort: None,
         id: provider_gateway_api_key_id(&account.id),
         label: format!("Provider Gateway: {}", account.email),
@@ -2033,6 +2035,7 @@ fn build_bound_oauth_local_gateway_collection_for_profile(
     let now = now_ms();
     collection.api_key = key.clone();
     collection.api_keys.push(CodexLocalAccessApiKey {
+        workbuddy_delegate: None,
         max_reasoning_effort: None,
         id: provider_gateway_api_key_id(&account.id),
         label: format!("Bound OAuth Local Gateway: {}", account.email),
@@ -2223,6 +2226,7 @@ fn build_model_provider_gateway_test_collection(
         });
     }
     collection.api_keys.push(CodexLocalAccessApiKey {
+        workbuddy_delegate: None,
         max_reasoning_effort: None,
         id: provider_gateway_test_api_key_id(request),
         label: provider_gateway_test_api_key_label(request),

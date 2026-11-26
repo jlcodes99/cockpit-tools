@@ -125,6 +125,16 @@ fn native_model_route_plan(
     key: Option<&CodexLocalAccessApiKey>,
     model: &str,
 ) -> Result<NativeModelRoutePlan, native_contract::ServiceError> {
+    if key.is_some_and(|key| key.workbuddy_delegate.is_some()) {
+        // A dedicated native actor owns its live ACP session. No generic
+        // route, auxiliary endpoint, WebSocket or rebuild may reinterpret it
+        // as a cloud text account or a member of another provider pool.
+        return Err(native_error(
+            400,
+            "workbuddy_delegate_http_only",
+            "This dedicated WorkBuddy key supports its HTTP Responses native-delegate profile only",
+        ));
+    }
     let mut plan = NativeModelRoutePlan {
         model: model.into(),
         full_model: model.into(),

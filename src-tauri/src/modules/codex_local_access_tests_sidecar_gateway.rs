@@ -1125,6 +1125,7 @@
             port: 14998,
             api_key: "local-api-key".to_string(),
             api_keys: Vec::new(),
+            workbuddy_delegate_revoked_key_ids: Vec::new(),
             account_pools: Vec::new(),
             account_pool_revision: 0,
             access_scope: CodexLocalAccessScope::Localhost,
@@ -1848,6 +1849,7 @@ HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings
             vision_routing_model: None,
         };
         let mut key = CodexLocalAccessApiKey {
+            workbuddy_delegate: None,
             max_reasoning_effort: None,
             id: "provider_gateway_deepseek".to_string(),
             label: "Provider Gateway: deepseek".to_string(),
@@ -3847,6 +3849,7 @@ http_headers = { "x-cockpit-instance-id" = "default" }
     fn provider_gateway_api_key_disables_profile_websockets() {
         let mut collection = test_local_access_collection(Vec::new());
         collection.api_keys.push(CodexLocalAccessApiKey {
+            workbuddy_delegate: None,
             max_reasoning_effort: None,
             id: "provider_gateway_deepseek".to_string(),
             label: "Provider Gateway: DeepSeek".to_string(),

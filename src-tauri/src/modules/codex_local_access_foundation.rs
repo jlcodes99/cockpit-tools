@@ -1740,6 +1740,7 @@ fn preserve_runtime_collection_fields(
     {
         copy_image_model_catalog_fields(collection, current);
     }
+    merge_workbuddy_delegate_revocations(collection, &current.api_keys, &current.workbuddy_delegate_revoked_key_ids);
     for api_key in &mut collection.api_keys {
         if let Some(current_api_key) = current.api_keys.iter().find(|item| item.id == api_key.id) {
             api_key.token_used = api_key.token_used.max(current_api_key.token_used);

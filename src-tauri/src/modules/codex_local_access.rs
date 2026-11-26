@@ -39,6 +39,11 @@ include!("codex_local_access_native_transport.rs");
 include!("codex_local_access_direct_identity.rs");
 include!("codex_local_access_official_background.rs");
 include!("codex_local_access_native_routes.rs");
+include!("codex_local_access_workbuddy_delegate.rs");
+include!("codex_local_access_workbuddy_delegate_revocation.rs");
+#[cfg(test)]
+#[path = "codex_local_access_workbuddy_delegate_live_tests.rs"]
+mod workbuddy_delegate_live_tests;
 include!("codex_local_access_native_capability.rs");
 include!("codex_local_access_native_images.rs");
 include!("codex_local_access_native_diagnostics.rs");

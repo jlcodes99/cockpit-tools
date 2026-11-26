@@ -7,6 +7,7 @@ fn new_local_access_collection() -> Result<CodexLocalAccessCollection, String> {
         port: allocate_initial_local_port(CODEX_LOCAL_ACCESS_LOCALHOST_BIND_HOST)?,
         api_key: generate_local_api_key(),
         api_keys: Vec::new(),
+        workbuddy_delegate_revoked_key_ids: Vec::new(),
         account_pools: Vec::new(),
         account_pool_revision: 0,
         access_scope: CodexLocalAccessScope::Localhost,
