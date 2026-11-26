@@ -1160,6 +1160,41 @@ where
     }
 }
 
+fn desktop_profile_snapshot_dir_is_managed(profile_dir: &Path) -> bool {
+    profile_dir
+        .parent()
+        .and_then(|parent| parent.file_name())
+        .is_some_and(|name| {
+            name.eq_ignore_ascii_case(crate::modules::claude_account_core_storage::CLAUDE_DESKTOP_PROFILES_DIR)
+        })
+}
+
+/// Persist a refreshed cookie export back into the cockpit-managed profile
+/// snapshot so later silent refreshes can read cookies without launching the
+/// hidden Electron probe again (which is rate-limited by a cooldown).
+/// Only cockpit-owned snapshot dirs are written; real Claude Desktop
+/// user-data directories used as fallback probe candidates are left untouched.
+fn persist_desktop_auth_export_to_profile(
+    profile_dir: &Path,
+    export: &ClaudeDesktopAuthCookieExport,
+) -> bool {
+    if !desktop_profile_snapshot_dir_is_managed(profile_dir) {
+        return false;
+    }
+    let path = desktop_auth_export_path(profile_dir);
+    match write_desktop_cookie_probe_file(&path, export) {
+        Ok(()) => true,
+        Err(error) => {
+            logger::log_warn(&format!(
+                "[Claude] 回写刷新后的 Cookie 导出失败: path={}, error={}",
+                path.display(),
+                error
+            ));
+            false
+        }
+    }
+}
+
 fn write_desktop_cookie_probe_file(
     path: &Path,
     export: &ClaudeDesktopAuthCookieExport,
@@ -1209,6 +1244,13 @@ fn probe_desktop_web_profile_with_decrypted_cookies_and_launch_state(
         launched_electron = true;
         let result = wait_for_desktop_web_profile_export(&user_data_dir, Duration::from_secs(24))
             .and_then(|export| {
+                if let Some(profile) = export.web_profile.as_ref() {
+                    if desktop_web_usage_to_quota(profile).is_some()
+                        || !desktop_web_profile_has_usage_error(profile)
+                    {
+                        persist_desktop_auth_export_to_profile(profile_dir, &export);
+                    }
+                }
                 export
                     .web_profile
                     .ok_or_else(|| "Claude 资料接口未返回数据".to_string())
@@ -1268,6 +1310,13 @@ fn probe_desktop_web_profile_with_launch_state(profile_dir: &Path) -> (Result<Va
         launched_electron = true;
         let result = wait_for_desktop_web_profile_export(staged.path(), Duration::from_secs(18))
             .and_then(|export| {
+                if let Some(profile) = export.web_profile.as_ref() {
+                    if desktop_web_usage_to_quota(profile).is_some()
+                        || !desktop_web_profile_has_usage_error(profile)
+                    {
+                        persist_desktop_auth_export_to_profile(profile_dir, &export);
+                    }
+                }
                 export
                     .web_profile
                     .ok_or_else(|| "Claude 资料接口未返回数据".to_string())

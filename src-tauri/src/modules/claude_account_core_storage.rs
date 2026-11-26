@@ -84,7 +84,7 @@ const CLAUDE_OAUTH_SCOPES: [&str; 6] = [
     "user:file_upload",
 ];
 const CLAUDE_DESKTOP_LOGIN_STATE_FILE: &str = "claude_desktop_login_pending.json";
-const CLAUDE_DESKTOP_PROFILES_DIR: &str = "claude_desktop_profiles";
+pub(crate) const CLAUDE_DESKTOP_PROFILES_DIR: &str = "claude_desktop_profiles";
 const CLAUDE_DESKTOP_LOGIN_DIR: &str = "claude_desktop_login";
 const CLAUDE_DESKTOP_CONFIG_FILE_NAME: &str = "claude_desktop_config.json";
 const CLAUDE_DESKTOP_CONFIG_LIBRARY_DIR: &str = "configLibrary";
