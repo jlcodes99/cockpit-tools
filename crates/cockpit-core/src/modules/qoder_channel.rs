@@ -243,9 +243,13 @@ mod tests {
         assert_eq!(channel.marker(), "qoder_cn");
         assert_eq!(channel.openapi_base_url(), "https://openapi.qoder.com.cn");
 
+        // 用真实生成器，避免把占位字面量当 nonce 塞进登录地址（那正是
+        // rust/hard-coded-cryptographic-value 会报的写法）。
+        let nonce = crate::modules::qoder_oauth::generate_login_nonce();
+        let challenge = crate::modules::qoder_oauth::generate_pkce_challenge(&nonce);
         let sign_in = url::Url::parse(
             &channel
-                .sign_in_url("nonce-test", "challenge-test", "S256", Some("machine-test")) // lgtm[rs/hardcoded-credentials] 单元测试占位值，不参与生产认证
+                .sign_in_url(&nonce, &challenge, "S256", Some("machine-test"))
                 .unwrap(),
         )
         .unwrap();
@@ -260,7 +264,7 @@ mod tests {
         assert_eq!(callback.host_str(), Some("qoder.cn"));
         assert!(callback
             .query_pairs()
-            .any(|(key, value)| key == "challenge" && value == "challenge-test"));
+            .any(|(key, value)| key == "challenge" && value == challenge));
         assert!(!callback.query_pairs().any(|(key, _)| key == "redirect_uri"));
     }
 

@@ -232,14 +232,13 @@ fn encode(root: &Path, client: NativeClient, profile: &Value) -> Result<Vec<u8>,
     let plain = serde_json::to_vec(profile).map_err(|_| "QODER_NATIVE_JSON_INVALID")?;
     let bytes = match client {
         NativeClient::Desktop => {
-            use aes_gcm::aead::{rand_core::RngCore, OsRng};
-            let mut nonce = [0u8; 12]; // lgtm[rs/hardcoded-credentials] 仅作缓冲区，下一行由 OsRng 填满
-            OsRng.fill_bytes(&mut nonce);
+            use aes_gcm::aead::{AeadCore, OsRng};
+            let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
             let cipher = Aes256Gcm::new_from_slice(&desktop_key(root)?)
                 .map_err(|_| "QODER_NATIVE_KEY_INVALID")?
-                .encrypt(Nonce::from_slice(&nonce), plain.as_slice())
+                .encrypt(&nonce, plain.as_slice())
                 .map_err(|_| "QODER_NATIVE_ENCRYPT_FAILED")?;
-            [b"v10".as_slice(), &nonce, &cipher].concat()
+            [b"v10".as_slice(), nonce.as_slice(), &cipher].concat()
         }
         NativeClient::Cli => {
             let machine = fs::read_to_string(root.join("machine_id")).map_err(io_error)?;

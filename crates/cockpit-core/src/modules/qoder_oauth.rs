@@ -133,12 +133,12 @@ fn generate_pkce_verifier() -> String {
     URL_SAFE_NO_PAD.encode(bytes)
 }
 
-fn generate_pkce_challenge(verifier: &str) -> String {
+pub(crate) fn generate_pkce_challenge(verifier: &str) -> String {
     let digest = Sha256::digest(verifier.as_bytes());
     URL_SAFE_NO_PAD.encode(digest)
 }
 
-fn generate_login_nonce() -> String {
+pub(crate) fn generate_login_nonce() -> String {
     Uuid::new_v4().simple().to_string()
 }
 
@@ -2003,10 +2003,12 @@ async fn qoder_sash_request(
     loop {
         let access =
             access_token_from_info(target.auth_user_info_raw.as_ref()).ok_or(REAUTH_REQUIRED)?;
-        // endpoint 由 `session_endpoint` 按渠道给出，固定为 https；凭证只走 Authorization 头，
-        // URL 里只有接口路径。
+        // endpoint 由 `session_endpoint` 按渠道给出，固定为 https（国际站与 CN 的
+        // origin 都是常量，IDE 渠道用已校验的存储 origin）；凭证只走 Authorization
+        // 头，URL 里只有接口路径。Rust 侧的 CodeQL 没有行内抑制（codeql#21637），
+        // 所以这条 rust/cleartext-transmission 只能靠误报 dismiss 处理。
         let mut request = client
-            .request(method.clone(), format!("{}{}", endpoint, path_and_query)) // lgtm[rs/cleartext-transmission] 实际通过 HTTPS 传输，URL 中不含敏感字段
+            .request(method.clone(), format!("{}{}", endpoint, path_and_query))
             .headers(build_sash_headers(&access));
         if let Some(payload) = body.as_ref() {
             request = request.json(payload);
