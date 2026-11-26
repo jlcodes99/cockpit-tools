@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "verifiedAt": "2026-11-26T18:36:57.0149322+08:00",
+  "baseline": "d4b7de6697efc4bc251962e56d71ff6ffa05e956",
+  "release": {
+    "libWarnings": 846,
+    "version": "1.5.1",
+    "mebibytes": 162.44,
+    "binaryWarnings": 1,
+    "buildExitCode": 0,
+    "configuration": "Tauri CLI release, tauri/custom-protocol, relative ../dist, no bundle",
+    "sha256": "8D4E51508EFBDF7D86322F472136943F61A54AE490B9F6603AF09469C5F5A8A3",
+    "bytes": 170326528,
+    "futureCompatibilityWarning": "proc-macro-error2 2.0.1",
+    "productionGuardVerifiedLocalAssets": 11
+  },
+  "frontend": {
+    "consecutiveValidSnapshots": 4,
+    "markerFound": true,
+    "productionHandlersRegistered": false,
+    "frontendReady": true,
+    "fatalErrorCount": 0,
+    "indexScriptLoaded": true,
+    "distTreeSha256": "32963918BD7CF98F95908AB8460BA5FF5BD2B0BAD672AE5E9E59E218E90263B2",
+    "marker": "assets/index-",
+    "readyState": "complete",
+    "styleSheets": 10,
+    "testExitCode": 0,
+    "distFiles": 171,
+    "appVisible": true,
+    "ownedProcessCleanupVerified": true,
+    "mainVisible": true,
+    "exactArtifact": true,
+    "status": "Passed",
+    "resourceErrorCount": 0,
+    "distBytes": 19224513,
+    "stableForMs": 3001,
+    "productionPluginsRegistered": false,
+    "rootChildren": 1,
+    "pageFinished": true
+  },
+  "scope": "Isolated embedded frontend only; no production account/API, installation or upstream failure injection."
+}

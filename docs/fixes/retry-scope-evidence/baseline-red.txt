@@ -1,0 +1,55 @@
+running 9 tests
+
+thread 'modules::codex_native_api::tests::retry_scope_http_tests::retry_scope_async_reasoning_policy_check_uses_new_attempt_budget' (14792) panicked at src-tauri\src\modules\codex_native_api\retry_scope_http_tests.rs:527:5:
+assertion `left == right` failed: {"error":{"code":"upstream_connect_timeout","message":"Upstream preparation exceeded the opening time limit","type":"server_error"}}
+  left: 504
+ right: 200
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test modules::codex_native_api::tests::retry_scope_http_tests::retry_scope_async_reasoning_policy_check_uses_new_attempt_budget ... FAILED
+
+thread 'modules::codex_native_api::tests::retry_scope_http_tests::retry_scope_compaction_capsule_expands_again_after_open_timeout' (17236) panicked at src-tauri\src\modules\codex_native_api\retry_scope_http_tests.rs:502:5:
+assertion `left == right` failed: {"error":{"code":"blocking_operation_timeout","message":"Native API state operation timed out","type":"server_error"}}
+  left: 503
+ right: 200
+test modules::codex_native_api::tests::retry_scope_http_tests::retry_scope_compaction_capsule_expands_again_after_open_timeout ... FAILED
+test modules::codex_native_api::tests::retry_scope_http_tests::retry_scope_duplicate_images_keep_compression_disabled_and_input_intact ... ok
+synthetic retry_scope_account_replacement status=503 error_code=blocking_operation_timeout captures=1 selections=2
+
+thread 'modules::codex_native_api::tests::retry_scope_http_tests::retry_scope_recompresses_after_account_replacement' (24136) panicked at src-tauri\src\modules\codex_native_api\retry_scope_http_tests.rs:450:5:
+assertion `left == right` failed: {"error":{"code":"blocking_operation_timeout","message":"Native API state operation timed out","type":"server_error"}}
+  left: 503
+ right: 200
+test modules::codex_native_api::tests::retry_scope_http_tests::retry_scope_recompresses_after_account_replacement ... FAILED
+
+thread 'modules::codex_native_api::tests::retry_scope_http_tests::retry_scope_renewal_does_not_extend_total_deadline' (16872) panicked at src-tauri\src\modules\codex_native_api\retry_scope_http_tests.rs:553:5:
+assertion `left == right` failed: {"error":{"code":"blocking_operation_timeout","message":"Native API state operation timed out","type":"server_error"}}
+  left: 503
+ right: 504
+test modules::codex_native_api::tests::retry_scope_http_tests::retry_scope_renewal_does_not_extend_total_deadline ... FAILED
+test modules::codex_native_api::tests::retry_scope_http_tests::retry_scope_renewal_preserves_armed_network_recovery_deadline ... ok
+
+thread 'modules::codex_native_api::tests::retry_scope_http_tests::retry_scope_renewal_preserves_network_failure_cap' (20336) panicked at src-tauri\src\modules\codex_native_api\retry_scope_http_tests.rs:620:5:
+assertion `left == right` failed: {"error":{"code":"blocking_operation_timeout","message":"Native API state operation timed out","type":"server_error"}}
+  left: 503
+ right: 504
+test modules::codex_native_api::tests::retry_scope_http_tests::retry_scope_renewal_preserves_network_failure_cap ... FAILED
+synthetic retry_scope_same_account status=503 error_code=blocking_operation_timeout captures=1 selections=2
+
+thread 'modules::codex_native_api::tests::retry_scope_http_tests::retry_scope_same_account_recompresses_after_first_open_timeout' (18396) panicked at src-tauri\src\modules\codex_native_api\retry_scope_http_tests.rs:371:5:
+assertion `left == right` failed: {"error":{"code":"blocking_operation_timeout","message":"Native API state operation timed out","type":"server_error"}}
+  left: 503
+ right: 200
+test modules::codex_native_api::tests::retry_scope_http_tests::retry_scope_same_account_recompresses_after_first_open_timeout ... FAILED
+test modules::codex_native_api::tests::retry_scope_http_tests::retry_scope_shutdown_cancels_second_attempt_and_releases_account_permit ... ok
+
+failures:
+
+failures:
+    modules::codex_native_api::tests::retry_scope_http_tests::retry_scope_async_reasoning_policy_check_uses_new_attempt_budget
+    modules::codex_native_api::tests::retry_scope_http_tests::retry_scope_compaction_capsule_expands_again_after_open_timeout
+    modules::codex_native_api::tests::retry_scope_http_tests::retry_scope_recompresses_after_account_replacement
+    modules::codex_native_api::tests::retry_scope_http_tests::retry_scope_renewal_does_not_extend_total_deadline
+    modules::codex_native_api::tests::retry_scope_http_tests::retry_scope_renewal_preserves_network_failure_cap
+    modules::codex_native_api::tests::retry_scope_http_tests::retry_scope_same_account_recompresses_after_first_open_timeout
+
+test result: FAILED. 3 passed; 6 failed; 0 ignored; 0 measured; 5553 filtered out; finished in 13.66s

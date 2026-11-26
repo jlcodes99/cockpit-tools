@@ -38,6 +38,8 @@ mod legacy_relay_item_ids_tests;
 mod thinking_suffix_tests;
 #[path = "reasoning_policy_transport_tests.rs"]
 mod reasoning_policy_transport_tests;
+#[path = "retry_scope_http_tests.rs"]
+mod retry_scope_http_tests;
 
 #[path = "legacy_forwarding_websocket_tests.rs"]
 mod legacy_forwarding_websocket_tests;

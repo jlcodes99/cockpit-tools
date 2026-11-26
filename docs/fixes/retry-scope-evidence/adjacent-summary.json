@@ -1,0 +1,101 @@
+{
+  "baseline": "d4b7de6697efc4bc251962e56d71ff6ffa05e956",
+  "artifactSha256": "8939BD80600267E9E7410527A3172220EF5CE67CF4D157E612370AC594C2B1DE",
+  "suites": [
+    {
+      "filter": "modules::codex_native_api::blocking::tests::",
+      "passed": 1,
+      "exitCode": 0,
+      "summary": "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 5561 filtered out; finished in 0.00s"
+    },
+    {
+      "filter": "modules::codex_native_api::network_recovery::tests::",
+      "passed": 7,
+      "exitCode": 0,
+      "summary": "test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 5555 filtered out; finished in 0.32s"
+    },
+    {
+      "filter": "modules::codex_native_api::bootstrap::tests::",
+      "passed": 39,
+      "exitCode": 0,
+      "summary": "test result: ok. 39 passed; 0 failed; 0 ignored; 0 measured; 5523 filtered out; finished in 101.05s"
+    },
+    {
+      "filter": "modules::codex_native_api::http::preparation_timeout_tests::",
+      "passed": 9,
+      "exitCode": 0,
+      "summary": "test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 5553 filtered out; finished in 4.52s"
+    },
+    {
+      "filter": "modules::codex_native_api::http::official_late_rejection_tests::",
+      "passed": 2,
+      "exitCode": 0,
+      "summary": "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 5560 filtered out; finished in 0.52s"
+    },
+    {
+      "filter": "modules::codex_native_api::official_fallback_http_tests::",
+      "passed": 25,
+      "exitCode": 0,
+      "summary": "test result: ok. 25 passed; 0 failed; 0 ignored; 0 measured; 5537 filtered out; finished in 9.59s"
+    },
+    {
+      "filter": "modules::codex_native_api::capability_fallback_http_tests::",
+      "passed": 11,
+      "exitCode": 0,
+      "summary": "test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 5551 filtered out; finished in 2.54s"
+    },
+    {
+      "filter": "modules::codex_native_api::tests::compression_upstream_tests::",
+      "passed": 3,
+      "exitCode": 0,
+      "summary": "test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 5559 filtered out; finished in 1.41s"
+    },
+    {
+      "filter": "modules::codex_native_api::tests::reasoning_policy_transport_tests::",
+      "passed": 2,
+      "exitCode": 0,
+      "summary": "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 5560 filtered out; finished in 0.46s"
+    },
+    {
+      "filter": "modules::codex_native_api::reasoning_policy::tests::",
+      "passed": 2,
+      "exitCode": 0,
+      "summary": "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 5560 filtered out; finished in 0.00s"
+    },
+    {
+      "filter": "modules::codex_native_api::lifecycle::tests::",
+      "passed": 26,
+      "exitCode": 0,
+      "summary": "test result: ok. 26 passed; 0 failed; 0 ignored; 0 measured; 5536 filtered out; finished in 0.06s"
+    },
+    {
+      "filter": "modules::codex_native_api::retry::cooldown_tests::",
+      "passed": 7,
+      "exitCode": 0,
+      "summary": "test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 5555 filtered out; finished in 4.95s"
+    },
+    {
+      "filter": "modules::codex_native_api::execution::layout_tests::",
+      "passed": 1,
+      "exitCode": 0,
+      "summary": "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 5561 filtered out; finished in 0.00s"
+    },
+    {
+      "filter": "modules::codex_native_api::tests::shutdown_cancels_stalled_sse_and_releases_account_permit",
+      "passed": 1,
+      "exitCode": 0,
+      "summary": "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 5561 filtered out; finished in 0.36s"
+    }
+  ],
+  "passed": 136,
+  "earlierSetupFailures": [
+    {
+      "suite": "http::preparation_timeout_tests",
+      "detail": "Initial attempt timed out during 100ms fixture database initialization before HTTP; unchanged baseline and fixed executable then each passed all 9. Exact transient scheduling/storage cause not measured."
+    },
+    {
+      "suite": "shutdown_cancels_stalled_sse_and_releases_account_permit",
+      "detail": "Initial Windows fixture path could not open SQLite; shortened harness temp path, same executable then passed. No product code or timeout changed."
+    }
+  ]
+}

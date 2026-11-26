@@ -1,0 +1,14 @@
+running 9 tests
+test modules::codex_native_api::tests::retry_scope_http_tests::retry_scope_async_reasoning_policy_check_uses_new_attempt_budget ... ok
+test modules::codex_native_api::tests::retry_scope_http_tests::retry_scope_compaction_capsule_expands_again_after_open_timeout ... ok
+test modules::codex_native_api::tests::retry_scope_http_tests::retry_scope_duplicate_images_keep_compression_disabled_and_input_intact ... ok
+synthetic retry_scope_account_replacement status=200 error_code=none captures=2 selections=2
+test modules::codex_native_api::tests::retry_scope_http_tests::retry_scope_recompresses_after_account_replacement ... ok
+test modules::codex_native_api::tests::retry_scope_http_tests::retry_scope_renewal_does_not_extend_total_deadline ... ok
+test modules::codex_native_api::tests::retry_scope_http_tests::retry_scope_renewal_preserves_armed_network_recovery_deadline ... ok
+test modules::codex_native_api::tests::retry_scope_http_tests::retry_scope_renewal_preserves_network_failure_cap ... ok
+synthetic retry_scope_same_account status=200 error_code=none captures=2 selections=2
+test modules::codex_native_api::tests::retry_scope_http_tests::retry_scope_same_account_recompresses_after_first_open_timeout ... ok
+test modules::codex_native_api::tests::retry_scope_http_tests::retry_scope_shutdown_cancels_second_attempt_and_releases_account_permit ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 5553 filtered out; finished in 16.17s

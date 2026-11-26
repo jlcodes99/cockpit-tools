@@ -186,6 +186,10 @@ async fn send_inner(
             prepared.execution = prepared.execution.renew_open();
         }
         previous_open_deadline = Some(prepared.execution.open_deadline);
+        // Updating Prepared does not replace the caller's task-local Execution.
+        // Helpers that consult CURRENT must use this attempt's existing budget,
+        // not the expired opening deadline restored after a route refresh.
+        let execution = prepared.execution.clone();
         if raw.is_some() && (prepared.route.wire_api != WireApi::Chat || prepared.route.chatgpt) {
             return Err(ServiceError::new(
                 503,
@@ -220,7 +224,7 @@ async fn send_inner(
             body
         } else {
             let mut body = prepared.body.clone();
-            body = super::anthropic_compact::expand_wire(state,body).await?;
+            body = execution.run(super::anthropic_compact::expand_wire(state,body)).await?;
             if !prepared.route.chatgpt && !prepared.route.chatgpt_plan {
                 super::responses_http_input::normalize_external_results(&mut body);
             }
@@ -401,9 +405,9 @@ async fn send_inner(
         } else {
             None
         };
-        prepared.reasoning_ceiling_proof = super::reasoning_policy::check_dispatch_with_parent(
+        prepared.reasoning_ceiling_proof = execution.run(super::reasoning_policy::check_dispatch_with_parent(
             state, &prepared.caller, &prepared.route, &prepared.source_body, &body, protocol, parent,
-        ).await?;
+        )).await?;
         let request = prepared.route.client.post(url).headers(headers).json(&body);
         let (client, request) = request.build_split();
         let request = request.map_err(|error| super::diagnostics::transport_failure(
@@ -412,8 +416,8 @@ async fn send_inner(
         let compress = codex_backend
             && !prepared.route.chatgpt_plan
             && !super::http_compression::has_duplicate_inline_images(&body);
-        let (request, plain_request) =
-            super::http_compression::request(state, request, compress).await?;
+        let (request, plain_request) = execution
+            .run(super::http_compression::request(state, request, compress)).await?;
         if let Err(error) = tracker.check_quota_before_send() {
             let safe_replay = mapping::local_quota_prepared_replay_is_safe(prepared);
             if error.code == "quota_reserved"
@@ -785,10 +789,10 @@ async fn send_inner(
                 // An actual upstream rejection affects health even when the
                 // conversation cannot be replayed on a different credential.
                 if exhausted.is_none() {
-                    super::execution::within(state, async {
+                    execution.run(super::execution::within(state, async {
                         state.host.observe_official_failure(&prepared.route, &prepared.route.model, failure).await;
                         Ok(())
-                    }).await?;
+                    })).await?;
                 }
             }
         }
@@ -814,7 +818,10 @@ async fn send_inner(
             && prepared.capability_fallback_enabled
             && !prepared.request.required_capabilities.is_empty()
         {
-            if mapping::retry_capability(state, prepared).await? {
+            // An earlier official fallback may have renewed Prepared even if
+            // it found no candidate. Keep that budget without renewing it here.
+            let execution = prepared.execution.clone();
+            if execution.run(mapping::retry_capability(state, prepared)).await? {
                 drop(response);
                 tracker.routed(&prepared.caller, &prepared.route, &prepared.request.model);
                 tracker.routing_identity(&prepared.request);
