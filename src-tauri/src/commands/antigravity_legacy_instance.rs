@@ -277,8 +277,16 @@ pub async fn antigravity_legacy_start_instance(
                 account_id,
             )?;
         }
+        let egress_proxy_url = default_bind_account_id
+            .as_deref()
+            .and_then(|id| modules::account::load_account(id).ok())
+            .and_then(|account| account.egress_proxy_url);
         let extra_args = modules::process::parse_extra_args(&default_settings.extra_args);
-        let pid = modules::process::start_antigravity_legacy_with_args("", &extra_args)?;
+        let pid = modules::process::start_antigravity_legacy_with_args_proxy(
+            "",
+            &extra_args,
+            egress_proxy_url.as_deref(),
+        )?;
         let _ = modules::antigravity_legacy_instance::update_default_pid(Some(pid))?;
         let running = modules::process::is_pid_running(pid);
         return Ok(InstanceProfileView {
@@ -328,13 +336,24 @@ pub async fn antigravity_legacy_start_instance(
         modules::antigravity_legacy_instance::inject_account_to_profile(&profile_dir, account_id)?;
     }
 
+    let egress_proxy_url = instance
+        .bind_account_id
+        .as_deref()
+        .and_then(|id| modules::account::load_account(id).ok())
+        .and_then(|account| account.egress_proxy_url);
     let extra_args = modules::process::parse_extra_args(&instance.extra_args);
     #[cfg(target_os = "macos")]
-    let pid =
-        modules::process::start_managed_antigravity_on_macos(&instance.user_data_dir, &extra_args)?;
+    let pid = modules::process::start_managed_antigravity_on_macos_for_account(
+        &instance.user_data_dir,
+        &extra_args,
+        egress_proxy_url.as_deref(),
+    )?;
     #[cfg(not(target_os = "macos"))]
-    let pid =
-        modules::process::start_antigravity_legacy_with_args(&instance.user_data_dir, &extra_args)?;
+    let pid = modules::process::start_antigravity_legacy_with_args_proxy(
+        &instance.user_data_dir,
+        &extra_args,
+        egress_proxy_url.as_deref(),
+    )?;
     let updated =
         modules::antigravity_legacy_instance::update_instance_after_start(&instance.id, pid)?;
     let running = modules::process::is_pid_running(pid);

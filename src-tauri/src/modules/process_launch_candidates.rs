@@ -1927,9 +1927,63 @@ pub fn apply_effective_proxy_env_to_command(cmd: &mut Command, launch_proxy: &Co
     }
 }
 
+/// Antigravity 启动代理注入：账号自定义出口优先，未配置时回落全局代理。
+pub fn antigravity_launch_proxy_pairs(egress_proxy_url: Option<&str>) -> Vec<(&'static str, String)> {
+    match egress_proxy_url.map(str::trim).filter(|value| !value.is_empty()) {
+        Some(url) => account_proxy_env_pairs(url),
+        None => managed_proxy_env_pairs(),
+    }
+}
+
+/// Direct `Command` 注入，用于 Antigravity 桌面/受管实例启动（Windows/Linux 及 macOS 直启）。
+pub fn apply_antigravity_proxy_env_to_command(cmd: &mut Command, egress_proxy_url: Option<&str>) {
+    let pairs = antigravity_launch_proxy_pairs(egress_proxy_url);
+    if pairs.is_empty() {
+        return;
+    }
+    log_managed_proxy_injection("antigravity-env", cmd, &pairs);
+    for (key, value) in pairs {
+        cmd.env(key, value);
+    }
+}
+
+/// macOS `open --env` 注入：跟随 Antigravity 出口（账号代理优先，回落全局）。
+#[cfg(target_os = "macos")]
+pub fn append_antigravity_proxy_env_to_open_args(cmd: &mut Command, egress_proxy_url: Option<&str>) {
+    let pairs = antigravity_launch_proxy_pairs(egress_proxy_url);
+    if pairs.is_empty() {
+        return;
+    }
+    log_managed_proxy_injection("antigravity-open-arg", cmd, &pairs);
+    for (key, value) in pairs {
+        cmd.arg("--env").arg(format!("{}={}", key, value));
+    }
+}
+
 #[cfg(test)]
 mod account_egress_proxy_tests {
     use super::*;
+
+    #[test]
+    fn antigravity_launch_proxy_pairs_prefer_account_egress_and_fall_back_to_global() {
+        let pairs = antigravity_launch_proxy_pairs(Some(" socks5://127.0.0.1:19009 "));
+        for key in ["http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY", "all_proxy", "ALL_PROXY"] {
+            assert!(pairs.iter().any(|(name, value)| *name == key && value == "socks5://127.0.0.1:19009"));
+        }
+        for key in ["no_proxy", "NO_PROXY"] {
+            let value = &pairs.iter().find(|(name, _)| *name == key).expect("no_proxy injected").1;
+            assert!(value.contains("localhost") && value.contains("127.0.0.1"));
+        }
+        // 空值回落全局代理：与受管注入取同一数据源，结果一致。
+        assert_eq!(
+            antigravity_launch_proxy_pairs(None).len(),
+            managed_proxy_env_pairs().len()
+        );
+        assert_eq!(
+            antigravity_launch_proxy_pairs(Some("   ")).len(),
+            antigravity_launch_proxy_pairs(None).len()
+        );
+    }
 
     #[test]
     fn proxy_env_preserves_local_gateway_bypass() {

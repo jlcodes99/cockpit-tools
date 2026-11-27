@@ -20,17 +20,26 @@ pub(crate) async fn switch_antigravity_cli(
 ) -> Result<Account, String> {
     let permit =
         modules::account::try_begin_antigravity_switch(&modules::account::ANTIGRAVITY_SWITCH_GATE)?;
-    let terminal_plan = if launch {
-        Some(prepare_terminal(working_dir, terminal, custom_command).await?)
-    } else {
-        None
-    };
     let account = tokio::time::timeout(
         Duration::from_secs(60),
         modules::account::prepare_account_for_injection(&account_id),
     )
     .await
     .map_err(|_| "ANTIGRAVITY_SWITCH_PREPARATION_TIMEOUT".to_string())??;
+    let egress_proxy_url = account.egress_proxy_url.clone();
+    let terminal_plan = if launch {
+        Some(
+            prepare_terminal(
+                working_dir,
+                terminal,
+                custom_command,
+                egress_proxy_url.clone(),
+            )
+            .await?,
+        )
+    } else {
+        None
+    };
 
     tokio::task::spawn_blocking(move || {
         let _permit = permit;
@@ -59,7 +68,8 @@ pub(crate) async fn launch_antigravity_cli(
     terminal: Option<String>,
     custom_command: Option<String>,
 ) -> Result<(), String> {
-    let (terminal, plan) = prepare_terminal(working_dir, terminal, custom_command).await?;
+    let (terminal, plan) =
+        prepare_terminal(working_dir, terminal, custom_command, None).await?;
     tokio::task::spawn_blocking(move || {
         open_terminal(plan, &terminal)
             .map_err(|error| format!("ANTIGRAVITY_CLI_TERMINAL_FAILED: {error}"))
@@ -72,9 +82,10 @@ async fn prepare_terminal(
     working_dir: Option<PathBuf>,
     terminal: Option<String>,
     custom_command: Option<String>,
+    egress_proxy_url: Option<String>,
 ) -> Result<(String, CodexTerminalLaunchPlan), String> {
     tokio::task::spawn_blocking(move || {
-        let command = resolve_command(working_dir, custom_command)?;
+        let command = resolve_command(working_dir, custom_command, egress_proxy_url.as_deref())?;
         let terminal =
             terminal.unwrap_or_else(|| modules::config::get_user_config().default_terminal);
         let plan = build_codex_terminal_launch_plan(&command, &terminal)
@@ -90,7 +101,7 @@ pub(crate) async fn antigravity_cli_launch_command(
     working_dir: Option<PathBuf>,
     custom_command: Option<String>,
 ) -> Result<String, String> {
-    tokio::task::spawn_blocking(move || resolve_command(working_dir, custom_command))
+    tokio::task::spawn_blocking(move || resolve_command(working_dir, custom_command, None))
         .await
         .map_err(|error| error.to_string())?
 }
@@ -98,13 +109,46 @@ pub(crate) async fn antigravity_cli_launch_command(
 fn resolve_command(
     working_dir: Option<PathBuf>,
     custom_command: Option<String>,
+    egress_proxy_url: Option<&str>,
 ) -> Result<String, String> {
     let dir = working_dir
         .or_else(dirs::home_dir)
         .filter(|dir| dir.is_absolute() && dir.is_dir())
         .ok_or("ANTIGRAVITY_CLI_INVALID_DIRECTORY")?;
     let binary = find_cli().ok_or("ANTIGRAVITY_CLI_NOT_FOUND")?;
-    Ok(build_command(&binary, &dir, custom_command.as_deref()))
+    Ok(build_command(
+        &binary,
+        &dir,
+        custom_command.as_deref(),
+        egress_proxy_url,
+    ))
+}
+
+/// CLI 启动代理：账号自定义出口优先，未配置时回落全局代理（修复 CLI 不吃全局代理的盲区）。
+fn antigravity_cli_proxy_pairs(egress_proxy_url: Option<&str>) -> Option<Vec<(String, String)>> {
+    let url = match egress_proxy_url.map(str::trim).filter(|value| !value.is_empty()) {
+        Some(url) => url.to_string(),
+        None => {
+            let config = modules::config::get_user_config();
+            if config.global_proxy_enabled && !config.global_proxy_url.trim().is_empty() {
+                config.global_proxy_url.trim().to_string()
+            } else {
+                return None;
+            }
+        }
+    };
+    let no_proxy = crate::modules::codex_protocol::merge_local_no_proxy("");
+    let mut pairs = vec![
+        ("https_proxy".to_string(), url.clone()),
+        ("HTTPS_PROXY".to_string(), url.clone()),
+        ("http_proxy".to_string(), url.clone()),
+        ("HTTP_PROXY".to_string(), url),
+    ];
+    if !no_proxy.is_empty() {
+        pairs.push(("no_proxy".to_string(), no_proxy.clone()));
+        pairs.push(("NO_PROXY".to_string(), no_proxy));
+    }
+    Some(pairs)
 }
 
 pub(crate) fn find_cli() -> Option<PathBuf> {
@@ -148,33 +192,64 @@ pub(crate) fn detect_cli() -> Option<PathBuf> {
 }
 
 #[cfg(not(target_os = "windows"))]
-fn build_command(binary: &Path, dir: &Path, custom_command: Option<&str>) -> String {
+fn build_command(
+    binary: &Path,
+    dir: &Path,
+    custom_command: Option<&str>,
+    egress_proxy_url: Option<&str>,
+) -> String {
     fn quote(path: &Path) -> String {
         format!("'{}'", path.to_string_lossy().replace('\'', "'\"'\"'"))
     }
+    fn quote_value(value: &str) -> String {
+        format!("'{}'", value.replace('\'', "'\"'\"'"))
+    }
+    let env_prefix = match antigravity_cli_proxy_pairs(egress_proxy_url) {
+        Some(pairs) => pairs
+            .iter()
+            .map(|(key, value)| format!("{key}={}", quote_value(value)))
+            .collect::<Vec<_>>()
+            .join(" ")
+            + " ",
+        None => String::new(),
+    };
     let launch = match custom_command.filter(|value| !value.trim().is_empty()) {
         Some(value) => format!(
-            "PATH={}:\"$PATH\" /bin/sh -c {}",
+            "{}PATH={}:\"$PATH\" /bin/sh -c {}",
+            env_prefix,
             quote(binary.parent().unwrap_or_else(|| Path::new("/"))),
             quote(Path::new(value))
         ),
-        None => quote(binary),
+        None => format!("{}{}", env_prefix, quote(binary)),
     };
     format!("cd -- {} && {}", quote(dir), launch)
 }
 
 #[cfg(target_os = "windows")]
-fn build_command(binary: &Path, dir: &Path, custom_command: Option<&str>) -> String {
+fn build_command(
+    binary: &Path,
+    dir: &Path,
+    custom_command: Option<&str>,
+    egress_proxy_url: Option<&str>,
+) -> String {
     use super::super::claude::powershell_quote;
     use base64::{engine::general_purpose::STANDARD, Engine};
 
+    let env_lines = match antigravity_cli_proxy_pairs(egress_proxy_url) {
+        Some(pairs) => pairs
+            .iter()
+            .map(|(key, value)| format!("$env:{} = {}\n", key, powershell_quote(value)))
+            .collect::<String>(),
+        None => String::new(),
+    };
     let launch = match custom_command.filter(|value| !value.trim().is_empty()) {
         Some(value) => format!(
-            "$env:Path = {} + ';' + $env:Path\n{}",
+            "{}$env:Path = {} + ';' + $env:Path\n{}",
+            env_lines,
             powershell_quote(&binary.parent().unwrap_or(binary).to_string_lossy()),
             value
         ),
-        None => format!("& {}", powershell_quote(&binary.to_string_lossy())),
+        None => format!("{}& {}", env_lines, powershell_quote(&binary.to_string_lossy())),
     };
     let script = format!(
         "Set-Location -LiteralPath {} -ErrorAction Stop\n{}",
@@ -258,7 +333,7 @@ mod tests {
         let sandbox = tempfile::tempdir().unwrap();
         let dir = sandbox.path().join("working dir ' [*]");
         std::fs::create_dir(&dir).unwrap();
-        let command = build_command(Path::new("/bin/pwd"), &dir, None);
+        let command = build_command(Path::new("/bin/pwd"), &dir, None, None);
         let output = Command::new("/bin/sh")
             .args(["-c", &command])
             .output()
@@ -277,7 +352,7 @@ mod tests {
         let dir = sandbox.path().join("project ' with spaces");
         std::fs::create_dir(&dir).unwrap();
         let script = "printf '%s\\n' 'quoted argument'\npwd";
-        let command = build_command(Path::new("/bin/false"), &dir, Some(script));
+        let command = build_command(Path::new("/bin/false"), &dir, Some(script), None);
         let output = Command::new("/bin/sh")
             .args(["-c", &command])
             .output()
@@ -290,5 +365,27 @@ mod tests {
             Path::new(path.trim_end()).canonicalize().unwrap(),
             dir.canonicalize().unwrap()
         );
+    }
+
+    #[test]
+    fn antigravity_cli_command_carries_proxy_env_overrides() {
+        let sandbox = tempfile::tempdir().unwrap();
+        let command = build_command(
+            Path::new("/bin/sh"),
+            sandbox.path(),
+            Some("printf '%s\\n' \"$HTTPS_PROXY|$NO_PROXY\""),
+            Some("socks5://127.0.0.1:19009"),
+        );
+        let output = Command::new("/bin/sh")
+            .args(["-c", &command])
+            .env_clear()
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+        let stdout = String::from_utf8(output.stdout).unwrap();
+        let (proxy, no_proxy) = stdout.trim_end().split_once('|').unwrap();
+        assert_eq!(proxy, "socks5://127.0.0.1:19009");
+        assert!(no_proxy.contains("127.0.0.1"));
+        assert!(no_proxy.contains("localhost"));
     }
 }

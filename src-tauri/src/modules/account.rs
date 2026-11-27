@@ -2709,7 +2709,9 @@ fn persist_switch_history(item: modules::antigravity_switch_history::Antigravity
     });
 }
 
-fn ensure_antigravity_running_for_no_restart_switch() -> Result<bool, String> {
+fn ensure_antigravity_running_for_no_restart_switch(
+    egress_proxy_url: Option<&str>,
+) -> Result<bool, String> {
     let default_settings = modules::instance::load_default_settings()?;
     let resolved_pid = modules::process::resolve_antigravity_pid(default_settings.last_pid, None);
     if let Some(pid) = resolved_pid {
@@ -2725,11 +2727,8 @@ fn ensure_antigravity_running_for_no_restart_switch() -> Result<bool, String> {
 
     modules::logger::log_info("[Switch][NoRestart] Antigravity IDE 未运行，尝试自动启动");
     let extra_args = modules::process::parse_extra_args(&default_settings.extra_args);
-    let launch_result = if extra_args.is_empty() {
-        modules::process::start_antigravity()
-    } else {
-        modules::process::start_antigravity_with_args("", &extra_args)
-    };
+    let launch_result =
+        modules::process::start_antigravity_with_args_proxy("", &extra_args, egress_proxy_url);
     match launch_result {
         Ok(pid) => {
             if let Err(err) = modules::instance::update_default_pid(Some(pid)) {
@@ -2820,7 +2819,9 @@ pub async fn switch_account_dual_no_restart(
         }
     };
 
-    let was_started = match ensure_antigravity_running_for_no_restart_switch() {
+    let was_started =
+        match ensure_antigravity_running_for_no_restart_switch(account.egress_proxy_url.as_deref())
+        {
         Ok(started_now) => started_now,
         Err(error) => {
             modules::websocket::broadcast_account_switched(&account.id, &account.email);
@@ -3068,13 +3069,10 @@ async fn perform_ide_switch(
         }
 
         let launch_error = if launch {
+            let egress = account.egress_proxy_url.clone();
             let result = modules::instance::load_default_settings().and_then(|settings| {
                 let args = modules::process::parse_extra_args(&settings.extra_args);
-                if args.is_empty() {
-                    modules::process::start_antigravity()
-                } else {
-                    modules::process::start_antigravity_with_args("", &args)
-                }
+                modules::process::start_antigravity_with_args_proxy("", &args, egress.as_deref())
             });
             match result {
                 Ok(pid) => {

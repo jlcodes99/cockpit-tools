@@ -103,7 +103,7 @@ pub(crate) fn switch(
             .as_ref()
             .map(|settings| process::parse_extra_args(&settings.extra_args))
             .unwrap_or_default();
-        process::start_antigravity_legacy_with_args("", &args)
+        process::start_antigravity_legacy_with_args_proxy("", &args, account.egress_proxy_url.as_deref())
             .and_then(|pid| antigravity_legacy_instance::update_default_pid(Some(pid)).map(|_| ()))
             .err()
     } else {
@@ -114,7 +114,7 @@ pub(crate) fn switch(
             .as_ref()
             .map(|settings| process::parse_extra_args(&settings.extra_args))
             .unwrap_or_default();
-        process::start_antigravity_with_args("", &args)
+        process::start_antigravity_with_args_proxy("", &args, account.egress_proxy_url.as_deref())
             .and_then(|pid| instance::update_default_pid(Some(pid)).map(|_| ()))
             .err()
     } else {

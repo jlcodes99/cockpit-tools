@@ -238,8 +238,16 @@ pub async fn start_instance(instance_id: String) -> Result<InstanceProfileView, 
         if let Some(ref account_id) = default_bind_account_id {
             inject_instance_account(default_dir.clone(), account_id).await?;
         }
+        let egress_proxy_url = default_bind_account_id
+            .as_deref()
+            .and_then(|id| modules::account::load_account(id).ok())
+            .and_then(|account| account.egress_proxy_url);
         let extra_args = modules::process::parse_extra_args(&default_settings.extra_args);
-        let pid = modules::process::start_antigravity_with_args("", &extra_args)?;
+        let pid = modules::process::start_antigravity_with_args_proxy(
+            "",
+            &extra_args,
+            egress_proxy_url.as_deref(),
+        )?;
         let _ = modules::instance::update_default_pid(Some(pid))?;
         let running = modules::process::is_pid_running(pid);
         return Ok(InstanceProfileView {
@@ -288,8 +296,17 @@ pub async fn start_instance(instance_id: String) -> Result<InstanceProfileView, 
             .await?;
     }
 
+    let egress_proxy_url = instance
+        .bind_account_id
+        .as_deref()
+        .and_then(|id| modules::account::load_account(id).ok())
+        .and_then(|account| account.egress_proxy_url);
     let extra_args = modules::process::parse_extra_args(&instance.extra_args);
-    let pid = modules::process::start_antigravity_with_args(&instance.user_data_dir, &extra_args)?;
+    let pid = modules::process::start_antigravity_with_args_proxy(
+        &instance.user_data_dir,
+        &extra_args,
+        egress_proxy_url.as_deref(),
+    )?;
     let updated = modules::instance::update_instance_after_start(&instance.id, pid)?;
     let running = modules::process::is_pid_running(pid);
     let initialized = is_profile_initialized(&updated.user_data_dir);

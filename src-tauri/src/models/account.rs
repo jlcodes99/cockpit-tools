@@ -55,6 +55,9 @@ pub struct Account {
     /// Last successful credential switch; absent for historical/imported accounts.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_switched_at: Option<i64>,
+    /// Antigravity 账号自定义出口代理；空 = 跟随设置中的全局代理。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub egress_proxy_url: Option<String>,
 }
 
 impl Account {
@@ -83,6 +86,7 @@ impl Account {
             usage_updated_at: None,
             created_at: now,
             last_used: now,
+            egress_proxy_url: None,
         }
     }
 

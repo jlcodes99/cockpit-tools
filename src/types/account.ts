@@ -19,6 +19,7 @@ export interface Account {
     created_at: number;
     last_used: number;
   last_switched_at?: number | null;
+  egress_proxy_url?: string | null;
 }
 
 export interface AccountNoteUpdate {

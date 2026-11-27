@@ -86,7 +86,11 @@ pub(crate) async fn switch_account_desktop(
             || {
                 let settings = modules::antigravity_legacy_instance::load_default_settings()?;
                 let args = modules::process::parse_extra_args(&settings.extra_args);
-                let pid = modules::process::start_antigravity_legacy_with_args("", &args)?;
+                let pid = modules::process::start_antigravity_legacy_with_args_proxy(
+                    "",
+                    &args,
+                    account.egress_proxy_url.as_deref(),
+                )?;
                 if let Err(error) =
                     modules::antigravity_legacy_instance::update_default_pid(Some(pid))
                 {

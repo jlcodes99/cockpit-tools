@@ -585,6 +585,32 @@ fn spawn_open_app_with_options_and_env_and_egress(
     Ok(pid)
 }
 
+/// macOS `open -n -a` 启动 Antigravity，显式注入出口代理（账号代理优先，回落全局）。
+#[cfg(target_os = "macos")]
+pub(crate) fn spawn_open_app_with_antigravity_proxy(
+    app_root: &str,
+    args: &[String],
+    force_new_instance: bool,
+    egress_proxy_url: Option<&str>,
+) -> Result<u32, String> {
+    let mut cmd = Command::new("open");
+    sanitize_macos_gui_launch_env(&mut cmd);
+    append_antigravity_proxy_env_to_open_args(&mut cmd, egress_proxy_url);
+    if force_new_instance {
+        cmd.arg("-n");
+    }
+    cmd.arg("-a").arg(app_root);
+    if !args.is_empty() {
+        cmd.arg("--args");
+        for arg in args {
+            if !arg.trim().is_empty() {
+                cmd.arg(arg);
+            }
+        }
+    }
+    spawn_detached_unix(&mut cmd).map_err(|e| format!("启动失败: {}", e))
+}
+
 fn find_antigravity_process_exe() -> Option<std::path::PathBuf> {
     #[cfg(target_os = "macos")]
     {

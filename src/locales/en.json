@@ -7814,6 +7814,12 @@
       "openLayout": "Open Platform Layout"
     },
     "antigravity": {
+      "proxy": {
+        "followHint": "Use the global proxy from Settings; falls back to the default network when disabled.",
+        "independentHint": "Applies to this account only and overrides the global proxy.",
+        "invalidUrl": "Unsupported proxy URL. Only http, https, socks5 and socks5h are supported.",
+        "restartHint": "After binding, switching or clearing a proxy, restart Antigravity (desktop or a new CLI session) to apply. A failing proxy does not fall back to a direct connection."
+      },
       "cautions": {
         "0": "If you see abnormal statuses (for example 403/refresh failed), refresh first, then decide whether to remove and re-login."
       },

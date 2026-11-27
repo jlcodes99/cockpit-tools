@@ -190,6 +190,7 @@ interface AccountState {
     syncCurrentFromClient: () => Promise<void>;
     updateAccountTags: (accountId: string, tags: string[]) => Promise<Account>;
     updateAccountNotes: (accountId: string, update: string | AccountNoteUpdate) => Promise<Account>;
+    updateAccountEgressProxy: (accountId: string, egressProxyUrl: string | null) => Promise<Account>;
 }
 
 export const useAccountStore = create<AccountState>()(
@@ -562,6 +563,26 @@ export const useAccountStore = create<AccountState>()(
             },
         }));
         await emitAccountsChanged({ platformId: 'antigravity', accountId: account.id, reason: 'note' });
+        return account;
+    },
+
+    updateAccountEgressProxy: async (accountId: string, egressProxyUrl: string | null) => {
+        const account = await accountService.updateAntigravityAccountEgressProxy(accountId, egressProxyUrl);
+        set((state) => ({
+            accounts: state.accounts.map((item) => item.id === account.id ? account : item),
+            currentAccount: state.currentAccount?.id === account.id ? account : state.currentAccount,
+            currentAccountsByTarget: {
+                antigravity:
+                    state.currentAccountsByTarget.antigravity?.id === account.id
+                        ? account
+                        : state.currentAccountsByTarget.antigravity,
+                antigravity_ide:
+                    state.currentAccountsByTarget.antigravity_ide?.id === account.id
+                        ? account
+                        : state.currentAccountsByTarget.antigravity_ide,
+            },
+        }));
+        await emitAccountsChanged({ platformId: 'antigravity', accountId: account.id, reason: 'egress_proxy' });
         return account;
     },
   }),

@@ -949,6 +949,7 @@ pub fn run() {
             commands::account::update_account_tags,
             commands::account::update_account_notes,
             commands::account::update_account_note,
+            commands::account::update_antigravity_account_egress_proxy,
             commands::account::fetch_account_note_mail_url,
             commands::account::load_account_group_snapshot,
             commands::account::seed_account_groups,
