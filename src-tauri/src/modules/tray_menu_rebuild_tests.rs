@@ -156,3 +156,21 @@ fn newer_apply_generation_invalidates_queued_snapshot() {
     assert!(is_stale_tray_menu_apply(&slot, first));
     assert!(!is_stale_tray_menu_apply(&slot, second));
 }
+
+#[test]
+fn t3code_platform_entry_maps_submenu_and_navigation_target() {
+    assert_eq!(PlatformId::from_str("t3code"), Some(PlatformId::T3Code));
+    assert_eq!(PlatformId::T3Code.nav_target(), "t3code");
+
+    let entry = TrayMenuEntry::Platform(PlatformId::T3Code);
+    let snapshot = map_tray_entry_to_snapshot(&entry, |_| sample_info("Codex · alice@example.com"));
+    match snapshot {
+        TrayMenuSnapshotEntry::Platform(platform) => {
+            assert_eq!(platform.submenu_id, "platform:t3code:submenu");
+            assert_eq!(platform.title, "T3 Code");
+            assert_eq!(platform.platform_id, "t3code");
+            assert_eq!(platform.account, "email Codex · alice@example.com");
+        }
+        other => panic!("expected platform snapshot, got {other:?}"),
+    }
+}

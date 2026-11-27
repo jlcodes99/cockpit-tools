@@ -29,6 +29,55 @@ fn quota_display_official() -> CodexAccount {
     account
 }
 
+#[tokio::test]
+async fn quota_reply_counts_account_window_cooldowns() {
+    let accounts = [
+        ("quota-fixture-ready-a", 90, 70),
+        ("quota-fixture-ready-b", 98, 69),
+        ("quota-fixture-short", 0, 53),
+        ("quota-fixture-weekly-a", 100, 0),
+        ("quota-fixture-weekly-b", 100, 0),
+        ("quota-fixture-weekly-c", 100, 0),
+    ]
+    .map(|(id, hourly, weekly)| quota_display_account(id, "plus", hourly, weekly));
+    let account_ids: Vec<_> = accounts.iter().map(|account| account.id.clone()).collect();
+    let collection: CodexLocalAccessCollection = serde_json::from_value(json!({
+        "enabled": true,
+        "port": 1455,
+        "apiKey": "fixture-primary-key",
+        "accountIds": account_ids,
+        "createdAt": 1,
+        "updatedAt": 2
+    }))
+    .unwrap();
+    let mut runtime = GatewayRuntime {
+        collection: Some(collection.clone()),
+        ..Default::default()
+    };
+    sync_runtime_quota_cooldowns(&mut runtime, &accounts, now_ms());
+    let health = build_account_health_snapshot(&runtime);
+    assert_eq!(health.iter().filter(|account| account.available).count(), 2);
+
+    let mut host = NativeHostBridge::for_collection(collection);
+    host.account_overrides = accounts
+        .into_iter()
+        .map(|account| (account.id.clone(), account))
+        .collect();
+    let caller = native_contract::Caller {
+        id: NATIVE_PRIMARY_CALLER.into(),
+        label: String::new(),
+    };
+    let result = native_management(&host, &caller, NativeManagementRequest::Quota)
+        .await
+        .unwrap();
+    assert_eq!(result["accountCount"], 6);
+    assert_eq!(result["availableAccountCount"], 2);
+    assert_eq!(result["cooldownAccountCount"], 4);
+    assert_eq!(result["abnormalAccountCount"], 0);
+    assert_eq!(result["fiveHourRemainingPercent"], 188);
+    assert_eq!(result["weeklyRemainingPercent"], 192);
+}
+
 #[test]
 fn quota_reply_official_uses_bound_source_data_and_timestamp_without_special_plan_group() {
     let source = quota_display_account("source", "plus", 65, 80);

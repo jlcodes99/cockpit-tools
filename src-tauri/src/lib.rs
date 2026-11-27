@@ -185,6 +185,7 @@ mod tests {
         config.workbuddy_auto_refresh_minutes = -1;
         config.minimax_code_auto_refresh_minutes = -1;
         config.qoder_auto_refresh_minutes = -1;
+        config.qoder_cn_auto_refresh_minutes = -1;
         config.zcode_auto_refresh_minutes = -1;
         config.t3code_auto_refresh_minutes = -1;
         config.trae_auto_refresh_minutes = -1;
@@ -307,6 +308,7 @@ fn has_enabled_periodic_account_refresh(config: &modules::config::UserConfig) ->
         config.workbuddy_auto_refresh_minutes,
         config.minimax_code_auto_refresh_minutes,
         config.qoder_auto_refresh_minutes,
+        config.qoder_cn_auto_refresh_minutes,
         config.zcode_auto_refresh_minutes,
         config.t3code_auto_refresh_minutes,
         config.trae_auto_refresh_minutes,
@@ -949,6 +951,7 @@ pub fn run() {
             commands::account::update_account_tags,
             commands::account::update_account_notes,
             commands::account::update_account_note,
+            commands::account::update_antigravity_account_egress_proxy,
             commands::account::fetch_account_note_mail_url,
             commands::account::load_account_group_snapshot,
             commands::account::seed_account_groups,
@@ -1284,6 +1287,10 @@ pub fn run() {
             commands::codex::add_codex_account_with_api_key,
             commands::codex::add_codex_account_from_grok,
             commands::codex::add_codex_account_from_workbuddy,
+            commands::codex::get_codex_workbuddy_delegate_catalog,
+            commands::codex::create_codex_workbuddy_delegate_profile,
+            commands::codex::list_codex_workbuddy_delegate_profiles,
+            commands::codex::restore_codex_workbuddy_delegate_profile,
             commands::codex::add_codex_account_from_zcode,
             commands::codex::update_codex_account_name,
             commands::codex::update_codex_account_egress_proxy,
@@ -1419,6 +1426,7 @@ pub fn run() {
             commands::codex::codex_local_access_update_custom_routing,
             commands::codex::codex_local_access_update_account_model_rules,
             commands::codex::codex_local_access_update_account_quota_floor,
+            commands::codex::codex_local_access_update_account_concurrency_limit,
             commands::codex::codex_local_access_update_model_rules,
             commands::codex::codex_local_access_update_model_pricings,
             commands::codex::codex_local_access_reprice_request_logs,
@@ -1683,6 +1691,8 @@ pub fn run() {
             commands::qoder::delete_qoder_accounts,
             commands::qoder::import_qoder_from_json,
             commands::qoder::import_qoder_from_local,
+            commands::qoder::import_qoder_native,
+            commands::qoder::inject_qoder_native,
             commands::qoder::qoder_oauth_login_start,
             commands::qoder::qoder_oauth_login_peek,
             commands::qoder::qoder_oauth_login_complete,
@@ -1693,6 +1703,26 @@ pub fn run() {
             commands::qoder::inject_qoder_account,
             commands::qoder::update_qoder_account_tags,
             commands::qoder::get_qoder_accounts_index_path,
+            commands::qoder_cn::list_qoder_cn_accounts,
+            commands::qoder_cn::import_qoder_cn_native,
+            commands::qoder_cn::import_qoder_cn_from_local,
+            commands::qoder_cn::import_qoder_cn_from_json,
+            commands::qoder_cn::export_qoder_cn_accounts,
+            commands::qoder_cn::inject_qoder_cn_native,
+            commands::qoder_cn::qoder_open_client,
+            commands::qoder_cn::inject_qoder_cn_account,
+            commands::qoder_cn::get_qoder_cn_checkin_status,
+            commands::qoder_cn::claim_qoder_cn_checkin,
+            commands::qoder_cn::delete_qoder_cn_account,
+            commands::qoder_cn::delete_qoder_cn_accounts,
+            commands::qoder_cn::update_qoder_cn_account_tags,
+            commands::qoder_cn::get_qoder_cn_accounts_index_path,
+            commands::qoder_cn::qoder_cn_oauth_login_start,
+            commands::qoder_cn::qoder_cn_oauth_login_peek,
+            commands::qoder_cn::qoder_cn_oauth_login_complete,
+            commands::qoder_cn::qoder_cn_oauth_login_cancel,
+            commands::qoder_cn::refresh_qoder_cn_token,
+            commands::qoder_cn::refresh_all_qoder_cn_tokens,
             // Zed Commands
             commands::zed::list_zed_accounts,
             commands::zed::delete_zed_account,

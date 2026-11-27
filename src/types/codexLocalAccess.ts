@@ -103,7 +103,16 @@ export interface CodexLocalAccessModelPricing {
   priorityLongCachedInputUsdPerMillion?: number | null;
 }
 
+export interface CodexLocalAccessWorkbuddyDelegate {
+  providerAccountId: string;
+  modelId: string;
+  publicModel: string;
+  reasoningEffort: string;
+}
+
 export interface CodexLocalAccessApiKey {
+  /** Explicit fixed-source Native DelegateTool mode; absent means the existing routing path. */
+  workbuddyDelegate?: CodexLocalAccessWorkbuddyDelegate | null;
   id: string;
   label: string;
   key: string;
@@ -169,6 +178,8 @@ export interface CodexLocalAccessCollection {
   port: number;
   apiKey: string;
   apiKeys: CodexLocalAccessApiKey[];
+  /** Monotonic native-profile revocation tombstones; never clear in UI snapshots. */
+  workbuddyDelegateRevokedKeyIds?: string[];
   accountPools?: CodexLocalAccessAccountPool[];
   accessScope: CodexLocalAccessScope;
   clientBaseUrlHost: CodexLocalAccessClientBaseUrlHost;
@@ -192,6 +203,7 @@ export interface CodexLocalAccessCollection {
   customRoutingRules: CodexLocalAccessCustomRoutingRule[];
   accountModelRules: CodexLocalAccessAccountModelRule[];
   accountQuotaFloors?: Record<string, number>;
+  accountConcurrencyLimits?: Record<string, number>;
   modelAliases: CodexLocalAccessModelAlias[];
   modelPricingVersion: number;
   modelPricings: CodexLocalAccessModelPricing[];

@@ -8,7 +8,9 @@ import * as qoderService from '../services/qoderService';
 import { getProviderCurrentAccountId } from '../services/providerCurrentAccountService';
 import { createProviderAccountStore } from './createProviderAccountStore';
 
-const QODER_ACCOUNTS_CACHE_KEY = 'agtools.qoder.accounts.cache';
+// A legacy display cache can contain CN records formerly shown on the global page.
+const QODER_ACCOUNTS_CACHE_KEY = 'agtools.qoder.accounts.cache.v2';
+try { localStorage.removeItem('agtools.qoder.accounts.cache'); } catch { /* native storage is authoritative */ }
 const QODER_CURRENT_ACCOUNT_ID_KEY = 'agtools.qoder.current_account_id';
 
 export const useQoderAccountStore = createProviderAccountStore<QoderAccount>(

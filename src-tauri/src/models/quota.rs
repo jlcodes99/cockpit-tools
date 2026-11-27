@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 #[path = "../../../crates/cockpit-core/src/models/antigravity_quota_summary.rs"]
 mod antigravity_quota_summary;
-pub use antigravity_quota_summary::QuotaSummaryGroup;
+pub use antigravity_quota_summary::{QuotaSummaryGroup, QuotaSummaryWindow};
 
 /// 模型配额信息
 #[derive(Debug, Clone, Serialize, Deserialize)]

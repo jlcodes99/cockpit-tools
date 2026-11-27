@@ -28,6 +28,9 @@ fn resolve_provider_current_account_id(platform: &str) -> Result<Option<String>,
             Ok(crate::modules::codebuddy_cn_account::resolve_current_account_id(&accounts))
         }
         "qoder" => crate::modules::qoder_account::reconcile_current_account(),
+        // The CN clients keep their state in their own stores, so the current account
+        // is whatever the app recorded; reconciliation would need a live client read.
+        "qoder_cn" => crate::modules::provider_current_state::get_current_account_id("qoder_cn"),
         "trae" | "trae_solo" | "trae-solo" | "trae_cn" | "trae-cn" | "trae_solo_cn"
         | "trae-solo-cn" => {
             let platform = crate::modules::trae_account::TraePlatformKind::parse(Some(platform))?;

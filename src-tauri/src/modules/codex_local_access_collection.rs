@@ -250,22 +250,36 @@ fn save_collection_to_path(
                         .map(serde_json::from_value).transpose().map_err(|error| error.to_string())?
                         .unwrap_or_default();
                     prune_account_quota_floors(&mut next);
+                    next.account_concurrency_limits = current.get("accountConcurrencyLimits").cloned()
+                        .map(serde_json::from_value).transpose().map_err(|error| error.to_string())?
+                        .unwrap_or_default();
+                    prune_account_concurrency_limits(&mut next);
                     if let Some(updated_at) = current.get("updatedAt").and_then(Value::as_i64) {
                         next.updated_at = next.updated_at.max(updated_at);
                     }
-                    if let Some(keys) = current.get("apiKeys").and_then(Value::as_array) {
-                        for key in &mut next.api_keys {
-                            if let Some(previous) = keys.iter().find(|value| value["id"] == key.id) {
-                                let previous: CodexLocalAccessApiKey = serde_json::from_value(previous.clone())
-                                    .map_err(|error| format!("Cannot preserve API key accounting: {error}"))?;
-                                key.token_used = key.token_used.max(previous.token_used);
-                                merge_key_budget_usage(&mut key.budget_usage, &previous.budget_usage);
-                                if previous.updated_at > key.updated_at { key.budget = previous.budget; }
-                            }
+                    let previous_revoked = current.get("workbuddyDelegateRevokedKeyIds").cloned()
+                        .map(serde_json::from_value::<Vec<String>>).transpose()
+                        .map_err(|error| format!("Cannot preserve WorkBuddy grant revocations: {error}"))?
+                        .unwrap_or_default();
+                    let previous_keys = current.get("apiKeys").and_then(Value::as_array)
+                        .map(|keys| keys.iter().map(|value| serde_json::from_value::<CodexLocalAccessApiKey>(value.clone())
+                            .map_err(|error| format!("Cannot preserve API key accounting: {error}"))).collect::<Result<Vec<_>, _>>())
+                        .transpose()?.unwrap_or_default();
+                    for key in &mut next.api_keys {
+                        if let Some(previous) = previous_keys.iter().find(|value| value.id == key.id) {
+                            key.token_used = key.token_used.max(previous.token_used);
+                            merge_key_budget_usage(&mut key.budget_usage, &previous.budget_usage);
+                            if previous.updated_at > key.updated_at { key.budget = previous.budget.clone(); }
                         }
                     }
+                    merge_workbuddy_delegate_revocations(&mut next, &previous_keys, &previous_revoked);
                 }
                 Err(error) => {
+                    if next.api_keys.iter().any(|key| key.workbuddy_delegate.is_some())
+                        || !next.workbuddy_delegate_revoked_key_ids.is_empty()
+                    {
+                        return Err("WORKBUDDY_DELEGATE_REVOCATION_STORAGE_UNREADABLE".into());
+                    }
                     // Keep the existing recovery path for damaged files. With no readable
                     // choice, use the last published setting (off before initial loading).
                     next.request_payload_logging =
@@ -1744,6 +1758,7 @@ fn sanitize_collection_structure(
     changed |= normalize_bound_oauth_quota_reserve(&mut collection.bound_oauth_quota_reserve, has_bound_oauth_account);
 
     changed |= prune_account_quota_floors(collection);
+    changed |= prune_account_concurrency_limits(collection);
 
     let original_custom_routing_rules = std::mem::take(&mut collection.custom_routing_rules);
     let normalized_custom_routing_rules = normalize_custom_routing_rules(
@@ -2080,6 +2095,7 @@ async fn ensure_runtime_loaded_without_start_with_profile_restore(
                 port: allocate_initial_local_port(CODEX_LOCAL_ACCESS_LOCALHOST_BIND_HOST)?,
                 api_key: generate_local_api_key(),
                 api_keys: Vec::new(),
+                workbuddy_delegate_revoked_key_ids: Vec::new(),
                 account_pools: Vec::new(),
                 account_pool_revision: 0,
                 access_scope: CodexLocalAccessScope::Localhost,
@@ -2108,6 +2124,7 @@ async fn ensure_runtime_loaded_without_start_with_profile_restore(
                 custom_routing_rules: Vec::new(),
                 account_model_rules: Vec::new(),
                 account_quota_floors: HashMap::new(),
+                account_concurrency_limits: HashMap::new(),
                 model_aliases: Vec::new(),
                 suppress_oauth_model_alias: false,
                 model_pricing_version: DEFAULT_MODEL_PRICING_VERSION,

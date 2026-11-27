@@ -27,6 +27,7 @@ const QUICK_SETTINGS_SCOPE_MAP: Record<string, string> = {
   codebuddy: 'codebuddy',
   codebuddy_cn: 'codebuddy_cn',
   qoder: 'qoder',
+  qoder_cn: 'qoder_cn',
   zcode: 'zcode',
   t3code: 't3code',
   trae: 'trae',

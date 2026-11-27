@@ -217,44 +217,56 @@ pub async fn get_t3code_provider_runtime_status(
 }
 
 #[tauri::command]
-pub async fn t3code_install_antigravity_runtime(instance_id: String) -> Result<(), String> {
-    t3code_provider_bindings::launch_paths::install_antigravity_runtime(&instance_id).await
+pub async fn t3code_install_antigravity_runtime(
+    instance_id: String,
+    t3_instance_id: Option<String>,
+) -> Result<(), String> {
+    t3code_provider_bindings::launch_paths::install_antigravity_runtime(
+        &instance_id, t3_instance_id,
+    ).await
 }
 
 #[tauri::command]
 pub async fn bind_t3code_provider_instance_account(
+    app: AppHandle,
     t3_instance_id: Option<String>,
     provider_instance_id: String,
     driver: String,
     cockpit_account_id: String,
 ) -> Result<T3CodeProviderWorkspaceView, String> {
-    t3code_provider_bindings::bind_provider_instance_account(
+    let view = t3code_provider_bindings::bind_provider_instance_account(
         t3_instance_id.as_deref(),
         &provider_instance_id,
         &driver,
         &cockpit_account_id,
     )
-    .await
+    .await?;
+    let _ = tray::update_tray_menu(&app);
+    Ok(view)
 }
 
 #[tauri::command]
 pub async fn switch_t3code_provider_instance_account(
+    app: AppHandle,
     t3_instance_id: Option<String>,
     provider_instance_id: String,
     driver: String,
     cockpit_account_id: String,
 ) -> Result<crate::models::t3code::T3CodeProviderSwitchView, String> {
-    t3code_provider_bindings::switch_provider_instance_account(
+    let view = t3code_provider_bindings::switch_provider_instance_account(
         t3_instance_id.as_deref(),
         &provider_instance_id,
         &driver,
         &cockpit_account_id,
     )
-    .await
+    .await?;
+    let _ = tray::update_tray_menu(&app);
+    Ok(view)
 }
 
 #[tauri::command]
 pub async fn upsert_t3code_provider_instance(
+    app: AppHandle,
     t3_instance_id: Option<String>,
     instance_id: String,
     driver: String,
@@ -263,7 +275,7 @@ pub async fn upsert_t3code_provider_instance(
     enabled: bool,
     bind_account_id: Option<String>,
 ) -> Result<T3CodeProviderWorkspaceView, String> {
-    t3code_provider_bindings::upsert_provider_instance(
+    let view = t3code_provider_bindings::upsert_provider_instance(
         t3_instance_id.as_deref(),
         &instance_id,
         &driver,
@@ -272,47 +284,58 @@ pub async fn upsert_t3code_provider_instance(
         enabled,
         bind_account_id.as_deref(),
     )
-    .await
+    .await?;
+    let _ = tray::update_tray_menu(&app);
+    Ok(view)
 }
 
 #[tauri::command]
 pub async fn promote_t3code_provider_account(
+    app: AppHandle,
     t3_instance_id: Option<String>,
     provider_instance_id: String,
     cockpit_account_id: String,
 ) -> Result<T3CodeProviderSwitchView, String> {
-    t3code_provider_bindings::promote_provider_account(
+    let view = t3code_provider_bindings::promote_provider_account(
         t3_instance_id.as_deref(),
         &provider_instance_id,
         &cockpit_account_id,
     )
-    .await
+    .await?;
+    let _ = tray::update_tray_menu(&app);
+    Ok(view)
 }
 
 #[tauri::command]
 pub async fn remove_t3code_provider_instance(
+    app: AppHandle,
     t3_instance_id: Option<String>,
     instance_id: String,
     cockpit_account_id: Option<String>,
 ) -> Result<T3CodeProviderSwitchView, String> {
-    t3code_provider_bindings::remove_provider_instance(
+    let view = t3code_provider_bindings::remove_provider_instance(
         t3_instance_id.as_deref(),
         &instance_id,
         cockpit_account_id.as_deref(),
     )
-    .await
+    .await?;
+    let _ = tray::update_tray_menu(&app);
+    Ok(view)
 }
 
 #[tauri::command]
 pub async fn refresh_t3code_provider_account_quota(
+    app: AppHandle,
     t3_instance_id: Option<String>,
     provider_instance_id: String,
 ) -> Result<T3CodeProviderWorkspaceView, String> {
-    t3code_provider_bindings::refresh_provider_account_quota(
+    let view = t3code_provider_bindings::refresh_provider_account_quota(
         t3_instance_id.as_deref(),
         &provider_instance_id,
     )
-    .await
+    .await?;
+    let _ = tray::update_tray_menu(&app);
+    Ok(view)
 }
 
 #[tauri::command]

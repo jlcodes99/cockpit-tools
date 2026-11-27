@@ -670,10 +670,32 @@ struct AllowedTier {
 #[derive(Debug, Deserialize)]
 struct Tier {
     id: Option<String>,
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
+    description: Option<String>,
+    #[serde(rename = "clientExperienceTag", default)]
+    client_experience_tag: Option<String>,
     #[serde(rename = "usesGcpTos")]
     uses_gcp_tos: Option<bool>,
     #[serde(rename = "availableCredits", default)]
     available_credits: Option<Vec<AvailableCreditRaw>>,
+}
+
+impl Tier {
+    fn resolved_identifier(&self) -> Option<String> {
+        [
+            self.id.as_deref(),
+            self.client_experience_tag.as_deref(),
+            self.name.as_deref(),
+            self.description.as_deref(),
+        ]
+        .into_iter()
+        .flatten()
+        .map(str::trim)
+        .find(|value| !value.is_empty())
+        .map(str::to_string)
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -962,9 +984,9 @@ pub async fn fetch_project_metadata_with_context(
                             match serde_json::from_str::<LoadProjectResponse>(&text) {
                                 Ok(data) => {
                                     let paid_tier_id =
-                                        data.paid_tier.as_ref().and_then(|tier| tier.id.clone());
+                                        data.paid_tier.as_ref().and_then(Tier::resolved_identifier);
                                     let current_tier_id =
-                                        data.current_tier.as_ref().and_then(|tier| tier.id.clone());
+                                        data.current_tier.as_ref().and_then(Tier::resolved_identifier);
                                     subscription_tier =
                                         paid_tier_id.clone().or(current_tier_id.clone());
 
@@ -1289,6 +1311,177 @@ fn build_quota_data_from_response(
     quota_data
 }
 
+#[derive(Debug, Clone, serde::Deserialize)]
+pub(crate) struct AntigravityQuotaWindowSpec {
+    pub id: String,
+    pub model: String,
+    pub weekly: bool,
+    pub aliases: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ResolvedAntigravityWindow {
+    pub canonical_id: String,
+    pub raw_id: String,
+    pub label: String,
+    pub percentage: i32,
+    pub reset_time: String,
+    pub sort_rank: usize,
+    pub aliases: Vec<String>,
+}
+
+pub(crate) fn antigravity_quota_windows() -> &'static [AntigravityQuotaWindowSpec] {
+    static WINDOWS: std::sync::OnceLock<Vec<AntigravityQuotaWindowSpec>> =
+        std::sync::OnceLock::new();
+    WINDOWS.get_or_init(|| {
+        serde_json::from_str(include_str!("../../../src/utils/antigravityQuotaWindows.json"))
+            .expect("valid Antigravity quota windows")
+    })
+}
+
+pub(crate) fn translate_quota_label_or(lang: &str, key: &str, fallback: &str) -> String {
+    let translated = crate::modules::i18n::translate(lang, key, &[]);
+    if translated != key {
+        translated
+    } else {
+        fallback.to_string()
+    }
+}
+
+pub(crate) fn format_antigravity_window_label(lang: &str, title: &str, period: &str) -> String {
+    let period = period.trim();
+    if period.is_empty() {
+        return title.to_string();
+    }
+    let localized = if period.eq_ignore_ascii_case("weekly") {
+        translate_quota_label_or(lang, "common.quota.weeklyWindow", "Weekly")
+    } else {
+        period.to_string()
+    };
+    format!("{title} ({localized})")
+}
+
+impl AntigravityQuotaWindowSpec {
+    pub(crate) fn find<'a>(&self, quota: &'a QuotaData) -> Option<&'a crate::models::quota::ModelQuota> {
+        self.aliases.iter().find_map(|alias| {
+            quota
+                .models
+                .iter()
+                .find(|model| model.name.eq_ignore_ascii_case(alias))
+        })
+    }
+
+    pub(crate) fn matches_metric(&self, metric: &str) -> bool {
+        self.id.eq_ignore_ascii_case(metric)
+            || self
+                .aliases
+                .iter()
+                .any(|alias| alias.eq_ignore_ascii_case(metric))
+    }
+
+    pub(crate) fn label(&self, lang: &str) -> String {
+        format_antigravity_window_label(lang, &self.model, if self.weekly { "weekly" } else { "5h" })
+    }
+}
+
+fn find_known_antigravity_window(
+    canonical_id: &str,
+    raw_id: &str,
+) -> Option<(usize, &'static AntigravityQuotaWindowSpec)> {
+    antigravity_quota_windows()
+        .iter()
+        .enumerate()
+        .find(|(_, window)| {
+            window.id.eq_ignore_ascii_case(canonical_id)
+                || window
+                    .aliases
+                    .iter()
+                    .any(|alias| alias.eq_ignore_ascii_case(raw_id))
+        })
+}
+
+pub(crate) fn resolve_antigravity_summary_windows(
+    lang: &str,
+    quota: &QuotaData,
+) -> Vec<ResolvedAntigravityWindow> {
+    let windows = antigravity_quota_windows();
+    if let Some(groups) = quota.quota_summary_groups.as_ref() {
+        let mut resolved = Vec::new();
+        let mut seen_ids = std::collections::HashSet::new();
+        for group in crate::models::quota::QuotaSummaryGroup::without_retired_argon(groups.clone())
+        {
+            for window in group.windows {
+                let canonical = window.canonical_id();
+                let known = find_known_antigravity_window(&canonical, &window.id);
+                let dedup_id = known
+                    .map(|(_, entry)| entry.id.clone())
+                    .unwrap_or_else(|| canonical.clone());
+                if !seen_ids.insert(dedup_id.to_ascii_lowercase()) {
+                    continue;
+                }
+                let (label, sort_rank, aliases) = if let Some((rank, entry)) = known {
+                    (entry.label(lang), rank, entry.aliases.clone())
+                } else {
+                    (
+                        format_antigravity_window_label(lang, &group.name, &window.period),
+                        usize::MAX,
+                        vec![window.id.clone()],
+                    )
+                };
+                let reset_time = if !window.reset_time.is_empty() {
+                    window.reset_time
+                } else {
+                    quota
+                        .models
+                        .iter()
+                        .find(|model| model.name.eq_ignore_ascii_case(&window.id))
+                        .map(|model| model.reset_time.clone())
+                        .unwrap_or_default()
+                };
+                resolved.push(ResolvedAntigravityWindow {
+                    canonical_id: dedup_id,
+                    raw_id: window.id,
+                    label,
+                    percentage: window.percentage.clamp(0, 100),
+                    reset_time,
+                    sort_rank,
+                    aliases,
+                });
+            }
+        }
+        resolved.sort_by_key(|item| item.sort_rank);
+        return resolved;
+    }
+
+    windows
+        .iter()
+        .enumerate()
+        .filter_map(|(rank, window)| {
+            let model = window.find(quota)?;
+            Some(ResolvedAntigravityWindow {
+                canonical_id: window.id.clone(),
+                raw_id: model.name.clone(),
+                label: window.label(lang),
+                percentage: model.percentage.clamp(0, 100),
+                reset_time: model.reset_time.clone(),
+                sort_rank: rank,
+                aliases: window.aliases.clone(),
+            })
+        })
+        .collect()
+}
+
+impl ResolvedAntigravityWindow {
+    pub(crate) fn matches_metric(&self, metric: &str) -> bool {
+        self.canonical_id.eq_ignore_ascii_case(metric)
+            || self.raw_id.eq_ignore_ascii_case(metric)
+            || self
+                .aliases
+                .iter()
+                .any(|alias| alias.eq_ignore_ascii_case(metric))
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum SummaryBucketFamily {
     Claude,
@@ -1321,10 +1514,25 @@ pub(crate) fn preserve_failed_quota_summary(quota: &mut QuotaData, previous: Opt
     {
         return;
     }
+    let previous_groups = previous
+        .quota_summary_groups
+        .clone()
+        .map(crate::models::quota::QuotaSummaryGroup::without_retired_argon)
+        .filter(|groups| !groups.is_empty());
+    let summary_window_ids: std::collections::HashSet<String> = previous_groups
+        .iter()
+        .flatten()
+        .flat_map(|group| group.windows.iter().map(|window| window.id.clone()))
+        .collect();
+    let is_summary_window = |name: &str| {
+        !crate::models::quota::QuotaSummaryWindow::is_retired_argon(name)
+            && (summary_bucket_family(name).is_some() || summary_window_ids.contains(name))
+    };
+
     for model in previous
         .models
         .iter()
-        .filter(|model| summary_bucket_family(&model.name).is_some())
+        .filter(|model| is_summary_window(&model.name))
     {
         if !quota
             .models
@@ -1334,10 +1542,14 @@ pub(crate) fn preserve_failed_quota_summary(quota: &mut QuotaData, previous: Opt
             quota.models.push(model.clone());
         }
     }
+    if quota.quota_summary_groups.is_none() {
+        quota.quota_summary_groups = previous_groups;
+    }
     if quota
-        .models
-        .iter()
-        .any(|model| summary_bucket_family(&model.name).is_some())
+        .quota_summary_groups
+        .as_ref()
+        .is_some_and(|groups| !groups.is_empty())
+        || quota.models.iter().any(|model| is_summary_window(&model.name))
     {
         quota.quota_summary_updated_at = previous
             .quota_summary_updated_at

@@ -323,6 +323,14 @@ pub async fn codex_local_access_update_account_quota_floor(
 }
 
 #[tauri::command]
+pub async fn codex_local_access_update_account_concurrency_limit(
+    account_id: String,
+    max_concurrency: Option<u16>,
+) -> Result<CodexLocalAccessState, String> {
+    codex_local_access::update_local_access_account_concurrency_limit(account_id, max_concurrency).await
+}
+
+#[tauri::command]
 pub async fn codex_local_access_update_model_rules(
     model_aliases: Vec<CodexLocalAccessModelAlias>,
     excluded_models: Vec<String>,

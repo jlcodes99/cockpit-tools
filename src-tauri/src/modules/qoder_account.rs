@@ -995,6 +995,10 @@ pub(crate) fn save_refresh(
         .quota_query_last_error
         .as_ref()
         .map(|_| chrono::Utc::now().timestamp_millis());
+    // The account card labels quota freshness with `usage_updated_at`.
+    if updated.quota_query_last_error.is_none() {
+        updated.usage_updated_at = Some(now_ts());
+    }
     save_account_file(&updated)?;
     refresh_summary(&mut index, &updated);
     save_account_index(&index)?;
@@ -1011,6 +1015,24 @@ pub fn upsert_account_from_snapshot(
         user_plan_raw,
         credit_usage_raw,
     })
+}
+
+/// Builds the account details for a snapshot without touching any store, so
+/// callers that own their own index can persist it themselves.
+pub(crate) fn build_account_from_snapshot(
+    user_info_raw: Value,
+    user_plan_raw: Option<Value>,
+    credit_usage_raw: Option<Value>,
+    existing: Option<&QoderAccount>,
+) -> QoderAccount {
+    snapshot_to_account(
+        QoderSnapshot {
+            user_info_raw: Some(user_info_raw),
+            user_plan_raw,
+            credit_usage_raw,
+        },
+        existing,
+    )
 }
 
 pub fn get_default_qoder_state_db_path() -> Option<PathBuf> {
@@ -1181,6 +1203,23 @@ pub(crate) fn resolve_current_account_id(accounts: &[QoderAccount]) -> Option<St
     )
 }
 
+/// 记录凭据刚被写入客户端，供列表显示"当前登录"。原生适配器的切换走这里，
+/// 与 IDE 注入路径分开：那条路径改的是 state.vscdb，这条只动客户端凭据文件。
+pub fn mark_switched(account_id: &str) -> Result<(), String> {
+    update_existing_account(account_id, |account| {
+        account.last_used = now_ts();
+        account.last_switched_at = Some(account.last_used);
+    })?
+    .ok_or_else(|| "QODER_ACCOUNT_NOT_FOUND".to_string())?;
+    Ok(())
+}
+
+/// 刷新后检查全局 Qoder 账号的剩余额度。判定见 `qoder_quota_alert`。
+pub fn run_quota_alert_if_needed(
+) -> Result<Option<crate::modules::account::QuotaAlertPayload>, String> {
+    crate::modules::qoder_quota_alert::run(crate::modules::qoder_quota_alert::QoderStore::Global)
+}
+
 fn serialize_raw_or_fallback(raw: &Option<Value>, fallback: Value) -> Result<String, String> {
     let value = raw.clone().unwrap_or(fallback);
     serde_json::to_string(&value).map_err(|e| format!("序列化 Qoder 注入数据失败: {}", e))
@@ -1266,57 +1305,12 @@ pub fn inject_to_qoder_at_path(db_path: &Path, account_id: &str) -> Result<(), S
     let account =
         load_account(account_id).ok_or_else(|| format!("Qoder 账号不存在: {}", account_id))?;
     super::qoder_channel::ide_source(&account)?;
-    let access_token =
-        crate::modules::qoder_oauth::access_token_from_info(account.auth_user_info_raw.as_ref())
-            .ok_or("QODER_REAUTH_REQUIRED")?;
+    let payload = qoder_ide_payload(&account, false)?;
     if let Some(parent) = db_path.parent() {
         fs::create_dir_all(parent)
             .map_err(|e| format!("创建 Qoder state.vscdb 目录失败: {}", e))?;
     }
-
-    let mut info = account
-        .auth_user_info_raw
-        .as_ref()
-        .and_then(Value::as_object)
-        .cloned()
-        .unwrap_or_default();
-    info.insert("token".into(), Value::String(access_token));
-    if let Some(id) = &account.user_id {
-        info.entry("id")
-            .or_insert_with(|| Value::String(id.clone()));
-    }
-    info.entry("email")
-        .or_insert_with(|| Value::String(account.email.clone()));
-    let user_info_json = Value::Object(info).to_string();
-    let user_plan_json = serialize_raw_or_fallback(
-        &account.auth_user_plan_raw,
-        build_user_plan_fallback(&account),
-    )?;
-    let personal_usage = account.auth_credit_usage_raw.as_ref().map(|raw| {
-        crate::modules::qoder_usage::personal(raw)
-            .cloned()
-            .unwrap_or(Value::Null)
-    });
-    let credit_usage_json =
-        serialize_raw_or_fallback(&personal_usage, build_credit_usage_fallback(&account))?;
-    let enterprise_usage = account
-        .auth_credit_usage_raw
-        .as_ref()
-        .and_then(crate::modules::qoder_usage::enterprise)
-        .cloned()
-        .unwrap_or(Value::Null);
-    crate::modules::vscode_inject::inject_qoder_secret_snapshot(
-        db_path,
-        &[
-            (QODER_SECRET_USER_INFO_KEY, &user_info_json),
-            (QODER_SECRET_USER_PLAN_KEY, &user_plan_json),
-            (QODER_SECRET_CREDIT_USAGE_KEY, &credit_usage_json),
-            (
-                QODER_SECRET_ENTERPRISE_USAGE_KEY,
-                &enterprise_usage.to_string(),
-            ),
-        ],
-    )?;
+    crate::modules::vscode_inject::inject_qoder_secret_snapshot(db_path, &qoder_ide_entries(&payload))?;
 
     verify_state_db_key_exists(db_path, QODER_SECRET_USER_INFO_KEY)?;
     verify_state_db_key_exists(db_path, QODER_SECRET_USER_PLAN_KEY)?;
@@ -1336,6 +1330,69 @@ pub fn inject_to_qoder_at_path(db_path: &Path, account_id: &str) -> Result<(), S
         db_path.to_string_lossy()
     ));
     Ok(())
+}
+
+fn qoder_ide_payload(account: &QoderAccount, cn: bool) -> Result<[String; 4], String> {
+    let access_token =
+        crate::modules::qoder_oauth::access_token_from_info(account.auth_user_info_raw.as_ref())
+            .ok_or("QODER_REAUTH_REQUIRED")?;
+    let mut info = account
+        .auth_user_info_raw
+        .as_ref()
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    info.insert("token".into(), Value::String(access_token));
+    if let Some(id) = &account.user_id {
+        info.entry("id")
+            .or_insert_with(|| Value::String(id.clone()));
+    }
+    info.entry("email")
+        .or_insert_with(|| Value::String(account.email.clone()));
+    if cn {
+        info.insert("login_source".into(), Value::String("qodercn".into()));
+    }
+    let user_info_json = Value::Object(info).to_string();
+    let mut user_plan_json = serialize_raw_or_fallback(
+        &account.auth_user_plan_raw,
+        build_user_plan_fallback(account),
+    )?;
+    if cn {
+        let mut plan = serde_json::from_str::<Value>(&user_plan_json).map_err(|error| error.to_string())?
+            .as_object().cloned().unwrap_or_default();
+        plan.insert("login_source".into(), Value::String("qodercn".into()));
+        plan.insert("login_version".into(), Value::String("2.0".into()));
+        user_plan_json = Value::Object(plan).to_string();
+    }
+    let personal_usage = account.auth_credit_usage_raw.as_ref().map(|raw| {
+        crate::modules::qoder_usage::personal(raw)
+            .cloned()
+            .unwrap_or(Value::Null)
+    });
+    let credit_usage_json =
+        serialize_raw_or_fallback(&personal_usage, build_credit_usage_fallback(account))?;
+    let enterprise_usage = account
+        .auth_credit_usage_raw
+        .as_ref()
+        .and_then(crate::modules::qoder_usage::enterprise)
+        .cloned()
+        .unwrap_or(Value::Null);
+    Ok([user_info_json, user_plan_json, credit_usage_json, enterprise_usage.to_string()])
+}
+
+fn qoder_ide_entries(payload: &[String; 4]) -> [(&'static str, &str); 4] {
+    [
+        (QODER_SECRET_USER_INFO_KEY, &payload[0]),
+        (QODER_SECRET_USER_PLAN_KEY, &payload[1]),
+        (QODER_SECRET_CREDIT_USAGE_KEY, &payload[2]),
+        (QODER_SECRET_ENTERPRISE_USAGE_KEY, &payload[3]),
+    ]
+}
+
+#[cfg(target_os = "macos")]
+pub(crate) fn inject_cn_ide_snapshot(db_path: &Path, account: &QoderAccount) -> Result<(), String> {
+    let payload = qoder_ide_payload(account, true)?;
+    crate::modules::vscode_inject::inject_qoder_cn_ide_secret_snapshot(db_path, &qoder_ide_entries(&payload))
 }
 
 pub fn update_account_tags(account_id: &str, tags: Vec<String>) -> Result<QoderAccount, String> {

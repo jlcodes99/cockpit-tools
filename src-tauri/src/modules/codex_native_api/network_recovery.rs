@@ -1,6 +1,12 @@
 //! A request-local fence for repeated transport failures before response headers.
 //! Successful streams retain their own idle limits and have no new total timer.
-use std::time::Duration;
+use std::{
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
 
 use tokio::{sync::watch, time::Instant};
 
@@ -19,20 +25,34 @@ struct State {
 }
 
 #[derive(Clone)]
-pub(super) struct Budget(watch::Sender<State>);
+pub(super) struct Budget {
+    state: watch::Sender<State>,
+    request_bytes: Arc<AtomicU64>,
+}
 
 impl Default for Budget {
     fn default() -> Self {
-        Self(watch::channel(State::default()).0)
+        Self {
+            state: watch::channel(State::default()).0,
+            request_bytes: Arc::new(AtomicU64::new(0)),
+        }
     }
 }
 
 impl Budget {
+    pub(super) fn observe_request_bytes(&self, bytes: u64) {
+        self.request_bytes.fetch_max(bytes, Ordering::Relaxed);
+    }
+
+    pub(super) fn request_bytes(&self) -> u64 {
+        self.request_bytes.load(Ordering::Relaxed)
+    }
+
     /// Actual HTTP headers end a continuous transport-failure episode. In
     /// particular, a later quota/auth/capacity reply must retain its own policy
     /// instead of inheriting an old network timer.
     pub(super) fn recovered(&self) {
-        self.0.send_replace(State::default());
+        self.state.send_replace(State::default());
     }
 
     /// Count typed transport failures only. A quota/auth/server status does not
@@ -42,7 +62,7 @@ impl Budget {
         if error.transport_failure_kind().is_none() {
             return;
         }
-        self.0.send_modify(|state| {
+        self.state.send_modify(|state| {
             let timeout = if policy.network_recovery_timeout.is_zero() {
                 DEFAULT_TIMEOUT
             } else {
@@ -59,7 +79,7 @@ impl Budget {
     }
 
     pub(super) fn check(&self) -> Result<(), ServiceError> {
-        let state = *self.0.borrow();
+        let state = *self.state.borrow();
         if state.exhausted || state.deadline.is_some_and(|at| Instant::now() >= at) {
             Err(self.error())
         } else {
@@ -71,7 +91,7 @@ impl Budget {
     /// bounds a stalled route refresh/backoff after the first network failure.
     /// Dropping it after headers succeed never cancels an active response body.
     pub(super) async fn wait(&self) {
-        let mut changes = self.0.subscribe();
+        let mut changes = self.state.subscribe();
         loop {
             let state = *changes.borrow_and_update();
             if state.exhausted {
@@ -96,16 +116,36 @@ impl Budget {
     }
 
     pub(super) fn error(&self) -> ServiceError {
-        let state = *self.0.borrow();
-        let message = crate::modules::i18n::translate(
-            &crate::modules::config::get_user_config().language,
-            "common.networkErrors.recoveryExhausted",
-            &[],
-        );
-        ServiceError::new(504, CODE, message).with_error_details(serde_json::json!({
+        let state = *self.state.borrow();
+        let request_bytes = self.request_bytes();
+        let locale = crate::modules::config::get_user_config().language;
+        let large_timeout = request_bytes >= super::connection_error::LARGE_REQUEST_BYTES
+            && (matches!(
+                state.last_code,
+                Some("upstream_connect_timeout" | "upstream_timeout" | "upstream_idle_timeout")
+            ) || state.deadline.is_some_and(|at| Instant::now() >= at));
+        let message = if large_timeout {
+            let size = super::connection_error::format_request_size_mb(request_bytes);
+            crate::modules::i18n::translate(
+                &locale,
+                "common.networkErrors.recoveryExhaustedLargeRequest",
+                &[("size", &size)],
+            )
+        } else {
+            crate::modules::i18n::translate(
+                &locale,
+                "common.networkErrors.recoveryExhausted",
+                &[],
+            )
+        };
+        let mut details = serde_json::json!({
             "type": "server_error", "code": CODE, "retryable": false,
             "transport_failures": state.failures, "last_error_code": state.last_code,
-        }))
+        });
+        if request_bytes >= super::connection_error::LARGE_REQUEST_BYTES {
+            details["request_bytes"] = serde_json::json!(request_bytes);
+        }
+        ServiceError::new(504, CODE, message).with_error_details(details)
     }
 }
 
@@ -149,9 +189,9 @@ mod tests {
         let budget = Budget::default();
         let watcher = budget.clone();
         budget.observe(&network(), &policy);
-        let first = budget.0.borrow().deadline;
+        let first = budget.state.borrow().deadline;
         budget.observe(&network(), &policy);
-        assert_eq!(first, budget.0.borrow().deadline);
+        assert_eq!(first, budget.state.borrow().deadline);
         tokio::time::timeout(Duration::from_secs(1), watcher.wait())
             .await
             .unwrap();
@@ -210,7 +250,7 @@ mod tests {
         };
         let budget = Budget::default();
         budget.observe(&network(), &policy);
-        let old_deadline = budget.0.borrow().deadline.unwrap();
+        let old_deadline = budget.state.borrow().deadline.unwrap();
         let mut wait = Box::pin(budget.wait());
         // Register the old timer, but keep control of when this future is
         // polled again. Timer wakeups cannot run it ahead of recovered().
@@ -236,7 +276,7 @@ mod tests {
         };
         let budget = Budget::default();
         budget.observe(&network(), &policy);
-        let old_deadline = budget.0.borrow().deadline.unwrap();
+        let old_deadline = budget.state.borrow().deadline.unwrap();
         let mut wait = Box::pin(budget.wait());
         assert!(!poll_wait(wait.as_mut()));
         tokio::time::sleep_until(old_deadline + Duration::from_millis(1)).await;
@@ -245,7 +285,7 @@ mod tests {
         // only the private test state without waking the watch branch, so a
         // randomly preferred reset notification cannot hide a stale return.
         // The preceding test exercises the actual recovered() notification.
-        assert!(!budget.0.send_if_modified(|state| {
+        assert!(!budget.state.send_if_modified(|state| {
             *state = State::default();
             false
         }));
@@ -254,5 +294,58 @@ mod tests {
         budget.observe(&network(), &policy);
         budget.observe(&network(), &policy);
         assert!(poll_wait(wait.as_mut()));
+    }
+
+    #[tokio::test]
+    async fn network_recovery_large_request_timeout_reports_size_and_survives_recovered() {
+        let policy = ExecutionPolicy {
+            network_recovery_max_failures: 1,
+            ..Default::default()
+        };
+        let large_bytes = 110 * 1024 * 1024;
+        let locale = crate::modules::config::get_user_config().language;
+
+        let budget = Budget::default();
+        budget.observe_request_bytes(large_bytes);
+        budget.recovered();
+        assert_eq!(budget.request_bytes(), large_bytes);
+
+        budget.observe(&network(), &policy);
+        let error = budget.check().unwrap_err();
+        assert_eq!(error.code, CODE);
+        assert_eq!(
+            error.message,
+            crate::modules::i18n::translate(
+                &locale,
+                "common.networkErrors.recoveryExhaustedLargeRequest",
+                &[("size", "110.0 MB")],
+            )
+        );
+        assert_eq!(error.response_error.as_ref().unwrap()["request_bytes"], large_bytes);
+
+        let small = Budget::default();
+        small.observe_request_bytes(1024);
+        small.observe(&network(), &policy);
+        let small_error = small.check().unwrap_err();
+        assert_eq!(
+            small_error.message,
+            crate::modules::i18n::translate(&locale, "common.networkErrors.recoveryExhausted", &[])
+        );
+        assert!(small_error.response_error.as_ref().unwrap()["request_bytes"].is_null());
+
+        let connection = Budget::default();
+        connection.observe_request_bytes(large_bytes);
+        connection.observe(
+            &ServiceError::new(502, "upstream_unavailable", "connect failed").with_upstream_not_sent(true),
+            &ExecutionPolicy {
+                network_recovery_max_failures: 1,
+                ..Default::default()
+            },
+        );
+        let conn_error = connection.error();
+        assert_eq!(
+            conn_error.message,
+            crate::modules::i18n::translate(&locale, "common.networkErrors.recoveryExhausted", &[])
+        );
     }
 }

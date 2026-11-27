@@ -109,6 +109,10 @@ export function getAntigravityCliLaunchCommand(options: AntigravityCliLaunchOpti
     return invoke('antigravity_cli_launch_command', { ...options });
 }
 
+export function updateAntigravityAccountEgressProxy(accountId: string, egressProxyUrl: string | null): Promise<Account> {
+    return invoke('update_antigravity_account_egress_proxy', { accountId, egressProxyUrl });
+}
+
 
 export interface AntigravitySwitchHistoryItem {
     id: string;

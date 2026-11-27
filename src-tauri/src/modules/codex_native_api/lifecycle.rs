@@ -269,6 +269,7 @@ impl RequestTracker {
         self.transport_identity = None;
         self.capture_payloads = capture_payloads;
         self.overload = Default::default();
+        self.network_recovery = Default::default();
         self.quota_exhausted_accounts.clear();
         self.quota_exhausted_attempt = None;
         self.field_compat = Default::default();
@@ -758,13 +759,19 @@ impl RequestTracker {
     }
 
     pub(super) fn request_size(&mut self, size: super::diagnostics::RequestSize) {
+        self.network_recovery.observe_request_bytes(size.total_bytes);
         self.request_size = Some(size);
     }
 
     pub(super) fn upstream_request_bytes(&mut self, bytes: usize) {
+        self.network_recovery.observe_request_bytes(bytes as u64);
         if let Some(attempt) = self.diagnostics.as_mut().and_then(|context| context.attempts.last_mut()) {
             attempt.upstream_request_bytes = Some(bytes as u64);
         }
+    }
+
+    pub(super) fn max_request_bytes(&self) -> u64 {
+        self.network_recovery.request_bytes()
     }
 
     pub(super) fn responses_history_rejection(

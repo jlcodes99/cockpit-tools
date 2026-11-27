@@ -354,3 +354,59 @@ async fn real_upstream_auth_rejection_survives_later_proxy_connection_failures()
     proxy_task.await.unwrap();
     task.abort();
 }
+
+#[test]
+fn large_request_timeout_uses_size_aware_message_without_affecting_small_or_connection_errors() {
+    let proxied = route(Some("http://127.0.0.1:7890"), "node-a");
+    let direct = route(None, "direct");
+    let locale = config::get_user_config().language;
+    let large_bytes = 110 * 1024 * 1024;
+    let large_size = format_request_size_mb(large_bytes);
+    assert_eq!(large_size, "110.0 MB");
+
+    let large_proxy = timeout_with_request_bytes(&proxied, large_bytes);
+    assert_eq!(
+        large_proxy.message,
+        i18n::translate(
+            &locale,
+            "common.networkErrors.proxyLargeRequestTimeout",
+            &[("proxy", "node-a"), ("target", "ChatGPT"), ("size", &large_size)],
+        )
+    );
+
+    let large_direct = timeout_with_request_bytes(&direct, large_bytes);
+    assert_eq!(
+        large_direct.message,
+        i18n::translate(
+            &locale,
+            "common.networkErrors.directLargeRequestTimeout",
+            &[("target", "ChatGPT"), ("size", &large_size)],
+        )
+    );
+
+    let small_proxy = timeout_with_request_bytes(&proxied, LARGE_REQUEST_BYTES - 1);
+    assert_eq!(
+        small_proxy.message,
+        i18n::translate(
+            &locale,
+            "common.networkErrors.proxyTimeout",
+            &[("proxy", "node-a"), ("target", "ChatGPT")],
+        )
+    );
+
+    let connection = explain_with_request_bytes(
+        &proxied,
+        ServiceError::new(502, "upstream_unavailable", ""),
+        Cause::Connection,
+        &locale,
+        large_bytes,
+    );
+    assert_eq!(
+        connection.message,
+        i18n::translate(
+            &locale,
+            "common.networkErrors.proxyConnection",
+            &[("proxy", "node-a"), ("target", "ChatGPT")],
+        )
+    );
+}

@@ -368,7 +368,7 @@ export function getGrokQuotaSummaryItems(
     items.push({
       key: "weekly",
       label: quota.isUnifiedBillingUser === true
-        ? t("grok.quota.sharedPool", "共享额度")
+        ? t("common.apiBudget.sharedPool", "共享额度")
         : /monthly/i.test(quota.periodType || "")
           ? t("grok.quota.monthly", "每月用量")
           : t("grok.quota.weekly", "每周用量"),

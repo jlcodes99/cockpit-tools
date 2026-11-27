@@ -13,7 +13,7 @@ const window = (id, remainingPercent) => ({ id, label: id, remainingPercent });
 const rows = list => Array.from(list, item => [item.id, item.remainingPercent]);
 
 test('resolves quota and refresh for the selected Cockpit ACP provider instance', () => {
-  for (const driver of ['workbuddy', 'workbuddy_ai', 'codebuddy', 'codebuddy_cn', 'minimaxcode', 'grok']) {
+  for (const driver of ['workbuddy', 'workbuddy_ai', 'codebuddy', 'codebuddy_cn', 'minimaxcode', 'grok', 'qoder', 'qoder_cn']) {
     const instanceId = 'provider-2';
     const provider = {
       instanceId, driver, boundAccountId: 'account-2', boundAccountEmail: 'b@example.test',
@@ -592,8 +592,13 @@ test('updates gateway quota only for the endpoint T3 Code actually reports', () 
 test('shows human subscription labels and does not guess the Antigravity tier', () => {
   assert.equal(displayPlan('antigravity', 'g1-pro-tier'), 'Pro');
   assert.equal(displayPlan('antigravity', 'g1-ultra-tier'), 'Ultra');
+  assert.equal(displayPlan('antigravity', 'g1-ultra-lite-tier'), 'Ultra Lite');
+  assert.equal(displayPlan('antigravity', 'g1-plus-tier'), 'Plus');
   assert.equal(displayPlan('antigravity', 'free-tier'), 'Free');
   assert.equal(displayPlan('antigravity', 'standard-tier'), 'Free');
+  assert.equal(displayPlan('antigravity', 'legacy-tier'), 'Free');
+  assert.equal(displayPlan('antigravity', 'gcp-ge-ultra-tier'), 'Ultra');
+  assert.equal(displayPlan('antigravity', 'gcp-enterprise-tier'), 'Enterprise');
   assert.equal(displayPlan('antigravity', 'g1-unrecognized-tier'), '未知');
   assert.equal(displayPlan('antigravity', 'Google account'), '未知');
   assert.equal(displayPlan('codex', 'team'), 'Team');

@@ -206,6 +206,19 @@ pub fn close_qoder_instances(user_data_dirs: &[String], timeout_secs: u64) -> Re
     )
 }
 
+/// Closes the CN desktop client so its credential files can be replaced. The
+/// pid list comes from `qoder_native`, which scopes the match to the CN install
+/// directory instead of taking every process that shares the launcher name.
+pub(crate) fn close_qoder_cn_client(pids: &[u32], timeout_secs: u64) -> Result<(), String> {
+    if pids.is_empty() {
+        return Ok(());
+    }
+    crate::modules::logger::log_info(&format!(
+        "[Qoder CN Close] closing selected client pids={pids:?}"
+    ));
+    close_pids(pids, timeout_secs)
+}
+
 pub fn close_trae_instances(user_data_dirs: &[String], timeout_secs: u64) -> Result<(), String> {
     let default_dir = get_default_trae_user_data_dir_for_os()
         .map(|value| normalize_path_for_compare(&value))
@@ -1293,6 +1306,15 @@ pub fn start_antigravity_with_args(
     user_data_dir: &str,
     extra_args: &[String],
 ) -> Result<u32, String> {
+    start_antigravity_with_args_proxy(user_data_dir, extra_args, None)
+}
+
+/// 启动 Antigravity IDE，注入账号自定义出口代理（None = 回落全局代理）。
+pub fn start_antigravity_with_args_proxy(
+    user_data_dir: &str,
+    extra_args: &[String],
+    egress_proxy_url: Option<&str>,
+) -> Result<u32, String> {
     crate::modules::logger::log_info("正在启动 Antigravity IDE...");
 
     let launch_path = resolve_antigravity_launch_path()?;
@@ -1313,7 +1335,12 @@ pub fn start_antigravity_with_args(
                 args.push(arg.to_string());
             }
         }
-        let pid = spawn_open_app_with_options(&app_root, &args, true)
+        let spawn_result = if egress_proxy_url.is_some() {
+            spawn_open_app_with_antigravity_proxy(&app_root, &args, true, egress_proxy_url)
+        } else {
+            spawn_open_app_with_options(&app_root, &args, true)
+        };
+        let pid = spawn_result
             .map_err(|e| format!("启动 Antigravity IDE 失败: {}", e))?;
         crate::modules::logger::log_info("Antigravity IDE 启动命令已发送（open -n -a）");
         if !user_data_dir_trimmed.is_empty() {
@@ -1344,7 +1371,7 @@ pub fn start_antigravity_with_args(
         if let Some(parent) = launch_path.parent() {
             cmd.current_dir(parent);
         }
-        apply_managed_proxy_env_to_command(&mut cmd);
+        apply_antigravity_proxy_env_to_command(&mut cmd, egress_proxy_url);
         if should_detach_child() {
             cmd.creation_flags(0x08000000 | CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS); // CREATE_NO_WINDOW | detached
             cmd.stdin(Stdio::null())
@@ -1375,7 +1402,7 @@ pub fn start_antigravity_with_args(
     #[cfg(target_os = "linux")]
     {
         let mut cmd = Command::new(&launch_path);
-        apply_managed_proxy_env_to_command(&mut cmd);
+        apply_antigravity_proxy_env_to_command(&mut cmd, egress_proxy_url);
         if should_detach_child() {
             cmd.stdin(Stdio::null())
                 .stdout(Stdio::null())
@@ -1409,17 +1436,31 @@ pub(crate) fn start_managed_antigravity_on_macos(
     user_data_dir: &str,
     extra_args: &[String],
 ) -> Result<u32, String> {
+    start_managed_antigravity_on_macos_for_account(user_data_dir, extra_args, None)
+}
+
+/// 启动受管 Antigravity 实例，注入账号自定义出口代理（None = 回落全局代理）。
+#[cfg(target_os = "macos")]
+pub(crate) fn start_managed_antigravity_on_macos_for_account(
+    user_data_dir: &str,
+    extra_args: &[String],
+    egress_proxy_url: Option<&str>,
+) -> Result<u32, String> {
     crate::modules::antigravity_composer_status::launch(user_data_dir, extra_args, |args| {
-        start_managed_antigravity_process(user_data_dir, args)
+        start_managed_antigravity_process(user_data_dir, args, egress_proxy_url)
     })
 }
 
 #[cfg(target_os = "macos")]
-fn start_managed_antigravity_process(user_data_dir: &str, extra_args: &[String]) -> Result<u32, String> {
+fn start_managed_antigravity_process(
+    user_data_dir: &str,
+    extra_args: &[String],
+    egress_proxy_url: Option<&str>,
+) -> Result<u32, String> {
     let executable = resolve_antigravity_legacy_launch_path()?;
     let mut cmd = Command::new(executable);
     sanitize_macos_gui_launch_env(&mut cmd);
-    apply_managed_proxy_env_to_command(&mut cmd);
+    apply_antigravity_proxy_env_to_command(&mut cmd, egress_proxy_url);
     cmd.env_remove("JETSKI_OAUTH_TOKEN");
     let positional_start = extra_args
         .iter()
@@ -1435,12 +1476,25 @@ pub fn start_antigravity_legacy_with_args(
     user_data_dir: &str,
     extra_args: &[String],
 ) -> Result<u32, String> {
+    start_antigravity_legacy_with_args_proxy(user_data_dir, extra_args, None)
+}
+
+/// 启动 Antigravity 桌面端，注入账号自定义出口代理（None = 回落全局代理）。
+pub fn start_antigravity_legacy_with_args_proxy(
+    user_data_dir: &str,
+    extra_args: &[String],
+    egress_proxy_url: Option<&str>,
+) -> Result<u32, String> {
     crate::modules::antigravity_composer_status::launch(user_data_dir, extra_args, |args| {
-        start_antigravity_legacy_process(user_data_dir, args)
+        start_antigravity_legacy_process(user_data_dir, args, egress_proxy_url)
     })
 }
 
-fn start_antigravity_legacy_process(user_data_dir: &str, extra_args: &[String]) -> Result<u32, String> {
+fn start_antigravity_legacy_process(
+    user_data_dir: &str,
+    extra_args: &[String],
+    egress_proxy_url: Option<&str>,
+) -> Result<u32, String> {
     crate::modules::logger::log_info("正在启动 Antigravity...");
 
     let launch_path = resolve_antigravity_legacy_launch_path()?;
@@ -1460,7 +1514,12 @@ fn start_antigravity_legacy_process(user_data_dir: &str, extra_args: &[String]) 
                 args.push(arg.to_string());
             }
         }
-        let pid = spawn_open_app_with_options(&app_root, &args, true)
+        let spawn_result = if egress_proxy_url.is_some() {
+            spawn_open_app_with_antigravity_proxy(&app_root, &args, true, egress_proxy_url)
+        } else {
+            spawn_open_app_with_options(&app_root, &args, true)
+        };
+        let pid = spawn_result
             .map_err(|e| format!("启动 Antigravity 失败: {}", e))?;
         crate::modules::logger::log_info("Antigravity 启动命令已发送（open -n -a）");
         if !user_data_dir_trimmed.is_empty() {
@@ -1491,7 +1550,7 @@ fn start_antigravity_legacy_process(user_data_dir: &str, extra_args: &[String]) 
         if let Some(parent) = launch_path.parent() {
             cmd.current_dir(parent);
         }
-        apply_managed_proxy_env_to_command(&mut cmd);
+        apply_antigravity_proxy_env_to_command(&mut cmd, egress_proxy_url);
         if should_detach_child() {
             cmd.creation_flags(CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS);
             cmd.stdin(Stdio::null())
@@ -1523,7 +1582,7 @@ fn start_antigravity_legacy_process(user_data_dir: &str, extra_args: &[String]) 
     #[cfg(target_os = "linux")]
     {
         let mut cmd = Command::new(&launch_path);
-        apply_managed_proxy_env_to_command(&mut cmd);
+        apply_antigravity_proxy_env_to_command(&mut cmd, egress_proxy_url);
         if should_detach_child() {
             cmd.stdin(Stdio::null())
                 .stdout(Stdio::null())

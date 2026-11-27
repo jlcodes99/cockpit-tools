@@ -1,5 +1,17 @@
 {
   "antigravityLaunch": {
+    "desktopLanguage": "Lingua dell’interfaccia",
+    "desktopLanguageEnglish": "Inglese",
+    "desktopLayout": "Disposizione",
+    "desktopLayoutEngineering": "Ingegneria del software",
+    "desktopLayoutKnowledge": "Lavoro della conoscenza",
+    "desktopPermission": "Permessi locali predefiniti",
+    "desktopPermissionReview": "Richiedi revisione",
+    "desktopPermissionDefault": "Predefinito",
+    "desktopPermissionAuto": "Automatico",
+    "desktopPermissionTurbo": "Completamente automatico",
+    "desktopSettingsHint": "La disposizione e i permessi locali si applicano all’avvio di Antigravity da Cockpit Tools.",
+    "desktopLanguageChinese": "Cinese semplificato",
     "initializeTitle": "Antigravity IDE deve essere inizializzato",
     "initializeThenSwitch": "Apri l’IDE una volta per poter cambiare account.",
     "initializeThenBind": "Avvia l’istanza una volta per associare un account.",
@@ -20,7 +32,6 @@
     "sharedInstanceStarted": "Accesso condiviso aggiornato. Avvio richiesto.",
     "sharedInstanceLaunchFailed": "Accesso aggiornato, ma l’avvio dell’istanza non è riuscito: {{error}}",
     "sharedCopySource": "Copia la cartella di configurazione dell’istanza selezionata.",
-    "quickSwitchSetting": "Si applica al cambio rapido in Antigravity IDE. Nella finestra dell’account puoi scegliere ogni volta se avviare.",
     "title": "Scegli client",
     "switchOnly": "Cambia soltanto",
     "switchAndLaunch": "Cambia e avvia",
@@ -33,7 +44,8 @@
     "cliAuth": "agy segue le proprie impostazioni di autenticazione. Una chiave API o le credenziali Google Cloud configurate hanno la precedenza.",
     "cliMissing": "agy non trovato. Installa la versione ufficiale di Antigravity CLI e riprova.",
     "terminalFailed": "Impossibile preparare il terminale. {{error}}",
-    "switchedTerminalFailed": "Account cambiato, ma non è stato possibile aprire il terminale. {{error}}"
+    "switchedTerminalFailed": "Account cambiato, ma non è stato possibile aprire il terminale. {{error}}",
+    "quickSwitchSetting": "Si applica al cambio rapido in Antigravity IDE. Nella finestra dell’account puoi scegliere ogni volta se avviare."
   },
   "pelican": {
     "caseKinds": {
@@ -194,6 +206,7 @@
     "providerClear": "Azzera selezione"
   },
   "common": {
+    "commonSettings": "Impostazioni comuni",
     "automation": {
       "invalidPlatform": "Piattaforma account sconosciuta. Esegui cockpit-cli account platforms per vedere gli ID supportati.",
       "hostUnavailable": "Avvia l’applicazione desktop Cockpit Tools con questa cartella dei dati e riprova.",
@@ -233,6 +246,7 @@
     "dataQueryBusy": "Elaborazione dei dati in corso. Riprova tra poco.",
     "historyRestoring": "Ripristino della cronologia…",
     "apiBudget": {
+      "sharedPool": "Quota condivisa",
       "keyScope": "Questa chiave",
       "upgradeRequired": "Aggiorna Cockpit Tools sul computer gateway per visualizzare statistiche e cronologia delle richieste.",
       "gatewayName": "Gateway Cockpit",
@@ -279,7 +293,10 @@
       "proxyAuth": "Autenticazione del proxy «{{proxy}}» non riuscita. Controlla il nome utente o la password del proxy.",
       "localProxyUnavailable": "Impossibile connettersi al proxy locale «{{proxy}}». Verifica che il servizio proxy sia in esecuzione.",
       "directConnection": "Connessione a {{target}} non riuscita. Controlla la rete e riprova.",
-      "directTimeout": "Tempo scaduto per la connessione a {{target}}. Controlla la rete e riprova."
+      "directTimeout": "Tempo scaduto per la connessione a {{target}}. Controlla la rete e riprova.",
+      "recoveryExhaustedLargeRequest": "Ripetuti errori o timeout dell'upstream hanno interrotto i tentativi automatici per questa richiesta voluminosa ({{size}}). La cronologia o le immagini potrebbero aver superato il timeout di invio o di attesa della risposta; compatta la conversazione o avviane una nuova e riprova. Questo errore non indica quota esaurita.",
+      "proxyLargeRequestTimeout": "L'invio di questa richiesta voluminosa ({{size}}) a {{target}} tramite proxy “{{proxy}}” è andato in timeout prima della risposta. Cronologia o immagini troppo grandi potrebbero aver superato il limite del proxy o dell'upstream; compatta la conversazione, avviane una nuova o controlla il proxy.",
+      "directLargeRequestTimeout": "L'invio di questa richiesta voluminosa ({{size}}) a {{target}} è andato in timeout prima della risposta. Cronologia o immagini troppo grandi potrebbero aver superato il timeout di invio o dell'upstream; compatta la conversazione o avviane una nuova e riprova."
     },
     "codexUsage": {
       "responseSpeed": "Velocità di risposta",
@@ -836,7 +853,8 @@
     "apiRelay": "Relay API",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "qoderCn": "Qoder CN"
   },
   "sponsors": {
     "pageTitle": "Sponsor",
@@ -948,6 +966,7 @@
       "syncThreads": "Aggiunge le sessioni mancanti in tutte le istanze e accoda nuovi contenuti solo se l’istanza di destinazione è arrestata e la sua cronologia corrisponde. I byte esistenti vengono conservati. Gli aggiornamenti di cronologie divergenti o destinazioni in esecuzione vengono rifiutati. I file di destinazione vengono salvati prima della scrittura. Continuare?"
     },
     "status": {
+      "firstLaunchInitializing": "Preparazione del primo avvio…",
       "running": "In esecuzione",
       "stopped": "Fermato",
       "restarting": "Riavvio in corso",
@@ -1117,6 +1136,7 @@
       "empty": "Nessuna quota in cache"
     },
     "messages": {
+      "firstLaunchTimedOut": "La configurazione iniziale non è ancora completata. Se l’app chiede di accedere o concedere un’autorizzazione, completa quel passaggio e riprova.",
       "created": "Istanza creata",
       "emptyCreated": "Istanza vuota creata. Avviala una volta prima di collegare un account.",
       "existingDirCreated": "Istanza creata utilizzando la directory selezionata.",
@@ -1555,8 +1575,6 @@
       "claudeShareCodeSessionsOnSwitchDesc": "Condivide l’elenco delle sessioni Code tra gli account locali quando si cambia il profilo predefinito di Claude Desktop su macOS.",
       "claudeAppPath": "Destinazione di avvio Claude Desktop",
       "claudeAppPathDesc": "Il profilo predefinito può usare una destinazione Microsoft Store; le istanze multiple richiedono il vero Claude.exe.",
-      "antigravityLaunchOnSwitch": "Avvia Antigravity IDE al cambio",
-      "antigravityLaunchOnSwitchDesc": "Se disattivato, il cambio scrive solo i dati dell’account predefinito di Antigravity IDE e non chiude, avvia o riavvia l’app.",
       "tokenKeeper": "Auth sempre attiva",
       "tokenKeeperDesc": "Aggiorna i token degli account in piccoli gruppi solo quando l’autorizzazione sta per scadere, riducendo le richieste in background.",
       "platformAutoRefresh": "Aggiornamento automatico quota {{platform}}",
@@ -1643,7 +1661,14 @@
       "t3codeAutoRefresh": "Aggiornamento automatico quota T3 Code",
       "t3codeAutoRefreshDesc": "Intervallo di aggiornamento quota in background",
       "t3codeAppUiInjection": "Capsula della quota nella chat di T3 Code",
-      "t3codeAppUiInjectionDesc": "Quando avvii T3 Code da Cockpit, il campo di scrittura mostra la famiglia del modello selezionato e la quota residua. Fai clic per vedere i dettagli dell’account e dell’utilizzo."
+      "t3codeAppUiInjectionDesc": "Quando avvii T3 Code da Cockpit, il campo di scrittura mostra la famiglia del modello selezionato e la quota residua. Fai clic per vedere i dettagli dell’account e dell’utilizzo.",
+      "qoderCnAppPath": "Percorso di avvio di Qoder CN",
+      "qoderCnAppPathDesc": "Lascia vuoto per il rilevamento automatico. Il cambio account chiude e riavvia il client desktop.",
+      "qoderCnAppPathPlaceholder": "Percorso predefinito",
+      "qoderCnPathReset": "Ripristina predefinito",
+      "antigravityLaunchOnSwitch": "Avvia Antigravity IDE al cambio",
+      "antigravityLaunchOnSwitchDesc": "Se disattivato, il cambio scrive solo i dati dell’account predefinito di Antigravity IDE e non chiude, avvia o riavvia l’app.",
+      "qoderCnAutoRefresh": "Aggiornamento automatico quota Qoder CN"
     },
     "network": {
       "apiTitle": "API della cabina di pilotaggio antigravità",
@@ -5295,7 +5320,12 @@
         "maxConcurrentImageRequests": "Richieste di immagini per account",
         "maxAccountConcurrency": "Concorrenza per account",
         "accountConcurrencyWait": "Attesa (s)",
-        "optionsSaved": "Opzioni routing salvate"
+        "optionsSaved": "Opzioni routing salvate",
+        "accountConcurrencyLimit": "Limite concorrenza",
+        "accountConcurrencyUnlimited": "Illimitato",
+        "accountConcurrencyHint": "Sostituisce la concorrenza per questo account (0 per illimitato, max 64). Lascia vuoto per ereditare il valore globale.",
+        "accountConcurrencyInvalid": "Inserisci un numero intero da 0 a 64.",
+        "accountConcurrencySaveFailed": "Impossibile salvare il limite di concorrenza dell’account."
       },
       "validation": {
         "numberRange": "Inserisci un numero da {{min}} a {{max}}"
@@ -6575,7 +6605,8 @@
         "canceled": "Il client ha annullato la richiesta; non è un timeout di apertura del flusso.",
         "gateway": "HTTP 504 indica un timeout del gateway. Il registro non ne conferma la causa; verifica l’errore a monte e la fase della richiesta.",
         "threshold": "Soglia applicata a questa richiesta: {{seconds}} secondi.",
-        "settings": "Regola timeout"
+        "settings": "Regola timeout",
+        "largeRequest": "Dimensione richiesta registrata: {{size}}. Cronologie o immagini incorporate molto grandi possono andare in timeout durante l'invio o l'attesa della prima risposta; si consiglia di compattare la conversazione o avviarne una nuova."
       },
       "identity": {
         "title": "Identità di sessione e account",
@@ -7101,6 +7132,14 @@
     "t3code": {
       "title": "Impostazioni T3 Code",
       "appPath": "Percorso di avvio T3 Code"
+    },
+    "validation": {
+      "refreshIntervalInvalid": "Inserisci un numero intero tra 1 e 999, oppure -1 per disattivare l'aggiornamento automatico.",
+      "quotaAlertThresholdInvalid": "Inserisci un numero intero tra 0 e 100."
+    },
+    "disableRefreshHint": "-1 disattiva l'aggiornamento automatico.",
+    "qoderCn": {
+      "title": "Impostazioni Qoder CN"
     }
   },
   "quotaAlert": {
@@ -7802,7 +7841,21 @@
       "switchLaunchFailed": "L’account è stato salvato, ma Qoder IDE non si è avviato. {{detail}}",
       "refreshCount": "Aggiornati {{count}} account su {{total}}.",
       "launchUnconfirmed": "Impossibile confermare l’avvio di Qoder IDE.",
-      "workerFailed": "L’operazione Qoder in background non è riuscita. {{detail}}"
+      "workerFailed": "L’operazione Qoder in background non è riuscita. {{detail}}",
+      "oauthUrlEmpty": "L'URL di autorizzazione OAuth di Qoder è vuota.",
+      "qoderCnPathMissing": "Qoder CN Desktop non trovato. Imposta il percorso di avvio nelle impostazioni o installalo, quindi riprova.",
+      "platformMismatch": "Questo account appartiene a una build di un'altra regione e non può essere scritto nel client corrente.",
+      "cnRelaunchFailed": "L'account è stato cambiato, ma il client Qoder CN non si è avviato. {{detail}}",
+      "cnDesktopUnsupported": "Usa la CLI per cambiare account Qoder CN su questo sistema.",
+      "clientInvalid": "Il tipo di client non è valido. Seleziona di nuovo la destinazione del cambio.",
+      "nativeTokenMissing": "Questo account non ha credenziali di accesso scrivibili. Autorizzalo di nuovo o reimportalo.",
+      "nativeWriteVerifyFailed": "La verifica delle credenziali scritte non è riuscita ed è stato tentato il ripristino allo stato originale. Chiudi il client e riprova.",
+      "nativeKeyUnreadable": "Impossibile leggere la chiave delle credenziali locale. Verifica che Cockpit e Qoder usino lo stesso account di sistema.",
+      "nativeImportInvalid": "Le credenziali importate non contengono informazioni sull'account, quindi non è possibile identificarlo.",
+      "nativeImportFailed": "Impossibile importare l'accesso locale di Qoder. Accedi prima nel client, poi riprova.",
+      "nativeProcessProbeFailed": "Impossibile rilevare lo stato del processo Qoder. Riprova più tardi.",
+      "regionUnsupported": "Impossibile identificare la build regionale dell'account. Autorizzalo di nuovo.",
+      "clientRunning": "Chiudi {{client}} prima di cambiare account."
     },
     "title": "Gestione account Qoder",
     "comingSoon": {
@@ -7844,6 +7897,38 @@
     },
     "empty": {
       "desc": "Fai clic su \"Aggiungi account\" per usare login auth, import locale o import JSON."
+    },
+    "region": {
+      "cn": "Qoder CN · Cina",
+      "global": "Qoder · Internazionale"
+    },
+    "clientTarget": {
+      "importSource": "Origine importazione locale",
+      "initializeHint": "Apri il client selezionato, completa la configurazione e riprova.",
+      "label": "Destinazione cambio / importazione locale",
+      "ariaLabel": "Client Qoder",
+      "desktop": "Qoder Desktop",
+      "desktopCn": "Qoder CN Desktop",
+      "cli": "Qoder CLI",
+      "cliCn": "Qoder CN CLI",
+      "ide": "Qoder IDE",
+      "switchSuccess": "Account cambiato. Riapri il client di destinazione.",
+      "windowsOnly": " (solo Windows)",
+      "desktopSwitchSuccess": "Account cambiato. {{client}} è stato riavviato.",
+      "relaunchFailed": "Account cambiato, ma non è stato possibile avviare automaticamente {{client}}. Aprilo manualmente."
+    },
+    "cn": {
+      "nativeOnly": "Seleziona Desktop o CLI per gli account Qoder CN.",
+      "ideUnavailable": "Seleziona Desktop o CLI per gli account Qoder CN. L'adattatore IDE qui è solo per la versione internazionale.",
+      "instancesUnsupported": "Qoder CN Desktop e CLI supportano il cambio account del client predefinito. Le istanze multiple dell'app non sono ancora supportate.",
+      "flowNoticeDesc": "Supporta l’accesso ufficiale, l’importazione locale da app desktop o CLI, l’importazione JSON e il controllo delle quote. Puoi cambiare account e scegliere se avviare il client selezionato.",
+      "flowNoticePermission": "L’importazione locale legge la sessione dell’app desktop o della CLI. Il cambio di account aggiorna solo la sessione locale del client Qoder CN selezionato.",
+      "flowNoticeNetwork": "Accesso di rete: l'accesso ufficiale contatta i servizi Qoder CN per completare il callback; le query sulle quote recuperano l'utilizzo tramite l'API Qoder CN. Le chiavi e le credenziali locali non vengono mai caricate.",
+      "flowNoticeTitle": "Guida account Qoder CN (clicca per espandere/ridurre)",
+      "oauthHint": "Fai clic sul pulsante qui sotto per completare l’autorizzazione OAuth di Qoder CN nel browser.",
+      "importJsonHint": "Importa un file Qoder CN JSON esportato da questo strumento.",
+      "importLocalDesc": "Legge lo stato di accesso corrente dal client Qoder CN locale, incluse le informazioni utente, il piano e l’utilizzo dei crediti.",
+      "importLocalSuccess": "Account importato da Qoder CN locale."
     }
   },
   "trae": {
@@ -8231,7 +8316,38 @@
       "logHits": "{{count}} occorrenze nei log"
     },
     "exposeToCodex": {
-      "title": "Si collega tramite il gateway Native Rust senza copiare il token WorkBuddy"
+      "title": "Si collega tramite il gateway Native Rust senza copiare il token WorkBuddy",
+      "textOnlyTitle": "Il precedente Native ACP supporta solo testo. Per leggere e scrivere file o eseguire comandi, usa il Ponte di strumenti Codex.",
+      "textOnlyAction": "Collega a Codex (solo testo)"
+    },
+    "nativeCodex": {
+      "managedKeyRotation": "Questo Key è gestito dal ponte di strumenti nativi di WorkBuddy. Per cambiarlo, revoca la configurazione e creane una nuova.",
+      "nativeRequired": "Crea e attiva prima il servizio Native Rust nella pagina del servizio API. La modalità non verrà cambiata automaticamente.",
+      "enterpriseUnsupported": "La prima versione non consente ancora di vincolare in modo rigoroso un tenant aziendale; sono supportate solo le origini WorkBuddy personali.",
+      "revokedFilesPreserved": "Il Key dedicato è stato revocato. I file di configurazione sono stati modificati o non possono essere rimossi in sicurezza. Tutti i file modificati e i dati delle sessioni sono stati conservati; controlla i file e riprova il ripristino.",
+      "notOwned": "La prova di proprietà della configurazione non corrisponde al Key dedicato. Nessun Key è stato modificato. Controlla l’indicatore di proprietà nella cartella della configurazione.",
+      "profileChanged": "Questa configurazione indipendente è stata modificata. Il programma non sovrascriverà le tue modifiche.",
+      "selectionChanged": "Il modello o il livello di ragionamento non è più disponibile. Ricarica il catalogo ed effettua una nuova selezione.",
+      "sourceUnavailable": "Questa origine WorkBuddy non è disponibile. Controlla lo stato di accesso. Non verranno provati altri account.",
+      "operationFailed": "Operazione non riuscita. Verifica che WorkBuddy CLI sia installato e che l’account sia valido, quindi ricarica il catalogo.",
+      "title": "WorkBuddy → Codex: ponte di strumenti nativi",
+      "scope": "Crea un Key locale dedicato a un’origine fissa e un CODEX_HOME indipendente. Codex esegue gli strumenti autonomamente; il token WorkBuddy non viene scritto nella configurazione di Codex e non vengono modificati né l’accesso predefinito né il Key principale del servizio API.",
+      "account": "Origine WorkBuddy",
+      "noSourceSelected": "Nessuna origine disponibile; puoi comunque gestire le configurazioni già create",
+      "model": "Modelli CLI attualmente disponibili",
+      "readCatalog": "Carica il catalogo aggiornato",
+      "effort": "Livello di ragionamento",
+      "metadataOnly": "Il caricamento del catalogo inizializza soltanto CLI e non invia prompt al modello. Il modello e il livello di ragionamento vengono verificati di nuovo prima della creazione; se l’origine non è valida, viene mostrato subito un errore, senza passare a un altro account. È supportato solo HTTP Responses; la ricerca web (web_search) è disattivata nella configurazione indipendente. Immagini, altri strumenti ospitati, compact e WebSocket non sono supportati.",
+      "refreshCatalog": "Ricarica il catalogo",
+      "managedProfile": "Configurazione indipendente creata",
+      "profileSource": "Origine: ",
+      "profileSourceMissing": "L’origine è stata eliminata; puoi comunque revocare il Key dedicato e ripristinare la configurazione indipendente.",
+      "profileSourceUnavailable": "L’origine non è attualmente disponibile; la revoca e il ripristino non richiedono l’accesso all’origine.",
+      "launchHelp": "Nel terminale, passa alla cartella del tuo progetto ed esegui il comando qui sotto. Solo questo avvio di Codex utilizzerà la configurazione.",
+      "retryRestore": "Riprova il ripristino (Key revocato)",
+      "restore": "Revoca il Key dedicato e ripristina questa configurazione",
+      "create": "Crea un Key dedicato e una configurazione indipendente",
+      "open": "Ponte di strumenti Codex"
     }
   },
   "minimaxCode": {
@@ -8989,7 +9105,6 @@
     "quota": {
       "cliUnavailable": "Utilizzo CLI non disponibile",
       "weekly": "Utilizzo settimanale",
-      "sharedPool": "Quota condivisa",
       "monthly": "Uso mensile",
       "onDemand": "Utilizzo a consumo",
       "balance": "Saldo e crediti",
@@ -9622,6 +9737,15 @@
     "saved": "Salvato. Si applica alle nuove richieste."
   },
   "antigravityTokenUsage": {
+    "context": {
+      "requestContext": "Contesto richiesta",
+      "coverage": "{{reported}} misurate · {{estimated}} stimate · {{missing}} senza dati",
+      "largestGrowth": "Aumento maggiore {{total}} al passaggio #{{step}}",
+      "growthParts": "Input {{input}} · Lettura cache {{read}} · Scrittura cache {{write}}",
+      "method": "Il contesto somma i token in ingresso e quelli della cache. Le variazioni confrontano richieste consecutive con misurazioni. Le quote di messaggi, strumenti e allegati non sono disponibili.",
+      "unplacedCompactions": "Compressioni senza numero di passaggio {{count}}",
+      "compactionStep": "Compressione del contesto"
+    },
     "tab": "Utilizzo sessioni",
     "subtitle": "Consumo locale di token delle sessioni Antigravity",
     "title": "Utilizzo token sessioni Antigravity",
@@ -9776,7 +9900,6 @@
       "codexCatalogPending": "Chiavi esterne in attesa di sincronizzare i modelli: {{count}}"
     },
     "commonSettings": {
-      "title": "Impostazioni comuni",
       "language": "Lingua di T3 Code"
     },
     "platformOrder": {
@@ -9996,6 +10119,14 @@
       "searchAccountsPlaceholder": "Cerca account {{platform}}...",
       "goAddSourceAccount": "Aggiungi in {{platform}}",
       "emptyPoolDesc": "Aggiungi prima un account nella pagina {{platform}} per collegarlo a T3 Code."
+    }
+  },
+  "antigravity": {
+    "proxy": {
+      "followHint": "Usa il proxy globale dalle impostazioni; se disattivato viene usata la rete predefinita.",
+      "independentHint": "Si applica solo a questo account e ha la precedenza sul proxy globale.",
+      "invalidUrl": "URL proxy non supportato. Sono supportati solo http, https, socks5 e socks5h.",
+      "restartHint": "Dopo il collegamento, la modifica o la rimozione di un proxy, riavvia Antigravity (desktop o una nuova sessione CLI) per applicarlo. Un proxy che fallisce non ripiega sulla connessione diretta."
     }
   }
 }

@@ -23,6 +23,10 @@ use crate::modules::logger;
 mod tray_click;
 use tray_click::handle_tray_event;
 
+#[cfg(any(test, not(target_os = "macos")))]
+#[path = "tray_t3code.rs"]
+mod tray_t3code;
+
 /// 托盘菜单 ID
 pub const TRAY_ID: &str = "main-tray";
 
@@ -224,6 +228,7 @@ pub(crate) fn set_tray_visibility<R: Runtime>(
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum PlatformId {
     Antigravity,
+    T3Code,
     Codex,
     Claude,
     Zed,
@@ -236,6 +241,7 @@ pub(crate) enum PlatformId {
     Codebuddy,
     CodebuddyCn,
     Qoder,
+    QoderCn,
     Zcode,
     Trae,
     TraeSolo,
@@ -246,11 +252,12 @@ pub(crate) enum PlatformId {
 }
 
 impl PlatformId {
-    pub(crate) fn default_order() -> [Self; 19] {
+    pub(crate) fn default_order() -> [Self; 21] {
         [
             Self::Claude,
             Self::Codex,
             Self::Antigravity,
+            Self::T3Code,
             Self::Zed,
             Self::GitHubCopilot,
             Self::Windsurf,
@@ -260,6 +267,7 @@ impl PlatformId {
             Self::Codebuddy,
             Self::CodebuddyCn,
             Self::Qoder,
+            Self::QoderCn,
             Self::Zcode,
             Self::Trae,
             Self::TraeSolo,
@@ -273,6 +281,7 @@ impl PlatformId {
     pub(crate) fn from_str(value: &str) -> Option<Self> {
         match value {
             crate::modules::tray_layout::PLATFORM_ANTIGRAVITY => Some(Self::Antigravity),
+            crate::modules::tray_layout::PLATFORM_T3CODE => Some(Self::T3Code),
             crate::modules::tray_layout::PLATFORM_CODEX => Some(Self::Codex),
             crate::modules::tray_layout::PLATFORM_CLAUDE_MANAGER => Some(Self::Claude),
             crate::modules::tray_layout::PLATFORM_ZED => Some(Self::Zed),
@@ -284,6 +293,7 @@ impl PlatformId {
             crate::modules::tray_layout::PLATFORM_CODEBUDDY => Some(Self::Codebuddy),
             crate::modules::tray_layout::PLATFORM_CODEBUDDY_CN => Some(Self::CodebuddyCn),
             crate::modules::tray_layout::PLATFORM_QODER => Some(Self::Qoder),
+            crate::modules::tray_layout::PLATFORM_QODER_CN => Some(Self::QoderCn),
             crate::modules::tray_layout::PLATFORM_ZCODE => Some(Self::Zcode),
             crate::modules::tray_layout::PLATFORM_TRAE => Some(Self::Trae),
             crate::modules::tray_layout::PLATFORM_TRAE_SOLO => Some(Self::TraeSolo),
@@ -298,6 +308,7 @@ impl PlatformId {
     pub(crate) fn as_str(self) -> &'static str {
         match self {
             Self::Antigravity => crate::modules::tray_layout::PLATFORM_ANTIGRAVITY,
+            Self::T3Code => crate::modules::tray_layout::PLATFORM_T3CODE,
             Self::Codex => crate::modules::tray_layout::PLATFORM_CODEX,
             Self::Claude => crate::modules::tray_layout::PLATFORM_CLAUDE_MANAGER,
             Self::Zed => crate::modules::tray_layout::PLATFORM_ZED,
@@ -309,6 +320,7 @@ impl PlatformId {
             Self::Codebuddy => crate::modules::tray_layout::PLATFORM_CODEBUDDY,
             Self::CodebuddyCn => crate::modules::tray_layout::PLATFORM_CODEBUDDY_CN,
             Self::Qoder => crate::modules::tray_layout::PLATFORM_QODER,
+            Self::QoderCn => crate::modules::tray_layout::PLATFORM_QODER_CN,
             Self::Zcode => crate::modules::tray_layout::PLATFORM_ZCODE,
             Self::Trae => crate::modules::tray_layout::PLATFORM_TRAE,
             Self::TraeSolo => crate::modules::tray_layout::PLATFORM_TRAE_SOLO,
@@ -322,6 +334,7 @@ impl PlatformId {
     pub(crate) fn title(self) -> &'static str {
         match self {
             Self::Antigravity => "Antigravity IDE",
+            Self::T3Code => "T3 Code",
             Self::Codex => "Codex",
             Self::Claude => "Claude",
             Self::Zed => "Zed",
@@ -333,6 +346,7 @@ impl PlatformId {
             Self::Codebuddy => "CodeBuddy",
             Self::CodebuddyCn => "CodeBuddy CN",
             Self::Qoder => "Qoder",
+            Self::QoderCn => "Qoder CN",
             Self::Zcode => "ZCode",
             Self::Trae => "Trae",
             Self::TraeSolo => super::trae_account::TraePlatformKind::TraeSolo.display_name(),
@@ -346,6 +360,7 @@ impl PlatformId {
     pub(crate) fn nav_target(self) -> &'static str {
         match self {
             Self::Antigravity => "overview",
+            Self::T3Code => "t3code",
             Self::Codex => "codex",
             Self::Claude => "claude",
             Self::Zed => "zed",
@@ -357,6 +372,7 @@ impl PlatformId {
             Self::Codebuddy => "codebuddy",
             Self::CodebuddyCn => "codebuddy-cn",
             Self::Qoder => "qoder",
+            Self::QoderCn => "qoder-cn",
             Self::Zcode => "zcode",
             Self::Trae => "trae",
             Self::TraeSolo => "trae-solo",
@@ -963,6 +979,7 @@ fn parse_group_entry_id(raw: &str) -> Option<String> {
 fn get_account_display_info(platform: PlatformId, lang: &str) -> AccountDisplayInfo {
     match platform {
         PlatformId::Antigravity => build_antigravity_display_info(lang),
+        PlatformId::T3Code => tray_t3code::build_t3code_display_info(lang),
         PlatformId::Codex => build_codex_display_info(lang),
         PlatformId::Claude => build_claude_display_info(lang, true),
         PlatformId::Zed => build_zed_display_info(lang),
@@ -973,6 +990,7 @@ fn get_account_display_info(platform: PlatformId, lang: &str) -> AccountDisplayI
         PlatformId::Grok => build_grok_display_info(lang),
         PlatformId::Codebuddy => build_codebuddy_display_info(lang),
         PlatformId::CodebuddyCn => build_codebuddy_cn_display_info(lang),
+        PlatformId::QoderCn => build_qoder_cn_display_info(lang),
         PlatformId::Qoder => build_qoder_display_info(lang),
         PlatformId::Zcode => build_zcode_display_info(lang),
         PlatformId::Trae | PlatformId::TraeSolo | PlatformId::TraeCn | PlatformId::TraeSoloCn => {
@@ -984,15 +1002,40 @@ fn get_account_display_info(platform: PlatformId, lang: &str) -> AccountDisplayI
 }
 
 #[cfg(not(target_os = "macos"))]
+fn build_antigravity_summary_window_lines(
+    lang: &str,
+    quota: &crate::models::quota::QuotaData,
+) -> Vec<String> {
+    crate::modules::quota::resolve_antigravity_summary_windows(lang, quota)
+        .into_iter()
+        .map(|window| {
+            let reset_ts = parse_model_reset_ts(&window.reset_time);
+            let reset_text = reset_ts.map(|ts| format_reset_time_from_ts(lang, Some(ts)));
+            format_quota_line(
+                lang,
+                &window.label,
+                &format_percent_text(window.percentage),
+                reset_text.as_deref(),
+            )
+        })
+        .collect()
+}
+
+#[cfg(not(target_os = "macos"))]
 fn build_antigravity_display_info(lang: &str) -> AccountDisplayInfo {
     match crate::modules::account::get_current_account() {
         Ok(Some(account)) => {
             let quota_lines = if let Some(quota) = &account.quota {
-                let grouped_lines = build_antigravity_group_quota_lines(lang, &quota.models);
-                if grouped_lines.is_empty() {
-                    build_model_quota_lines(lang, &quota.models)
+                let window_lines = build_antigravity_summary_window_lines(lang, quota);
+                if !window_lines.is_empty() {
+                    window_lines
                 } else {
-                    grouped_lines
+                    let grouped_lines = build_antigravity_group_quota_lines(lang, &quota.models);
+                    if grouped_lines.is_empty() {
+                        build_model_quota_lines(lang, &quota.models)
+                    } else {
+                        grouped_lines
+                    }
                 }
             } else {
                 vec![get_text("loading", lang)]
@@ -1092,7 +1135,7 @@ fn build_antigravity_group_quota_lines(
     models: &[crate::models::quota::ModelQuota],
 ) -> Vec<String> {
     let settings = crate::modules::group_settings::load_group_settings();
-    let ordered_groups = settings.get_ordered_groups(Some(3));
+    let ordered_groups = settings.get_ordered_groups(None);
     if ordered_groups.is_empty() {
         return Vec::new();
     }
@@ -1138,6 +1181,9 @@ fn build_antigravity_group_quota_lines(
             &format_percent_text(avg_percentage),
             reset_text.as_deref(),
         ));
+        if lines.len() >= 3 {
+            break;
+        }
     }
 
     lines
@@ -1951,9 +1997,34 @@ fn json_as_f64(value: &serde_json::Value) -> Option<f64> {
 
 #[cfg(not(target_os = "macos"))]
 fn build_qoder_display_info(lang: &str) -> AccountDisplayInfo {
+    qoder_display_info(current_qoder_account(), lang)
+}
+
+/// Qoder CN 的菜单栏卡片：取数与全球版一致，只是账号来自 CN 存储。
+#[cfg(not(target_os = "macos"))]
+fn build_qoder_cn_display_info(lang: &str) -> AccountDisplayInfo {
+    qoder_display_info(current_qoder_cn_account(), lang)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn current_qoder_account() -> Option<crate::models::qoder::QoderAccount> {
     let accounts = crate::modules::qoder_account::list_accounts();
-    let account = crate::modules::qoder_account::resolve_current_account_id(&accounts)
-        .and_then(|account_id| accounts.iter().find(|item| item.id == account_id).cloned());
+    crate::modules::qoder_account::resolve_current_account_id(&accounts)
+        .and_then(|account_id| accounts.iter().find(|item| item.id == account_id).cloned())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn current_qoder_cn_account() -> Option<crate::models::qoder::QoderAccount> {
+    let accounts = crate::modules::qoder_native::list_accounts();
+    let current = crate::modules::qoder_native::resolve_current_account_id(&accounts)?;
+    accounts.into_iter().find(|account| account.id == current)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn qoder_display_info(
+    account: Option<crate::models::qoder::QoderAccount>,
+    lang: &str,
+) -> AccountDisplayInfo {
 
     let Some(account) = account else {
         return AccountDisplayInfo {
@@ -2206,6 +2277,8 @@ fn parse_qoder_quota_bucket(
         })
         .or_else(|| fallback.and_then(|(_, t, _)| *t));
 
+    // Credits are authoritative when present, and a reported ratio has to be
+    // converted to percent points before it reaches the tray label.
     let percentage = crate::modules::qoder_usage::derived_percent(used, total).or_else(|| {
         raw.as_ref()
             .and_then(|r| {
@@ -3829,231 +3902,7 @@ fn parse_platform_from_menu_id(id: &str) -> Option<PlatformId> {
 /// native menu construction is applied in a single UI-thread pass.
 include!("tray_menu_rebuild.rs");
 
-/// 获取本地化文本
-#[cfg(not(target_os = "macos"))]
-fn get_text(key: &str, lang: &str) -> String {
-    match (key, lang) {
-        // 简体中文
-        ("show_window", "zh-cn") => "显示主窗口".to_string(),
-        ("show_floating_card", "zh-cn") => "显示悬浮卡片".to_string(),
-        ("refresh_quota", "zh-cn") => "🔄 刷新配额".to_string(),
-        ("settings", "zh-cn") => "⚙️ 设置...".to_string(),
-        ("quit", "zh-cn") => "❌ 退出".to_string(),
-        ("not_logged_in", "zh-cn") => "未登录".to_string(),
-        ("loading", "zh-cn") => "加载中...".to_string(),
-        ("reset", "zh-cn") => "重置".to_string(),
-        ("reset_done", "zh-cn") => "已重置".to_string(),
-        ("reset_unknown", "zh-cn") => "重置时间未知".to_string(),
-        ("left", "zh-cn") => "剩余".to_string(),
-        ("usage_status", "zh-cn") => "用量状态".to_string(),
-        ("plan", "zh-cn") => "订阅".to_string(),
-        ("claude_current_session", "zh-cn") => "Current session".to_string(),
-        ("claude_current_week_all_models", "zh-cn") => "Current week (all models)".to_string(),
-        ("token_spend", "zh-cn") => "Token 消耗".to_string(),
-        ("edit_predictions", "zh-cn") => "编辑预测".to_string(),
-        ("overdue_field", "zh-cn") => "是否欠费".to_string(),
-        ("overdue_yes", "zh-cn") => "是".to_string(),
-        ("overdue_no", "zh-cn") => "否".to_string(),
-        ("status_normal_short", "zh-cn") => "正常".to_string(),
-        ("included", "zh-cn") => "包含".to_string(),
-        ("ghcp_inline", "zh-cn") => "Inline".to_string(),
-        ("ghcp_chat", "zh-cn") => "Chat".to_string(),
-        ("ghcp_premium", "zh-cn") => "Premium".to_string(),
-        ("windsurf_daily_quota_usage", "zh-cn") => "每日额度用量".to_string(),
-        ("windsurf_weekly_quota_usage", "zh-cn") => "每周额度用量".to_string(),
-        ("windsurf_extra_usage_balance", "zh-cn") => "额外用量余额".to_string(),
-        ("windsurf_credits_left", "zh-cn") => "剩余积分".to_string(),
-        ("windsurf_prompt_credits_left", "zh-cn") => "Prompt Credits".to_string(),
-        ("windsurf_addon_credits_available", "zh-cn") => "附加积分".to_string(),
-        ("subscription_reset", "zh-cn") => "订阅重置".to_string(),
-        ("more_platforms", "zh-cn") => "更多平台".to_string(),
-        ("no_platform_selected", "zh-cn") => "未选择托盘平台".to_string(),
-
-        // 繁体中文
-        ("show_window", "zh-tw") => "顯示主視窗".to_string(),
-        ("show_floating_card", "zh-tw") => "顯示懸浮卡片".to_string(),
-        ("refresh_quota", "zh-tw") => "🔄 重新整理配額".to_string(),
-        ("settings", "zh-tw") => "⚙️ 設定...".to_string(),
-        ("quit", "zh-tw") => "❌ 結束".to_string(),
-        ("not_logged_in", "zh-tw") => "未登入".to_string(),
-        ("loading", "zh-tw") => "載入中...".to_string(),
-        ("reset", "zh-tw") => "重置".to_string(),
-        ("reset_done", "zh-tw") => "已重置".to_string(),
-        ("reset_unknown", "zh-tw") => "重置時間未知".to_string(),
-        ("left", "zh-tw") => "剩餘".to_string(),
-        ("usage_status", "zh-tw") => "用量狀態".to_string(),
-        ("plan", "zh-tw") => "訂閱".to_string(),
-        ("claude_current_session", "zh-tw") => "目前工作階段".to_string(),
-        ("claude_current_week_all_models", "zh-tw") => "本週（所有模型）".to_string(),
-        ("token_spend", "zh-tw") => "Token 消耗".to_string(),
-        ("edit_predictions", "zh-tw") => "編輯預測".to_string(),
-        ("overdue_field", "zh-tw") => "是否欠費".to_string(),
-        ("overdue_yes", "zh-tw") => "是".to_string(),
-        ("overdue_no", "zh-tw") => "否".to_string(),
-        ("status_normal_short", "zh-tw") => "正常".to_string(),
-        ("included", "zh-tw") => "已包含".to_string(),
-        ("ghcp_inline", "zh-tw") => "Inline".to_string(),
-        ("ghcp_chat", "zh-tw") => "Chat".to_string(),
-        ("ghcp_premium", "zh-tw") => "Premium".to_string(),
-        ("windsurf_daily_quota_usage", "zh-tw") => "每日額度用量".to_string(),
-        ("windsurf_weekly_quota_usage", "zh-tw") => "每週額度用量".to_string(),
-        ("windsurf_extra_usage_balance", "zh-tw") => "額外用量餘額".to_string(),
-        ("windsurf_credits_left", "zh-tw") => "剩餘積分".to_string(),
-        ("windsurf_prompt_credits_left", "zh-tw") => "Prompt Credits".to_string(),
-        ("windsurf_addon_credits_available", "zh-tw") => "附加積分".to_string(),
-        ("subscription_reset", "zh-tw") => "訂閱重置".to_string(),
-        ("more_platforms", "zh-tw") => "更多平台".to_string(),
-        ("no_platform_selected", "zh-tw") => "未選擇托盤平台".to_string(),
-
-        // 英文
-        ("show_window", "en") => "Show Window".to_string(),
-        ("show_floating_card", "en") => "Show Floating Card".to_string(),
-        ("refresh_quota", "en") => "🔄 Refresh Quota".to_string(),
-        ("settings", "en") => "⚙️ Settings...".to_string(),
-        ("quit", "en") => "❌ Quit".to_string(),
-        ("not_logged_in", "en") => "Not logged in".to_string(),
-        ("loading", "en") => "Loading...".to_string(),
-        ("reset", "en") => "Reset".to_string(),
-        ("reset_done", "en") => "Reset done".to_string(),
-        ("reset_unknown", "en") => "Reset time unknown".to_string(),
-        ("left", "en") => "left".to_string(),
-        ("usage_status", "en") => "Usage Status".to_string(),
-        ("plan", "en") => "Plan".to_string(),
-        ("claude_current_session", "en") => "Current session".to_string(),
-        ("claude_current_week_all_models", "en") => "Current week (all models)".to_string(),
-        ("token_spend", "en") => "Token Spend".to_string(),
-        ("edit_predictions", "en") => "Edit Predictions".to_string(),
-        ("overdue_field", "en") => "Overdue".to_string(),
-        ("overdue_yes", "en") => "Yes".to_string(),
-        ("overdue_no", "en") => "No".to_string(),
-        ("status_normal_short", "en") => "Normal".to_string(),
-        ("included", "en") => "Included".to_string(),
-        ("ghcp_inline", "en") => "Inline".to_string(),
-        ("ghcp_chat", "en") => "Chat".to_string(),
-        ("ghcp_premium", "en") => "Premium".to_string(),
-        ("windsurf_daily_quota_usage", "en") => "Daily quota usage".to_string(),
-        ("windsurf_weekly_quota_usage", "en") => "Weekly quota usage".to_string(),
-        ("windsurf_extra_usage_balance", "en") => "Extra usage balance".to_string(),
-        ("windsurf_credits_left", "en") => "Credits left".to_string(),
-        ("windsurf_prompt_credits_left", "en") => "Prompt credits left".to_string(),
-        ("windsurf_addon_credits_available", "en") => "Add-on credits available".to_string(),
-        ("subscription_reset", "en") => "Subscription reset".to_string(),
-        ("more_platforms", "en") => "More platforms".to_string(),
-        ("no_platform_selected", "en") => "No tray platforms selected".to_string(),
-
-        // 日语
-        ("show_window", "ja") => "ウィンドウを表示".to_string(),
-        ("show_floating_card", "ja") => "フローティングカードを表示".to_string(),
-        ("refresh_quota", "ja") => "🔄 クォータを更新".to_string(),
-        ("settings", "ja") => "⚙️ 設定...".to_string(),
-        ("quit", "ja") => "❌ 終了".to_string(),
-        ("not_logged_in", "ja") => "未ログイン".to_string(),
-        ("loading", "ja") => "読み込み中...".to_string(),
-        ("reset", "ja") => "リセット".to_string(),
-        ("reset_done", "ja") => "リセット済み".to_string(),
-        ("reset_unknown", "ja") => "リセット時間不明".to_string(),
-        ("left", "ja") => "残り".to_string(),
-        ("usage_status", "ja") => "利用状況".to_string(),
-        ("plan", "ja") => "プラン".to_string(),
-        ("claude_current_session", "ja") => "現在のセッション".to_string(),
-        ("claude_current_week_all_models", "ja") => "今週（全モデル）".to_string(),
-        ("token_spend", "ja") => "Token Spend".to_string(),
-        ("edit_predictions", "ja") => "Edit Predictions".to_string(),
-        ("overdue_field", "ja") => "延滞有無".to_string(),
-        ("overdue_yes", "ja") => "はい".to_string(),
-        ("overdue_no", "ja") => "いいえ".to_string(),
-        ("status_normal_short", "ja") => "正常".to_string(),
-        ("included", "ja") => "含まれる".to_string(),
-        ("ghcp_inline", "ja") => "Inline".to_string(),
-        ("ghcp_chat", "ja") => "Chat".to_string(),
-        ("ghcp_premium", "ja") => "Premium".to_string(),
-        ("windsurf_daily_quota_usage", "ja") => "日次クォータ使用量".to_string(),
-        ("windsurf_weekly_quota_usage", "ja") => "週次クォータ使用量".to_string(),
-        ("windsurf_extra_usage_balance", "ja") => "追加使用残高".to_string(),
-        ("windsurf_credits_left", "ja") => "残りクレジット".to_string(),
-        ("windsurf_prompt_credits_left", "ja") => "Prompt Credits".to_string(),
-        ("windsurf_addon_credits_available", "ja") => "追加クレジット".to_string(),
-        ("subscription_reset", "ja") => "サブスクリプションリセット".to_string(),
-        ("more_platforms", "ja") => "その他のプラットフォーム".to_string(),
-        ("no_platform_selected", "ja") => {
-            "トレイに表示するプラットフォームがありません".to_string()
-        }
-
-        // 俄语
-        ("show_window", "ru") => "Показать окно".to_string(),
-        ("show_floating_card", "ru") => "Показать плавающую карточку".to_string(),
-        ("refresh_quota", "ru") => "🔄 Обновить квоту".to_string(),
-        ("settings", "ru") => "⚙️ Настройки...".to_string(),
-        ("quit", "ru") => "❌ Выход".to_string(),
-        ("not_logged_in", "ru") => "Не авторизован".to_string(),
-        ("loading", "ru") => "Загрузка...".to_string(),
-        ("reset", "ru") => "Сброс".to_string(),
-        ("reset_done", "ru") => "Сброс выполнен".to_string(),
-        ("reset_unknown", "ru") => "Время сброса неизвестно".to_string(),
-        ("left", "ru") => "осталось".to_string(),
-        ("usage_status", "ru") => "Статус использования".to_string(),
-        ("plan", "ru") => "План".to_string(),
-        ("claude_current_session", "ru") => "Текущая сессия".to_string(),
-        ("claude_current_week_all_models", "ru") => "Текущая неделя (все модели)".to_string(),
-        ("token_spend", "ru") => "Token Spend".to_string(),
-        ("edit_predictions", "ru") => "Edit Predictions".to_string(),
-        ("overdue_field", "ru") => "Есть задолженность".to_string(),
-        ("overdue_yes", "ru") => "Да".to_string(),
-        ("overdue_no", "ru") => "Нет".to_string(),
-        ("status_normal_short", "ru") => "Норма".to_string(),
-        ("included", "ru") => "Включено".to_string(),
-        ("ghcp_inline", "ru") => "Inline".to_string(),
-        ("ghcp_chat", "ru") => "Chat".to_string(),
-        ("ghcp_premium", "ru") => "Premium".to_string(),
-        ("windsurf_daily_quota_usage", "ru") => "Дневная квота".to_string(),
-        ("windsurf_weekly_quota_usage", "ru") => "Недельная квота".to_string(),
-        ("windsurf_extra_usage_balance", "ru") => "Баланс доп. использования".to_string(),
-        ("windsurf_credits_left", "ru") => "Остаток кредитов".to_string(),
-        ("windsurf_prompt_credits_left", "ru") => "Prompt credits".to_string(),
-        ("windsurf_addon_credits_available", "ru") => "Доп. кредиты".to_string(),
-        ("subscription_reset", "ru") => "Сброс подписки".to_string(),
-        ("more_platforms", "ru") => "Другие платформы".to_string(),
-        ("no_platform_selected", "ru") => "Платформы для трея не выбраны".to_string(),
-
-        // 默认英文
-        ("show_window", _) => "Show Window".to_string(),
-        ("show_floating_card", _) => "Show Floating Card".to_string(),
-        ("refresh_quota", _) => "🔄 Refresh Quota".to_string(),
-        ("settings", _) => "⚙️ Settings...".to_string(),
-        ("quit", _) => "❌ Quit".to_string(),
-        ("not_logged_in", _) => "Not logged in".to_string(),
-        ("loading", _) => "Loading...".to_string(),
-        ("reset", _) => "Reset".to_string(),
-        ("reset_done", _) => "Reset done".to_string(),
-        ("reset_unknown", _) => "Reset time unknown".to_string(),
-        ("left", _) => "left".to_string(),
-        ("usage_status", _) => "Usage Status".to_string(),
-        ("plan", _) => "Plan".to_string(),
-        ("claude_current_session", _) => "Current session".to_string(),
-        ("claude_current_week_all_models", _) => "Current week (all models)".to_string(),
-        ("token_spend", _) => "Token Spend".to_string(),
-        ("edit_predictions", _) => "Edit Predictions".to_string(),
-        ("overdue_field", _) => "Overdue".to_string(),
-        ("overdue_yes", _) => "Yes".to_string(),
-        ("overdue_no", _) => "No".to_string(),
-        ("status_normal_short", _) => "Normal".to_string(),
-        ("included", _) => "Included".to_string(),
-        ("ghcp_inline", _) => "Inline".to_string(),
-        ("ghcp_chat", _) => "Chat".to_string(),
-        ("ghcp_premium", _) => "Premium".to_string(),
-        ("windsurf_daily_quota_usage", _) => "Daily quota usage".to_string(),
-        ("windsurf_weekly_quota_usage", _) => "Weekly quota usage".to_string(),
-        ("windsurf_extra_usage_balance", _) => "Extra usage balance".to_string(),
-        ("windsurf_credits_left", _) => "Credits left".to_string(),
-        ("windsurf_prompt_credits_left", _) => "Prompt credits left".to_string(),
-        ("windsurf_addon_credits_available", _) => "Add-on credits available".to_string(),
-        ("subscription_reset", _) => "Subscription reset".to_string(),
-        ("more_platforms", _) => "More platforms".to_string(),
-        ("no_platform_selected", _) => "No tray platforms selected".to_string(),
-
-        _ => key.to_string(),
-    }
-}
+include!("tray_i18n.rs");
 
 #[cfg(test)]
 #[path = "tray_menu_rebuild_tests.rs"]

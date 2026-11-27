@@ -907,6 +907,43 @@ async fn context_rebuild_cache_miss_reasoning_and_agent_cipher_keep_original_a_p
 }
 
 #[tokio::test]
+async fn context_rebuild_full_inline_input_rebinds_across_providers_after_turn_state_pin() {
+    let fixture = Fixture::new(
+        true,
+        vec![Step::Complete("a-root", None)],
+        vec![Step::Complete("b-reply", None)],
+    )
+    .await;
+    let mut request = body(vec![message("user", "first")], None, false);
+    request["model"] = json!("provider-a-model");
+    let response = fixture.post(&request, None).await;
+    assert_eq!(response.status(), 200);
+    response.bytes().await.unwrap();
+
+    let expected = json!([
+        message("user", "first"),
+        message("assistant", "answer-a-root"),
+        message("user", "switch to provider B"),
+    ]);
+    let mut request = body(vec![message("user", "switch to provider B")], None, false);
+    request["model"] = json!("provider-b-model");
+    request["input"] = expected.clone();
+    let response = fixture
+        .post(&request, Some("synthetic-state-a-root"))
+        .await;
+    let status = response.status();
+    let output = response.text().await.unwrap();
+    assert_eq!(status, 200, "{output}");
+    let sent = fixture.sent();
+    assert_eq!(sent.len(), 2);
+    assert_eq!(sent[1].account, "b");
+    assert_eq!(sent[1].body["input"], expected);
+    assert_eq!(fixture.active().unwrap().0, "b");
+    fixture.assert_owner("b-reply", "b");
+    fixture.finish().await;
+}
+
+#[tokio::test]
 async fn context_rebuild_unknown_complete_history_automatically_retries_an_available_account() {
     for failure in [Step::HttpOverload, Step::SseOverload] {
         let streaming = matches!(failure, Step::SseOverload);

@@ -672,6 +672,7 @@
     ) -> (Vec<AccountCard>, Option<String>, Option<String>) {
         match platform {
             PlatformId::Antigravity => build_antigravity_cards(lang),
+            PlatformId::T3Code => build_t3code_cards(lang),
             PlatformId::Codex => build_codex_cards(lang),
             PlatformId::Claude => build_claude_cards(lang, true),
             PlatformId::GitHubCopilot => build_ghcp_cards(lang),
@@ -680,6 +681,7 @@
             PlatformId::Cursor => build_cursor_cards(lang),
             PlatformId::Grok => build_grok_cards(lang),
             PlatformId::Qoder => build_qoder_cards(lang),
+            PlatformId::QoderCn => build_qoder_cn_cards(lang),
             PlatformId::Zcode => build_zcode_cards(lang),
             PlatformId::Trae
             | PlatformId::TraeSolo
@@ -718,8 +720,7 @@
                 let remaining_percent = if metric.is_empty() {
                     min_quota_progress(&quota_rows, true)
                 } else {
-                    quota.and_then(|quota| selected_antigravity_menu_quota(quota, metric))
-                        .map(|model| model.percentage.clamp(0, 100))
+                    quota.and_then(|quota| selected_antigravity_menu_percentage(quota, metric))
                 };
                 AccountCard {
                     id: account.id,
@@ -1692,9 +1693,23 @@
         (cards, current_id, recommended)
     }
 
+    fn build_qoder_cn_cards(lang: &str) -> (Vec<AccountCard>, Option<String>, Option<String>) {
+        let accounts = modules::qoder_native::list_accounts();
+        let current_id = modules::qoder_native::resolve_current_account_id(&accounts);
+        build_qoder_cards_for(lang, accounts, current_id)
+    }
+
     fn build_qoder_cards(lang: &str) -> (Vec<AccountCard>, Option<String>, Option<String>) {
-        let mut accounts = modules::qoder_account::list_accounts();
+        let accounts = modules::qoder_account::list_accounts();
         let current_id = modules::qoder_account::resolve_current_account_id(&accounts);
+        build_qoder_cards_for(lang, accounts, current_id)
+    }
+
+    fn build_qoder_cards_for(
+        lang: &str,
+        mut accounts: Vec<crate::models::qoder::QoderAccount>,
+        current_id: Option<String>,
+    ) -> (Vec<AccountCard>, Option<String>, Option<String>) {
         accounts
             .sort_by_key(|account| std::cmp::Reverse(account.last_used.max(account.created_at)));
         let cards = accounts
@@ -2396,5 +2411,201 @@
             })
             .collect();
         (cards, current_id, recommended)
+    }
+
+    fn build_t3code_cards(lang: &str) -> (Vec<AccountCard>, Option<String>, Option<String>) {
+        let summaries = modules::t3code_provider_bindings::list_default_tray_provider_summaries();
+        build_t3code_cards_from_summaries(&summaries, lang)
+    }
+
+    fn build_t3code_cards_from_summaries(
+        summaries: &[modules::t3code_provider_bindings::T3CodeTrayProviderSummary],
+        lang: &str,
+    ) -> (Vec<AccountCard>, Option<String>, Option<String>) {
+        let cards: Vec<AccountCard> = summaries
+            .iter()
+            .map(|summary| {
+                let account_label = if summary.bound_is_api_service {
+                    translate_or(lang, "common.apiBudget.gatewayName", "Codex API Service", &[])
+                } else {
+                    summary
+                        .bound_account_email
+                        .as_deref()
+                        .map(str::trim)
+                        .filter(|value| !value.is_empty())
+                        .map(str::to_string)
+                        .unwrap_or_else(|| summary.display_name.clone())
+                };
+                let title = if account_label == summary.display_name {
+                    summary.display_name.clone()
+                } else {
+                    format!("{} · {}", summary.display_name, account_label)
+                };
+                let windows = modules::t3code_provider_bindings::resolve_t3code_summary_windows(
+                    &summary.driver,
+                    &summary.windows,
+                    summary.quota_summary_groups.as_deref(),
+                    6,
+                );
+                let mut rows = Vec::with_capacity(windows.len());
+                for window in &windows {
+                    let label = if window.id == "credits" {
+                        translate_or(lang, "accounts.credits.label", "Credits", &[])
+                    } else if summary.driver == modules::t3code_provider_bindings::DRIVER_CODEX
+                        && (window.id == "weekly" || window.label == "7d")
+                    {
+                        localize_codex_pool_window_label(lang, "Weekly")
+                    } else {
+                        window.label.clone()
+                    };
+                    let subtext = modules::t3code_provider_bindings::parse_t3code_reset_ts(
+                        window.reset_time.as_deref(),
+                    )
+                    .and_then(|ts| format_reset_subtext(lang, Some(ts)));
+                    match &window.remaining {
+                        crate::models::t3code::T3CodeQuotaRemaining::Percent {
+                            remaining_percent,
+                        } => {
+                            let pct = (*remaining_percent).clamp(0, 100);
+                            rows.push(make_progress_row(
+                                label,
+                                format!("{}%", (*remaining_percent).max(0)),
+                                pct,
+                                subtext,
+                                remaining_balance_tone(pct),
+                            ));
+                        }
+                        crate::models::t3code::T3CodeQuotaRemaining::Amount {
+                            remaining_amount,
+                        } => {
+                            rows.push(make_text_row(
+                                label,
+                                format_quota_number(*remaining_amount),
+                                subtext,
+                            ));
+                        }
+                    }
+                }
+                if rows.is_empty() {
+                    if let Some(value) = summary
+                        .provider_quota
+                        .as_ref()
+                        .and_then(|quota| quota.summary_value_text())
+                    {
+                        rows.push(make_text_row(summary.display_name.clone(), value, None));
+                    }
+                }
+                let remaining_percent = min_quota_progress(&rows, true);
+                AccountCard {
+                    id: summary.instance_id.clone(),
+                    title,
+                    plan: summary
+                        .bound_account_plan
+                        .clone()
+                        .filter(|value| !value.trim().is_empty()),
+                    updated_at: summary.bound_updated_at,
+                    quota_rows: rows,
+                    remaining_percent,
+                }
+            })
+            .collect();
+        let current_id = cards.first().map(|card| card.id.clone());
+        (cards, current_id, None)
+    }
+
+    #[cfg(test)]
+    mod t3code_card_tests {
+        use super::*;
+        use crate::models::quota::{QuotaSummaryGroup, QuotaSummaryWindow};
+        use crate::models::t3code::{T3CodeQuotaRemaining, T3CodeQuotaWindowView};
+        use crate::modules::t3code_provider_bindings::T3CodeTrayProviderSummary;
+
+        #[test]
+        fn t3code_cards_handle_empty_and_multi_provider_summaries() {
+            let (empty_cards, empty_current, empty_rec) = build_t3code_cards_from_summaries(&[], "en");
+            assert!(empty_cards.is_empty());
+            assert!(empty_current.is_none());
+            assert!(empty_rec.is_none());
+
+            let codex = T3CodeTrayProviderSummary {
+                instance_id: "codex".to_string(),
+                driver: "codex".to_string(),
+                display_name: "Codex".to_string(),
+                bound_account_id: Some("c1".to_string()),
+                bound_account_email: Some("alice@example.com".to_string()),
+                bound_account_plan: Some("PRO".to_string()),
+                bound_is_api_service: false,
+                bound_updated_at: Some(1_700_000_000),
+                windows: vec![T3CodeQuotaWindowView {
+                    id: "weekly".to_string(),
+                    label: "7d".to_string(),
+                    remaining: T3CodeQuotaRemaining::Percent { remaining_percent: 64 },
+                    reset_time: None,
+                }],
+                quota_summary_groups: None,
+                provider_quota: None,
+            };
+            let antigravity = T3CodeTrayProviderSummary {
+                instance_id: "antigravity".to_string(),
+                driver: "antigravity".to_string(),
+                display_name: "Antigravity".to_string(),
+                bound_account_id: Some("ag1".to_string()),
+                bound_account_email: Some("bob@example.com".to_string()),
+                bound_account_plan: Some("ULTRA".to_string()),
+                bound_is_api_service: false,
+                bound_updated_at: None,
+                windows: vec![],
+                quota_summary_groups: Some(vec![QuotaSummaryGroup {
+                    id: "gemini".to_string(),
+                    name: "Gemini".to_string(),
+                    models: vec![],
+                    windows: vec![QuotaSummaryWindow {
+                        id: "g5h".to_string(),
+                        period: "5h".to_string(),
+                        percentage: 90,
+                        reset_time: String::new(),
+                        summary_exhausted: None,
+                    }],
+                }]),
+                provider_quota: None,
+            };
+            let qoder = T3CodeTrayProviderSummary {
+                instance_id: "qoder".to_string(),
+                driver: "qoder".to_string(),
+                display_name: "Qoder".to_string(),
+                bound_account_id: Some("q1".to_string()),
+                bound_account_email: Some("carol@example.com".to_string()),
+                bound_account_plan: Some("PRO".to_string()),
+                bound_is_api_service: false,
+                bound_updated_at: None,
+                windows: vec![T3CodeQuotaWindowView {
+                    id: "credits".to_string(),
+                    label: "Credits".to_string(),
+                    remaining: T3CodeQuotaRemaining::Amount { remaining_amount: 42.5 },
+                    reset_time: None,
+                }],
+                quota_summary_groups: None,
+                provider_quota: None,
+            };
+
+            let (cards, current_id, recommended_id) =
+                build_t3code_cards_from_summaries(&[codex, antigravity, qoder], "en");
+            assert_eq!(cards.len(), 3);
+            assert_eq!(current_id.as_deref(), Some("codex"));
+            assert!(recommended_id.is_none());
+
+            assert_eq!(cards[0].title, "Codex · alice@example.com");
+            assert_eq!(cards[0].plan.as_deref(), Some("PRO"));
+            assert_eq!(cards[0].remaining_percent, Some(64));
+            assert_eq!(cards[0].quota_rows[0].value, "64%");
+
+            assert_eq!(cards[1].title, "Antigravity · bob@example.com");
+            assert_eq!(cards[1].quota_rows[0].label, "Gemini 5h");
+            assert_eq!(cards[1].remaining_percent, Some(90));
+
+            assert_eq!(cards[2].title, "Qoder · carol@example.com");
+            assert_eq!(cards[2].quota_rows[0].value, "42.5");
+            assert_eq!(cards[2].quota_rows[0].progress, None);
+        }
     }
 

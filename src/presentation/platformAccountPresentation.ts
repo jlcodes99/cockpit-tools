@@ -1,6 +1,12 @@
 import { getCodexServiceAccountDisplay, getCodexServiceSourceId } from "../utils/chatgptPlanOverview";
 import { resolveCodexAccountDisplayName } from "../utils/codexAccountDisplayName";
-import { getAntigravityModelDisplayName } from "../utils/antigravityModels";
+import {
+  canonicalSummaryWindowKey,
+  getAntigravityModelDisplayName,
+  isRetiredArgonSummaryGroup,
+  isRetiredArgonSummaryWindow,
+  resolveSummaryWindowPeriod,
+} from "../utils/antigravityModels";
 import type { Account } from "../types/account";
 import type {
   CodebuddyAccount,
@@ -192,6 +198,7 @@ export interface UnifiedAccountPresentation {
   id: string;
   displayName: string;
   planLabel: string;
+  planTitle?: string;
   planClass: string;
   quotaItems: UnifiedQuotaMetric[];
   cycleText?: string;
@@ -695,6 +702,44 @@ export function getAntigravityQuotaDisplayItems(
     });
   }
 
+  const emittedKeys = new Set(result.map((item) => item.key.toLowerCase()));
+  for (const group of account.quota?.quota_summary_groups ?? []) {
+    if (isRetiredArgonSummaryGroup(group.id)) {
+      continue;
+    }
+    for (const win of group.windows ?? []) {
+      const rawId = win.id.trim();
+      if (!rawId || isRetiredArgonSummaryWindow(rawId)) {
+        continue;
+      }
+      const period = resolveSummaryWindowPeriod(rawId, win.period);
+      const canonicalKey = canonicalSummaryWindowKey(rawId, period);
+      const lowerId = rawId.toLowerCase();
+      if (
+        emittedKeys.has(canonicalKey.toLowerCase())
+        || emittedKeys.has(lowerId)
+        || ANTIGRAVITY_QUOTA_WINDOW_IDS.has(canonicalKey)
+        || ANTIGRAVITY_QUOTA_WINDOW_IDS.has(rawId)
+      ) {
+        continue;
+      }
+      if (isFree && period === '5h') {
+        continue;
+      }
+      emittedKeys.add(canonicalKey.toLowerCase());
+      emittedKeys.add(lowerId);
+      const matchingModel = models.find((m) => m.name.toLowerCase() === lowerId);
+      const periodLabel = period === 'weekly' ? 'Weekly' : period;
+      result.push({
+        key: canonicalKey,
+        label: periodLabel ? `${group.name} (${periodLabel})` : group.name,
+        percentage: win.percentage,
+        resetTime: win.reset_time || matchingModel?.reset_time || '',
+        stale,
+      });
+    }
+  }
+
   return result;
 }
 
@@ -706,10 +751,16 @@ const ANTIGRAVITY_QUOTA_WINDOW_IDS = new Set([
 ]);
 
 export function getAntigravityModelQuotaDisplayItems(account: Account): AgQuotaDisplayItem[] {
+  const summaryWindowIds = new Set(
+    (account.quota?.quota_summary_groups ?? []).flatMap((group) =>
+      (group.windows ?? []).map((win) => win.id),
+    ),
+  );
   return (account.quota?.models ?? [])
     .filter(({ name }) =>
       !ANTIGRAVITY_QUOTA_WINDOW_IDS.has(name)
-      && !(name.startsWith('gemini-argon-') && /-(weekly|5h)$/.test(name)),
+      && !summaryWindowIds.has(name)
+      && !isRetiredArgonSummaryWindow(name),
     )
     .map((model) => ({
       key: model.name,
@@ -761,6 +812,7 @@ export function buildAntigravityAccountPresentation(
     id: account.id,
     displayName: account.email,
     planLabel: tierBadge.label,
+    planTitle: tierBadge.rawTier || tierBadge.label,
     planClass: tierBadge.className,
     quotaItems,
   };

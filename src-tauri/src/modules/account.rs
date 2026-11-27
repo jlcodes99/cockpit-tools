@@ -1,4 +1,6 @@
-use crate::modules::antigravity_account_index_store::{AccountIndexStore, IndexRead, LEGACY_FILE};
+use crate::modules::antigravity_account_index_store::{
+    AccountIndexStore, IndexDocument, IndexRead, IndexStore, LEGACY_FILE,
+};
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -348,7 +350,10 @@ fn save_account_index(index: &AccountIndex) -> Result<(), String> {
     save_account_index_locked(index)
 }
 
-fn schedule_index_store(store: AccountIndexStore) {
+pub(crate) fn schedule_index_store<T>(store: IndexStore<T>)
+where
+    T: IndexDocument + Send + 'static,
+{
     modules::background_maintenance::schedule(store.migration_key(), move || store.migrate_batch());
 }
 
@@ -2709,7 +2714,9 @@ fn persist_switch_history(item: modules::antigravity_switch_history::Antigravity
     });
 }
 
-fn ensure_antigravity_running_for_no_restart_switch() -> Result<bool, String> {
+fn ensure_antigravity_running_for_no_restart_switch(
+    egress_proxy_url: Option<&str>,
+) -> Result<bool, String> {
     let default_settings = modules::instance::load_default_settings()?;
     let resolved_pid = modules::process::resolve_antigravity_pid(default_settings.last_pid, None);
     if let Some(pid) = resolved_pid {
@@ -2725,11 +2732,8 @@ fn ensure_antigravity_running_for_no_restart_switch() -> Result<bool, String> {
 
     modules::logger::log_info("[Switch][NoRestart] Antigravity IDE 未运行，尝试自动启动");
     let extra_args = modules::process::parse_extra_args(&default_settings.extra_args);
-    let launch_result = if extra_args.is_empty() {
-        modules::process::start_antigravity()
-    } else {
-        modules::process::start_antigravity_with_args("", &extra_args)
-    };
+    let launch_result =
+        modules::process::start_antigravity_with_args_proxy("", &extra_args, egress_proxy_url);
     match launch_result {
         Ok(pid) => {
             if let Err(err) = modules::instance::update_default_pid(Some(pid)) {
@@ -2820,7 +2824,9 @@ pub async fn switch_account_dual_no_restart(
         }
     };
 
-    let was_started = match ensure_antigravity_running_for_no_restart_switch() {
+    let was_started =
+        match ensure_antigravity_running_for_no_restart_switch(account.egress_proxy_url.as_deref())
+        {
         Ok(started_now) => started_now,
         Err(error) => {
             modules::websocket::broadcast_account_switched(&account.id, &account.email);
@@ -3001,13 +3007,29 @@ async fn perform_ide_switch(
     dual_no_restart: bool,
 ) -> Result<IdeSwitchResult, String> {
     let permit = try_begin_antigravity_switch(&ANTIGRAVITY_SWITCH_GATE)?;
-    let local_profile = tokio::task::spawn_blocking(|| {
+    let (local_profile, initialization) = tokio::task::spawn_blocking(move || {
         if crate::commands::system::antigravity_ide_uses_shared_credentials() {
-            return Ok(None);
+            return Ok((None, None));
         }
         let profile = modules::instance::get_default_user_data_dir()?;
-        modules::instance::require_ide_switch_database(&profile, None)?;
-        Ok::<_, String>(Some(profile))
+        let initialization = if launch {
+            let settings = modules::instance::load_default_settings()?;
+            modules::client_initialization::prepare(
+                "antigravity_ide", "__default__",
+                || modules::client_initialization::state_db_ready(&profile),
+                || {
+                    if modules::process::resolve_antigravity_pid(settings.last_pid, None).is_none() {
+                        let args = modules::process::parse_extra_args(&settings.extra_args);
+                        modules::process::start_antigravity_with_args("", &args)?;
+                    }
+                    Ok(())
+                },
+            )?
+        } else {
+            modules::instance::require_ide_switch_database(&profile, None)?;
+            None
+        };
+        Ok::<_, String>((Some(profile), initialization))
     })
     .await
     .map_err(|error| error.to_string())??;
@@ -3019,6 +3041,7 @@ async fn perform_ide_switch(
     .map_err(|_| "ANTIGRAVITY_SWITCH_PREPARATION_TIMEOUT".to_string())??;
 
     tokio::task::spawn_blocking(move || {
+        let _initialization = initialization;
         let Some(default_dir) = local_profile else {
             let (account, launch_error) = modules::antigravity_shared_switch::switch(
                 &account,
@@ -3068,13 +3091,10 @@ async fn perform_ide_switch(
         }
 
         let launch_error = if launch {
+            let egress = account.egress_proxy_url.clone();
             let result = modules::instance::load_default_settings().and_then(|settings| {
                 let args = modules::process::parse_extra_args(&settings.extra_args);
-                if args.is_empty() {
-                    modules::process::start_antigravity()
-                } else {
-                    modules::process::start_antigravity_with_args("", &args)
-                }
+                modules::process::start_antigravity_with_args_proxy("", &args, egress.as_deref())
             });
             match result {
                 Ok(pid) => {

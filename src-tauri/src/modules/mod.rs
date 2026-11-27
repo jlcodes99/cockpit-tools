@@ -45,6 +45,7 @@ pub mod claude_desktop_gateway;
 pub(crate) mod claude_desktop_gateway_config;
 pub mod claude_instance;
 pub mod client_version;
+pub(crate) mod client_initialization;
 pub mod codebuddy_account;
 pub(crate) mod codebuddy_cli;
 pub mod codebuddy_cn_account;
@@ -181,17 +182,26 @@ pub mod provider_token_keeper;
 pub mod qoder_account;
 #[path = "../../../crates/cockpit-core/src/modules/qoder_channel.rs"]
 mod qoder_channel;
+#[path = "../../../crates/cockpit-core/src/modules/qoder_cn_account.rs"]
+pub mod qoder_cn_account;
 #[path = "../../../crates/cockpit-core/src/modules/qoder_identity.rs"]
 mod qoder_identity;
 pub mod qoder_instance;
+pub mod qoder_native;
+pub(crate) mod qoder_cn_clients;
+#[path = "../../../crates/cockpit-core/src/modules/qoder_native_profile.rs"]
+pub(crate) mod qoder_native_profile;
 #[path = "../../../crates/cockpit-core/src/modules/qoder_oauth.rs"]
 pub mod qoder_oauth;
 #[path = "../../../crates/cockpit-core/src/modules/qoder_paths.rs"]
 pub(crate) mod qoder_paths;
+pub mod qoder_quota_alert;
 pub mod quota;
 pub mod quota_cache;
 pub(crate) mod platform_quota_history;
 pub mod remote_config;
+#[path = "../../../crates/cockpit-core/src/modules/epoch_time.rs"]
+pub(crate) mod epoch_time;
 pub mod secure_account_storage;
 #[path = "../../../crates/cockpit-core/src/modules/account_file_crypto.rs"]
 mod account_file_crypto;

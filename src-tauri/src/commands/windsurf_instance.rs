@@ -194,22 +194,6 @@ pub async fn windsurf_update_instance(
         });
     }
 
-    let wants_bind = bind_account_id
-        .as_ref()
-        .and_then(|next| next.as_ref())
-        .is_some();
-    if wants_bind {
-        let store = modules::windsurf_instance::load_instance_store()?;
-        if let Some(target) = store.instances.iter().find(|item| item.id == instance_id) {
-            if !is_profile_initialized(&target.user_data_dir) {
-                return Err(
-                    "INSTANCE_NOT_INITIALIZED:请先启动一次实例创建数据后，再进行账号绑定"
-                        .to_string(),
-                );
-            }
-        }
-    }
-
     let instance = modules::windsurf_instance::update_instance(
         modules::windsurf_instance::UpdateInstanceParams {
             working_dir: None,
@@ -254,6 +238,22 @@ pub async fn windsurf_start_instance(instance_id: String) -> Result<InstanceProf
         let default_dir = modules::windsurf_instance::get_default_windsurf_user_data_dir()?;
         let default_dir_str = default_dir.to_string_lossy().to_string();
         let default_settings = modules::windsurf_instance::load_default_settings()?;
+        let extra_args = modules::process::parse_extra_args(&default_settings.extra_args);
+        let _initialization = if default_settings.bind_account_id.is_some() {
+            let root = default_dir.clone();
+            let args = extra_args.clone();
+            let last_pid = default_settings.last_pid;
+            modules::client_initialization::prepare_profile(
+                "windsurf", instance_id.clone(), move || modules::client_initialization::state_db_ready(&root),
+                move || {
+                    if modules::windsurf_instance::resolve_windsurf_pid(last_pid, None).is_none() {
+                        modules::windsurf_instance::start_windsurf_default_with_args_with_new_window(&args, true)?;
+                    }
+                    Ok(())
+                },
+            ).await?
+        } else { None };
+
         modules::windsurf_instance::close_windsurf(&[default_dir_str.clone()], 20)?;
         let _ = modules::windsurf_instance::update_default_pid(None)?;
         inject_bound_account_for_instance_start(
@@ -261,7 +261,6 @@ pub async fn windsurf_start_instance(instance_id: String) -> Result<InstanceProf
             default_settings.bind_account_id.as_deref(),
         )
         .await?;
-        let extra_args = modules::process::parse_extra_args(&default_settings.extra_args);
         let pid = modules::windsurf_instance::start_windsurf_default_with_args_with_new_window(
             &extra_args,
             true,
@@ -291,6 +290,23 @@ pub async fn windsurf_start_instance(instance_id: String) -> Result<InstanceProf
         .into_iter()
         .find(|item| item.id == instance_id)
         .ok_or("实例不存在")?;
+    let extra_args = modules::process::parse_extra_args(&instance.extra_args);
+    let _initialization = if instance.bind_account_id.is_some() {
+        let directory = instance.user_data_dir.clone();
+        let root = std::path::PathBuf::from(&directory);
+        let args = extra_args.clone();
+        let last_pid = instance.last_pid;
+        modules::client_initialization::prepare_profile(
+            "windsurf", instance_id.clone(), move || modules::client_initialization::state_db_ready(&root),
+            move || {
+                if modules::windsurf_instance::resolve_windsurf_pid(last_pid, Some(&directory)).is_none() {
+                    modules::windsurf_instance::start_windsurf_with_args_with_new_window(&directory, &args, true)?;
+                }
+                Ok(())
+            },
+        ).await?
+    } else { None };
+
 
     modules::windsurf_instance::close_windsurf(&[instance.user_data_dir.clone()], 20)?;
     let _ = modules::windsurf_instance::update_instance_pid(&instance.id, None)?;
@@ -299,7 +315,6 @@ pub async fn windsurf_start_instance(instance_id: String) -> Result<InstanceProf
         instance.bind_account_id.as_deref(),
     )
     .await?;
-    let extra_args = modules::process::parse_extra_args(&instance.extra_args);
     let pid = modules::windsurf_instance::start_windsurf_with_args_with_new_window(
         &instance.user_data_dir,
         &extra_args,

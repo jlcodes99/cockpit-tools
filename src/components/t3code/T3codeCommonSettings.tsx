@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Globe, SlidersHorizontal } from 'lucide-react';
+import { Globe } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import {
   getT3codeNativeLanguage,
@@ -58,14 +58,7 @@ export function T3codeCommonSettings() {
   }
 
   return (
-    <section className="t3code-common-settings" aria-label={t('t3code.commonSettings.title')}>
-      <div className="t3code-common-settings-lead">
-        <span className="t3code-common-settings-icon" aria-hidden="true">
-          <SlidersHorizontal size={15} />
-        </span>
-        <h3 className="t3code-common-settings-title">{t('t3code.commonSettings.title')}</h3>
-      </div>
-
+    <section className="t3code-common-settings" aria-label={t('common.commonSettings')}>
       <div className="t3code-common-settings-controls">
         <div className="t3code-common-settings-language">
           <Globe size={14} className="t3code-common-settings-lang-icon" aria-hidden="true" />

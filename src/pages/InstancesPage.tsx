@@ -146,7 +146,7 @@ export function InstancesPage({ onNavigate }: InstancesPageProps) {
         renderAccountBadge={(account) => {
           const presentation = buildAntigravityAccountPresentation(account, displayGroups, t);
           return (
-            <span className={`tier-badge ${presentation.planClass}`}>{presentation.planLabel}</span>
+            <span className={`tier-badge ${presentation.planClass}`} title={presentation.planTitle || presentation.planLabel}>{presentation.planLabel}</span>
           );
         }}
         getAccountSearchText={(account) => {

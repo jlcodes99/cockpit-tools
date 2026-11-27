@@ -89,12 +89,20 @@ export function hasRequestFirstResponse(value: number | null | undefined): value
 export type RequestTimeoutKind = 'open' | 'idle' | 'canceled' | 'gateway';
 export type RequestTimeoutField = 'sidecarStreamOpenTimeoutMs' | 'sidecarStreamIdleTimeoutMs'
   | 'sidecarImageStreamOpenTimeoutMs' | 'sidecarImageStreamIdleTimeoutMs';
+export const LARGE_REQUEST_TIMEOUT_BYTES = 20 * 1024 * 1024;
+
+function formatLargeRequestMb(bytes: number): string {
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 /** Read the threshold recorded by the gateway, never today's (possibly edited) setting. */
-export function requestTimeoutDiagnostic(event: {
-  success?: boolean; httpStatus?: number | null; errorCategory?: string | null;
-  errorMessage?: string | null; failurePhase?: string | null; requestKind?: string;
-}): { kind: RequestTimeoutKind; seconds?: number; field?: RequestTimeoutField } | null {
+export function requestTimeoutDiagnostic(
+  event: {
+    success?: boolean; httpStatus?: number | null; errorCategory?: string | null;
+    errorMessage?: string | null; failurePhase?: string | null; requestKind?: string;
+  },
+  requestBytes?: number | null,
+): { kind: RequestTimeoutKind; seconds?: number; field?: RequestTimeoutField; largeRequestSize?: string } | null {
   if (event.success) return null;
   const message = (event.errorMessage ?? '').toLowerCase();
   if (event.httpStatus === 499 || event.failurePhase === 'client_canceled' || event.errorCategory === 'client_canceled'
@@ -105,6 +113,7 @@ export function requestTimeoutDiagnostic(event: {
   const kind = match ? (match[1].startsWith('stream_open') ? 'open' : 'idle')
     : event.errorCategory === 'upstream_first_byte_timeout' || event.errorCategory === 'upstream_connect_timeout' ? 'open'
       : event.errorCategory === 'upstream_idle_timeout' ? 'idle' : null;
+  let diagnostic: { kind: RequestTimeoutKind; seconds?: number; field?: RequestTimeoutField } | null = null;
   if (kind) {
     const duration = match?.[2];
     const parts = duration ? [...duration.matchAll(/(\d+(?:\.\d+)?)(ms|us|µs|μs|ns|h|m|s)/g)] : [];
@@ -115,7 +124,14 @@ export function requestTimeoutDiagnostic(event: {
     const field = kind === 'open'
       ? image ? 'sidecarImageStreamOpenTimeoutMs' : 'sidecarStreamOpenTimeoutMs'
       : image ? 'sidecarImageStreamIdleTimeoutMs' : 'sidecarStreamIdleTimeoutMs';
-    return { kind, seconds, field };
+    diagnostic = { kind, seconds, field };
+  } else if (event.httpStatus === 504) {
+    diagnostic = { kind: 'gateway' };
   }
-  return event.httpStatus === 504 ? { kind: 'gateway' } : null;
+  if (!diagnostic) return null;
+  if ((diagnostic.kind === 'open' || diagnostic.kind === 'gateway')
+    && typeof requestBytes === 'number' && Number.isFinite(requestBytes) && requestBytes >= LARGE_REQUEST_TIMEOUT_BYTES) {
+    return { ...diagnostic, largeRequestSize: formatLargeRequestMb(requestBytes) };
+  }
+  return diagnostic;
 }

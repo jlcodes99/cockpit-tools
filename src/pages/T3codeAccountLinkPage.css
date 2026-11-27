@@ -91,6 +91,17 @@
   border-radius: var(--radius-md);
 }
 
+.t3code-instance-select {
+  flex: 0 1 200px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.t3code-instance-select .single-select-dropdown-trigger {
+  width: 100%;
+  min-height: 36px;
+}
+
 .t3code-overview-toolbar .t3code-runtime-pill {
   height: 32px;
   padding: 0 12px;
@@ -121,7 +132,6 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
   gap: 10px 16px;
   margin: 0;
   padding: 11px 16px;
@@ -131,40 +141,12 @@
   box-shadow: var(--shadow-sm);
 }
 
-.t3code-common-settings-lead {
-  display: inline-flex;
-  align-items: center;
-  gap: 9px;
-  min-width: 0;
-}
-
-.t3code-common-settings-icon {
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  color: var(--primary);
-  background: color-mix(in srgb, var(--primary) 10%, var(--bg-tertiary));
-  border: 1px solid color-mix(in srgb, var(--primary) 20%, transparent);
-}
-
-.t3code-common-settings-title {
-  margin: 0;
-  font-size: 13.5px;
-  font-weight: 650;
-  color: var(--text-primary);
-}
-
 .t3code-common-settings-controls {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 10px 14px;
   min-width: 0;
-  margin-inline-start: auto;
 }
 
 .t3code-common-settings-divider {
@@ -387,7 +369,7 @@
   justify-content: flex-end;
 }
 
-.t3code-overview-entry-actions:has(> .t3code-overview-default-tag) {
+.t3code-overview-entry-actions:has(> .t3code-overview-default-tag):not(:has(> .t3code-overview-switch)) {
   flex-wrap: nowrap;
 }
 

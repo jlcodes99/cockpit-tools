@@ -1194,7 +1194,7 @@ async fn api_service_grok_quota_lines(locale: &str) -> Option<Vec<InjectionGrokQ
     let Some(collection) = state.collection else {
         return Some(Vec::new());
     };
-    let shared_label = i18n::translate(locale, "grok.quota.sharedPool", &[]);
+    let shared_label = i18n::translate(locale, "common.apiBudget.sharedPool", &[]);
     match tauri::async_runtime::spawn_blocking(move || {
         let mut grouped: std::collections::BTreeMap<String, (i64, i64)> =
             std::collections::BTreeMap::new();

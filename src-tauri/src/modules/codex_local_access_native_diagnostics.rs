@@ -333,7 +333,7 @@ async fn native_management(
                 }
             }
             let accounts = bridge.load_routing_accounts(scope.clone(), caller.id != NATIVE_INTERNAL_CALLER).await?;
-            let cooling: HashSet<String> = bridge
+            let mut cooling: HashSet<String> = bridge
                 .cooldowns
                 .lock()
                 .map_err(|_| {
@@ -343,7 +343,19 @@ async fn native_management(
                 .filter(|(_, state)| state.until > Instant::now())
                 .map(|(key, _)| key.account.clone())
                 .collect();
-            let now = chrono::Utc::now().timestamp();
+            let now = chrono::Utc::now();
+            let now_ms = now.timestamp_millis();
+            // Include the account-level quota cooldowns used by routing.
+            cooling.extend(
+                accounts
+                    .iter()
+                    .filter(|account| {
+                        pool_account_quota_cooldown(&collection, account, now_ms)
+                            .is_some_and(|quota| quota.active(now_ms))
+                    })
+                    .map(|account| account.id.clone()),
+            );
+            let now = now.timestamp();
             let mut summary = native_quota_summary(
                 &scope,
                 &accounts,

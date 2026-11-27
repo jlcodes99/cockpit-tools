@@ -154,6 +154,10 @@ const settings = {
     portable: false,
   },
   'agtools.antigravity.cli_working_dir.v1': { valid: (value: string) => !value.includes('\0'), portable: false },
+  'agtools.qoder.global.launch_client.v1': { valid: value => ['desktop', 'ide', 'cli'].includes(value), portable: false },
+  'agtools.qoder.cn.launch_client.v1': { valid: value => ['desktop', 'ide', 'cli'].includes(value), portable: false },
+  'agtools.qoder.global.cli_working_dir.v1': { valid: value => !value.includes('\0'), portable: false },
+  'agtools.qoder.cn.cli_working_dir.v1': { valid: value => !value.includes('\0'), portable: false },
   'agtools.current_account_refresh_minutes.v1': {
     valid: jsonObject, event: 'agtools:current-account-refresh-preferences-changed',
     portable: false, // Keep exporting the legacy current_account_refresh_minutes field.

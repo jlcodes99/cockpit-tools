@@ -23,7 +23,8 @@ export function PlatformLaunchPathField({ target, disabled, recovery, onSaving, 
   const { t } = useTranslation();
   const id = useId();
   const input = useRef<HTMLInputElement>(null);
-  const { label: app, guide } = PLATFORM_LAUNCH_PATHS[target];
+  const { label: appName, guide } = PLATFORM_LAUNCH_PATHS[target];
+  const app = target === 'qoder_desktop' ? t('qoder.clientTarget.desktop') : appName;
   const [status, setStatus] = useState<Awaited<ReturnType<typeof readPlatformLaunchPath>>>();
   const [loadFailed, setLoadFailed] = useState(false);
   const [draft, setDraft] = useState<string>();

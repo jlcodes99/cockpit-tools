@@ -86,6 +86,23 @@
 .codex-proxy-account-saved { display: flex; align-items: center; gap: 8px; margin: 0 0 16px; color: var(--primary); font-size: 12px; }
 .codex-proxy-account-dialog .codex-proxy-check-result { margin: 16px 0; }
 .codex-proxy-account-dialog .codex-proxy-field { font-size: 12px; }
+.codex-proxy-account-dialog .codex-proxy-field input {
+  appearance: none;
+  width: 100%;
+  height: 36px;
+  box-sizing: border-box;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.codex-proxy-account-dialog .codex-proxy-field input::placeholder { color: var(--text-muted); }
+.codex-proxy-account-dialog .codex-proxy-field input:focus-visible { outline: 0; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-light); }
+.codex-proxy-account-dialog .codex-proxy-field input:disabled { opacity: .6; cursor: not-allowed; }
 .codex-proxy-account-follow-failures { padding: 0; list-style: none; }
 .codex-proxy-account-follow-failures li { display: grid; gap: 5px; padding: 10px 0; font-size: 12px; overflow-wrap: anywhere; }
 .codex-proxy-account-follow-failures span { color: var(--danger); }

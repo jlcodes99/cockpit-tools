@@ -62,6 +62,8 @@ fn configured_cli_path(app: &str, config: &config::UserConfig) -> Option<String>
         "claude_cli" => &config.claude_cli_path,
         "antigravity_cli" => &config.antigravity_cli_path,
         "codebuddy_cli" => &config.codebuddy_cli_path,
+        "qoder_cli" => &config.qoder_cli_path,
+        "qoder_cn_cli" => &config.qoder_cn_cli_path,
         _ => return None,
     };
     Some(process::normalize_windows_user_facing_path(path))
@@ -72,6 +74,7 @@ fn detect_cli_path(app: &str) -> Option<PathBuf> {
         "claude_cli" => detect_claude_cli(),
         "antigravity_cli" => super::account::cli_launch::detect_cli(),
         "codebuddy_cli" => crate::modules::codebuddy_cli::detect_cli(),
+        "qoder_cli" | "qoder_cn_cli" => crate::modules::qoder_cn_clients::detect_cli(app == "qoder_cn_cli"),
         _ => None,
     }
 }
@@ -91,7 +94,7 @@ pub(crate) async fn get_platform_launch_path(app: String) -> Result<LaunchPathSt
             let configured_path = (!path.is_empty()).then_some(path);
             let uses_configured_path = configured_path
                 .as_deref()
-                .is_some_and(|path| executable_file(Path::new(path)));
+                .is_some_and(|path| valid_cli_path(&app, Path::new(path)));
             let resolved_path = if uses_configured_path {
                 configured_path.clone()
             } else if configured_path.is_none() {
@@ -105,6 +108,28 @@ pub(crate) async fn get_platform_launch_path(app: String) -> Result<LaunchPathSt
                 uses_configured_path,
             });
         }
+        if matches!(app.as_str(), "qoder" | "qoder_desktop" | "qoder_cn" | "qoder_cn_ide") {
+            let config = config::get_user_config();
+            let configured = match app.as_str() {
+                "qoder" => &config.qoder_app_path,
+                "qoder_desktop" => &config.qoder_desktop_app_path,
+                "qoder_cn" => &config.qoder_cn_app_path,
+                _ => &config.qoder_cn_ide_path,
+            };
+            let configured_path = (!configured.trim().is_empty()).then(|| configured.clone());
+            let (resolved, uses_configured_path) = if let Some(path) = &configured_path {
+                let resolved = qoder_app_candidate(&app, Some(path));
+                let valid = resolved.is_some();
+                (resolved, valid)
+            } else {
+                (qoder_app_candidate(&app, None), false)
+            };
+            return Ok(LaunchPathStatus {
+                configured_path,
+                resolved_path: resolved.map(path_for_display),
+                uses_configured_path,
+            });
+        }
         let path = process::inspect_preview_desktop_path(&app).ok_or("UNKNOWN_LAUNCH_TARGET")?;
         Ok(LaunchPathStatus {
             configured_path: path.configured_path,
@@ -113,6 +138,33 @@ pub(crate) async fn get_platform_launch_path(app: String) -> Result<LaunchPathSt
         })
     })
     .await
+}
+
+fn qoder_app_candidate(app: &str, path: Option<&str>) -> Option<PathBuf> {
+    if app == "qoder" {
+        return process::qoder_ide_launch_candidate(path);
+    }
+    if app == "qoder_desktop" {
+        return crate::modules::qoder_cn_clients::resolve_global_desktop(path);
+    }
+    if app == "qoder_cn_ide" {
+        return crate::modules::qoder_cn_clients::resolve_ide(path);
+    }
+    #[cfg(target_os = "macos")]
+    if let Some(path) = path {
+        use crate::modules::qoder_cn_clients::{mac_executable, Client};
+        return mac_executable(Path::new(path), Client::Desktop);
+    }
+    path.map(PathBuf::from)
+        .filter(|path| executable_file(path))
+        .or_else(|| (path.is_none()).then(process::detect_qoder_cn_exec_path).flatten())
+}
+
+fn valid_cli_path(app: &str, path: &Path) -> bool {
+    if matches!(app, "qoder_cli" | "qoder_cn_cli") {
+        return crate::modules::qoder_cn_clients::is_cli_path(path, app == "qoder_cn_cli");
+    }
+    executable_file(path)
 }
 
 fn path_for_display(path: PathBuf) -> String {
@@ -145,6 +197,9 @@ pub(crate) async fn scan_platform_launch_paths(app: String) -> Result<Vec<String
                 .map(path_for_display)
                 .into_iter()
                 .collect());
+        }
+        if matches!(app.as_str(), "qoder" | "qoder_desktop" | "qoder_cn" | "qoder_cn_ide") {
+            return Ok(qoder_app_candidate(&app, None).map(path_for_display).into_iter().collect());
         }
         if !matches!(
             app.as_str(),
@@ -229,7 +284,7 @@ pub(crate) async fn save_cli_launch_path(app: String, path: String) -> Result<()
     let platform = app.clone();
     tokio::task::spawn_blocking(move || {
         let path = process::normalize_windows_user_facing_path(path.trim());
-        if !path.is_empty() && !executable_file(Path::new(&path)) {
+        if !path.is_empty() && !valid_cli_path(&app, Path::new(&path)) {
             return Err(format!("CLI_PATH_NOT_FOUND:{app}"));
         }
         config::patch_user_config(move |config| {
@@ -237,6 +292,8 @@ pub(crate) async fn save_cli_launch_path(app: String, path: String) -> Result<()
                 "claude_cli" => config.claude_cli_path = path,
                 "antigravity_cli" => config.antigravity_cli_path = path,
                 "codebuddy_cli" => config.codebuddy_cli_path = path,
+                "qoder_cli" => config.qoder_cli_path = path,
+                "qoder_cn_cli" => config.qoder_cn_cli_path = path,
                 _ => return Err("UNKNOWN_CLI_TARGET".into()),
             }
             Ok(())

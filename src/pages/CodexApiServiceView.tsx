@@ -12,6 +12,7 @@ import { countCodexServiceSourceAccounts } from "../utils/codexServiceMemberView
 import { aggregateCodexServiceAccountStats, codexServiceAccountSources } from "../utils/codexServiceAccountStats";
 import { summarizeAccountPoolHealth } from "../components/codex/codexLocalAccessModalModel";
 import { CodexServiceMemberAuthorization } from "../components/codex/CodexServiceMemberAuthorization";
+import { CodexPoolAccountConcurrency } from "../components/codex/CodexPoolAccountConcurrency";
 import { CodexPoolQuotaFloor } from "../components/codex/CodexPoolQuotaFloor";
 import { CodexServiceEmptyMembers } from "../components/codex/CodexServiceEmptyMembers";
 import { CodexApiRequestLogs } from "./CodexApiRequestLogs";
@@ -25,7 +26,7 @@ import { isCodexAgentIdentityAccount, isCodexApiKeyAccount, isCodexChatgptPlanAc
 import { formatCodexGatewayModeError } from "../utils/codexGatewayError";
 import { CodexSessionIdentityMappingControl } from "../components/codex/CodexSessionIdentityMappingControl";
 import { CodexSpeedControl } from "../components/codex/CodexSpeedControl";
-import { Activity, BadgeDollarSign, ChevronDown, Check, CircleAlert, Copy, Eye, EyeOff, FolderPlus, Gauge, Image, Pin, PinOff, Play, Plus, Power, RefreshCw, Route, Send, ShieldCheck, SlidersHorizontal, Trash2, Undo2, Wrench, X } from "lucide-react";
+import { Activity, BadgeDollarSign, ChevronDown, Check, CircleAlert, Copy, Eye, EyeOff, FolderPlus, Gauge, Image, Pin, PinOff, Play, Plus, Power, RefreshCw, Route, ShieldCheck, SlidersHorizontal, Trash2, Undo2, Wrench, X } from "lucide-react";
 import { CodexIcon } from "../components/icons/CodexIcon";
 import { ManualHelpIconButton } from "../components/ManualHelpIconButton";
 import { PlatformGroupSwitcher } from "../components/platform/PlatformGroupSwitcher";
@@ -39,6 +40,7 @@ import { CodexServiceProviderQuotaRows } from "../components/codex/CodexServiceP
 import { CODEX_LOCAL_ACCESS_STATUS_KEYS, resolveCodexLocalAccessRuntimeStatus } from "../utils/codexLocalAccessStatus";
 import { SingleSelectDropdown } from "../components/SingleSelectDropdown";
 import { CodexLocalAccessModal } from "../components/CodexLocalAccessModal";
+import { CodexApiServiceTestDialog } from "../components/codex/CodexApiServiceTestDialog";
 import { CodexImageForwardConfig } from "../components/CodexImageForwardConfig";
 import { CodexImageModelSelect } from "../components/CodexImageModelConfig";
 import { CodexAccountPoolHealthModal } from "../components/CodexAccountPoolHealthModal";
@@ -960,6 +962,11 @@ export function CodexApiServiceView(props: CodexApiServiceViewProps) {
             />
             <div className="codex-api-service-table">
               {(collection?.apiKeys ?? []).map((apiKey) => {
+                const managedRotationNotice = apiKey.workbuddyDelegate ? t(
+                  "workbuddy.nativeCodex.managedKeyRotation",
+                  "This key is managed by the WorkBuddy native bridge. To change it, revoke the profile and create a new one.",
+                ) : undefined;
+                const rotationNoticeId = `${codexApiKeyInspectionCardId(apiKey.id)}-rotation-policy`;
                 const labelDraft = apiKeyDrafts[apiKey.id] ?? apiKey.label;
                 const unsavedPolicy =
                   apiKeyPolicyDrafts[apiKey.id] ??
@@ -1083,8 +1090,10 @@ export function CodexApiServiceView(props: CodexApiServiceViewProps) {
                           type="button"
                           className="folder-icon-btn"
                           onClick={() => void handleRotateApiKey(apiKey.id)}
-                          disabled={busy}
-                          title={t("codex.localAccess.rotateKey")}
+                          disabled={busy || Boolean(apiKey.workbuddyDelegate)}
+                          title={managedRotationNotice ?? t("codex.localAccess.rotateKey")}
+                          aria-label={managedRotationNotice ?? t("codex.localAccess.rotateKey")}
+                          aria-describedby={managedRotationNotice ? rotationNoticeId : undefined}
                         >
                           <RefreshCw size={14} />
                         </button>
@@ -1101,6 +1110,11 @@ export function CodexApiServiceView(props: CodexApiServiceViewProps) {
                         </button>
                       </div>
                     </div>
+                    {managedRotationNotice && (
+                      <p id={rotationNoticeId} className="codex-api-service-field-hint">
+                        {managedRotationNotice}
+                      </p>
+                    )}
                     <div className="api-key-details-row">
                       <div
                         className={`api-key-routing-summary ${
@@ -1832,6 +1846,10 @@ export function CodexApiServiceView(props: CodexApiServiceViewProps) {
                           && !isCodexWebSessionAccount(account) && !isCodexChatgptPlanAccount(account) && (
                           <CodexPoolQuotaFloor disabled={busy} value={collection.accountQuotaFloors?.[account.id] ?? null}
                             onSave={async (value) => setState(await codexLocalAccessService.updateCodexLocalAccessAccountQuotaFloor(account.id, value))} />
+                        )}
+                        {collection && collection.accountIds.includes(account.id) && (
+                          <CodexPoolAccountConcurrency disabled={busy} value={collection.accountConcurrencyLimits?.[account.id] ?? null}
+                            onSave={async (value) => setState(await codexLocalAccessService.updateCodexLocalAccessAccountConcurrencyLimit(account.id, value))} />
                         )}
                         <CodexServiceMemberAuthorization account={account} accounts={localAccessAccounts} grants={planGrants.accounts} memberIds={collection?.accountIds ?? []} pausedAccountIds={collection?.pausedAccountIds} />
                         <button
@@ -3719,175 +3737,23 @@ export function CodexApiServiceView(props: CodexApiServiceViewProps) {
         </div>
       )}
 
-      {testDialogOpen && (
-        <div
-          className="modal-overlay codex-local-access-test-dialog-overlay"
-        >
-          <div
-            className="modal codex-local-access-test-dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="codex-api-service-test-dialog-title"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="modal-header codex-local-access-test-dialog-header">
-              <div>
-                <h3 id="codex-api-service-test-dialog-title">
-                  <ShieldCheck size={18} />
-                  <span>
-                    {t("codex.localAccess.testDialogTitle", "测试 API 服务")}
-                  </span>
-                </h3>
-                <p>
-                  {t("codex.localAccess.testDialogDesc")}
-                </p>
-              </div>
-              <button
-                className="modal-close codex-local-access-test-dialog-close"
-                onClick={handleCloseTestDialog}
-                aria-label={t("common.close")}
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="modal-body codex-local-access-test-dialog-body">
-              <div className="codex-local-access-test-chat-toolbar">
-                <div className="codex-local-access-test-chat-model">
-                  <span>{t("codex.localAccess.testChatModel", "模型")}</span>
-                  <SingleSelectDropdown
-                    value={selectedModelId}
-                    options={testModelIds.map((modelId) => ({
-                      value: modelId,
-                      label: modelId,
-                    }))}
-                    onChange={setSelectedModelId}
-                    disabled={testModelIds.length === 0 || testDialogRunning}
-                    ariaLabel={t("codex.localAccess.testChatModel", "模型")}
-                    placeholder={t(
-                      "codex.localAccess.modelIdPlaceholder",
-                      "选择模型 ID",
-                    )}
-                    menuPlacement="down"
-                    menuMaxHeight={240}
-                  />
-                </div>
-                <button
-                  type="button"
-                  className="btn btn-secondary btn-sm"
-                  onClick={clearTestChat}
-                  disabled={testDialogRunning || testChatMessages.length === 0}
-                >
-                  {t("codex.localAccess.testChatClear", "清空对话")}
-                </button>
-              </div>
-
-              <div
-                className="codex-local-access-test-chat"
-                ref={testChatScrollRef}
-              >
-                {testChatMessages.length === 0 ? (
-                  <div className="codex-local-access-test-chat-empty">
-                    {t("codex.localAccess.testChatEmpty")}
-                  </div>
-                ) : (
-                  testChatMessages.map((message) => (
-                    <div
-                      key={message.id}
-                      className={`codex-local-access-test-chat-message is-${message.role}${
-                        message.failureTitle ? " is-error" : ""
-                      }`}
-                    >
-                      <div className="codex-local-access-test-chat-bubble">
-                        {message.failureTitle && (
-                          <strong className="codex-local-access-test-chat-error-title">
-                            {message.failureTitle}
-                          </strong>
-                        )}
-                        {message.imageDataUrl
-                          ? <img src={message.imageDataUrl} alt={t("codex.localAccess.testOutputTitle")} />
-                          : <p>{message.content}</p>}
-                        {message.failureDetail && (
-                          <span className="codex-local-access-test-chat-meta">
-                            {message.failureDetail}
-                          </span>
-                        )}
-                        {typeof message.latencyMs === "number" && (
-                          <span className="codex-local-access-test-chat-meta">
-                            {t("codex.localAccess.testChatLatency", {
-                              latency: formatLatencyMs(message.latencyMs),
-                              defaultValue: "耗时 {{latency}}",
-                            })}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  ))
-                )}
-                {testDialogRunning && (
-                  <div className="codex-local-access-test-chat-message is-assistant">
-                    <div className="codex-local-access-test-chat-bubble">
-                      <span className="codex-local-access-test-chat-loading">
-                        <RefreshCw size={14} className="loading-spinner" />
-                        {t(
-                          "codex.localAccess.testChatSending",
-                          "正在请求 API 服务",
-                        )}
-                      </span>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {testDialogError && (
-                <div
-                  className="codex-local-access-inline-error"
-                  aria-live="assertive"
-                >
-                  <CircleAlert size={14} />
-                  <span>{testDialogError}</span>
-                </div>
-              )}
-            </div>
-
-            <div className="modal-footer codex-local-access-test-dialog-footer">
-              <textarea
-                className="codex-local-access-test-chat-input"
-                value={testChatInput}
-                onChange={(event) => setTestChatInput(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" && !event.shiftKey) {
-                    event.preventDefault();
-                    void handleSendTestChatMessage();
-                  }
-                }}
-                disabled={testDialogRunning}
-                rows={2}
-                placeholder={t(
-                  "codex.localAccess.testChatInputPlaceholder",
-                  "输入测试消息，Enter 发送",
-                )}
-              />
-              <button
-                className="btn btn-primary codex-local-access-test-chat-send"
-                onClick={() => void handleSendTestChatMessage()}
-                disabled={
-                  testDialogRunning || !testChatInput.trim() || !selectedModelId
-                }
-              >
-                <Send size={15} />
-                {t("codex.localAccess.testChatSend", "发送")}
-              </button>
-              <button
-                className="btn btn-secondary"
-                onClick={handleCloseTestDialog}
-              >
-                {t("common.close")}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <CodexApiServiceTestDialog
+        open={testDialogOpen}
+        onClose={handleCloseTestDialog}
+        t={t}
+        selectedModelId={selectedModelId}
+        testModelIds={testModelIds}
+        onSelectModel={setSelectedModelId}
+        running={testDialogRunning}
+        onClearChat={clearTestChat}
+        messages={testChatMessages}
+        scrollRef={testChatScrollRef}
+        formatLatencyMs={formatLatencyMs}
+        error={testDialogError}
+        chatInput={testChatInput}
+        onChatInputChange={setTestChatInput}
+        onSend={handleSendTestChatMessage}
+      />
 
       <CodexAccountPoolHealthModal
         isOpen={healthModalOpen}

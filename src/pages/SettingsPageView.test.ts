@@ -160,10 +160,11 @@ test('data settings mount only on first visit and retain their component tree ac
   h.unmount();
 });
 
-test('the Antigravity menu bar selector keeps exact models and one choice per quota window', () => {
+test('the Antigravity menu bar selector keeps exact models and one choice per quota window', async () => {
   const Dropdown = () => null;
   const h = loadHookModule(new URL('../components/AntigravityMenuBarQuotaSelect.tsx', import.meta.url), {
     'react-i18next': { useTranslation: () => ({ t: (key: string) => key === 'common.quota.weeklyWindow' ? 'Weekly' : key }) },
+    '../utils/antigravityModels': await import('../utils/antigravityModels'),
     '../utils/antigravityQuotaWindows.json': {
       default: JSON.parse(readFileSync(new URL('../utils/antigravityQuotaWindows.json', import.meta.url), 'utf8')),
     },
@@ -171,19 +172,31 @@ test('the Antigravity menu bar selector keeps exact models and one choice per qu
   });
   const changes: string[] = [];
   const view = h.render(() => h.exports.AntigravityMenuBarQuotaSelect({
-    accounts: [{ quota: { models: [
-      { name: 'gemini-weekly', percentage: 80 },
-      { name: 'gemini-argon-wtu-weekly', percentage: 90 },
-      { name: 'argon:weekly', percentage: 90 },
-      { name: 'gemini-3.8-flash', display_name: 'Gemini Flash', percentage: 20 },
-    ] } }],
+    accounts: [{ quota: {
+      models: [
+        { name: 'gemini-weekly', percentage: 80 },
+        { name: 'gemini-argon-wtu-weekly', percentage: 90 },
+        { name: 'argon:weekly', percentage: 90 },
+        { name: 'neon-weekly', percentage: 42 },
+        { name: 'gemini-3.8-flash', display_name: 'Gemini Flash', percentage: 20 },
+      ],
+      quota_summary_groups: [
+        {
+          id: 'neon',
+          name: 'Neon Preview',
+          windows: [{ id: 'neon-weekly', period: 'weekly', percentage: 42 }],
+        },
+      ],
+    } }],
     value: 'unavailable-model',
     onChange: (value: string) => changes.push(value),
   })) as any;
   assert.equal(view.type, Dropdown);
   assert.ok(view.props.options.some(({ value, label }: { value: string; label: string }) =>
     value === 'gemini:weekly' && label === 'Gemini (Weekly)'));
-  assert.ok(!view.props.options.some(({ value }: { value: string }) => value === 'gemini-weekly'));
+  assert.ok(view.props.options.some(({ value, label }: { value: string; label: string }) =>
+    value === 'neon:weekly' && label === 'Neon Preview (Weekly)'));
+  assert.ok(!view.props.options.some(({ value }: { value: string }) => value === 'gemini-weekly' || value === 'neon-weekly'));
   assert.ok(!view.props.options.some(({ value }: { value: string }) =>
     value === 'argon:weekly' || value === 'gemini-argon-wtu-weekly'));
   assert.ok(view.props.options.some(({ value, label }: { value: string; label: string }) =>

@@ -942,3 +942,71 @@ async fn native_suspended_pool_member_fails_over_with_legacy_settings_and_keeps_
     assert_eq!((error.status, error.code), (503, "no_available_account"));
     assert!(error.retry_after.unwrap() >= Duration::from_secs(598));
 }
+
+#[tokio::test]
+async fn native_no_available_account_distinguishes_cooling_quota_reserve_and_model_mismatch() {
+    let mut host = native_test_routing_host();
+    host.collection_override.as_mut().unwrap().max_retry_interval_ms = 0;
+    let caller = native_test_caller(NATIVE_PRIMARY_CALLER);
+    let request = native_test_route_request("cooling-vs-mismatch");
+
+    // 1. Compatible accounts all cooling -> 503 no_available_account with cooling message & retry seconds.
+    {
+        let mut states = host.cooldowns.lock().unwrap();
+        for id in ["pool-a", "pool-b"] {
+            native_upsert_cooldown(&mut states, id, &request.model, 503, None, false, Instant::now());
+        }
+    }
+    let cooling = native_select_route(&host, &caller, request.clone()).await.err().unwrap();
+    assert_eq!((cooling.status, cooling.code), (503, "no_available_account"));
+    assert!(cooling.message.contains("temporarily cooling"), "{}", cooling.message);
+    assert!(cooling.retry_after.is_some());
+
+    // 2. Mixed cooling + quota exhausted -> 503 no_available_account mentioning cooling or quota exhausted.
+    {
+        let mut states = host.cooldowns.lock().unwrap();
+        states.clear();
+        native_upsert_cooldown(&mut states, "pool-a", &request.model, 503, None, false, Instant::now());
+        native_mark_quota_exhausted(&mut states, "pool-b", Some(Duration::from_secs(120)), Instant::now());
+    }
+    let mixed = native_select_route(&host, &caller, request.clone()).await.err().unwrap();
+    assert_eq!((mixed.status, mixed.code), (503, "no_available_account"));
+    assert!(mixed.message.contains("cooling or quota exhausted"), "{}", mixed.message);
+
+    // 3. Truly incompatible model -> keeps exact incompatible-model message.
+    host.cooldowns.lock().unwrap().clear();
+    let mut incompatible_request = request.clone();
+    incompatible_request.model = "nonexistent-model-for-pool".into();
+    let incompatible = native_select_route(&host, &caller, incompatible_request).await.err().unwrap();
+    assert_eq!((incompatible.status, incompatible.code), (503, "no_available_account"));
+    assert_eq!(incompatible.message, "No compatible account is available for this model");
+
+    // 4. Unpinned request whose only compatible account is protected by bound_oauth_quota_reserve -> 429 quota_reserved.
+    let mut reserved_host = native_test_routing_host();
+    let mut collection = reserved_host.collection_override.take().unwrap();
+    collection.account_ids = vec!["pool-a".into()];
+    collection.bound_oauth_account_id = Some("pool-a".into());
+    collection.bound_oauth_quota_reserve = Some(CodexLocalAccessQuotaReserve {
+        hourly_percent: 20,
+        weekly_percent: 20,
+        strict: false,
+        safety_margin_percent: 3,
+    });
+    reserved_host.collection_override = Some(collection);
+    reserved_host.account_overrides.get_mut("pool-a").unwrap().quota = Some(CodexQuota {
+        hourly_percentage: 10,
+        hourly_window_minutes: Some(300),
+        hourly_window_present: Some(true),
+        hourly_reset_time: Some(chrono::Utc::now().timestamp() + 3600),
+        weekly_percentage: 10,
+        weekly_window_minutes: Some(10080),
+        weekly_window_present: Some(true),
+        weekly_reset_time: Some(chrono::Utc::now().timestamp() + 86400),
+        raw_data: None,
+        reset_credits_available: None,
+        reset_credits: vec![],
+        reset_credits_next_expires_at: None,
+    });
+    let reserved = native_select_route(&reserved_host, &caller, request).await.err().unwrap();
+    assert_eq!((reserved.status, reserved.code), (429, "quota_reserved"));
+}

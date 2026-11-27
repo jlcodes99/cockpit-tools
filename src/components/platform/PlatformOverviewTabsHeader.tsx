@@ -1,6 +1,7 @@
 import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Clock3, FolderOpen, Github, Globe2, Layers, MoreHorizontal, PanelTop, Server } from 'lucide-react';
+import { Clock3, FolderOpen, Globe2, Layers, MoreHorizontal, PanelTop, Server } from 'lucide-react';
+import { CopilotIcon } from '../icons/CopilotIcon';
 import { CodexIcon } from '../icons/CodexIcon';
 import { ClaudeIcon } from '../icons/ClaudeIcon';
 import { WindsurfIcon } from '../icons/WindsurfIcon';
@@ -47,6 +48,7 @@ export type PlatformOverviewHeaderId =
   | 'codebuddy'
   | 'codebuddy_cn'
   | 'qoder'
+  | 'qoder_cn'
   | 'zcode'
   | 't3code'
   | 'trae'
@@ -92,7 +94,7 @@ const CONFIGS: Record<PlatformOverviewHeaderId, PlatformOverviewConfig> = {
   },
   'github-copilot': {
     platformLabel: 'GitHub Copilot',
-    overviewIcon: <Github className="tab-icon" />,
+    overviewIcon: <CopilotIcon className="tab-icon" size={16} />,
   },
   windsurf: {
     platformLabel: 'Devin',
@@ -121,6 +123,10 @@ const CONFIGS: Record<PlatformOverviewHeaderId, PlatformOverviewConfig> = {
   qoder: {
     platformLabel: 'Qoder',
     overviewIcon: <QoderIcon className="tab-icon" />,
+  },
+  qoder_cn: {
+    platformLabel: 'Qoder CN',
+    overviewIcon: <QoderIcon className="tab-icon" region="cn" />,
   },
   zcode: {
     platformLabel: 'ZCode',

@@ -1356,6 +1356,32 @@ pub fn start_qoder_with_args_with_new_window(
     }
 }
 
+/// Starts the resolved native Qoder desktop client.
+#[cfg(target_os = "windows")]
+pub(crate) fn start_qoder_desktop(launch_path: &std::path::Path, app: &str) -> Result<u32, String> {
+    use std::os::windows::process::CommandExt;
+
+    if !launch_path.is_file() {
+        return Err(app_path_missing_error(app));
+    }
+    let mut cmd = Command::new(launch_path);
+    apply_managed_proxy_env_to_command(&mut cmd);
+    if let Some(parent) = launch_path.parent() {
+        cmd.current_dir(parent);
+    }
+    if should_detach_child() {
+        cmd.creation_flags(0x0800_0000 | CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS);
+        cmd.stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+    } else {
+        cmd.creation_flags(0x0800_0000);
+    }
+    let child = spawn_command_with_trace(&mut cmd).map_err(|error| error.to_string())?;
+    crate::modules::logger::log_info("Qoder 桌面端启动命令已发送");
+    Ok(child.id())
+}
+
 pub fn start_qoder_default_with_args_with_new_window(
     extra_args: &[String],
     use_new_window: bool,
@@ -1657,10 +1683,11 @@ pub fn start_trae_platform_with_args_with_new_window(
             cmd.creation_flags(0x08000000);
         }
         cmd.arg("--user-data-dir").arg(target);
+        // use_new_window=false 表示冷启动（切号/启动实例前会先关闭客户端）：不传任何
+        // 窗口参数，让 Trae 按 window.startupWindowType 决定打开 Agent 还是 IDE 窗口；
+        // 显式 --new-window 会绕过该设置直接打开 IDE 窗口。
         if use_new_window {
             cmd.arg("--new-window");
-        } else {
-            cmd.arg("--reuse-window");
         }
         for arg in extra_args {
             let trimmed = arg.trim();
@@ -1691,10 +1718,10 @@ pub fn start_trae_platform_with_args_with_new_window(
                 .stderr(Stdio::null());
         }
         cmd.arg("--user-data-dir").arg(target);
+        // use_new_window=false 表示冷启动：不传窗口参数，让 Trae 按
+        // window.startupWindowType 决定打开 Agent 还是 IDE 窗口。
         if use_new_window {
             cmd.arg("--new-window");
-        } else {
-            cmd.arg("--reuse-window");
         }
         for arg in extra_args {
             let trimmed = arg.trim();
@@ -1867,10 +1894,11 @@ pub fn start_trae_platform_default_with_args_with_new_window(
         } else {
             cmd.creation_flags(0x08000000);
         }
+        // use_new_window=false 表示冷启动（切号流程会先关闭客户端）：不传任何窗口
+        // 参数，让 Trae 按 window.startupWindowType 决定打开 Agent 还是 IDE 窗口；
+        // 显式 --new-window 会绕过该设置直接打开 IDE 窗口。
         if use_new_window {
             cmd.arg("--new-window");
-        } else {
-            cmd.arg("--reuse-window");
         }
         for arg in extra_args {
             let trimmed = arg.trim();
@@ -1897,10 +1925,10 @@ pub fn start_trae_platform_default_with_args_with_new_window(
                 .stdout(Stdio::null())
                 .stderr(Stdio::null());
         }
+        // use_new_window=false 表示冷启动：不传窗口参数，让 Trae 按
+        // window.startupWindowType 决定打开 Agent 还是 IDE 窗口。
         if use_new_window {
             cmd.arg("--new-window");
-        } else {
-            cmd.arg("--reuse-window");
         }
         for arg in extra_args {
             let trimmed = arg.trim();

@@ -294,10 +294,6 @@ pub async fn inject_codebuddy_to_vscode(
         None,
         Some(false),
     )?;
-    crate::modules::provider_current_state::set_current_account_id(
-        "codebuddy",
-        Some(account_id.as_str()),
-    )?;
 
     let launch_warning =
         match crate::commands::codebuddy_instance::codebuddy_switch_default_account_and_start()
@@ -321,6 +317,11 @@ pub async fn inject_codebuddy_to_vscode(
             }
         };
 
+
+    crate::modules::provider_current_state::set_current_account_id(
+        "codebuddy",
+        Some(account_id.as_str()),
+    )?;
 
     let _ = crate::modules::tray::update_tray_menu(&app);
 

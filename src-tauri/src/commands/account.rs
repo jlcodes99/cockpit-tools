@@ -576,15 +576,21 @@ async fn switch_account_legacy_antigravity(
 #[tauri::command]
 pub async fn antigravity_launch_current(runtime_target: Option<String>) -> Result<(), String> {
     tokio::task::spawn_blocking(move || {
+        let egress = modules::account::get_current_account()
+            .ok()
+            .flatten()
+            .and_then(|account| account.egress_proxy_url);
         if normalize_antigravity_runtime_target(runtime_target.as_deref()) == AntigravityRuntimeTarget::Legacy {
             let settings = modules::antigravity_legacy_instance::load_default_settings()?;
             let args = modules::process::parse_extra_args(&settings.extra_args);
-            let pid = modules::process::start_antigravity_legacy_with_args("", &args)?;
+            let pid =
+                modules::process::start_antigravity_legacy_with_args_proxy("", &args, egress.as_deref())?;
             modules::antigravity_legacy_instance::update_default_pid(Some(pid))?;
         } else {
             let settings = modules::instance::load_default_settings()?;
             let args = modules::process::parse_extra_args(&settings.extra_args);
-            let pid = modules::process::start_antigravity_with_args("", &args)?;
+            let pid =
+                modules::process::start_antigravity_with_args_proxy("", &args, egress.as_deref())?;
             modules::instance::update_default_pid(Some(pid))?;
         }
         Ok(())
@@ -746,6 +752,31 @@ pub async fn update_account_note(
             aux_email,
         },
     )
+}
+
+/// 更新 Antigravity 账号的自定义出口代理（None/空 = 清除，跟随全局代理）。
+#[tauri::command]
+pub async fn update_antigravity_account_egress_proxy(
+    account_id: String,
+    egress_proxy_url: Option<String>,
+) -> Result<models::Account, String> {
+    let mut account = modules::account::load_account(&account_id)?;
+    let trimmed = egress_proxy_url.as_deref().map(str::trim).unwrap_or("");
+    let value = if trimmed.is_empty() {
+        None
+    } else {
+        let lowered = trimmed.to_lowercase();
+        let supported = ["http://", "https://", "socks5://", "socks5h://"]
+            .iter()
+            .any(|scheme| lowered.starts_with(scheme));
+        if !supported {
+            return Err("ANTIGRAVITY_EGRESS_PROXY_INVALID_URL".to_string());
+        }
+        Some(trimmed.to_string())
+    };
+    account.egress_proxy_url = value;
+    modules::account::save_account(&account)?;
+    Ok(account)
 }
 
 /// 从本地客户端同步当前账号状态

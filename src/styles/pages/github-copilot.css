@@ -1016,6 +1016,7 @@
   border: 1px solid var(--plan-free-border);
 }
 
+.tier-badge.qoder-cn-launch-plan.individual,
 .ghcp-account-card .tier-badge.individual,
 .ghcp-accounts-page .account-table .tier-badge.individual {
   background: var(--plan-individual-bg);
@@ -1023,6 +1024,7 @@
   border: 1px solid var(--plan-individual-border);
 }
 
+.tier-badge.qoder-cn-launch-plan.business,
 .ghcp-account-card .tier-badge.business,
 .ghcp-accounts-page .account-table .tier-badge.business {
   background: var(--plan-business-bg);
@@ -1038,6 +1040,7 @@
   border: 1px solid var(--plan-plus-border);
 }
 
+.tier-badge.qoder-cn-launch-plan.team,
 .ghcp-account-card .tier-badge.team,
 .ghcp-accounts-page .account-table .tier-badge.team {
   background: var(--plan-team-bg);
@@ -1083,6 +1086,7 @@
   border: 1px solid var(--plan-trial-border);
 }
 
+.tier-badge.qoder-cn-launch-plan.ultra,
 .ghcp-account-card .tier-badge.ultra,
 .ghcp-accounts-page .account-table .tier-badge.ultra {
   background: var(--plan-ultra-bg);
@@ -1364,6 +1368,37 @@
   .trae-accounts-page .trae-compact-quota-reset {
     text-align: left;
   }
+}
+
+.qoder-accounts-page .qoder-import-source {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  align-items: center;
+  gap: 12px;
+}
+
+.qoder-accounts-page .qoder-import-source-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.qoder-accounts-page .qoder-import-source-select {
+  min-width: 0;
+}
+
+.qoder-accounts-page .qoder-import-initialization {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
+.qoder-accounts-page .qoder-import-initialization > p {
+  flex: 1 1 12rem;
+  min-width: 0;
+  margin: 0;
 }
 
 .qoder-accounts-page .qoder-account-subline {

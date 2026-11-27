@@ -15,6 +15,10 @@ pub struct QuotaSummaryWindow {
     pub id: String,
     pub period: String,
     pub percentage: i32,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub reset_time: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary_exhausted: Option<bool>,
 }
 
 impl QuotaSummaryGroup {
@@ -32,6 +36,7 @@ impl QuotaSummaryGroup {
                 if QuotaSummaryWindow::is_retired_argon(id) {
                     continue;
                 }
+                let remaining_fraction = bucket.get("remainingFraction")?.as_f64()?;
                 windows.push(QuotaSummaryWindow {
                     id: id.to_owned(),
                     period: bucket
@@ -41,7 +46,13 @@ impl QuotaSummaryGroup {
                         .or_else(|| id.ends_with("5h").then_some("5h"))
                         .unwrap_or_default()
                         .to_owned(),
-                    percentage: (bucket.get("remainingFraction")?.as_f64()? * 100.0) as i32,
+                    percentage: (remaining_fraction * 100.0) as i32,
+                    reset_time: bucket
+                        .get("resetTime")
+                        .and_then(Value::as_str)
+                        .unwrap_or_default()
+                        .to_owned(),
+                    summary_exhausted: Some(remaining_fraction == 0.0),
                 });
             }
             let Some(id) = windows.iter().map(QuotaSummaryWindow::group_key).min() else {
@@ -95,7 +106,7 @@ impl QuotaSummaryGroup {
 }
 
 impl QuotaSummaryWindow {
-    fn group_key(&self) -> &str {
+    pub fn group_key(&self) -> &str {
         // The quota response identifies windows, but carries no separate group ID.
         let key = self
             .id
@@ -110,7 +121,15 @@ impl QuotaSummaryWindow {
         }
     }
 
-    fn is_retired_argon(id: &str) -> bool {
+    pub fn canonical_id(&self) -> String {
+        if self.period.is_empty() {
+            self.id.clone()
+        } else {
+            format!("{}:{}", self.group_key(), self.period)
+        }
+    }
+
+    pub fn is_retired_argon(id: &str) -> bool {
         let id = id.trim().to_ascii_lowercase();
         matches!(id.as_str(), "argon:weekly" | "argon:5h")
             || (id.starts_with("gemini-argon-") && (id.ends_with("-weekly") || id.ends_with("-5h")))

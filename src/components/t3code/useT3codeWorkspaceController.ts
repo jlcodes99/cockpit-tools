@@ -46,7 +46,9 @@ export interface T3codeBannerMessage {
 export function useT3codeWorkspaceController() {
   const { t } = useTranslation();
   const startInstance = useT3codeInstanceStore((state) => state.startInstance);
-  const targetId = DEFAULT_T3_INSTANCE;
+  const instances = useT3codeInstanceStore((state) => state.instances);
+  const fetchInstances = useT3codeInstanceStore((state) => state.fetchInstances);
+  const [targetId, setTargetId] = useState(DEFAULT_T3_INSTANCE);
 
   const [workspace, setWorkspace] = useState<T3CodeProviderWorkspaceView | null>(null);
   const [apiServiceQuota, setApiServiceQuota] = useState<T3CodeQuotaWindowView[]>([]);
@@ -62,6 +64,17 @@ export function useT3codeWorkspaceController() {
   const [refreshingAll, setRefreshingAll] = useState(false);
   const [removalPendingAt, setRemovalPendingAt] = useState<number>();
   const [restarting, setRestarting] = useState(false);
+
+  useEffect(() => {
+    void fetchInstances().catch(() => {});
+  }, [fetchInstances]);
+
+  const selectTarget = (id: string) => {
+    setMessage(null);
+    setLoadError('');
+    setRemovalPendingAt(undefined);
+    setTargetId(id);
+  };
 
   const [isFlowNoticeCollapsed, setIsFlowNoticeCollapsed] = useDurableUiBooleanSetting(
     T3CODE_FLOW_NOTICE_COLLAPSED_KEY,
@@ -112,7 +125,7 @@ export function useT3codeWorkspaceController() {
     }
   }, []);
 
-  const loadWorkspace = useCallback(async (id: string = DEFAULT_T3_INSTANCE, silent = false) => {
+  const loadWorkspace = useCallback(async (id: string, silent = false) => {
     const request = ++sequence.current;
     void loadApiServiceQuota();
     if (!silent) {
@@ -307,7 +320,7 @@ export function useT3codeWorkspaceController() {
       setMessage(null);
       try {
         const updated = await service.createT3codeProviderInstance({
-          t3InstanceId: null,
+          t3InstanceId: targetId === DEFAULT_T3_INSTANCE ? null : targetId,
           instanceId,
           driver,
           displayName: useDefault
@@ -321,8 +334,27 @@ export function useT3codeWorkspaceController() {
         setBusyInstanceId(null);
       }
     },
-    [activeWorkspace, gatewayName, loadApiServiceQuota],
+    [activeWorkspace, gatewayName, loadApiServiceQuota, targetId],
   );
+
+  const switchProviderAccount = useCallback(async (instance: T3CodeProviderInstanceView, accountId: string) => {
+    setBusyInstanceId(instance.instanceId);
+    setMessage(null);
+    const request = ++sequence.current;
+    try {
+      const result = await service.switchT3codeProviderInstanceAccount({
+        t3InstanceId: targetId === DEFAULT_T3_INSTANCE ? null : targetId,
+        providerInstanceId: instance.instanceId,
+        driver: instance.driver,
+        cockpitAccountId: accountId,
+      });
+      if (request === sequence.current) setWorkspace(result.workspace);
+      else void loadWorkspace(targetId, true);
+      setMessage({ tone: 'success', text: result.message });
+    } finally {
+      setBusyInstanceId(null);
+    }
+  }, [targetId, loadWorkspace]);
 
   const promoteProviderAccount = useCallback(async (instance: T3CodeProviderInstanceView) => {
     if (busyInstanceId || restarting || !instance.boundAccountId) return;
@@ -331,7 +363,7 @@ export function useT3codeWorkspaceController() {
     const request = ++sequence.current;
     try {
       const result = await service.promoteT3codeProviderAccount({
-        t3InstanceId: null,
+        t3InstanceId: targetId === DEFAULT_T3_INSTANCE ? null : targetId,
         providerInstanceId: instance.instanceId,
         cockpitAccountId: instance.boundAccountId,
       });
@@ -350,7 +382,7 @@ export function useT3codeWorkspaceController() {
     setMessage(null);
     try {
       const result = await service.removeT3codeProviderInstance({
-        t3InstanceId: null,
+        t3InstanceId: targetId === DEFAULT_T3_INSTANCE ? null : targetId,
         instanceId: instance.instanceId,
         cockpitAccountId: instance.boundAccountId ?? null,
       });
@@ -360,10 +392,12 @@ export function useT3codeWorkspaceController() {
     } finally {
       setBusyInstanceId(null);
     }
-  }, []);
+  }, [targetId]);
 
   return {
     targetId,
+    instances,
+    selectTarget,
     activeWorkspace,
     providers,
     t3Running,
@@ -388,6 +422,7 @@ export function useT3codeWorkspaceController() {
     handleRefreshAll,
     handleStartOrRestart,
     addProviderAccount,
+    switchProviderAccount,
     promoteProviderAccount,
     removeProviderInstance,
   };

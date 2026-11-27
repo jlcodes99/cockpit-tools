@@ -4,6 +4,12 @@ use super::contract::{Route, ServiceError};
 use crate::modules::{config, i18n};
 use std::error::Error;
 
+pub(super) const LARGE_REQUEST_BYTES: u64 = 20 * 1024 * 1024;
+
+pub(super) fn format_request_size_mb(bytes: u64) -> String {
+    format!("{:.1} MB", bytes as f64 / (1024.0 * 1024.0))
+}
+
 #[derive(Clone, Copy)]
 enum Cause {
     Connection,
@@ -13,6 +19,14 @@ enum Cause {
 }
 
 pub(super) fn request(route: &Route, source: &reqwest::Error) -> ServiceError {
+    request_with_request_bytes(route, source, 0)
+}
+
+pub(super) fn request_with_request_bytes(
+    route: &Route,
+    source: &reqwest::Error,
+    request_bytes: u64,
+) -> ServiceError {
     let error = super::diagnostics::transport_failure(
         502,
         "upstream_unavailable",
@@ -28,15 +42,26 @@ pub(super) fn request(route: &Route, source: &reqwest::Error) -> ServiceError {
     } else {
         classify(route, source)
     };
-    explain(route, error, cause, &config::get_user_config().language)
+    explain_with_request_bytes(
+        route,
+        error,
+        cause,
+        &config::get_user_config().language,
+        request_bytes,
+    )
 }
 
 pub(super) fn timeout(route: &Route) -> ServiceError {
-    explain(
+    timeout_with_request_bytes(route, 0)
+}
+
+pub(super) fn timeout_with_request_bytes(route: &Route, request_bytes: u64) -> ServiceError {
+    explain_with_request_bytes(
         route,
         ServiceError::new(504, "upstream_connect_timeout", ""),
         Cause::Timeout,
         &config::get_user_config().language,
+        request_bytes,
     )
 }
 
@@ -106,7 +131,18 @@ fn proxy_name(route: &Route) -> Option<String> {
     ))
 }
 
-fn explain(route: &Route, mut error: ServiceError, cause: Cause, locale: &str) -> ServiceError {
+#[cfg_attr(not(test), allow(dead_code))]
+fn explain(route: &Route, error: ServiceError, cause: Cause, locale: &str) -> ServiceError {
+    explain_with_request_bytes(route, error, cause, locale, 0)
+}
+
+fn explain_with_request_bytes(
+    route: &Route,
+    mut error: ServiceError,
+    cause: Cause,
+    locale: &str,
+    request_bytes: u64,
+) -> ServiceError {
     let target = if url::Url::parse(&route.base_url)
         .ok()
         .and_then(|url| url.host_str().map(str::to_owned))
@@ -117,13 +153,21 @@ fn explain(route: &Route, mut error: ServiceError, cause: Cause, locale: &str) -
         i18n::translate(locale, "common.networkErrors.upstream", &[])
     };
     let proxy = proxy_name(route);
-    let key = match (proxy.is_some(), cause) {
-        (true, Cause::ProxyAuth) => "common.networkErrors.proxyAuth",
-        (true, Cause::LocalProxyUnavailable) => "common.networkErrors.localProxyUnavailable",
-        (true, Cause::Timeout) => "common.networkErrors.proxyTimeout",
-        (true, Cause::Connection) => "common.networkErrors.proxyConnection",
-        (false, Cause::Timeout) => "common.networkErrors.directTimeout",
-        (false, _) => "common.networkErrors.directConnection",
+    let large_timeout = matches!(cause, Cause::Timeout) && request_bytes >= LARGE_REQUEST_BYTES;
+    let key = match (proxy.is_some(), cause, large_timeout) {
+        (true, Cause::ProxyAuth, _) => "common.networkErrors.proxyAuth",
+        (true, Cause::LocalProxyUnavailable, _) => "common.networkErrors.localProxyUnavailable",
+        (true, Cause::Timeout, true) => "common.networkErrors.proxyLargeRequestTimeout",
+        (true, Cause::Timeout, false) => "common.networkErrors.proxyTimeout",
+        (true, Cause::Connection, _) => "common.networkErrors.proxyConnection",
+        (false, Cause::Timeout, true) => "common.networkErrors.directLargeRequestTimeout",
+        (false, Cause::Timeout, false) => "common.networkErrors.directTimeout",
+        (false, _, _) => "common.networkErrors.directConnection",
+    };
+    let size = if large_timeout {
+        format_request_size_mb(request_bytes)
+    } else {
+        String::new()
     };
     error.message = i18n::translate(
         locale,
@@ -131,6 +175,7 @@ fn explain(route: &Route, mut error: ServiceError, cause: Cause, locale: &str) -
         &[
             ("proxy", proxy.as_deref().unwrap_or_default()),
             ("target", &target),
+            ("size", &size),
         ],
     );
     error

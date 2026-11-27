@@ -368,10 +368,13 @@ async fn sync_and_refresh(
     Err(live::message("switchBusy"))
 }
 
-pub async fn install_antigravity_runtime(provider_id: &str) -> Result<(), String> {
+pub async fn install_antigravity_runtime(
+    provider_id: &str,
+    t3_instance_id: Option<String>,
+) -> Result<(), String> {
     let id = provider_id.to_owned();
     let (t3_id, state_dir) = tokio::task::spawn_blocking(move || {
-        let (t3_id, state_dir) = resolve_state_dir_for_t3_instance(None)?;
+        let (t3_id, state_dir) = resolve_state_dir_for_t3_instance(t3_instance_id.as_deref())?;
         let settings = read_t3_settings_json(&state_dir)?;
         let entry = &settings["providerInstances"][&id];
         if entry["driver"] != DRIVER_ANTIGRAVITY && !(id == DRIVER_ANTIGRAVITY && entry.is_null()) {

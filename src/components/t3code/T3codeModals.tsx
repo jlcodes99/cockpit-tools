@@ -11,9 +11,11 @@ import { getAvailableProviderAccounts, getT3codePlatformSpec } from './t3codePla
 import { formatAccountLabel, T3codeQuotaSection } from './t3codePresentation';
 import { PlatformLaunchPathField } from '../PlatformLaunchPathField';
 import { T3codeRuntimeSetup } from './T3codeRuntimeSetup';
+import { formatQoderError } from '../../utils/qoderErrors';
 
 export type T3codeModalState =
   | { kind: 'add'; driver: T3CodeDriverKind }
+  | { kind: 'switch'; instance: T3CodeProviderInstanceView }
   | { kind: 'runtime'; instance: T3CodeProviderInstanceView }
   | { kind: 'remove'; instance: T3CodeProviderInstanceView };
 
@@ -25,27 +27,29 @@ interface T3codeModalsProps {
   renderPlanBadge: (driver: T3CodeDriverKind, id?: string, plan?: string, apiService?: boolean) => ReactNode;
   onClose: () => void;
   onAdd: (driver: T3CodeDriverKind, accountId: string) => Promise<unknown>;
+  onSwitch: (instance: T3CodeProviderInstanceView, accountId: string) => Promise<unknown>;
   onRemove: (instance: T3CodeProviderInstanceView) => Promise<unknown>;
   onNavigate?: (page: Page) => void;
 }
 
 export function T3codeModals({
-  modal, workspace, gatewayName, maskAccountText, renderPlanBadge, onClose, onAdd, onRemove, onNavigate,
+  modal, workspace, gatewayName, maskAccountText, renderPlanBadge, onClose, onAdd, onSwitch, onRemove, onNavigate,
 }: T3codeModalsProps) {
   const { t } = useTranslation();
   const [busy, setBusy] = useState(false);
   const [pathSaving, setPathSaving] = useState(false);
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState('');
-  const [missingCli, setMissingCli] = useState(false);
+  const [missingCli, setMissingCli] = useState<'codebuddy_cli' | 'qoder_cli' | 'qoder_cn_cli' | null>(null);
   const modalError = useModalErrorState();
   const dialogRef = useRef<HTMLFormElement>(null);
   const add = modal.kind === 'add';
+  const pickingAccount = add || modal.kind === 'switch';
   const runtimeSetup = modal.kind === 'runtime';
   const remove = modal.kind === 'remove';
   const driver = add ? modal.driver : modal.instance.driver;
   const spec = getT3codePlatformSpec(driver);
-  const accounts = add ? getAvailableProviderAccounts(workspace, driver) : [];
+  const accounts = pickingAccount ? getAvailableProviderAccounts(workspace, driver) : [];
   const matches = accounts.filter((account) => {
     const query = search.trim().toLowerCase();
     return [formatAccountLabel(account, gatewayName, maskAccountText), account.planBadge]
@@ -54,8 +58,9 @@ export function T3codeModals({
   const selected = accounts.some((account) => account.id === selectedId);
   const disabled = busy || pathSaving;
   const action = t(add ? 't3code.providerWorkspace.addAccount'
-    : runtimeSetup ? 'appPath.missing.configurePath' : 't3code.overview.removeAccount');
-  const HeaderIcon = add ? Plus : runtimeSetup ? Settings2 : AlertTriangle;
+    : modal.kind === 'switch' ? 't3code.providerWorkspace.switchAccount'
+      : runtimeSetup ? 'appPath.missing.configurePath' : 't3code.overview.removeAccount');
+  const HeaderIcon = add ? Plus : modal.kind === 'switch' ? RefreshCw : runtimeSetup ? Settings2 : AlertTriangle;
 
   const close = useCallback(() => {
     if (!disabled) onClose();
@@ -65,18 +70,26 @@ export function T3codeModals({
   useModalFocusTrap(dialogRef, true);
 
   const submit = async () => {
-    if (runtimeSetup || busy || (add && !selected)) return;
+    if (runtimeSetup || busy || (pickingAccount && !selected)) return;
     modalError.clear();
     setBusy(true);
     try {
       if (add) await onAdd(driver, selectedId);
+      else if (modal.kind === 'switch') await onSwitch(modal.instance, selectedId);
       else await onRemove(modal.instance);
       onClose();
     } catch (error) {
-      if (add && String(error).replace(/^Error: /, '') === 'CLI_PATH_NOT_FOUND:codebuddy_cli') {
-        setMissingCli(true);
+      const message = String(error).replace(/^Error: /, '');
+      if (pickingAccount && message === 'CLI_PATH_NOT_FOUND:codebuddy_cli') {
+        setMissingCli('codebuddy_cli');
+      } else if (pickingAccount && message === 'CLI_PATH_NOT_FOUND:qoder_cn_cli') {
+        setMissingCli('qoder_cn_cli');
+      } else if (pickingAccount && message === 'CLI_PATH_NOT_FOUND:qoder_cli') {
+        setMissingCli('qoder_cli');
+      } else if (driver === 'qoder' || driver === 'qoder_cn') {
+        modalError.report(formatQoderError(error, driver === 'qoder_cn' ? 'cn' : 'global'));
       } else {
-        modalError.report(String(error));
+        modalError.report(message);
       }
       setBusy(false);
     }
@@ -111,13 +124,13 @@ export function T3codeModals({
         <div className="modal-body t3code-dialog-body">
           <ModalErrorMessage message={modalError.message} scrollKey={modalError.scrollKey} />
           {missingCli && (
-            <PlatformLaunchPathField target="codebuddy_cli" recovery disabled={busy} onSaving={setPathSaving}
+            <PlatformLaunchPathField target={missingCli} recovery disabled={busy} onSaving={setPathSaving}
               onSaved={() => {
-                setMissingCli(false);
+                setMissingCli(null);
                 void submit();
               }} />
           )}
-          {add ? (
+          {pickingAccount ? (
             <div className="t3code-switch-picker">
               {(accounts.length > 0 || onNavigate) && (
                 <div className="t3code-switch-picker-top">
@@ -208,8 +221,8 @@ export function T3codeModals({
           <button className="btn btn-secondary" type="button" disabled={disabled} onClick={close}>
             {t(runtimeSetup ? 'common.close' : 'common.cancel')}
           </button>
-          {!runtimeSetup && <button className={`btn ${add ? 'btn-primary' : 'btn-danger'} t3code-dialog-submit`}
-            type="submit" aria-busy={busy} disabled={disabled || (add && !selected)}>
+          {!runtimeSetup && <button className={`btn ${pickingAccount ? 'btn-primary' : 'btn-danger'} t3code-dialog-submit`}
+            type="submit" aria-busy={busy} disabled={disabled || (pickingAccount && !selected)}>
             <span className="t3code-dialog-action-label" aria-hidden={busy}>{action}</span>
             <span className="t3code-dialog-action-label" aria-hidden={!busy}>
               <RefreshCw size={14} aria-hidden="true" className={busy ? 'loading-spinner' : undefined} />

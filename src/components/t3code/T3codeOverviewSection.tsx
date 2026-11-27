@@ -3,6 +3,7 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { CheckCircle2, Eye, EyeOff, Play, Plus, RefreshCw, RotateCw, Search } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { QuickSettingsPopover } from '../QuickSettingsPopover';
+import { SingleSelectDropdown, type SingleSelectOption } from '../SingleSelectDropdown';
 import { useDurableUiSetting } from '../../hooks/useDurableUiSetting';
 import type { T3CodeDriverKind, T3CodeProviderInstanceView, T3CodeProviderWorkspaceView } from '../../types/t3code';
 import { T3CODE_PLATFORM_ORDER_STORAGE_KEY } from '../../utils/durableUiSettings';
@@ -13,6 +14,9 @@ import type { T3codeProviderRowView } from './useT3codeWorkspaceController';
 
 interface T3codeOverviewSectionProps {
   workspace: T3CodeProviderWorkspaceView | null;
+  instanceOptions: SingleSelectOption[];
+  targetId: string;
+  onSelectTarget: (targetId: string) => void;
   providers: T3codeProviderRowView[];
   t3Running: boolean;
   injectionConnected: boolean;
@@ -27,6 +31,7 @@ interface T3codeOverviewSectionProps {
   renderPlanBadge: (driver: T3CodeDriverKind, id?: string, plan?: string, apiService?: boolean) => ReactNode;
   onAdd: (driver: T3CodeDriverKind) => void;
   onSetDefault: (instance: T3CodeProviderInstanceView) => void;
+  onSwitch: (instance: T3CodeProviderInstanceView) => void;
   onRemove: (instance: T3CodeProviderInstanceView) => void;
   onConfigureRuntime: (instance: T3CodeProviderInstanceView) => void;
   onRefreshAll: () => void;
@@ -34,9 +39,10 @@ interface T3codeOverviewSectionProps {
 }
 
 export function T3codeOverviewSection({
-  workspace, providers, t3Running, injectionConnected, loading, busyInstanceId,
+  workspace, instanceOptions, targetId, onSelectTarget,
+  providers, t3Running, injectionConnected, loading, busyInstanceId,
   refreshingAll, restarting, gatewayName, privacyModeEnabled, onTogglePrivacyMode,
-  maskAccountText, renderPlanBadge, onAdd, onSetDefault, onRemove, onConfigureRuntime, onRefreshAll, onStartOrRestart,
+  maskAccountText, renderPlanBadge, onAdd, onSetDefault, onSwitch, onRemove, onConfigureRuntime, onRefreshAll, onStartOrRestart,
 }: T3codeOverviewSectionProps) {
   const { t } = useTranslation();
   const [search, setSearch] = useState('');
@@ -86,6 +92,16 @@ export function T3codeOverviewSection({
     <>
       <div className="toolbar t3code-overview-toolbar">
         <div className="toolbar-left">
+          {instanceOptions?.length > 1 && (
+            <SingleSelectDropdown
+              className="t3code-instance-select"
+              value={targetId}
+              options={instanceOptions}
+              disabled={busy || refreshingAll}
+              ariaLabel={t('t3code.providerWorkspace.targetInstance')}
+              onChange={onSelectTarget}
+            />
+          )}
           <div className="search-box">
             <Search size={16} className="search-icon" />
             <input
@@ -173,6 +189,8 @@ export function T3codeOverviewSection({
                 const pending = busyInstanceId === instance.instanceId;
                 const setDefaultLabel = t('t3code.overview.setDefaultAccount');
                 const removeLabel = t('t3code.overview.removeAccount');
+                const switchLabel = t('t3code.providerWorkspace.switchAccount');
+                const supportsSwitch = instance.driver === 'qoder' || instance.driver === 'qoder_cn';
                 return (
                   <div
                     key={instance.instanceId}
@@ -217,6 +235,12 @@ export function T3codeOverviewSection({
                           aria-label={`${setDefaultLabel} · ${primary}`} onClick={() => onSetDefault(instance)}>
                           {pending && <RefreshCw size={13} className="loading-spinner" />}
                           {setDefaultLabel}
+                        </button>
+                      )}
+                      {supportsSwitch && (
+                        <button type="button" className="btn btn-secondary btn-sm t3code-overview-action t3code-overview-switch"
+                          disabled={busy} aria-label={`${switchLabel} · ${primary}`} onClick={() => onSwitch(instance)}>
+                          {switchLabel}
                         </button>
                       )}
                       <button type="button" className="btn btn-ghost btn-sm t3code-overview-action t3code-overview-remove"

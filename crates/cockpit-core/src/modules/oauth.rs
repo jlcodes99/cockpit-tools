@@ -21,6 +21,10 @@ pub struct TokenResponse {
     pub refresh_token: Option<String>,
     #[serde(default)]
     pub id_token: Option<String>,
+    /// 授权返回的 scope。桌面端据此判断是否缺 aicode scope 需要重新授权；
+    /// 这里只解析，让两个 crate 共用的 `oauth_tests.rs` 能同时编译。
+    #[serde(default)]
+    pub scope: Option<String>,
     #[serde(skip)]
     pub oauth_client_key: Option<String>,
 }

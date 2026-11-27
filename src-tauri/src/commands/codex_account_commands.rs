@@ -69,6 +69,32 @@ static CODEX_BATCH_DELETE_JOBS: LazyLock<Mutex<HashMap<String, CodexBatchDeleteJ
     LazyLock::new(|| Mutex::new(HashMap::new()));
 static CODEX_SWITCH_CANCEL_REQUESTS: LazyLock<Mutex<HashSet<String>>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));
+static CODEX_AUTO_SWITCH_LAST_DEFER_KEY: LazyLock<Mutex<Option<String>>> =
+    LazyLock::new(|| Mutex::new(None));
+
+fn log_codex_auto_switch_deferred(target_id: &str, reason: &str) {
+    let key = format!("{target_id}:{reason}");
+    let mut last = CODEX_AUTO_SWITCH_LAST_DEFER_KEY
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    if last.as_deref() == Some(key.as_str()) {
+        return;
+    }
+    *last = Some(key);
+    logger::log_info(&format!(
+        "[AutoSwitch][Codex] 自动切号暂缓: target_id={}, reason={}，{}秒后复检",
+        target_id,
+        reason,
+        CODEX_AUTO_SWITCH_RECHECK_INTERVAL.as_secs()
+    ));
+}
+
+fn clear_codex_auto_switch_defer_log() {
+    let mut last = CODEX_AUTO_SWITCH_LAST_DEFER_KEY
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    *last = None;
+}
 
 fn request_codex_switch_cancel(account_id: &str) {
     CODEX_SWITCH_CANCEL_REQUESTS
@@ -1785,23 +1811,33 @@ fn is_deferred_auto_switch(error: &str) -> bool {
     matches!(error, CODEX_AUTO_SWITCH_WAITING_FOR_IDLE | CODEX_AUTO_SWITCH_SELECTION_CHANGED)
 }
 
-async fn default_runtime_allows_auto_switch() -> bool {
+async fn default_runtime_auto_switch_block_reason() -> Option<&'static str> {
     use crate::modules::codex_app_injection::{default_desktop_activity, DesktopActivity};
 
     let launch_mode = tauri::async_runtime::spawn_blocking(|| {
         crate::modules::codex_instance::load_default_settings().map(|settings| settings.launch_mode)
     }).await;
     match launch_mode {
-        Ok(Ok(crate::models::InstanceLaunchMode::App)) => {
-            default_desktop_activity().await == DesktopActivity::Idle
-        }
+        Ok(Ok(crate::models::InstanceLaunchMode::App)) => match default_desktop_activity().await {
+            DesktopActivity::Idle => None,
+            DesktopActivity::Busy => Some("desktop_busy"),
+            DesktopActivity::Unknown => Some("desktop_activity_unknown"),
+        },
         Ok(Ok(crate::models::InstanceLaunchMode::Cli)) => {
-            crate::commands::codex_instance::cli_resume::cli_allows_auto_switch(
+            if crate::commands::codex_instance::cli_resume::cli_allows_auto_switch(
                 codex_account::get_codex_home(),
-            ).await
+            ).await {
+                None
+            } else {
+                Some("cli_busy")
+            }
         }
-        _ => false,
+        _ => Some("launch_mode_unavailable"),
     }
+}
+
+async fn default_runtime_allows_auto_switch() -> bool {
+    default_runtime_auto_switch_block_reason().await.is_none()
 }
 
 fn schedule_codex_auto_switch_recheck(app: &AppHandle) {
@@ -1838,7 +1874,8 @@ async fn run_codex_post_refresh_check_once(app: &AppHandle) {
     let mut switched = false;
     match codex_account::pick_auto_switch_target_if_needed() {
         Ok(Some(selection)) => {
-            if !default_runtime_allows_auto_switch().await {
+            if let Some(reason) = default_runtime_auto_switch_block_reason().await {
+                log_codex_auto_switch_deferred(&selection.target_id, reason);
                 schedule_codex_auto_switch_recheck(app);
             } else {
                 let target_id = selection.target_id.clone();
@@ -1855,6 +1892,7 @@ async fn run_codex_post_refresh_check_once(app: &AppHandle) {
                 .await
                 {
                     Ok(switched_account) => {
+                        clear_codex_auto_switch_defer_log();
                         logger::log_info(&format!(
                             "[AutoSwitch][Codex] 自动切号完成: target_id={}, email={}",
                             switched_account.id, switched_account.email
@@ -1862,9 +1900,11 @@ async fn run_codex_post_refresh_check_once(app: &AppHandle) {
                         switched = true;
                     }
                     Err(error) if is_deferred_auto_switch(&error) => {
+                        log_codex_auto_switch_deferred(&target_id, &error);
                         schedule_codex_auto_switch_recheck(app);
                     }
                     Err(error) => {
+                        clear_codex_auto_switch_defer_log();
                         logger::log_warn(&format!(
                             "[AutoSwitch][Codex] 自动切号失败: target_id={}, error={}",
                             target_id, error
@@ -1873,8 +1913,11 @@ async fn run_codex_post_refresh_check_once(app: &AppHandle) {
                 }
             }
         }
-        Ok(None) => {}
+        Ok(None) => {
+            clear_codex_auto_switch_defer_log();
+        }
         Err(error) => {
+            clear_codex_auto_switch_defer_log();
             logger::log_warn(&format!("[AutoSwitch][Codex] 自动切号检查失败: {error}"));
         }
     }
@@ -3105,6 +3148,36 @@ pub async fn restore_codex_active_takeover_if_enabled(app: AppHandle) -> Result<
         reapply_catalog_result
     ));
     Ok(reapply_catalog_result)
+}
+
+/// Read live CLI model/effort metadata only; never starts a model prompt.
+#[tauri::command]
+pub async fn get_codex_workbuddy_delegate_catalog(
+    workbuddy_account_id: String,
+    model_id: Option<String>,
+) -> Result<crate::modules::codex_local_access::CodexWorkbuddyDelegateCatalog, String> {
+    crate::modules::codex_local_access::get_workbuddy_delegate_catalog(workbuddy_account_id, model_id).await
+}
+
+#[tauri::command]
+pub async fn create_codex_workbuddy_delegate_profile(
+    workbuddy_account_id: String,
+    model_id: String,
+    reasoning_effort: String,
+) -> Result<crate::modules::codex_local_access::CodexWorkbuddyDelegateProfile, String> {
+    crate::modules::codex_local_access::create_workbuddy_delegate_profile(workbuddy_account_id, model_id, reasoning_effort).await
+}
+
+#[tauri::command]
+pub async fn list_codex_workbuddy_delegate_profiles(
+) -> Result<Vec<crate::modules::codex_local_access::CodexWorkbuddyDelegateProfile>, String> {
+    tokio::task::spawn_blocking(crate::modules::codex_local_access::list_workbuddy_delegate_profiles)
+        .await.map_err(|_| "WORKBUDDY_DELEGATE_PROFILE_READ_FAILED".to_string())?
+}
+
+#[tauri::command]
+pub async fn restore_codex_workbuddy_delegate_profile(profile_id: String) -> Result<(), String> {
+    crate::modules::codex_local_access::restore_workbuddy_delegate_profile(profile_id).await
 }
 
 // ─── Codex 账号分组持久化 ────────────────────────────────────────────

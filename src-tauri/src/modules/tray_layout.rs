@@ -9,6 +9,7 @@ use std::path::PathBuf;
 const TRAY_LAYOUT_FILE: &str = "tray_layout.json";
 
 pub const PLATFORM_ANTIGRAVITY: &str = "antigravity";
+pub const PLATFORM_T3CODE: &str = "t3code";
 pub const PLATFORM_CODEX: &str = "codex";
 pub const PLATFORM_CLAUDE_MANAGER: &str = "claude_manager";
 pub const PLATFORM_ZED: &str = "zed";
@@ -20,6 +21,7 @@ pub const PLATFORM_GROK: &str = "grok";
 pub const PLATFORM_CODEBUDDY: &str = "codebuddy";
 pub const PLATFORM_CODEBUDDY_CN: &str = "codebuddy_cn";
 pub const PLATFORM_QODER: &str = "qoder";
+pub const PLATFORM_QODER_CN: &str = "qoder_cn";
 pub const PLATFORM_ZCODE: &str = "zcode";
 pub const PLATFORM_TRAE: &str = "trae";
 pub const PLATFORM_TRAE_SOLO: &str = "trae_solo";
@@ -28,10 +30,11 @@ pub const PLATFORM_TRAE_SOLO_CN: &str = "trae_solo_cn";
 pub const PLATFORM_WORKBUDDY: &str = "workbuddy";
 pub const PLATFORM_MINIMAX_CODE: &str = "minimaxcode";
 
-pub const SUPPORTED_PLATFORM_IDS: [&str; 19] = [
+pub const SUPPORTED_PLATFORM_IDS: [&str; 21] = [
     PLATFORM_CLAUDE_MANAGER,
     PLATFORM_CODEX,
     PLATFORM_ANTIGRAVITY,
+    PLATFORM_T3CODE,
     PLATFORM_ZED,
     PLATFORM_GITHUB_COPILOT,
     PLATFORM_WINDSURF,
@@ -41,6 +44,7 @@ pub const SUPPORTED_PLATFORM_IDS: [&str; 19] = [
     PLATFORM_CODEBUDDY,
     PLATFORM_CODEBUDDY_CN,
     PLATFORM_QODER,
+    PLATFORM_QODER_CN,
     PLATFORM_ZCODE,
     PLATFORM_TRAE,
     PLATFORM_TRAE_SOLO,
@@ -128,6 +132,7 @@ fn normalize_platform_id(id: &str) -> Option<&'static str> {
     match id.trim() {
         PLATFORM_CLAUDE_MANAGER => Some(PLATFORM_CLAUDE_MANAGER),
         PLATFORM_ANTIGRAVITY => Some(PLATFORM_ANTIGRAVITY),
+        PLATFORM_T3CODE => Some(PLATFORM_T3CODE),
         PLATFORM_CODEX => Some(PLATFORM_CODEX),
         PLATFORM_ZED => Some(PLATFORM_ZED),
         PLATFORM_GITHUB_COPILOT => Some(PLATFORM_GITHUB_COPILOT),
@@ -138,6 +143,7 @@ fn normalize_platform_id(id: &str) -> Option<&'static str> {
         PLATFORM_CODEBUDDY => Some(PLATFORM_CODEBUDDY),
         PLATFORM_CODEBUDDY_CN => Some(PLATFORM_CODEBUDDY_CN),
         PLATFORM_QODER => Some(PLATFORM_QODER),
+        PLATFORM_QODER_CN => Some(PLATFORM_QODER_CN),
         PLATFORM_ZCODE => Some(PLATFORM_ZCODE),
         PLATFORM_TRAE => Some(PLATFORM_TRAE),
         PLATFORM_TRAE_SOLO | "trae-solo" => Some(PLATFORM_TRAE_SOLO),
@@ -194,6 +200,7 @@ fn normalize_tray_platforms(
         && contains_platform(&sanitized, PLATFORM_WINDSURF);
 
     for &new_platform in &[
+        PLATFORM_T3CODE,
         PLATFORM_ZED,
         PLATFORM_KIRO,
         PLATFORM_CURSOR,
@@ -406,6 +413,7 @@ fn normalize_config(
     let ordered_platform_ids = normalize_order(&config.ordered_platform_ids);
 
     let raw_order_new_platforms: Vec<&str> = [
+        PLATFORM_T3CODE,
         PLATFORM_KIRO,
         PLATFORM_CURSOR,
         PLATFORM_CODEBUDDY,
@@ -458,7 +466,6 @@ pub fn is_platform_enabled(platform_id: &str) -> bool {
         "antigravity_ide" => Some("antigravity_ide"),
         "codex_api_service" => Some("codex_api_service"),
         "workbuddy_ai" => Some("workbuddy_ai"),
-        "t3code" => Some("t3code"),
         "claude" => Some(PLATFORM_CLAUDE_MANAGER),
         "github_copilot" => Some(PLATFORM_GITHUB_COPILOT),
         id => normalize_platform_id(id),
@@ -673,5 +680,56 @@ mod tests {
         assert!(normalize_platform_id("minimax_code").is_none());
         let legacy = normalize_order(&["minimax_code".to_string()]);
         assert!(legacy.contains(&PLATFORM_MINIMAX_CODE.to_string()));
+    }
+
+    #[test]
+    fn t3code_tray_layout_persists_checked_and_unchecked_states() {
+        assert_eq!(normalize_platform_id("t3code"), Some(PLATFORM_T3CODE));
+
+        let defaults = TrayLayoutConfig::default();
+        assert!(defaults
+            .ordered_platform_ids
+            .contains(&PLATFORM_T3CODE.to_string()));
+        assert!(defaults
+            .tray_platform_ids
+            .contains(&PLATFORM_T3CODE.to_string()));
+        assert!(defaults
+            .ordered_entry_ids
+            .contains(&"platform:t3code".to_string()));
+
+        let checked = normalize_config(defaults.clone(), false);
+        assert!(checked
+            .tray_platform_ids
+            .contains(&PLATFORM_T3CODE.to_string()));
+
+        let mut unchecked_config = defaults.clone();
+        unchecked_config
+            .tray_platform_ids
+            .retain(|id| id != PLATFORM_T3CODE);
+        let saved_unchecked = normalize_config(unchecked_config, false);
+        assert!(!saved_unchecked
+            .tray_platform_ids
+            .contains(&PLATFORM_T3CODE.to_string()));
+
+        // Reloading an explicitly saved layout that already knows about `t3code`
+        // must keep `t3code` unchecked even when all 4 legacy core platforms are checked.
+        let reloaded_unchecked = normalize_config(saved_unchecked, true);
+        assert!(!reloaded_unchecked
+            .tray_platform_ids
+            .contains(&PLATFORM_T3CODE.to_string()));
+
+        // Upgrading a legacy layout that did not yet include `t3code` in orderedPlatformIds
+        // migrates `t3code` into trayPlatformIds automatically.
+        let mut legacy = defaults;
+        legacy
+            .ordered_platform_ids
+            .retain(|id| id != PLATFORM_T3CODE);
+        legacy
+            .tray_platform_ids
+            .retain(|id| id != PLATFORM_T3CODE);
+        let migrated = normalize_config(legacy, true);
+        assert!(migrated
+            .tray_platform_ids
+            .contains(&PLATFORM_T3CODE.to_string()));
     }
 }

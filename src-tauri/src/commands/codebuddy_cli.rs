@@ -146,14 +146,11 @@ fn open_terminal(command: &str, terminal: Option<String>) -> Result<(), String> 
             #[cfg(target_os = "windows")]
             {
                 use std::os::windows::process::CommandExt;
-                match program.as_str() {
+                if super::codex_instance::terminal::is_powershell_program(&program) {
                     // The selected PowerShell is the interactive terminal itself.
-                    "powershell" | "pwsh" => {
-                        process.creation_flags(0x00000010);
-                    }
-                    _ => {
-                        process.creation_flags(0x08000000);
-                    }
+                    process.creation_flags(0x00000010);
+                } else {
+                    process.creation_flags(0x08000000);
                 }
             }
             process.spawn()

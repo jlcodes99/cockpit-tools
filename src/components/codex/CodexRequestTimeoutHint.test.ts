@@ -55,3 +55,26 @@ test('native timeout hints name and focus the matching open or idle setting', ()
     assert.equal(target, field);
   }
 });
+
+test('timeout hint renders large request warning when recorded request size exceeds threshold', () => {
+  const h = loadHookModule(new URL('./CodexRequestTimeoutHint.tsx', import.meta.url), {
+    'react-i18next': {
+      useTranslation: () => ({
+        t: (key: string, args?: any) =>
+          `${key}${args?.size ? `:${args.size}` : ''}${args?.setting ? `:${args.setting}` : ''}`,
+      }),
+    },
+    '../../utils/codexRequestDiagnostics': { requestTimeoutDiagnostic },
+  });
+  let requestBytes: number | null = 110 * 1024 * 1024;
+  h.render(() => h.exports.CodexRequestTimeoutHint({
+    event: { httpStatus: 504, errorCategory: 'network_recovery_exhausted' },
+    requestBytes,
+  }));
+  let tree = nodes(h.flush());
+  assert.ok(tree.some((node) => node.props?.children === 'codex.requestDiagnostics.timeout.largeRequest:110.0 MB'));
+
+  requestBytes = 1024;
+  tree = nodes(h.flush());
+  assert.equal(tree.some((node) => String(node.props?.children).includes('.largeRequest')), false);
+});

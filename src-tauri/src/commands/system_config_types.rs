@@ -132,6 +132,8 @@ pub struct GeneralConfig {
     pub minimax_code_auto_refresh_minutes: i32,
     /// Qoder 自动刷新间隔（分钟），-1 表示禁用
     pub qoder_auto_refresh_minutes: i32,
+    /// Qoder CN 自动刷新间隔（分钟），-1 表示禁用
+    pub qoder_cn_auto_refresh_minutes: i32,
     /// ZCode 自动刷新间隔（分钟），-1 表示禁用
     pub zcode_auto_refresh_minutes: i32,
     /// T3 Code 自动刷新间隔（分钟），-1 表示禁用
@@ -225,6 +227,8 @@ pub struct GeneralConfig {
     pub codebuddy_cn_share_sessions_on_switch: bool,
     /// Qoder 启动路径（为空则使用默认路径）
     pub qoder_app_path: String,
+    /// Qoder CN 启动路径（为空则使用自动探测）
+    pub qoder_cn_app_path: String,
     /// ZCode 启动路径（为空则使用默认路径）
     pub zcode_app_path: String,
     /// T3 Code 启动路径（为空则使用默认路径）
@@ -272,6 +276,9 @@ pub struct GeneralConfig {
     pub codex_auto_restore_takeover_on_launch: bool,
     /// 切换 Antigravity IDE 时是否自动启动/重启应用
     pub antigravity_launch_on_switch: bool,
+    pub antigravity_desktop_chinese_enabled: bool,
+    pub antigravity_desktop_layout: config::AntigravityDesktopLayout,
+    pub antigravity_desktop_permission: config::AntigravityDesktopPermission,
     /// 切换 Codex 时是否自动重启指定应用
     pub codex_restart_specified_app_on_switch: bool,
     /// 是否在 Codex 总览中显示 API 服务入口
@@ -368,6 +375,10 @@ pub struct GeneralConfig {
     pub qoder_quota_alert_enabled: bool,
     /// Qoder 配额预警阈值（百分比）
     pub qoder_quota_alert_threshold: i32,
+    /// 是否启用 Qoder CN 配额预警通知
+    pub qoder_cn_quota_alert_enabled: bool,
+    /// Qoder CN 配额预警阈值（百分比）
+    pub qoder_cn_quota_alert_threshold: i32,
     /// 是否启用 Trae 配额预警通知
     pub trae_quota_alert_enabled: bool,
     /// Trae 配额预警阈值（百分比）
@@ -547,9 +558,42 @@ fn read_macos_plist_string(path: &Path, key: &str) -> Option<String> {
     None
 }
 
-#[cfg(any(target_os = "linux", test))]
 #[path = "antigravity_linux_asar.rs"]
 mod antigravity_linux_asar;
+
+fn antigravity_asar_candidates(root: &Path) -> Vec<PathBuf> {
+    vec![
+        root.join("resources").join("app.asar"),
+        root.join("Contents").join("Resources").join("app.asar"),
+    ]
+}
+
+/// Antigravity 2.x ships its metadata inside `app.asar`. An in-place reinstall over
+/// 1.x can leave a stale unpacked `resources/app/product.json` behind, so the packed
+/// archive (what Electron actually runs) must win over it.
+fn read_antigravity_desktop_asar_metadata(root: &Path) -> Option<AntigravityInstalledVersionInfo> {
+    antigravity_asar_candidates(root).into_iter().find_map(|archive| {
+        let version = antigravity_linux_asar::desktop_version_from_asar(&archive)?;
+        Some(AntigravityInstalledVersionInfo {
+            product_name: "Antigravity".to_string(),
+            version,
+            app_path: root.to_string_lossy().to_string(),
+            source: "app.asar/package.json".to_string(),
+        })
+    })
+}
+
+fn read_antigravity_root_file_metadata(
+    root: &Path,
+    target: Option<&str>,
+) -> Option<AntigravityInstalledVersionInfo> {
+    if normalize_antigravity_metadata_target(target) != Some("antigravity_ide") {
+        if let Some(info) = read_antigravity_desktop_asar_metadata(root) {
+            return Some(info);
+        }
+    }
+    read_antigravity_product_json_metadata(root)
+}
 
 fn antigravity_product_json_candidates(root: &Path) -> Vec<PathBuf> {
     #[cfg(target_os = "macos")]
@@ -923,6 +967,9 @@ fn antigravity_metadata_root_matches_target_with_product_metadata(
         }
     }
     if prefer_product_metadata {
+        if read_antigravity_desktop_asar_metadata(root).is_some() {
+            return target == "antigravity";
+        }
         if let Some(metadata_target) = antigravity_product_json_target(root) {
             return metadata_target == target;
         }
@@ -1141,21 +1188,8 @@ fn resolve_antigravity_installed_version_info_for_target_with_mode(
     scan_mode: AntigravityVersionScanMode,
 ) -> Option<AntigravityInstalledVersionInfo> {
     for root in antigravity_metadata_candidates(target, scan_mode) {
-        if let Some(info) = read_antigravity_product_json_metadata(&root) {
+        if let Some(info) = read_antigravity_root_file_metadata(&root, target) {
             return Some(info);
-        }
-
-        #[cfg(target_os = "linux")]
-        if normalize_antigravity_metadata_target(target) != Some("antigravity_ide") {
-            let archive = root.join("resources").join("app.asar");
-            if let Some(version) = antigravity_linux_asar::desktop_version_from_asar(&archive) {
-                return Some(AntigravityInstalledVersionInfo {
-                    product_name: "Antigravity".to_string(),
-                    version,
-                    app_path: root.to_string_lossy().to_string(),
-                    source: "app.asar/package.json".to_string(),
-                });
-            }
         }
 
         #[cfg(target_os = "macos")]
@@ -1282,6 +1316,7 @@ fn is_general_config_patch_field(key: &str) -> bool {
             | "workbuddy_auto_refresh_minutes"
             | "minimax_code_auto_refresh_minutes"
             | "qoder_auto_refresh_minutes"
+            | "qoder_cn_auto_refresh_minutes"
             | "zcode_auto_refresh_minutes"
             | "t3code_auto_refresh_minutes"
             | "t3code_app_ui_injection_enabled"
@@ -1334,6 +1369,7 @@ fn is_general_config_patch_field(key: &str) -> bool {
             | "codebuddy_cn_app_path"
             | "codebuddy_cn_share_sessions_on_switch"
             | "qoder_app_path"
+            | "qoder_cn_app_path"
             | "zcode_app_path"
             | "t3code_app_path"
             | "trae_app_path"
@@ -1364,6 +1400,9 @@ fn is_general_config_patch_field(key: &str) -> bool {
             | "codex_cli_auto_refresh_on_switch"
             | "codex_auto_restore_takeover_on_launch"
             | "antigravity_launch_on_switch"
+            | "antigravity_desktop_chinese_enabled"
+            | "antigravity_desktop_layout"
+            | "antigravity_desktop_permission"
             | "codex_restart_specified_app_on_switch"
             | "codex_local_access_entry_visible"
             | "codex_hide_relay_quota"
@@ -1412,6 +1451,8 @@ fn is_general_config_patch_field(key: &str) -> bool {
             | "codebuddy_cn_quota_alert_threshold"
             | "qoder_quota_alert_enabled"
             | "qoder_quota_alert_threshold"
+            | "qoder_cn_quota_alert_enabled"
+            | "qoder_cn_quota_alert_threshold"
             | "trae_quota_alert_enabled"
             | "trae_quota_alert_threshold"
             | "trae_solo_quota_alert_enabled"
@@ -1545,6 +1586,7 @@ fn apply_general_config_updates(
     normalize_app_path_field!("codebuddy_app_path", codebuddy_app_path);
     normalize_app_path_field!("codebuddy_cn_app_path", codebuddy_cn_app_path);
     normalize_app_path_field!("qoder_app_path", qoder_app_path);
+    normalize_app_path_field!("qoder_cn_app_path", qoder_cn_app_path);
     normalize_app_path_field!("zcode_app_path", zcode_app_path);
     normalize_app_path_field!("t3code_app_path", t3code_app_path);
     normalize_app_path_field!("trae_app_path", trae_app_path);

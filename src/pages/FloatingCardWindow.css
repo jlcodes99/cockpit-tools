@@ -572,6 +572,11 @@ body.floating-card-overlay-root,
   line-height: 1.4;
 }
 
+.floating-card-error > .btn {
+  display: flex;
+  margin-top: 5px;
+}
+
 .floating-card-footer {
   display: flex;
   align-items: center;

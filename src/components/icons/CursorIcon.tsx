@@ -1,5 +1,5 @@
 import { CSSProperties } from 'react';
-import cursorIcon from '../../assets/icons/cursor.svg';
+import cursorIcon from '../../assets/icons/cursor-menu.png';
 
 type CursorIconProps = {
   className?: string;

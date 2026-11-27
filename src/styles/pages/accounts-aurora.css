@@ -696,6 +696,18 @@
   border-color: var(--plan-pro-border);
 }
 
+.accounts-page .tier-badge.plus {
+  background: var(--plan-plus-bg);
+  color: var(--plan-plus-color);
+  border-color: var(--plan-plus-border);
+}
+
+.accounts-page .tier-badge.trial {
+  background: var(--plan-trial-bg);
+  color: var(--plan-trial-color);
+  border-color: var(--plan-trial-border);
+}
+
 .accounts-page .tier-badge.pro-plus,
 .accounts-page .tier-badge.ultra {
   background: var(--plan-ultra-bg);
@@ -1347,7 +1359,7 @@
 }
 
 .account-selection-toolbar.has-middle .codex-overview-selection-left {
-  flex: 1 1 0;
+  flex: 0 0 auto;
   min-width: min-content;
 }
 
@@ -1355,18 +1367,18 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  flex: 1 1 auto;
+  flex: 1 1 16rem;
   min-width: 0;
   max-width: 100%;
 }
 
 .account-selection-toolbar.has-middle .account-selection-toolbar-middle {
-  flex: 0 1 auto;
-  max-width: 45%;
+  flex: 1 1 16rem;
+  max-width: 100%;
 }
 
 .account-selection-toolbar.has-middle .codex-overview-selection-actions {
-  flex: 1 1 max-content;
+  flex: 0 0 auto;
   min-width: 0;
   max-width: 100%;
   justify-content: flex-end;
@@ -1391,19 +1403,15 @@
 
 .account-group-tabs {
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
+  justify-content: center;
   gap: 4px;
   padding: 3px;
   background: color-mix(in srgb, var(--bg-tertiary, #f1f5f9) 80%, transparent);
-  border-radius: 20px;
+  border-radius: 16px;
   border: 1px solid color-mix(in srgb, var(--border, #e2e8f0) 70%, transparent);
-  overflow-x: auto;
   max-width: 100%;
-  scrollbar-width: none;
-}
-
-.account-group-tabs::-webkit-scrollbar {
-  display: none;
 }
 
 .account-group-tab {
@@ -1420,6 +1428,7 @@
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
+  flex-shrink: 0;
   transition: all 0.18s ease;
   user-select: none;
 }

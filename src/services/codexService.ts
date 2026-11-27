@@ -17,6 +17,8 @@ import {
   CodexReasoningEffort,
   CodexQuota,
   CodexResetCreditsSnapshot,
+  CodexWorkbuddyDelegateCatalog,
+  CodexWorkbuddyDelegateProfile,
 } from '../types/codex';
 import { normalizeCodexSwitchError } from '../utils/codexSwitchAuthFailure';
 import type { CodexOAuthProxyUse } from '../utils/codexOAuthReauthProxy';
@@ -34,6 +36,30 @@ export interface CodexDeviceAuthStartResponse {
   userCode: string;
   verificationUrl: string;
   pollIntervalSeconds: number;
+}
+
+/** Read CLI initialization metadata only; this does not run a model prompt. */
+export function getCodexWorkbuddyDelegateCatalog(
+  workbuddyAccountId: string,
+  modelId?: string,
+): Promise<CodexWorkbuddyDelegateCatalog> {
+  return invoke('get_codex_workbuddy_delegate_catalog', { workbuddyAccountId, modelId: modelId ?? null });
+}
+
+export function createCodexWorkbuddyDelegateProfile(
+  workbuddyAccountId: string,
+  modelId: string,
+  reasoningEffort: string,
+): Promise<CodexWorkbuddyDelegateProfile> {
+  return invoke('create_codex_workbuddy_delegate_profile', { workbuddyAccountId, modelId, reasoningEffort });
+}
+
+export function listCodexWorkbuddyDelegateProfiles(): Promise<CodexWorkbuddyDelegateProfile[]> {
+  return invoke('list_codex_workbuddy_delegate_profiles');
+}
+
+export function restoreCodexWorkbuddyDelegateProfile(profileId: string): Promise<void> {
+  return invoke('restore_codex_workbuddy_delegate_profile', { profileId });
 }
 
 /** 列出所有 Codex 账号 */

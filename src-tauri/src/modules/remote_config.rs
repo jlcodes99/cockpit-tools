@@ -390,6 +390,7 @@ fn normalize_platform_id(value: &str) -> Option<String> {
         "cursor" => Some("cursor".to_string()),
         "codebuddy" => Some("codebuddy".to_string()),
         "codebuddy-cn" => Some("codebuddy_cn".to_string()),
+        "qoder-cn" => Some("qoder_cn".to_string()),
         "qoder" => Some("qoder".to_string()),
         "zcode" => Some("zcode".to_string()),
         "trae" => Some("trae".to_string()),

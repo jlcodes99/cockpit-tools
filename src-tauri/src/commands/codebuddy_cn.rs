@@ -310,10 +310,6 @@ pub async fn inject_codebuddy_cn_to_vscode(
         }
         logger::log_warn(&format!("更新 CodeBuddy CN 默认实例绑定账号失败: {}", err));
     }
-    crate::modules::provider_current_state::set_current_account_id(
-        "codebuddy_cn",
-        Some(account_id.as_str()),
-    )?;
 
     let launch_warning =
         match crate::commands::codebuddy_cn_instance::codebuddy_cn_switch_default_account_and_start(
@@ -337,6 +333,11 @@ pub async fn inject_codebuddy_cn_to_vscode(
                 }
             }
         };
+
+    crate::modules::provider_current_state::set_current_account_id(
+        "codebuddy_cn",
+        Some(account_id.as_str()),
+    )?;
 
     let _ = crate::modules::tray::update_tray_menu(&app);
 

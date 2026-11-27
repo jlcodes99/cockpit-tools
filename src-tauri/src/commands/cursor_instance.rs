@@ -166,22 +166,6 @@ pub async fn cursor_update_instance(
         });
     }
 
-    let wants_bind = bind_account_id
-        .as_ref()
-        .and_then(|next| next.as_ref())
-        .is_some();
-    if wants_bind {
-        let store = modules::cursor_instance::load_instance_store()?;
-        if let Some(target) = store.instances.iter().find(|item| item.id == instance_id) {
-            if !is_profile_initialized(&target.user_data_dir) {
-                return Err(
-                    "INSTANCE_NOT_INITIALIZED:请先启动一次实例创建数据后，再进行账号绑定"
-                        .to_string(),
-                );
-            }
-        }
-    }
-
     let instance = modules::cursor_instance::update_instance(
         modules::cursor_instance::UpdateInstanceParams {
             working_dir: None,
@@ -234,6 +218,22 @@ pub async fn cursor_start_instance(instance_id: String) -> Result<InstanceProfil
         let default_dir = modules::cursor_instance::get_default_cursor_user_data_dir()?;
         let default_dir_str = default_dir.to_string_lossy().to_string();
         let default_settings = modules::cursor_instance::load_default_settings()?;
+        let extra_args = modules::process::parse_extra_args(&default_settings.extra_args);
+        let _initialization = if default_settings.bind_account_id.is_some() {
+            let root = default_dir.clone();
+            let args = extra_args.clone();
+            let last_pid = default_settings.last_pid;
+            modules::client_initialization::prepare_profile(
+                "cursor", instance_id.clone(), move || modules::client_initialization::state_db_ready(&root),
+                move || {
+                    if modules::cursor_instance::resolve_cursor_pid(last_pid, None).is_none() {
+                        modules::cursor_instance::start_cursor_default_with_args_with_new_window(&args, true)?;
+                    }
+                    Ok(())
+                },
+            ).await?
+        } else { None };
+
 
         if let Some(pid) =
             modules::cursor_instance::resolve_cursor_pid(default_settings.last_pid, None)
@@ -248,7 +248,6 @@ pub async fn cursor_start_instance(instance_id: String) -> Result<InstanceProfil
             default_settings.bind_account_id.as_deref(),
         )?;
 
-        let extra_args = modules::process::parse_extra_args(&default_settings.extra_args);
         let pid = modules::cursor_instance::start_cursor_default_with_args_with_new_window(
             &extra_args,
             true,
@@ -279,6 +278,23 @@ pub async fn cursor_start_instance(instance_id: String) -> Result<InstanceProfil
         .into_iter()
         .find(|item| item.id == instance_id)
         .ok_or("实例不存在")?;
+    let extra_args = modules::process::parse_extra_args(&instance.extra_args);
+    let _initialization = if instance.bind_account_id.is_some() {
+        let directory = instance.user_data_dir.clone();
+        let root = std::path::PathBuf::from(&directory);
+        let args = extra_args.clone();
+        let last_pid = instance.last_pid;
+        modules::client_initialization::prepare_profile(
+            "cursor", instance_id.clone(), move || modules::client_initialization::state_db_ready(&root),
+            move || {
+                if modules::cursor_instance::resolve_cursor_pid(last_pid, Some(&directory)).is_none() {
+                    modules::cursor_instance::start_cursor_with_args_with_new_window(&directory, &args, true)?;
+                }
+                Ok(())
+            },
+        ).await?
+    } else { None };
+
 
     if let Some(pid) = modules::cursor_instance::resolve_cursor_pid(
         instance.last_pid,
@@ -294,7 +310,6 @@ pub async fn cursor_start_instance(instance_id: String) -> Result<InstanceProfil
         instance.bind_account_id.as_deref(),
     )?;
 
-    let extra_args = modules::process::parse_extra_args(&instance.extra_args);
     let pid = modules::cursor_instance::start_cursor_with_args_with_new_window(
         &instance.user_data_dir,
         &extra_args,

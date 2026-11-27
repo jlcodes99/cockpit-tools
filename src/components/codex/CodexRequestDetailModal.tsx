@@ -98,6 +98,10 @@ export function CodexRequestDetailModal({ event, accountDisplayNames = new Map()
   const firstResponseMs = detail?.firstResponseMs ?? event.firstResponseMs;
   const requestSize = detail?.attempts.find((attempt) => attempt.requestSize)?.requestSize;
   const upstreamSize = detail?.attempts.find((attempt) => attempt.upstreamRequestBytes != null);
+  const recordedRequestBytes = Math.max(
+    requestSize?.totalBytes ?? 0,
+    ...(detail?.attempts.map((attempt) => attempt.upstreamRequestBytes ?? 0) ?? []),
+  ) || null;
   const overloadRetry = detail?.attempts.filter((attempt) => attempt.overloadRetry).pop()?.overloadRetry;
   const tierLabel = (tier: string) => {
     const key = requestedServiceTierLabelKey(tier);
@@ -156,7 +160,7 @@ export function CodexRequestDetailModal({ event, accountDisplayNames = new Map()
           {event.errorMessage && <p>{event.errorMessage}</p>}
           <p className="codex-request-diagnostics-hint">{t('codex.requestDiagnostics.toolExecutionHint')}</p>
         </section>}
-        <CodexRequestTimeoutHint event={event} onOpenSettings={onOpenTimeoutSettings} />
+        <CodexRequestTimeoutHint event={event} requestBytes={recordedRequestBytes} onOpenSettings={onOpenTimeoutSettings} />
         {loading && <p className="codex-request-diagnostics-hint" role="status">{t('common.loading')}</p>}
         {!loading && !detail && !error && <p>{t('codex.requestDiagnostics.unavailable')}</p>}
         {detail && <>

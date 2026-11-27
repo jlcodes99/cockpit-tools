@@ -325,7 +325,7 @@ export function GroupAccountPickerModal({
                         {maskAccountText(account.email)}
                       </span>
                       <div className="group-account-meta">
-                        <span className={`tier-badge ${tierBadge.className} group-account-tier-badge`}>
+                        <span className={`tier-badge ${tierBadge.className} group-account-tier-badge`} title={tierBadge.rawTier || tierBadge.label}>
                           {tierBadge.label}
                         </span>
                         {verificationBadge && (

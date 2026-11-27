@@ -17,6 +17,7 @@ export type Page =
   | 'codebuddy'
   | 'codebuddy-cn'
   | 'qoder'
+  | 'qoder-cn'
   | 'zcode'
   | 't3code'
   | 'trae'
@@ -54,7 +55,9 @@ export const MAIN_WINDOW_NAVIGABLE_PAGES: readonly Page[] = [
   'codebuddy',
   'codebuddy-cn',
   'qoder',
+  'qoder-cn',
   'zcode',
+  't3code',
   'trae',
   'trae-solo',
   'trae-cn',

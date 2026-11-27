@@ -47,7 +47,7 @@ export function AntigravityInstanceLaunchDialog({ source, onClose }: Props) {
   function accountBadge(account: Account | undefined) {
     if (!account) return undefined;
     const tier = getAntigravityTierBadge(account.quota);
-    return <span className={`tier-badge ${tier.className}`} title={tier.label}>{tier.label}</span>;
+    return <span className={`tier-badge ${tier.className}`} title={tier.rawTier || tier.label}>{tier.label}</span>;
   }
 
   function renderDetails(client: AntigravityLaunchClient, disabled: boolean) {

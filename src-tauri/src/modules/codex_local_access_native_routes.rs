@@ -125,6 +125,16 @@ fn native_model_route_plan(
     key: Option<&CodexLocalAccessApiKey>,
     model: &str,
 ) -> Result<NativeModelRoutePlan, native_contract::ServiceError> {
+    if key.is_some_and(|key| key.workbuddy_delegate.is_some()) {
+        // A dedicated native actor owns its live ACP session. No generic
+        // route, auxiliary endpoint, WebSocket or rebuild may reinterpret it
+        // as a cloud text account or a member of another provider pool.
+        return Err(native_error(
+            400,
+            "workbuddy_delegate_http_only",
+            "This dedicated WorkBuddy key supports its HTTP Responses native-delegate profile only",
+        ));
+    }
     let mut plan = NativeModelRoutePlan {
         model: model.into(),
         full_model: model.into(),
@@ -1464,10 +1474,12 @@ async fn native_select_route_once(
             })
     });
     native_filter_capability_backups(&collection, &plan, &request, &mut accounts)?;
+    let had_compatible_candidates = !accounts.is_empty();
     // Quota reservation uses a separate coordinator lock. Resolve quota readiness
     // first, then combine it with in-memory cooldowns without nesting those locks.
     let mut reserved_owner_error = None;
     let mut pool_quota_floor_error = None;
+    let mut bound_quota_reserve_error = None;
     let quota_candidates: HashMap<_, _> = accounts
         .iter()
         .filter_map(|account| {
@@ -1478,7 +1490,9 @@ async fn native_select_route_once(
                 request.auxiliary.as_deref(),
                 request.image_input,
             )?;
+            let mut is_quota_reserved = false;
             if let Some(error) = native_pool_quota_floor_error(&collection, account, &upstream) {
+                is_quota_reserved = true;
                 if request.preferred_account_id.as_ref() == Some(&account.id) {
                     reserved_owner_error = Some(error.with_local_rejected_account(account.id.clone()));
                     return None;
@@ -1487,21 +1501,27 @@ async fn native_select_route_once(
             }
             let wait = native_model_quota_retry_wait(&collection, account, &upstream);
             if wait.is_none()
-                && request.preferred_account_id.as_ref() == Some(&account.id)
                 && !native_is_chatgpt_plan_account(account)
                 && (!native_is_reserve_model(&upstream)
                     || account.is_api_key_auth()
                     || account_has_gpt_reserve_entitlement(account))
             {
-                reserved_owner_error = quota_reserve_policy(&collection, &account.id)
+                let reserve_error = quota_reserve_policy(&collection, &account.id)
                     .and_then(|reserve| {
                         let runtime = quota_reserve_coordinator().lock().ok()?;
                         quota_reserve_admission_error(&reserve, account, runtime.accounts.get(&account.id))
-                    })
-                    .map(|error| error.with_local_rejected_account(account.id.clone()));
+                    });
+                if let Some(error) = reserve_error {
+                    is_quota_reserved = true;
+                    if request.preferred_account_id.as_ref() == Some(&account.id) {
+                        reserved_owner_error = Some(error.with_local_rejected_account(account.id.clone()));
+                    } else {
+                        bound_quota_reserve_error.get_or_insert(error);
+                    }
+                }
             }
             // Keep the mapped model even when a quota reset time is unknown.
-            Some((account.id.clone(), (upstream, wait)))
+            Some((account.id.clone(), (upstream, wait, is_quota_reserved)))
         })
         .collect();
     // An eligible continuation owner can be temporarily protected by the local
@@ -1512,6 +1532,8 @@ async fn native_select_route_once(
     let mut closest_cooldown = None;
     let mut owner_quota_exhausted = false;
     let mut all_candidates_usage_exhausted = !accounts.is_empty();
+    let mut any_candidate_usage_exhausted = false;
+    let mut all_candidates_quota_reserved = !accounts.is_empty();
     let confirmed_quota_failover;
     {
         let cooldowns = host.cooldowns.lock().map_err(|_| {
@@ -1521,8 +1543,9 @@ async fn native_select_route_once(
             native_confirmed_quota_active(&cooldowns, id, &model, Instant::now())
         });
         accounts.retain(|account| {
-            let Some((upstream, quota_wait)) = quota_candidates.get(&account.id) else {
+            let Some((upstream, quota_wait, is_quota_reserved)) = quota_candidates.get(&account.id) else {
                 all_candidates_usage_exhausted = false;
+                all_candidates_quota_reserved = false;
                 return false;
             };
             let now = Instant::now();
@@ -1532,7 +1555,10 @@ async fn native_select_route_once(
                 && pool_account_quota_cooldown(&collection, account, now_ms)
                     .is_some_and(|quota| quota.active(now_ms));
             let confirmed_exhausted = native_confirmed_quota_active(&cooldowns, &account.id, upstream, now);
-            all_candidates_usage_exhausted &= snapshot_exhausted || confirmed_exhausted;
+            let exhausted = snapshot_exhausted || confirmed_exhausted;
+            all_candidates_usage_exhausted &= exhausted;
+            any_candidate_usage_exhausted |= exhausted;
+            all_candidates_quota_reserved &= *is_quota_reserved;
             let Some(quota_wait) = *quota_wait else {
                 return false;
             };
@@ -1598,6 +1624,14 @@ async fn native_select_route_once(
             }
             return Err(native_usage_exhausted_error(closest_cooldown));
         }
+        if all_candidates_quota_reserved
+            && request.preferred_account_id.is_none()
+            && request.capability_fallback_from.is_none()
+        {
+            if let Some(error) = bound_quota_reserve_error.or(pool_quota_floor_error) {
+                return Err(error);
+            }
+        }
         if request.capability_fallback_from.is_some() {
             return Err(native_error(
                 503,
@@ -1606,12 +1640,11 @@ async fn native_select_route_once(
             )
             .with_retry_after(closest_cooldown));
         }
-        return Err(native_error(
-            503,
-            "no_available_account",
-            "No compatible account is available for this model",
-        )
-        .with_retry_after(closest_cooldown));
+        return Err(native_no_available_account_error(
+            had_compatible_candidates,
+            closest_cooldown,
+            any_candidate_usage_exhausted,
+        ));
     }
     let routing_namespace = native_routing_namespace(
         caller,
@@ -1779,20 +1812,19 @@ async fn native_select_route_once(
                 }));
         }
         if accounts.is_empty() {
-            let error = if request.capability_fallback_from.is_some() {
-                native_error(
+            if request.capability_fallback_from.is_some() {
+                return Err(native_error(
                     503,
                     "capability_fallback_no_compatible_account",
                     "No compatible account is available within this API key's model scope",
                 )
-            } else {
-                native_error(
-                    503,
-                    "no_available_account",
-                    "No compatible account is available for this model",
-                )
-            };
-            return Err(error.with_retry_after(closest_cooldown));
+                .with_retry_after(closest_cooldown));
+            }
+            return Err(native_no_available_account_error(
+                true,
+                closest_cooldown,
+                false,
+            ));
         }
         // Each newly cooled candidate is removed once. Reuse the remaining
         // admission budget instead of granting another full wait per account.
@@ -1900,6 +1932,32 @@ async fn native_select_route_once(
 
 // Keep genuine service/model-scope failures separate from a pool whose
 // compatible credentials are positively known to have exhausted usage.
+fn native_no_available_account_error(
+    had_compatible_candidates: bool,
+    closest_cooldown: Option<Duration>,
+    any_candidate_usage_exhausted: bool,
+) -> native_contract::ServiceError {
+    let message = if had_compatible_candidates {
+        if let Some(wait) = closest_cooldown {
+            let secs = wait.as_secs().max(1);
+            if any_candidate_usage_exhausted {
+                format!(
+                    "All compatible accounts for this model are temporarily unavailable (cooling or quota exhausted); retry after ~{secs}s"
+                )
+            } else {
+                format!(
+                    "All compatible accounts for this model are temporarily cooling; retry after ~{secs}s"
+                )
+            }
+        } else {
+            "No compatible account is available for this model".to_string()
+        }
+    } else {
+        "No compatible account is available for this model".to_string()
+    };
+    native_error(503, "no_available_account", &message).with_retry_after(closest_cooldown)
+}
+
 fn native_usage_exhausted_error(wait: Option<Duration>) -> native_contract::ServiceError {
     let message = "All compatible accounts have exhausted their usage quota; wait for quota reset or select an account with available quota";
     native_error(429, "usage_limit_reached", message)
@@ -2129,32 +2187,46 @@ async fn native_acquire_account_concurrency_permit(
             "No compatible account is available for this model",
         ));
     }
-    if !reserve_permit || collection.max_account_concurrency == 0 {
+    if !reserve_permit {
         return Ok((0, None));
     }
-    let gates: Vec<_> = {
+    let limits: Vec<u16> = accounts
+        .iter()
+        .map(|account| effective_account_concurrency_limit(collection, &account.id))
+        .collect();
+    if limits.iter().all(|limit| *limit == 0) {
+        return Ok((0, None));
+    }
+    let gates: Vec<Option<Arc<Semaphore>>> = {
         let mut gates = host.gates.lock().map_err(|_| {
             native_error(503, "service_unavailable", "Account limiter is unavailable")
         })?;
         gates.retain(|_, gate| Arc::strong_count(gate) > 1);
         accounts
             .iter()
-            .map(|account| {
-                gates
-                    .entry(format!(
-                        "{}:{}",
-                        account.id, collection.max_account_concurrency
-                    ))
-                    .or_insert_with(|| {
-                        Arc::new(Semaphore::new(collection.max_account_concurrency as usize))
-                    })
-                    .clone()
+            .zip(limits.iter().copied())
+            .map(|(account, limit)| {
+                if limit == 0 {
+                    None
+                } else {
+                    Some(
+                        gates
+                            .entry(format!("{}:{}", account.id, limit))
+                            .or_insert_with(|| Arc::new(Semaphore::new(limit as usize)))
+                            .clone(),
+                    )
+                }
             })
             .collect()
     };
     for (index, gate) in gates.iter().enumerate() {
-        if let Ok(permit) = gate.clone().try_acquire_owned() {
-            return Ok((index, Some(Arc::new(permit))));
+        match gate {
+            None => return Ok((index, None)),
+            Some(gate) => {
+                if let Ok(permit) = gate.clone().try_acquire_owned() {
+                    return Ok((index, Some(Arc::new(permit))));
+                }
+            }
         }
     }
     if collection.account_concurrency_wait_ms == 0 {
@@ -2170,7 +2242,9 @@ async fn native_acquire_account_concurrency_permit(
     let mut waiting: futures_util::stream::FuturesUnordered<_> = gates
         .into_iter()
         .enumerate()
-        .map(|(index, gate)| async move { (index, gate.acquire_owned().await) })
+        .filter_map(|(index, gate)| {
+            gate.map(|gate| async move { (index, gate.acquire_owned().await) })
+        })
         .collect();
     let (index, acquired) = timeout(native_account_concurrency_wait(collection), waiting.next())
         .await

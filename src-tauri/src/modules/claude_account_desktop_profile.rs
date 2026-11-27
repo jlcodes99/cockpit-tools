@@ -1160,6 +1160,39 @@ where
     }
 }
 
+fn desktop_profile_snapshot_dir_is_managed(profile_dir: &Path) -> bool {
+    profile_dir
+        .parent()
+        .and_then(|parent| parent.file_name())
+        .is_some_and(|name| name.eq_ignore_ascii_case(CLAUDE_DESKTOP_PROFILES_DIR))
+}
+
+/// Persist a refreshed cookie export back into the cockpit-managed profile
+/// snapshot so later silent refreshes can read cookies without launching the
+/// hidden Electron probe again (which is rate-limited by a cooldown).
+/// Only cockpit-owned snapshot dirs are written; real Claude Desktop
+/// user-data directories used as fallback probe candidates are left untouched.
+fn persist_desktop_auth_export_to_profile(
+    profile_dir: &Path,
+    export: &ClaudeDesktopAuthCookieExport,
+) -> bool {
+    if !desktop_profile_snapshot_dir_is_managed(profile_dir) {
+        return false;
+    }
+    let path = desktop_auth_export_path(profile_dir);
+    match write_desktop_cookie_probe_file(&path, export) {
+        Ok(()) => true,
+        Err(error) => {
+            logger::log_warn(&format!(
+                "[Claude] 回写刷新后的 Cookie 导出失败: path={}, error={}",
+                path.display(),
+                error
+            ));
+            false
+        }
+    }
+}
+
 fn write_desktop_cookie_probe_file(
     path: &Path,
     export: &ClaudeDesktopAuthCookieExport,
@@ -1209,6 +1242,13 @@ fn probe_desktop_web_profile_with_decrypted_cookies_and_launch_state(
         launched_electron = true;
         let result = wait_for_desktop_web_profile_export(&user_data_dir, Duration::from_secs(24))
             .and_then(|export| {
+                if let Some(profile) = export.web_profile.as_ref() {
+                    if desktop_web_usage_to_quota(profile).is_some()
+                        || !desktop_web_profile_has_usage_error(profile)
+                    {
+                        persist_desktop_auth_export_to_profile(profile_dir, &export);
+                    }
+                }
                 export
                     .web_profile
                     .ok_or_else(|| "Claude 资料接口未返回数据".to_string())
@@ -1268,6 +1308,13 @@ fn probe_desktop_web_profile_with_launch_state(profile_dir: &Path) -> (Result<Va
         launched_electron = true;
         let result = wait_for_desktop_web_profile_export(staged.path(), Duration::from_secs(18))
             .and_then(|export| {
+                if let Some(profile) = export.web_profile.as_ref() {
+                    if desktop_web_usage_to_quota(profile).is_some()
+                        || !desktop_web_profile_has_usage_error(profile)
+                    {
+                        persist_desktop_auth_export_to_profile(profile_dir, &export);
+                    }
+                }
                 export
                     .web_profile
                     .ok_or_else(|| "Claude 资料接口未返回数据".to_string())
@@ -3220,5 +3267,45 @@ fn test_electron_runtime_asset_for(os: &str, arch: &str) -> Option<ElectronRunti
             executable_relative: "electron",
         }),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod desktop_profile_cookie_persist_tests {
+    use super::*;
+
+    #[test]
+    fn persist_desktop_auth_export_writes_only_managed_profile_snapshots() {
+        let root = std::env::temp_dir().join(format!(
+            "cockpit-claude-cookie-export-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let managed = root.join(CLAUDE_DESKTOP_PROFILES_DIR).join("acct-1");
+        let external = root.join("Claude").join("UserData");
+        fs::create_dir_all(&managed).unwrap();
+        fs::create_dir_all(&external).unwrap();
+
+        let export = ClaudeDesktopAuthCookieExport {
+            cookies: vec![ClaudeDesktopAuthCookie {
+                name: "sessionKey".into(),
+                value: "sk-ant-fixture".into(),
+                domain: ".claude.ai".into(),
+                path: "/".into(),
+                secure: true,
+                http_only: true,
+                expiration_date: None,
+                same_site: Some("lax".into()),
+            }],
+            web_profile: None,
+        };
+
+        assert!(desktop_profile_snapshot_dir_is_managed(&managed));
+        assert!(!desktop_profile_snapshot_dir_is_managed(&external));
+        assert!(persist_desktop_auth_export_to_profile(&managed, &export));
+        assert!(desktop_auth_export_path(&managed).is_file());
+        assert!(!persist_desktop_auth_export_to_profile(&external, &export));
+        assert!(!desktop_auth_export_path(&external).exists());
+
+        let _ = fs::remove_dir_all(&root);
     }
 }

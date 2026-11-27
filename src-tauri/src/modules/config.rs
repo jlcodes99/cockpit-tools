@@ -7,6 +7,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock, RwLock};
 
+#[path = "../../../crates/cockpit-core/src/modules/antigravity_launch_preferences.rs"]
+mod antigravity_launch_preferences;
+pub use antigravity_launch_preferences::{AntigravityDesktopLayout, AntigravityDesktopPermission};
+
 /// 默认 WebSocket 端口
 pub const DEFAULT_WS_PORT: u16 = 19528;
 /// 默认网页查询服务端口
@@ -180,6 +184,9 @@ pub struct UserConfig {
     /// Qoder 自动刷新间隔（分钟），-1 表示禁用
     #[serde(default = "default_qoder_auto_refresh")]
     pub qoder_auto_refresh_minutes: i32,
+    /// Qoder CN 自动刷新间隔（分钟），-1 表示禁用
+    #[serde(default = "default_qoder_auto_refresh")]
+    pub qoder_cn_auto_refresh_minutes: i32,
     /// ZCode 自动刷新间隔（分钟），-1 表示禁用
     #[serde(default = "default_zcode_auto_refresh")]
     pub zcode_auto_refresh_minutes: i32,
@@ -395,6 +402,17 @@ pub struct UserConfig {
     /// Qoder 启动路径（为空则使用默认路径）
     #[serde(default = "default_qoder_app_path")]
     pub qoder_app_path: String,
+    #[serde(default)]
+    pub qoder_desktop_app_path: String,
+    /// Qoder CN 启动路径（为空则使用自动探测）
+    #[serde(default = "default_qoder_cn_app_path")]
+    pub qoder_cn_app_path: String,
+    #[serde(default)]
+    pub qoder_cn_ide_path: String,
+    #[serde(default)]
+    pub qoder_cn_cli_path: String,
+    #[serde(default)]
+    pub qoder_cli_path: String,
     /// ZCode 启动路径（为空则使用默认路径）
     #[serde(default = "default_zcode_app_path")]
     pub zcode_app_path: String,
@@ -473,9 +491,15 @@ pub struct UserConfig {
     /// 启动时是否自动恢复 Codex 代理接管状态
     #[serde(default = "default_codex_auto_restore_takeover_on_launch")]
     pub codex_auto_restore_takeover_on_launch: bool,
-    /// 切换 Antigravity IDE 时是否自动启动/重启应用
+    /// 保留旧版 IDE 隐式切号偏好，账号弹框的显式选择优先。
     #[serde(default = "default_antigravity_launch_on_switch")]
     pub antigravity_launch_on_switch: bool,
+    #[serde(default)]
+    pub antigravity_desktop_chinese_enabled: bool,
+    #[serde(default)]
+    pub antigravity_desktop_layout: AntigravityDesktopLayout,
+    #[serde(default)]
+    pub antigravity_desktop_permission: AntigravityDesktopPermission,
     /// 切换 Codex 时是否自动重启指定应用
     #[serde(default = "default_codex_restart_specified_app_on_switch")]
     pub codex_restart_specified_app_on_switch: bool,
@@ -620,6 +644,12 @@ pub struct UserConfig {
     /// Qoder 配额预警阈值（百分比）
     #[serde(default = "default_qoder_quota_alert_threshold")]
     pub qoder_quota_alert_threshold: i32,
+    /// 是否启用 Qoder CN 配额预警通知
+    #[serde(default = "default_qoder_cn_quota_alert_enabled")]
+    pub qoder_cn_quota_alert_enabled: bool,
+    /// Qoder CN 配额预警阈值（百分比）
+    #[serde(default = "default_qoder_cn_quota_alert_threshold")]
+    pub qoder_cn_quota_alert_threshold: i32,
     /// 是否启用 Trae 配额预警通知
     #[serde(default = "default_trae_quota_alert_enabled")]
     pub trae_quota_alert_enabled: bool,
@@ -949,6 +979,7 @@ pub fn normalize_startup_page(value: &str) -> String {
         "codebuddy",
         "codebuddy-cn",
         "qoder",
+        "qoder-cn",
         "zcode",
         "t3code",
         "trae",
@@ -1101,6 +1132,9 @@ fn default_codebuddy_cn_share_sessions_on_switch() -> bool {
     false
 }
 fn default_qoder_app_path() -> String {
+    String::new()
+}
+fn default_qoder_cn_app_path() -> String {
     String::new()
 }
 fn default_zcode_app_path() -> String {
@@ -1304,6 +1338,12 @@ fn default_qoder_quota_alert_enabled() -> bool {
 fn default_qoder_quota_alert_threshold() -> i32 {
     20
 }
+fn default_qoder_cn_quota_alert_enabled() -> bool {
+    false
+}
+fn default_qoder_cn_quota_alert_threshold() -> i32 {
+    20
+}
 fn default_trae_quota_alert_enabled() -> bool {
     false
 }
@@ -1370,6 +1410,7 @@ impl Default for UserConfig {
             workbuddy_auto_refresh_minutes: default_workbuddy_auto_refresh(),
             minimax_code_auto_refresh_minutes: default_minimax_code_auto_refresh(),
             qoder_auto_refresh_minutes: default_qoder_auto_refresh(),
+            qoder_cn_auto_refresh_minutes: default_qoder_auto_refresh(),
             zcode_auto_refresh_minutes: default_zcode_auto_refresh(),
             t3code_auto_refresh_minutes: default_t3code_auto_refresh(),
             t3code_app_ui_injection_enabled: default_t3code_app_ui_injection_enabled(),
@@ -1448,6 +1489,11 @@ impl Default for UserConfig {
             codebuddy_cn_app_path: default_codebuddy_cn_app_path(),
             codebuddy_cn_share_sessions_on_switch: default_codebuddy_cn_share_sessions_on_switch(),
             qoder_app_path: default_qoder_app_path(),
+            qoder_desktop_app_path: String::new(),
+            qoder_cn_app_path: default_qoder_cn_app_path(),
+            qoder_cn_ide_path: String::new(),
+            qoder_cn_cli_path: String::new(),
+            qoder_cli_path: String::new(),
             zcode_app_path: default_zcode_app_path(),
             t3code_app_path: default_t3code_app_path(),
             trae_app_path: default_trae_app_path(),
@@ -1481,6 +1527,9 @@ impl Default for UserConfig {
             codex_auto_restore_takeover_on_launch:
                 default_codex_auto_restore_takeover_on_launch(),
             antigravity_launch_on_switch: default_antigravity_launch_on_switch(),
+            antigravity_desktop_chinese_enabled: false,
+            antigravity_desktop_layout: AntigravityDesktopLayout::default(),
+            antigravity_desktop_permission: AntigravityDesktopPermission::default(),
             codex_restart_specified_app_on_switch: default_codex_restart_specified_app_on_switch(),
             codex_local_access_entry_visible: default_codex_local_access_entry_visible(),
             codex_hide_relay_quota: default_codex_hide_relay_quota(),
@@ -1531,6 +1580,8 @@ impl Default for UserConfig {
             codebuddy_cn_quota_alert_threshold: default_codebuddy_cn_quota_alert_threshold(),
             qoder_quota_alert_enabled: default_qoder_quota_alert_enabled(),
             qoder_quota_alert_threshold: default_qoder_quota_alert_threshold(),
+            qoder_cn_quota_alert_enabled: default_qoder_cn_quota_alert_enabled(),
+            qoder_cn_quota_alert_threshold: default_qoder_cn_quota_alert_threshold(),
             trae_quota_alert_enabled: default_trae_quota_alert_enabled(),
             trae_quota_alert_threshold: default_trae_quota_alert_threshold(),
             trae_solo_quota_alert_enabled: default_trae_quota_alert_enabled(),
@@ -2425,6 +2476,18 @@ pub fn load_user_config() -> Result<UserConfig, String> {
                 json!(legacy_threshold),
             );
         }
+        if !obj.contains_key("qoder_cn_quota_alert_enabled") {
+            obj.insert(
+                "qoder_cn_quota_alert_enabled".to_string(),
+                json!(default_qoder_cn_quota_alert_enabled()),
+            );
+        }
+        if !obj.contains_key("qoder_cn_quota_alert_threshold") {
+            obj.insert(
+                "qoder_cn_quota_alert_threshold".to_string(),
+                json!(default_qoder_cn_quota_alert_threshold()),
+            );
+        }
         if !obj.contains_key("trae_quota_alert_enabled") {
             obj.insert(
                 "trae_quota_alert_enabled".to_string(),
@@ -2857,7 +2920,7 @@ mod tests {
     include!("config_tests_proxy_env.rs");
     #[test]
     fn startup_client_preferences_preserve_app_ide_and_legacy_overview() {
-        for value in ["antigravity", "antigravity-ide", "overview", "last"] {
+        for value in ["antigravity", "antigravity-ide", "overview", "qoder-cn", "last"] {
             assert_eq!(super::normalize_startup_page(value), value);
         }
         assert_eq!(

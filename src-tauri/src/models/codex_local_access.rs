@@ -492,9 +492,21 @@ pub struct CodexLocalAccessModelRouting {
     pub routes: Vec<CodexLocalAccessModelRoute>,
 }
 
+/// Explicit, fixed-source Native DelegateTool mode. Absence preserves legacy text routing.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CodexLocalAccessWorkbuddyDelegate {
+    pub provider_account_id: String,
+    pub model_id: String,
+    pub public_model: String,
+    pub reasoning_effort: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CodexLocalAccessApiKey {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workbuddy_delegate: Option<CodexLocalAccessWorkbuddyDelegate>,
     pub id: String,
     pub label: String,
     pub key: String,
@@ -726,6 +738,10 @@ pub struct CodexLocalAccessCollection {
     pub api_key: String,
     #[serde(default)]
     pub api_keys: Vec<CodexLocalAccessApiKey>,
+    /// Monotonic tombstones: unrelated stale snapshots cannot re-enable a
+    /// restored/revoked native WorkBuddy profile, even after its key is deleted.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub workbuddy_delegate_revoked_key_ids: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub account_pools: Vec<CodexLocalAccessAccountPool>,
     #[serde(default)]
@@ -791,6 +807,9 @@ pub struct CodexLocalAccessCollection {
     /// Minimum included quota to retain for individual OAuth pool members.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub account_quota_floors: HashMap<String, i32>,
+    /// Optional per-account concurrency limit overrides (0 = unlimited, clamped to 64).
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub account_concurrency_limits: HashMap<String, u16>,
     #[serde(default)]
     pub model_aliases: Vec<CodexLocalAccessModelAlias>,
     /// 仅实例供应商网关使用：不把模型别名写进 sidecar 的 `oauth-model-alias`。

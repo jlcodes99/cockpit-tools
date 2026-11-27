@@ -164,22 +164,6 @@ pub async fn update_instance(
         });
     }
 
-    let wants_bind = bind_account_id
-        .as_ref()
-        .and_then(|next| next.as_ref())
-        .is_some();
-    if wants_bind {
-        let store = modules::instance::load_instance_store()?;
-        if let Some(target) = store.instances.iter().find(|item| item.id == instance_id) {
-            if !is_profile_initialized(&target.user_data_dir) {
-                return Err(
-                    "INSTANCE_NOT_INITIALIZED:请先启动一次实例创建数据后，再进行账号绑定"
-                        .to_string(),
-                );
-            }
-        }
-    }
-
     let instance = modules::instance::update_instance(modules::instance::UpdateInstanceParams {
         working_dir: None,
         instance_id,
@@ -220,9 +204,9 @@ pub async fn start_instance(instance_id: String) -> Result<InstanceProfileView, 
         let default_dir_str = default_dir.to_string_lossy().to_string();
         let default_settings = modules::instance::load_default_settings()?;
         let default_bind_account_id = resolve_default_account_id(&default_settings);
-        if default_bind_account_id.is_some() && !super::system::antigravity_ide_uses_shared_credentials() {
-            modules::instance::require_ide_switch_database(&default_dir, None)?;
-        }
+        let _initialization = if default_bind_account_id.is_some() && !super::system::antigravity_ide_uses_shared_credentials() {
+            prepare_ide_for_start(&instance_id, default_dir.clone(), None, default_settings.last_pid, &default_settings.extra_args).await?
+        } else { None };
         if let Some(pid) =
             modules::process::resolve_antigravity_pid(default_settings.last_pid, None)
         {
@@ -238,8 +222,16 @@ pub async fn start_instance(instance_id: String) -> Result<InstanceProfileView, 
         if let Some(ref account_id) = default_bind_account_id {
             inject_instance_account(default_dir.clone(), account_id).await?;
         }
+        let egress_proxy_url = default_bind_account_id
+            .as_deref()
+            .and_then(|id| modules::account::load_account(id).ok())
+            .and_then(|account| account.egress_proxy_url);
         let extra_args = modules::process::parse_extra_args(&default_settings.extra_args);
-        let pid = modules::process::start_antigravity_with_args("", &extra_args)?;
+        let pid = modules::process::start_antigravity_with_args_proxy(
+            "",
+            &extra_args,
+            egress_proxy_url.as_deref(),
+        )?;
         let _ = modules::instance::update_default_pid(Some(pid))?;
         let running = modules::process::is_pid_running(pid);
         return Ok(InstanceProfileView {
@@ -265,10 +257,10 @@ pub async fn start_instance(instance_id: String) -> Result<InstanceProfileView, 
         .into_iter()
         .find(|item| item.id == instance_id)
         .ok_or("实例不存在")?;
-    if instance.bind_account_id.is_some() && !super::system::antigravity_ide_uses_shared_credentials() {
-        let default_dir = modules::instance::get_default_user_data_dir()?;
-        modules::instance::require_ide_switch_database(Path::new(&instance.user_data_dir), Some(&default_dir))?;
-    }
+    let _initialization = if instance.bind_account_id.is_some() && !super::system::antigravity_ide_uses_shared_credentials() {
+        prepare_ide_for_start(&instance_id, std::path::PathBuf::from(&instance.user_data_dir),
+            Some(modules::instance::get_default_user_data_dir()?), instance.last_pid, &instance.extra_args).await?
+    } else { None };
 
     if let Some(pid) =
         modules::process::resolve_antigravity_pid(instance.last_pid, Some(&instance.user_data_dir))
@@ -288,8 +280,17 @@ pub async fn start_instance(instance_id: String) -> Result<InstanceProfileView, 
             .await?;
     }
 
+    let egress_proxy_url = instance
+        .bind_account_id
+        .as_deref()
+        .and_then(|id| modules::account::load_account(id).ok())
+        .and_then(|account| account.egress_proxy_url);
     let extra_args = modules::process::parse_extra_args(&instance.extra_args);
-    let pid = modules::process::start_antigravity_with_args(&instance.user_data_dir, &extra_args)?;
+    let pid = modules::process::start_antigravity_with_args_proxy(
+        &instance.user_data_dir,
+        &extra_args,
+        egress_proxy_url.as_deref(),
+    )?;
     let updated = modules::instance::update_instance_after_start(&instance.id, pid)?;
     let running = modules::process::is_pid_running(pid);
     let initialized = is_profile_initialized(&updated.user_data_dir);
@@ -298,6 +299,31 @@ pub async fn start_instance(instance_id: String) -> Result<InstanceProfileView, 
         running,
         initialized,
     ))
+}
+
+async fn prepare_ide_for_start(
+    id: &str,
+    root: std::path::PathBuf,
+    copy_source: Option<std::path::PathBuf>,
+    last_pid: Option<u32>,
+    raw_args: &str,
+) -> Result<Option<modules::client_initialization::StartupProgress>, String> {
+    let args = modules::process::parse_extra_args(raw_args);
+    let directory = (id != DEFAULT_INSTANCE_ID).then(|| root.to_string_lossy().into_owned());
+    modules::client_initialization::prepare_profile(
+        "antigravity_ide", id.to_owned(),
+        move || if copy_source.is_some() && !root.join("User/globalStorage/state.vscdb").is_file() {
+            modules::instance::ide_profile_needs_initialization(&root, copy_source.as_deref()).map(|required| !required)
+        } else {
+            modules::client_initialization::state_db_ready(&root)
+        },
+        move || {
+            if modules::process::resolve_antigravity_pid(last_pid, directory.as_deref()).is_none() {
+                modules::process::start_antigravity_with_args(directory.as_deref().unwrap_or(""), &args)?;
+            }
+            Ok(())
+        },
+    ).await
 }
 
 async fn inject_instance_account(

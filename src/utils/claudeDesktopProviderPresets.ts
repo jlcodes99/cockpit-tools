@@ -817,6 +817,20 @@ export const CLAUDE_DESKTOP_GATEWAY_PROVIDER_PRESETS: readonly ClaudeDesktopGate
       { supports1m: true },
     ),
   },
+  {
+    id: 'onomeo',
+    name: 'onomeo',
+    baseUrls: ['https://onomeo.com'],
+    authScheme: 'bearer',
+    connectionMode: 'local_mapping',
+    website: 'https://onomeo.com',
+    apiKeyUrl: 'https://onomeo.com/dashboard',
+    modelMappings: roleMappedRoutes(
+      'claude-sonnet-5.5',
+      'claude-opus-5.5',
+      'claude-haiku-5.5',
+    ),
+  },
 ];
 
 export function getDefaultClaudeDesktopGatewayProviderPresetId(): string {

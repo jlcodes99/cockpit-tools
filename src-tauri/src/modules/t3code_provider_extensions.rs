@@ -21,12 +21,18 @@ use super::{
     PersistedProviderBinding, DRIVER_ANTIGRAVITY, DRIVER_CLAUDE, DRIVER_CODEX,
 };
 
+#[path = "t3code_qoder_provider.rs"]
+mod qoder;
+pub(super) use qoder::QoderProvider;
+
 pub const PLATFORM_WORKBUDDY: &str = "workbuddy";
 pub const PLATFORM_WORKBUDDY_AI: &str = "workbuddy_ai";
 pub const PLATFORM_CODEBUDDY: &str = "codebuddy";
 pub const PLATFORM_CODEBUDDY_CN: &str = "codebuddy_cn";
 pub const PLATFORM_GROK: &str = "grok";
 pub const PLATFORM_MINIMAXCODE: &str = "minimaxcode";
+pub const PLATFORM_QODER: &str = "qoder";
+pub const PLATFORM_QODER_CN: &str = "qoder_cn";
 const T3_DRIVER_ACP_REGISTRY: &str = "acpRegistry";
 const T3_DRIVER_GROK: &str = "grok";
 
@@ -37,6 +43,8 @@ pub const EXTENDED_ACCOUNT_PLATFORMS: &[&str] = &[
     PLATFORM_CODEBUDDY_CN,
     PLATFORM_GROK,
     PLATFORM_MINIMAXCODE,
+    PLATFORM_QODER,
+    PLATFORM_QODER_CN,
 ];
 
 pub fn is_extended_platform(platform: &str) -> bool {
@@ -53,7 +61,9 @@ pub fn t3_raw_driver_for_platform(platform: &str) -> Option<&'static str> {
         | PLATFORM_WORKBUDDY_AI
         | PLATFORM_CODEBUDDY
         | PLATFORM_CODEBUDDY_CN
-        | PLATFORM_MINIMAXCODE => Some(T3_DRIVER_ACP_REGISTRY),
+        | PLATFORM_MINIMAXCODE
+        | PLATFORM_QODER
+        | PLATFORM_QODER_CN => Some(T3_DRIVER_ACP_REGISTRY),
         _ => None,
     }
 }
@@ -69,6 +79,8 @@ pub fn default_display_name(platform: &str) -> &'static str {
         PLATFORM_CODEBUDDY_CN => "CodeBuddy CN",
         PLATFORM_GROK => "Grok",
         PLATFORM_MINIMAXCODE => "MiniMax Code",
+        PLATFORM_QODER => "Qoder",
+        PLATFORM_QODER_CN => "Qoder CN",
         _ => "Provider",
     }
 }
@@ -119,6 +131,7 @@ pub fn infer_platform_from_t3_entry(
 
     if let Some(saved) = persisted.get(instance_id) {
         if is_extended_platform(&saved.driver)
+            && QoderProvider::from_platform(&saved.driver).is_none()
             && t3_raw_driver_for_platform(&saved.driver) == Some(raw_driver)
         {
             return Some(saved.driver.clone());
@@ -163,6 +176,7 @@ pub fn infer_platform_from_t3_entry(
             .unwrap_or("")
             .trim();
         return match agent_id {
+            "qoder" => Some(PLATFORM_QODER.to_string()),
             "minimax-code" => Some(PLATFORM_MINIMAXCODE.to_string()),
             "codebuddy-code" => {
                 if entry_has_env_value(entry, "CODEBUDDY_INTERNET_ENVIRONMENT", "internal")
@@ -178,7 +192,7 @@ pub fn infer_platform_from_t3_entry(
     }
 
     let lower_cmd = command_path.replace('\\', "/").to_ascii_lowercase();
-    let file_stem = Path::new(command_path)
+    let file_stem = Path::new(lower_cmd.rsplit('/').next().unwrap_or(""))
         .file_stem()
         .and_then(|s| s.to_str())
         .unwrap_or("")
@@ -191,6 +205,17 @@ pub fn infer_platform_from_t3_entry(
         return Some(PLATFORM_WORKBUDDY.to_string());
     }
     match file_stem.as_str() {
+        "qoder" | "qodercli" | "qodercn" | "qoderclicn"
+            if config_obj
+                .and_then(|config| config.get("commandArgs"))
+                .and_then(Value::as_array)
+                .is_some_and(|args| args.iter().any(|arg| arg.as_str() == Some("--acp"))) =>
+        {
+            Some(match file_stem.as_str() {
+                "qodercn" | "qoderclicn" => PLATFORM_QODER_CN,
+                _ => PLATFORM_QODER,
+            }.to_string())
+        }
         "mcode" => Some(PLATFORM_MINIMAXCODE.to_string()),
         "codebuddy" => {
             if entry_has_env_value(entry, "CODEBUDDY_INTERNET_ENVIRONMENT", "internal")
@@ -716,6 +741,11 @@ pub fn build_all_extra_bindable_accounts() -> HashMap<String, Vec<T3CodeBindable
         .filter_map(build_minimaxcode_view)
         .collect::<Vec<_>>();
     map.insert(PLATFORM_MINIMAXCODE.to_string(), mm_accounts);
+    for platform in [PLATFORM_QODER, PLATFORM_QODER_CN] {
+        if let Some(provider) = QoderProvider::from_platform(platform) {
+            map.insert(platform.to_string(), provider.list_accounts());
+        }
+    }
 
     map
 }
@@ -724,6 +754,7 @@ pub fn detect_extended_bound_account(
     state_dir: &Path,
     instance_id: &str,
     platform: &str,
+    entry: Option<&Map<String, Value>>,
     persisted: &PersistedBindingsMap,
     candidates: &[T3CodeBindableAccountView],
 ) -> (Option<T3CodeBindableAccountView>, Option<String>) {
@@ -737,6 +768,22 @@ pub fn detect_extended_bound_account(
         .and_then(Value::as_str)
         .map(str::trim)
         .filter(|s| !s.is_empty());
+    if let Some(provider) = QoderProvider::from_platform(platform) {
+        let saved = persisted.get(instance_id);
+        if saved.is_some_and(|item| item.unlinked) {
+            return (None, None);
+        }
+        let saved_id = saved.filter(|item| item.driver == platform &&
+            item.account_id != "__cli__").map(|item| item.account_id.as_str());
+        let found = [saved_id, disk_account_id].into_iter().flatten().find_map(|id| {
+            let account = candidates.iter().find(|account| account.id == id)?;
+            provider.matches_binding(state_dir, instance_id, id, entry).then_some(account)
+        });
+        return match found {
+            Some(account) => (Some(account.clone()), Some(account.email.clone())),
+            None => (None, None),
+        };
+    }
     let disk_email = meta
         .as_ref()
         .and_then(|v| v.get("email"))
@@ -778,6 +825,9 @@ pub async fn refresh_extended_account_quota(
     platform: &str,
     account_id: &str,
 ) -> Result<(), String> {
+    if let Some(provider) = QoderProvider::from_platform(platform) {
+        return provider.refresh_quota(account_id).await;
+    }
     match platform {
         PLATFORM_WORKBUDDY => workbuddy_account::refresh_account_token(account_id)
             .await
@@ -1380,7 +1430,11 @@ pub fn write_extended_account_binding(
                 config_patch.insert("agentId".to_string(), json!("minimax-code"));
             }
         }
-        _ => return Err(format!("该平台不支持 Cockpit 账号绑定: {platform}")),
+        platform => {
+            let provider = QoderProvider::from_platform(platform)
+                .ok_or_else(|| format!("该平台不支持 Cockpit 账号绑定: {platform}"))?;
+            email = provider.write_binding(state_dir, instance_id, account_id, &mut config_patch, &mut environment)?;
+        }
     }
 
     let meta_json = serde_json::to_string_pretty(&json!({
@@ -1488,7 +1542,6 @@ mod tests {
             ("cursor", "cursor"),
             ("kiro", "kiro"),
             ("github-copilot", "acpRegistry"),
-            ("qoder", "acpRegistry"),
             ("windsurf", "acpRegistry"),
             ("trae_cn", "acpRegistry"),
         ] {
@@ -1505,6 +1558,18 @@ mod tests {
                 infer_platform_from_t3_entry(platform, raw_driver, None, &persisted),
                 None
             );
+        }
+        for platform in [PLATFORM_QODER, PLATFORM_QODER_CN] {
+            persisted.insert(
+                platform.to_string(),
+                PersistedProviderBinding {
+                    driver: platform.to_string(),
+                    account_id: "__cli__".to_string(),
+                    ..Default::default()
+                },
+            );
+            assert_eq!(t3_raw_driver_for_platform(platform), Some("acpRegistry"));
+            assert_eq!(infer_platform_from_t3_entry(platform, "acpRegistry", None, &persisted), None);
         }
     }
 

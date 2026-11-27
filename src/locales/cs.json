@@ -1,5 +1,17 @@
 {
   "antigravityLaunch": {
+    "desktopLanguage": "Jazyk rozhraní aplikace",
+    "desktopLanguageEnglish": "Angličtina",
+    "desktopLayout": "Rozložení",
+    "desktopLayoutEngineering": "Softwarové inženýrství",
+    "desktopLayoutKnowledge": "Znalostní práce",
+    "desktopPermission": "Výchozí místní oprávnění",
+    "desktopPermissionReview": "Vyžádat kontrolu",
+    "desktopPermissionDefault": "Výchozí",
+    "desktopPermissionAuto": "Automaticky",
+    "desktopPermissionTurbo": "Plně automaticky",
+    "desktopSettingsHint": "Rozložení a místní oprávnění se použijí při spuštění Antigravity z Cockpit Tools.",
+    "desktopLanguageChinese": "Zjednodušená čínština",
     "initializeTitle": "Antigravity IDE vyžaduje inicializaci",
     "initializeThenSwitch": "Spusťte IDE jednou a poté můžete přepnout účet.",
     "initializeThenBind": "Po prvním spuštění instance můžete přiřadit účet.",
@@ -20,7 +32,6 @@
     "sharedInstanceStarted": "Sdílené přihlášení je aktualizováno a požadavek na spuštění odeslán.",
     "sharedInstanceLaunchFailed": "Přihlášení je aktualizováno, ale instanci se nepodařilo spustit: {{error}}",
     "sharedCopySource": "Zkopíruje složku nastavení vybrané instance.",
-    "quickSwitchSetting": "Platí pro rychlé přepínání v Antigravity IDE. V dialogu účtu lze pokaždé zvolit, zda se má klient spustit.",
     "title": "Vybrat klienta",
     "switchOnly": "Jen přepnout",
     "switchAndLaunch": "Přepnout a spustit",
@@ -33,7 +44,8 @@
     "cliAuth": "agy používá vlastní nastavení ověřování. Nastavený klíč API nebo přihlašovací údaje Google Cloud mají přednost.",
     "cliMissing": "agy nebyl nalezen. Nainstalujte oficiální Antigravity CLI a zkuste to znovu.",
     "terminalFailed": "Terminál se nepodařilo připravit. {{error}}",
-    "switchedTerminalFailed": "Účet byl přepnut, ale terminál se nepodařilo otevřít. {{error}}"
+    "switchedTerminalFailed": "Účet byl přepnut, ale terminál se nepodařilo otevřít. {{error}}",
+    "quickSwitchSetting": "Platí pro rychlé přepínání v Antigravity IDE. V dialogu účtu lze pokaždé zvolit, zda se má klient spustit."
   },
   "pelican": {
     "caseKinds": {
@@ -194,6 +206,7 @@
     "providerClear": "Zrušit výběr"
   },
   "common": {
+    "commonSettings": "Běžná nastavení",
     "automation": {
       "invalidPlatform": "Neznámá platforma účtu. Podporovaná ID zobrazíte příkazem cockpit-cli account platforms.",
       "hostUnavailable": "Spusťte desktopovou aplikaci Cockpit Tools s tímto adresářem dat a zkuste to znovu.",
@@ -233,6 +246,7 @@
     "dataQueryBusy": "Data se zpracovávají. Zkuste to za chvíli znovu.",
     "historyRestoring": "Obnovuje se historie…",
     "apiBudget": {
+      "sharedPool": "Sdílený limit",
       "keyScope": "Tento klíč",
       "upgradeRequired": "Aktualizujte Cockpit Tools na počítači brány pro zobrazení statistik a historie požadavků.",
       "gatewayName": "Brána Cockpit",
@@ -279,7 +293,10 @@
       "proxyAuth": "Ověření proxy „{{proxy}}“ selhalo. Zkontrolujte uživatelské jméno nebo heslo proxy.",
       "localProxyUnavailable": "Nelze se připojit k místní proxy „{{proxy}}“. Zkontrolujte, zda služba proxy běží.",
       "directConnection": "Připojení k {{target}} selhalo. Zkontrolujte síť a zkuste to znovu.",
-      "directTimeout": "Vypršel čas připojení k {{target}}. Zkontrolujte síť a zkuste to znovu."
+      "directTimeout": "Vypršel čas připojení k {{target}}. Zkontrolujte síť a zkuste to znovu.",
+      "recoveryExhaustedLargeRequest": "Opakovaná selhání nebo vypršení času upstreamu zastavila automatické opakování tohoto velkého požadavku ({{size}}). Velká historie konverzace nebo obrázky mohly překročit limit odesílání nebo čekání na odpověď; zkomprimujte konverzaci nebo začněte novou a zkuste to znovu. Tato chyba neznamená vyčerpání kvóty účtu.",
+      "proxyLargeRequestTimeout": "Odeslání tohoto velkého požadavku ({{size}}) do {{target}} přes proxy „{{proxy}}“ vypršelo před obdržením odpovědi. Příliš velká historie nebo obrázky mohly překročit limit proxy nebo upstreamu; zkomprimujte konverzaci, začněte novou nebo zkontrolujte proxy.",
+      "directLargeRequestTimeout": "Odeslání tohoto velkého požadavku ({{size}}) do {{target}} vypršelo před obdržením odpovědi. Příliš velká historie nebo obrázky mohly překročit limit odesílání nebo upstreamu; zkomprimujte konverzaci nebo začněte novou a zkuste to znovu."
     },
     "codexUsage": {
       "responseSpeed": "Rychlost odpovědi",
@@ -836,7 +853,8 @@
     "apiRelay": "API relay",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "qoderCn": "Qoder CN"
   },
   "sponsors": {
     "pageTitle": "Sponzoři",
@@ -948,6 +966,7 @@
       "syncThreads": "Doplní chybějící relace ve všech instancích a připojí nový obsah pouze tehdy, když je cílová instance zastavena a její historie odpovídá. Existující bajty zůstanou zachovány. Aktualizace odlišných historií nebo spuštěných cílů budou odmítnuty. Cílové soubory se před zápisem zálohují. Pokračovat?"
     },
     "status": {
+      "firstLaunchInitializing": "Příprava prvního spuštění…",
       "running": "Běží",
       "stopped": "Zastaveno",
       "restarting": "Restartování",
@@ -1117,6 +1136,7 @@
       "empty": "Žádná kvóta v mezipaměti"
     },
     "messages": {
+      "firstLaunchTimedOut": "První spuštění ještě není připravené. Pokud vás aplikace vyzve k přihlášení nebo udělení oprávnění, dokončete tento krok a zkuste to znovu.",
       "created": "Instance vytvořena",
       "emptyCreated": "Prázdná instance byla vytvořena. Před svázáním účtu ji nejprve jednou spusťte.",
       "existingDirCreated": "Instance byla vytvořena pomocí vybraného adresáře.",
@@ -1555,8 +1575,6 @@
       "claudeShareCodeSessionsOnSwitchDesc": "Sdílí seznam relací Code mezi místními účty při přepnutí výchozího profilu Claude Desktop v macOS.",
       "claudeAppPath": "Cíl spuštění Claude Desktop",
       "claudeAppPathDesc": "Výchozí profil může použít cíl Microsoft Store; více instancí potřebuje skutečný Claude.exe.",
-      "antigravityLaunchOnSwitch": "Spustit Antigravity IDE při přepnutí",
-      "antigravityLaunchOnSwitchDesc": "Po vypnutí přepnutí pouze zapíše data výchozího účtu Antigravity IDE a aplikaci nezavře, nespustí ani nerestartuje.",
       "tokenKeeper": "Udržení auth",
       "tokenKeeperDesc": "Obnovuje Tokeny účtů po malých dávkách jen před vypršením autorizace, čímž snižuje požadavky na pozadí u mnoha účtů.",
       "platformAutoRefresh": "Automatické obnovení kvóty {{platform}}",
@@ -1643,7 +1661,14 @@
       "t3codeAutoRefresh": "Automatické obnovení kvóty T3 Code",
       "t3codeAutoRefreshDesc": "Interval obnovení kvóty na pozadí",
       "t3codeAppUiInjection": "Kapsle kvóty v chatu T3 Code",
-      "t3codeAppUiInjectionDesc": "Po spuštění T3 Code z Cockpitu se pod polem pro zprávu zobrazí řada vybraného modelu a zbývající kvóta. Kliknutím otevřete podrobnosti účtu a využití."
+      "t3codeAppUiInjectionDesc": "Po spuštění T3 Code z Cockpitu se pod polem pro zprávu zobrazí řada vybraného modelu a zbývající kvóta. Kliknutím otevřete podrobnosti účtu a využití.",
+      "qoderCnAppPath": "Cesta spuštění Qoder CN",
+      "qoderCnAppPathDesc": "Ponechte prázdné pro automatické zjištění. Při přepnutí účtu se desktopový klient zavře a znovu spustí.",
+      "qoderCnAppPathPlaceholder": "Výchozí cesta",
+      "qoderCnPathReset": "Obnovit výchozí",
+      "antigravityLaunchOnSwitch": "Spustit Antigravity IDE při přepnutí",
+      "antigravityLaunchOnSwitchDesc": "Po vypnutí přepnutí pouze zapíše data výchozího účtu Antigravity IDE a aplikaci nezavře, nespustí ani nerestartuje.",
+      "qoderCnAutoRefresh": "Automatické obnovení kvóty Qoder CN"
     },
     "network": {
       "apiTitle": "Antigravity Cockpit API​",
@@ -5295,7 +5320,12 @@
         "maxConcurrentImageRequests": "Požadavky na obrázky na účet",
         "maxAccountConcurrency": "Souběžnost účtu",
         "accountConcurrencyWait": "Čekání (s)",
-        "optionsSaved": "Volby směrování uloženy"
+        "optionsSaved": "Volby směrování uloženy",
+        "accountConcurrencyLimit": "Limit souběžnosti",
+        "accountConcurrencyUnlimited": "Bez limitu",
+        "accountConcurrencyHint": "Přepíše limit souběžnosti pro tento účet (0 = bez limitu, max. 64). Prázdné pole převezme globální limit.",
+        "accountConcurrencyInvalid": "Zadejte celé číslo od 0 do 64.",
+        "accountConcurrencySaveFailed": "Limit souběžnosti účtu se nepodařilo uložit."
       },
       "validation": {
         "numberRange": "Zadejte číslo od {{min}} do {{max}}"
@@ -6575,7 +6605,8 @@
         "canceled": "Klient tento požadavek zrušil; nejde o časový limit otevření proudu.",
         "gateway": "HTTP 504 znamená vypršení času brány. Záznam neurčuje příčinu; zkontrolujte chybu serveru a fázi požadavku.",
         "threshold": "Použitý limit tohoto požadavku: {{seconds}} sekund.",
-        "settings": "Upravit limit"
+        "settings": "Upravit limit",
+        "largeRequest": "Zaznamenaná velikost požadavku: {{size}}. Velmi rozsáhlá historie nebo vložené obrázky mohou při nahrávání nebo čekání na první odpověď způsobit vypršení času; doporučujeme konverzaci zkomprimovat nebo začít novou."
       },
       "identity": {
         "title": "Identita relace a účtu",
@@ -7101,6 +7132,14 @@
     "t3code": {
       "title": "Nastavení T3 Code",
       "appPath": "Spouštěcí cesta T3 Code"
+    },
+    "validation": {
+      "refreshIntervalInvalid": "Zadejte celé číslo od 1 do 999 nebo -1 pro vypnutí automatické aktualizace.",
+      "quotaAlertThresholdInvalid": "Zadejte celé číslo od 0 do 100."
+    },
+    "disableRefreshHint": "-1 vypne automatickou aktualizaci.",
+    "qoderCn": {
+      "title": "Nastavení Qoder CN"
     }
   },
   "quotaAlert": {
@@ -7802,7 +7841,21 @@
       "switchLaunchFailed": "Účet byl zapsán, ale Qoder IDE se nepodařilo spustit. {{detail}}",
       "refreshCount": "Obnoveno {{count}} z {{total}} účtů.",
       "launchUnconfirmed": "Spuštění Qoder IDE se nepodařilo potvrdit.",
-      "workerFailed": "Operace Qoder na pozadí selhala. {{detail}}"
+      "workerFailed": "Operace Qoder na pozadí selhala. {{detail}}",
+      "oauthUrlEmpty": "Autorizační URL Qoder OAuth je prázdná.",
+      "qoderCnPathMissing": "Qoder CN Desktop nebyl nalezen. Nastavte cestu spuštění v nastavení nebo jej nainstalujte a zkuste to znovu.",
+      "platformMismatch": "Tento účet patří sestavení jiného regionu a nelze jej zapsat do aktuálního klienta.",
+      "cnRelaunchFailed": "Účet byl přepnut, ale klienta Qoder CN se nepodařilo spustit. {{detail}}",
+      "cnDesktopUnsupported": "V tomto systému použijte k přepnutí účtu Qoder CN rozhraní CLI.",
+      "clientInvalid": "Neplatný typ klienta. Znovu vyberte cíl přepnutí.",
+      "nativeTokenMissing": "Tomuto účtu chybí zapisovatelné přihlašovací údaje. Znovu jej autorizujte nebo importujte.",
+      "nativeWriteVerifyFailed": "Ověření zapsaných přihlašovacích údajů selhalo a bylo provedeno vrácení do původního stavu. Zavřete klienta a zkuste to znovu.",
+      "nativeKeyUnreadable": "Nepodařilo se načíst místní klíč přihlašovacích údajů. Ověřte, že Cockpit a Qoder běží pod stejným systémovým účtem.",
+      "nativeImportInvalid": "Importované přihlašovací údaje neobsahují informace o účtu, takže jej nelze identifikovat.",
+      "nativeImportFailed": "Import místního přihlášení Qoder selhal. Nejprve se přihlaste v klientovi a zkuste to znovu.",
+      "nativeProcessProbeFailed": "Nepodařilo se zjistit stav procesu Qoder. Zkuste to později.",
+      "regionUnsupported": "Nepodařilo se určit regionální sestavení účtu. Znovu jej autorizujte.",
+      "clientRunning": "Před přepnutím účtů zavřete {{client}}."
     },
     "title": "Správa účtů Qoder",
     "comingSoon": {
@@ -7844,6 +7897,38 @@
     },
     "empty": {
       "desc": "Klikněte na Přidat účet a použijte přihlášení, lokální import nebo import JSON."
+    },
+    "region": {
+      "cn": "Qoder CN · Čína",
+      "global": "Qoder · Mezinárodní"
+    },
+    "clientTarget": {
+      "importSource": "Zdroj místního importu",
+      "initializeHint": "Otevřete vybraného klienta, dokončete nastavení a zkuste to znovu.",
+      "label": "Cíl přepnutí / místního importu",
+      "ariaLabel": "Klient Qoder",
+      "desktop": "Qoder Desktop",
+      "desktopCn": "Qoder CN Desktop",
+      "cli": "Qoder CLI",
+      "cliCn": "Qoder CN CLI",
+      "ide": "Qoder IDE",
+      "switchSuccess": "Účet byl přepnut. Znovu otevřete cílového klienta.",
+      "windowsOnly": " (pouze Windows)",
+      "desktopSwitchSuccess": "Účet byl přepnut. {{client}} byl restartován.",
+      "relaunchFailed": "Účet byl přepnut, ale {{client}} se nepodařilo automaticky spustit. Otevřete jej ručně."
+    },
+    "cn": {
+      "nativeOnly": "Pro účty Qoder CN vyberte Desktop nebo CLI.",
+      "ideUnavailable": "Pro účty Qoder CN vyberte Desktop nebo CLI. Adaptér IDE je zde pouze pro mezinárodní verzi.",
+      "instancesUnsupported": "Qoder CN Desktop a CLI podporují přepínání účtu výchozího klienta. Více instancí aplikace zatím není podporováno.",
+      "flowNoticeDesc": "K dispozici je oficiální přihlášení, místní import z aplikace nebo CLI, import JSON a kontrola kvót. Můžete jen přepnout účet, nebo také spustit vybraného klienta.",
+      "flowNoticePermission": "Místní import čte přihlášení z aplikace nebo CLI. Přepnutí účtu aktualizuje pouze místní přihlášení vybraného klienta Qoder CN.",
+      "flowNoticeNetwork": "Síťový přístup: oficiální přihlášení kontaktuje služby Qoder CN kvůli dokončení callbacku; dotazy na kvóty získávají data o využití přes API Qoder CN. Místní klíče a přihlašovací údaje se nikdy nenahrávají.",
+      "flowNoticeTitle": "Prirucka k uctu Qoder CN (kliknutim rozbalit/sbalit)",
+      "oauthHint": "Klikněte na tlačítko níže a dokončete autorizaci OAuth účtu Qoder CN v prohlížeči.",
+      "importJsonHint": "Importujte soubor Qoder CN JSON exportovaný z tohoto nástroje.",
+      "importLocalDesc": "Načte aktuální stav přihlášení z místního klienta Qoder CN, včetně informací o uživateli, plánu a využití kreditů.",
+      "importLocalSuccess": "Účet byl importován z lokálního Qoder CN CN."
     }
   },
   "trae": {
@@ -8231,7 +8316,38 @@
       "logHits": "{{count}} výskytů v protokolech"
     },
     "exposeToCodex": {
-      "title": "Připojí se přes bránu Native Rust bez kopírování tokenu WorkBuddy"
+      "title": "Připojí se přes bránu Native Rust bez kopírování tokenu WorkBuddy",
+      "textOnlyTitle": "Starší Native ACP podporuje pouze text. Pro čtení a zápis souborů a spouštění příkazů použijte Most nástrojů Codex.",
+      "textOnlyAction": "Připojit ke Codex (pouze text)"
+    },
+    "nativeCodex": {
+      "managedKeyRotation": "Tento klíč spravuje nativní most nástrojů WorkBuddy. Chcete-li jej změnit, zneplatněte konfiguraci a vytvořte novou.",
+      "nativeRequired": "Nejprve na stránce služby API vytvořte a povolte službu Native Rust; režim se automaticky nepřepne.",
+      "enterpriseUnsupported": "První verze zatím nedokáže spolehlivě navázat konkrétního firemního tenanta; podporuje pouze osobní zdroje WorkBuddy.",
+      "revokedFilesPreserved": "Vyhrazený Key byl zneplatněn. Konfigurační soubory byly změněny nebo je nelze bezpečně odstranit, proto byly všechny změněné soubory i data relací zachovány. Zkontrolujte soubory a zkuste obnovení znovu.",
+      "notOwned": "Doklad o vlastnictví konfigurace neodpovídá vyhrazenému Key. Žádný Key nebyl změněn. Zkontrolujte označení vlastníka v adresáři konfigurace.",
+      "profileChanged": "Tato samostatná konfigurace byla změněna. Program vaše úpravy nepřepíše.",
+      "selectionChanged": "Model nebo úroveň uvažování již nejsou dostupné. Znovu načtěte seznam a vyberte jinou možnost.",
+      "sourceUnavailable": "Tento zdroj WorkBuddy není dostupný. Zkontrolujte přihlášení. Jiný účet se zkoušet nebude.",
+      "operationFailed": "Operace se nezdařila. Ověřte instalaci WorkBuddy CLI a platnost účtu a znovu načtěte seznam.",
+      "title": "WorkBuddy → Codex: nativní most nástrojů",
+      "scope": "Vytvořte vyhrazený místní Key s pevně určeným zdrojem a samostatný CODEX_HOME. Nástroje spouští samotný Codex; token WorkBuddy se do konfigurace Codex nezapíše a nezmění se výchozí přihlášení ani hlavní Key služby API.",
+      "account": "Zdroj WorkBuddy",
+      "noSourceSelected": "Žádný dostupný zdroj; vytvořené konfigurace lze nadále spravovat",
+      "model": "Aktuálně dostupné modely CLI",
+      "readCatalog": "Načtěte aktuální seznam",
+      "effort": "Úroveň uvažování",
+      "metadataOnly": "Načtení seznamu pouze inicializuje CLI a neodesílá modelu žádný prompt. Před vytvořením se model a úroveň uvažování znovu ověří; při neplatném zdroji se rovnou zobrazí chyba, bez přechodu na jiný účet. Podporováno je pouze HTTP Responses; v samostatné konfiguraci je vypnuto vyhledávání na webu (web_search). Obrázky, jiné hostované nástroje, compact ani WebSocket nejsou podporovány.",
+      "refreshCatalog": "Znovu načíst seznam",
+      "managedProfile": "Vytvořená samostatná konfigurace",
+      "profileSource": "Zdroj: ",
+      "profileSourceMissing": "Zdroj byl odstraněn; vyhrazený Key lze stále zneplatnit a samostatnou konfiguraci obnovit.",
+      "profileSourceUnavailable": "Zdroj nyní není dostupný; zneplatnění ani obnovení nevyžadují přihlášení ke zdroji.",
+      "launchHelp": "V terminálu přejděte do adresáře projektu a spusťte níže uvedený příkaz. Tuto konfiguraci použije pouze toto spuštění Codex.",
+      "retryRestore": "Zkusit obnovení znovu (Key je zneplatněn)",
+      "restore": "Zneplatnit vyhrazený Key a obnovit tuto konfiguraci",
+      "create": "Vytvořit vyhrazený Key a samostatnou konfiguraci",
+      "open": "Most nástrojů Codex"
     }
   },
   "minimaxCode": {
@@ -8989,7 +9105,6 @@
     "quota": {
       "cliUnavailable": "Využití CLI nedostupné",
       "weekly": "Týdenní využití",
-      "sharedPool": "Sdílený limit",
       "monthly": "Měsíční využití",
       "onDemand": "Využití na vyžádání",
       "balance": "Zůstatek a kredity",
@@ -9622,6 +9737,15 @@
     "saved": "Uloženo. Platí pro nové požadavky."
   },
   "antigravityTokenUsage": {
+    "context": {
+      "requestContext": "Kontext požadavku",
+      "coverage": "{{reported}} zaznamenáno · {{estimated}} odhadnuto · {{missing}} chybí",
+      "largestGrowth": "Největší nárůst {{total}} v kroku č. {{step}}",
+      "growthParts": "Vstup {{input}} · Čtení z mezipaměti {{read}} · Zápis do mezipaměti {{write}}",
+      "method": "Kontext požadavku sčítá tokeny vstupu a mezipaměti. Změny porovnávají sousední požadavky s naměřenými údaji. Podíly zpráv, nástrojů a příloh nejsou k dispozici.",
+      "unplacedCompactions": "Komprese bez čísla kroku {{count}}",
+      "compactionStep": "Komprese kontextu"
+    },
     "tab": "Využití relací",
     "subtitle": "Místní spotřeba tokenů z relací Antigravity",
     "title": "Spotřeba tokenů relací Antigravity",
@@ -9776,7 +9900,6 @@
       "codexCatalogPending": "Klíče třetích stran čekající na synchronizaci modelů: {{count}}"
     },
     "commonSettings": {
-      "title": "Běžná nastavení",
       "language": "Jazyk T3 Code"
     },
     "platformOrder": {
@@ -9996,6 +10119,14 @@
       "searchAccountsPlaceholder": "Hledat účty {{platform}}...",
       "goAddSourceAccount": "Přidat v {{platform}}",
       "emptyPoolDesc": "Nejprve přidejte účet na stránce {{platform}} a poté jej připojte do T3 Code."
+    }
+  },
+  "antigravity": {
+    "proxy": {
+      "followHint": "Použije globální proxy z nastavení; při vypnutí se použije výchozí síť.",
+      "independentHint": "Platí pouze pro tento účet a má přednost před globálním proxy.",
+      "invalidUrl": "Nepodporovaná adresa proxy. Podporovány jsou pouze protokoly http, https, socks5 a socks5h.",
+      "restartHint": "Po navázání, změně nebo vymazání proxy restartujte Antigravity (desktopovou aplikaci nebo novou relaci CLI), aby se změna projevila. Selhávající proxy nepřechází na přímé připojení."
     }
   }
 }

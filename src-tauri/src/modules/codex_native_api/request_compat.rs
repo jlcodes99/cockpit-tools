@@ -78,6 +78,7 @@ pub(super) fn ingress(mut body: Value) -> Result<Value, ServiceError> {
 enum Repair {
     Reasoning(super::encrypted_reasoning::Repair),
     Remove(String),
+    RemoveAll(Vec<String>),
     Status(String),
     NullContent(usize),
     Schema(String),
@@ -94,6 +95,9 @@ impl Repair {
                     .and_then(Value::as_object_mut)
                     .is_some_and(|object| object.remove(key).is_some())
             }
+            Self::RemoveAll(pointers) => pointers.iter().fold(false, |changed, pointer| {
+                Self::Remove(pointer.clone()).apply(body) | changed
+            }),
             Self::Status(kind) => {
                 let mut changed = false;
                 for item in body["input"].as_array_mut().into_iter().flatten() {
@@ -157,6 +161,42 @@ fn pointer(param: &str) -> Option<String> {
     })
 }
 
+/// Optional request hints that never change what the model is asked to do.
+/// Strict upstreams that reject one of them by name can safely receive the
+/// request again without it.
+const OPTIONAL_HINT_FIELDS: &[&str] = &[
+    "client_metadata",
+    "metadata",
+    "prompt_cache_key",
+    "prompt_cache_retention",
+    "safety_identifier",
+    "service_tier",
+    "verbosity",
+];
+
+/// Google's OpenAI-compatible endpoint lists every rejected top-level field in one
+/// 400: `Invalid JSON payload received. Unknown name "x": Cannot find field.`
+/// Nested names carry an `at '<path>'` suffix and are intentionally not matched.
+fn unknown_name_repair(body: &Value, message: &str) -> Option<Repair> {
+    static UNKNOWN_NAME_RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let regex = UNKNOWN_NAME_RE.get_or_init(|| {
+        regex::Regex::new(r#"Unknown name "([a-z_]+)": Cannot find field"#)
+            .expect("valid Google Unknown name regex")
+    });
+    let mut pointers = Vec::new();
+    for captures in regex.captures_iter(message) {
+        let name = &captures[1];
+        let pointer = format!("/{name}");
+        if OPTIONAL_HINT_FIELDS.contains(&name)
+            && body.get(name).is_some()
+            && !pointers.contains(&pointer)
+        {
+            pointers.push(pointer);
+        }
+    }
+    (!pointers.is_empty()).then_some(Repair::RemoveAll(pointers))
+}
+
 fn named_null_schema_repair(body: &Value, message: &str) -> Option<Repair> {
     let (name, detail) = message
         .strip_prefix("Invalid schema for function '")?
@@ -182,9 +222,14 @@ fn named_null_schema_repair(body: &Value, message: &str) -> Option<Repair> {
 }
 
 fn repair(body: &Value, error: &Value) -> Option<Repair> {
+    // Google wraps its error envelope in a one-element array.
+    let error = error.as_array().and_then(|errors| errors.first()).unwrap_or(error);
     let error = super::diagnostics::error_object(error);
     let code = error["code"].as_str().unwrap_or_default();
     let message = error["message"].as_str().unwrap_or_default();
+    if let Some(repair) = unknown_name_repair(body, message) {
+        return Some(repair);
+    }
     if matches!(code, "" | "invalid_request_error" | "invalid_function_parameters") {
         if let Some(repair) = named_null_schema_repair(body, message) {
             return Some(repair);
@@ -316,3 +361,7 @@ impl Budget {
         true
     }
 }
+
+#[cfg(test)]
+#[path = "request_compat_tests.rs"]
+mod tests;

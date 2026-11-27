@@ -121,6 +121,14 @@ pub fn ensure_unique(
 }
 
 pub fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<(), String> {
+    copy_dir_recursive_where(src, dst, &|_| true)
+}
+
+pub(crate) fn copy_dir_recursive_where(
+    src: &Path,
+    dst: &Path,
+    should_copy: &impl Fn(&Path) -> bool,
+) -> Result<(), String> {
     if !src.exists() {
         return Err(format!("源目录不存在: {}", src.to_string_lossy()));
     }
@@ -142,6 +150,9 @@ pub fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<(), String> {
     for entry in fs::read_dir(src).map_err(|e| format!("读取源目录失败: {}", e))? {
         let entry = entry.map_err(|e| format!("读取目录项失败: {}", e))?;
         let path = entry.path();
+        if !should_copy(&path) {
+            continue;
+        }
         let target = dst.join(entry.file_name());
 
         let file_type = entry
@@ -149,7 +160,7 @@ pub fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<(), String> {
             .map_err(|e| format!("获取文件类型失败: {}", e))?;
 
         if file_type.is_dir() {
-            copy_dir_recursive(&path, &target)?;
+            copy_dir_recursive_where(&path, &target, should_copy)?;
         } else if file_type.is_file() {
             fs::copy(&path, &target).map_err(|e| format!("复制文件失败: {}", e))?;
         }

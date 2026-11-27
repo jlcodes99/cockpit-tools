@@ -10,6 +10,51 @@
 
 ## [Unreleased]
 
+## [1.5.3] - 2026-11-27
+
+### 新增
+- **Antigravity 按账号独立出口代理** 支持为单个 Antigravity 账号绑定独立出口代理地址（`http` / `https` / `socks5` / `socks5h`），覆盖桌面端、IDE、CLI 及多开实例启动链路，未配置时跟随设置中的全局代理。 [#3335](https://github.com/jlcodes99/cockpit-tools/pull/3335)
+- **Antigravity 会话详情**展示逐轮请求上下文，按输入、缓存读取和缓存写入拆解最大增幅，并在时间线标出有记录的压缩步骤。
+- **Antigravity 桌面端**从 Cockpit Tools 启动后可将设置、项目、快捷键、登录、插件、浏览器、自动任务、预览及操作状态切换为简体中文。模型菜单保留官方的 Orchestrator 标签和模型名称。
+- **Antigravity** 聊天输入框旁的额度会随 Orchestrator 中选定的模型更新，也支持独立列出的 Neon、Carbon 和 Argon 选项。
+- **Antigravity 常用设置**支持选择桌面语言、页面布局和本机默认权限。通过 Cockpit 启动时默认应用「软件工程」和「自动」。
+- **Qoder CN** 完整接入国内站（`qoder.com.cn`）独立渠道，支持独立加密凭据存储、设备 OAuth 登录、桌面端与 CLI 原生切号、配额预警、每日签到以及仪表盘与托盘集成。 [#3323](https://github.com/jlcodes99/cockpit-tools/pull/3323)
+- **Qoder CN 客户端选择**支持切换账号并启动所选客户端。macOS 上可选择桌面端、IDE 或 CLI。
+- **Qoder 国际版桌面端**在 macOS 上支持本机导入账号，以及切换账号并启动客户端。
+- **T3 Code** 支持一键绑定和切换 Qoder 国际版及国内版账号，显示剩余额度，并为每个提供方实例保存独立的登录配置。
+- **WorkBuddy → Codex** 新增可选的原生工具执行桥接（DelegateTool），支持固定来源专属 Key、实时模型与推理强度选择、独立 `CODEX_HOME` 配置以及安全的撤销与恢复。 [#3312](https://github.com/jlcodes99/cockpit-tools/pull/3312)
+- **Codex API 服务**支持在号池成员中为单个账号覆盖并发上限（`0` 为不限，`1–64` 为上限，留空沿用全局并发数）。 [#3268](https://github.com/jlcodes99/cockpit-tools/issues/3268)
+- **Codex / Claude** 模型供应商新增 **onomeo** 预设。 [#3311](https://github.com/jlcodes99/cockpit-tools/pull/3311)
+
+### 变更
+
+- **切号与多开**自动完成客户端首次启动初始化，应用所选账号后按需重启。空白多开实例可在第一次启动前保存绑定账号。
+- **Qoder 与 Qoder CN** 的客户端选择弹框与 Antigravity 对齐，可分别配置启动路径，并通过「切换并启动」打开所选客户端，桌面端和 IDE 使用各自的官方图标。同步更新 Cursor、Kiro、MiniMax Code、Trae 和 GitHub Copilot 的平台图标。
+- **T3 Code** 简化账号总览，移除设置栏左侧的标题和图标。
+
+### 修复
+
+- **T3 Code** 的「菜单栏显示」设置正常生效，可在 macOS 菜单栏查看额度，并从托盘菜单刷新。 [#3332](https://github.com/jlcodes99/cockpit-tools/issues/3332)
+- **Claude 及其他受支持的平台**可保存默认实例的桌面端或 CLI 启动方式。 [#3339](https://github.com/jlcodes99/cockpit-tools/issues/3339)
+- **Codex 与各平台的账号分组**在空间不足时自动换行，保持分组标签和管理按钮可见。 [#3333](https://github.com/jlcodes99/cockpit-tools/issues/3333)
+- **Antigravity 2.x 桌面端版本检测**在全平台优先读取 `app.asar/package.json` 元数据，避免从 1.x 原地覆盖安装残留的旧 `product.json` 导致桌面端版本识别错误。 [#3334](https://github.com/jlcodes99/cockpit-tools/pull/3334)
+- **Antigravity** 托盘和 macOS 菜单栏会显示当前配额池，去掉重复的额度行，并在无法获取 AI Credits 数量时隐藏该项。 [#3336](https://github.com/jlcodes99/cockpit-tools/issues/3336) · [#3337](https://github.com/jlcodes99/cockpit-tools/pull/3337)
+- **Antigravity 套餐徽章**将 `g1-ultra-tier`、`g1-pro-tier`、`g1-plus-tier`、`free-tier`、`standard-tier` 等账号层级 ID 映射为标准套餐名称（如 `ULTRA`、`PRO`、`PLUS`、`FREE`），悬停可查看原始层级 ID，账号页、总览、弹窗及原生菜单展示保持一致。
+- **Antigravity 切号**只启动或重启账号弹框中选中的客户端。是否启动由弹框按钮决定，设置中移除了「切换时启动 Antigravity IDE」开关。
+- **Codex API 服务**在路由选号失败时区分“兼容账号全部冷却/命中本地额度保留”与“模型无兼容账号”，使网络恢复窗口上限不低于用户设置的流打开超时，并在超大请求体于响应前超时时在报错及请求详情中提示请求体积与压缩会话建议。
+- **Codex API 服务**对 ≥ 8 MiB 的原生大请求在持续发包时按发包进展有界延展 `open_timeout`（最多额外 1 个窗口且不突破总超时与安全重试边界），并在 zstd 请求压缩时去掉冗余的整份明文拷贝以降低峰值内存。 [#3342](https://github.com/jlcodes99/cockpit-tools/pull/3342)
+- **Codex 自动切号**将配额耗尽后遗留的 `systemError` 桌面会话视为非活跃空闲态，避免自动切号被永久拦截，并在等待空闲时记录暂缓原因日志。 [#3321](https://github.com/jlcodes99/cockpit-tools/issues/3321)
+- **Codex API 服务**在开启会话亲和且携带完整内联对话跨供应商切模型时，允许重新路由到可用账号，不再返回 `409 account_binding_unavailable`。 [#3319](https://github.com/jlcodes99/cockpit-tools/issues/3319) · [#3331](https://github.com/jlcodes99/cockpit-tools/pull/3331)
+- **Codex API 服务**在 Responses 转 Chat 时不再透传 `client_metadata`，并在严格校验的 Chat 上游明确拒绝可选提示字段时自动剔除后重试一次。 [#3329](https://github.com/jlcodes99/cockpit-tools/issues/3329) · [#3330](https://github.com/jlcodes99/cockpit-tools/pull/3330)
+- **Codex API 服务**在 `GET /v1/cockpit/quota` 汇总中将配额窗口冷却中的账号计入冷却数，与路由和健康快照保持一致。 [#3322](https://github.com/jlcodes99/cockpit-tools/pull/3322)
+- **Claude Desktop** 将隐藏 Electron 探测刷新出的 Cookie 持久化写回受管资料快照，避免后续静默刷新额度持续失败或触发冷却。 [#3318](https://github.com/jlcodes99/cockpit-tools/issues/3318) · [#3327](https://github.com/jlcodes99/cockpit-tools/pull/3327)
+- **Claude CLI** 刷新额度时只从已绑定的 CLI 实例同步本地登录凭据，避免影响默认终端的独立登录。 [#3338](https://github.com/jlcodes99/cockpit-tools/issues/3338)
+- **Antigravity 唤醒**在 Windows 未配置显式代理环境变量时复用系统手动代理及绕过规则，避免规则模式代理下语言服务器启动超时。 [#3326](https://github.com/jlcodes99/cockpit-tools/pull/3326)
+- **T3 Code** 在 Windows 上兼容检测安装于 `t3code` 目录下的 `T3 Code (Beta).exe` 与 `T3 Code (Nightly).exe`。 [#3324](https://github.com/jlcodes99/cockpit-tools/issues/3324) · [#3328](https://github.com/jlcodes99/cockpit-tools/pull/3328)
+- **CodeBuddy CLI** 在 Windows 上以读写权限打开控制台句柄，避免 Node CLI 误判非 TTY 而直接退出。 [#3316](https://github.com/jlcodes99/cockpit-tools/pull/3316)
+- **Trae** 在 Windows 切号与冷启动实例时不再强制传入窗口参数，使 Trae 自身的 `window.startupWindowType` 设置正常生效。 [#3315](https://github.com/jlcodes99/cockpit-tools/pull/3315)
+- **Windows 终端**在 `pwsh` 不在 `PATH` 时自动识别 Microsoft Store 别名与 `Program Files` 安装路径，并正确以交互控制台窗口启动。 [#3314](https://github.com/jlcodes99/cockpit-tools/pull/3314)
+
 ## [1.5.2] - 2026-11-26
 
 ### 新增
@@ -4736,6 +4781,8 @@
 ## [0.3.1] - 2026-01-23
 
 ### Changed
+
+- **Qoder 和 Qoder CN** 在添加账号时选择导入来源，在账号切换弹框中选择客户端。客户端和实例的初始化提示可直接打开对应应用。
 - **维护**: 常规版本更新与依赖维护。
 
 ## [0.3.0] - 2026-01-22

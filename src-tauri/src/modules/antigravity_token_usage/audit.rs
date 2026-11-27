@@ -6,7 +6,7 @@
 //!   modal is opened to surface context window pressure, compaction (`CHECKPOINT`)
 //!   events, tool call breakdown, command executions, file reads/edits, and subagent spawns.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use super::models::resolve_model_context_limit;
@@ -219,7 +219,8 @@ pub fn build_conversation_context_audit(
     let mut file_read_count = 0usize;
     let mut file_edit_count = 0usize;
     let mut subagent_spawn_count = children_count;
-    let mut compaction_steps: Vec<usize> = Vec::new();
+    let mut compaction_steps = BTreeSet::new();
+    let mut unplaced_compactions = 0usize;
     let mut tool_counts: HashMap<String, usize> = HashMap::new();
     let mut active_files: Vec<String> = Vec::new();
     let mut seen_files: HashSet<String> = HashSet::new();
@@ -229,7 +230,7 @@ pub fn build_conversation_context_audit(
             let mut planner_count = 0usize;
             let mut subagent_calls_in_tr = 0usize;
 
-            for (line_idx, raw_line) in content.lines().enumerate() {
+            for raw_line in content.lines() {
                 let line = raw_line.trim();
                 if line.is_empty() {
                     continue;
@@ -237,11 +238,6 @@ pub fn build_conversation_context_audit(
                 let Ok(obj) = serde_json::from_str::<serde_json::Value>(line) else {
                     continue;
                 };
-                let step_index = obj
-                    .get("step_index")
-                    .and_then(|v| v.as_u64())
-                    .map(|n| n as usize)
-                    .unwrap_or(line_idx);
                 let step_type = obj.get("type").and_then(|v| v.as_str()).unwrap_or("");
 
                 match step_type {
@@ -249,7 +245,17 @@ pub fn build_conversation_context_audit(
                         user_prompt_count += 1;
                     }
                     "CHECKPOINT" | "CONTEXT_COMPACTION" => {
-                        compaction_steps.push(step_index);
+                        let step = obj.get("step_index").and_then(|value| {
+                            value
+                                .as_u64()
+                                .and_then(|index| usize::try_from(index).ok())
+                                .or_else(|| value.as_str()?.trim().parse::<usize>().ok())
+                        });
+                        if let Some(step) = step {
+                            compaction_steps.insert(step);
+                        } else {
+                            unplaced_compactions += 1;
+                        }
                     }
                     "PLANNER_RESPONSE" => {
                         planner_count += 1;
@@ -336,8 +342,8 @@ pub fn build_conversation_context_audit(
         file_read_count,
         file_edit_count,
         subagent_spawn_count,
-        compaction_count: compaction_steps.len(),
-        compaction_steps,
+        compaction_count: compaction_steps.len() + unplaced_compactions,
+        compaction_steps: compaction_steps.into_iter().collect(),
         top_tools,
         active_files,
     }
@@ -370,6 +376,10 @@ mod tests {
                 r#"{"step_index":1,"type":"PLANNER_RESPONSE","tool_calls":[{"name":"read_file","args":{"Path":"/repo/src/main.rs"}},{"name":"run_command","args":{"CommandLine":"cargo test"}}]}"#,
                 "\n",
                 r#"{"step_index":2,"type":"CHECKPOINT","content":"compacted"}"#,
+                "\n",
+                r#"{"step_index":"2","type":"CONTEXT_COMPACTION"}"#,
+                "\n",
+                r#"{"type":"CHECKPOINT"}"#,
                 "\n",
                 r#"{"step_index":3,"type":"PLANNER_RESPONSE","tool_calls":[{"name":"edit_file","args":{"Path":"/repo/src/main.rs"}}]}"#,
                 "\n"
@@ -413,7 +423,7 @@ mod tests {
         assert_eq!(audit.context_limit_tokens, 256_000);
         assert_eq!(audit.peak_context_percent, 50.0);
         assert_eq!(audit.user_prompt_count, 1);
-        assert_eq!(audit.compaction_count, 1);
+        assert_eq!(audit.compaction_count, 2);
         assert_eq!(audit.compaction_steps, vec![2]);
         assert_eq!(audit.tool_call_count, 3);
         assert_eq!(audit.command_execution_count, 1);

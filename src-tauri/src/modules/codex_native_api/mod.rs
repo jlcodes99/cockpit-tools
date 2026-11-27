@@ -46,6 +46,9 @@ mod grok_errors;
 mod grok_wire;
 mod http;
 mod workbuddy_acp;
+mod workbuddy_delegate;
+mod workbuddy_delegate_protocol;
+mod workbuddy_delegate_runtime;
 mod http_compression;
 pub mod identity;
 mod images;
@@ -79,6 +82,7 @@ mod request_body;
 mod request_compat;
 mod encrypted_reasoning;
 mod request_metrics;
+mod request_upload;
 mod response_wire;
 mod replay_wire;
 mod responses_custom_results;
@@ -97,6 +101,9 @@ mod websocket;
 mod websocket_io;
 
 pub use server::{start, Handle, Options};
+pub(crate) use workbuddy_delegate::{
+    workbuddy_delegate_catalog_for_model, workbuddy_delegate_catalog_for_source,
+};
 
 #[cfg(test)]
 pub(crate) use compat::ollama_show as compat_catalog_show_for_test;

@@ -42,14 +42,21 @@
   display: flex;
 }
 
+.account-selection-toolbar.codex-overview-account-toolbar .codex-overview-selection-left {
+  flex: 0 0 auto;
+}
+
 .account-selection-toolbar.codex-overview-account-toolbar .account-selection-toolbar-middle {
-  flex: 1 1 8rem;
+  flex: 1 1 16rem;
+  min-width: 0;
+  max-width: 100%;
   order: 0;
   width: auto;
   margin-top: 0;
 }
 
 .codex-overview-account-toolbar .codex-overview-selection-actions {
+  flex: 0 0 auto;
   width: auto;
   min-width: 0;
   max-width: 100%;

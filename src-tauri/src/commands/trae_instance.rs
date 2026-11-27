@@ -349,7 +349,9 @@ pub async fn trae_start_instance(
         let pid = modules::process::start_trae_platform_default_with_args_with_new_window(
             platform.provider_key(),
             &extra_args,
-            true,
+            // 切号前已关闭客户端，属冷启动：不传 --new-window，让 Trae 按
+            // window.startupWindowType 决定打开 Agent（SOLO）还是 IDE 窗口。
+            false,
         ).map_err(path_error_after_injection)?;
         let _ = modules::trae_instance::update_default_pid_for_platform(platform, Some(pid))?;
         verify_bound_account_after_start(
@@ -409,7 +411,9 @@ pub async fn trae_start_instance(
         platform.provider_key(),
         &instance.user_data_dir,
         &extra_args,
-        true,
+        // 启动实例前已关闭旧进程，属冷启动：不传 --new-window，让 Trae 按
+        // window.startupWindowType 决定打开 Agent（SOLO）还是 IDE 窗口。
+        false,
     ).map_err(path_error_after_injection)?;
     let updated = modules::trae_instance::update_instance_after_start_for_platform(
         platform,

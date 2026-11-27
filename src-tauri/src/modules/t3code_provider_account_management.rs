@@ -47,6 +47,16 @@ fn save_default_selections(state_dir: &Path, selections: &DefaultSelections) -> 
     atomic_write::write_string_atomic(&state_dir.join(PENDING_DEFAULTS_FILE), &content)
 }
 
+pub(super) fn remove_copied_qoder_default_selections(state_dir: &Path) -> Result<(), String> {
+    let mut selections = load_default_selections(state_dir)?;
+    let previous = selections.len();
+    selections.retain(|platform, _| extensions::QoderProvider::from_platform(platform).is_none());
+    if selections.len() != previous {
+        save_default_selections(state_dir, &selections)?;
+    }
+    Ok(())
+}
+
 pub(super) fn show_pending_defaults(state_dir: &Path, rows: &mut [T3CodeProviderInstanceView]) {
     match load_default_selections(state_dir) {
         Ok(selections) => set_pending_default_rows(&selections, rows),

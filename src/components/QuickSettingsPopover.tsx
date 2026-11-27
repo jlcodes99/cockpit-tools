@@ -1,3 +1,4 @@
+import { QoderLaunchPathFields } from './QoderCnLaunchDialog';
 import { PlatformLaunchPathField } from './PlatformLaunchPathField';
 import { T3codeNativeSettingsPanel } from './t3code/T3codeNativeSettings';
 import { CodexAppEnhancementSettings } from './codex/CodexAppEnhancementSettings';
@@ -9,6 +10,7 @@ import { CodexQuotaRecoverySettings } from './codex/CodexQuotaRecoverySettings';
 import { CodexQuotaHistorySettings } from './codex/CodexQuotaHistorySettings';
 import { CodexProxyDirectHosts } from './codex/CodexProxyDirectHosts';
 import { SingleSelectDropdown } from './SingleSelectDropdown';
+import { AntigravityDesktopSettingsFields, readAntigravityDesktopSettings, type AntigravityDesktopSettings } from './antigravity/AntigravityDesktopSettings';
 import { MenuBarLeftClickSetting } from './MenuBarLeftClickSetting';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -91,7 +93,7 @@ import { CodexExperimentalModelEditor } from './codex/CodexExperimentalModelEdit
 import './QuickSettingsPopover.css';
 
 /** GeneralConfig from backend */
-interface GeneralConfig {
+interface GeneralConfig extends AntigravityDesktopSettings {
   language: string;
   theme: string;
   ui_scale: number;
@@ -114,6 +116,7 @@ interface GeneralConfig {
   codebuddy_auto_refresh_minutes: number;
   codebuddy_cn_auto_refresh_minutes: number;
   qoder_auto_refresh_minutes: number;
+  qoder_cn_auto_refresh_minutes: number;
   zcode_auto_refresh_minutes: number;
   t3code_auto_refresh_minutes: number;
   t3code_app_ui_injection_enabled?: boolean;
@@ -147,6 +150,7 @@ interface GeneralConfig {
   codebuddy_cn_app_path: string;
   codebuddy_cn_share_sessions_on_switch: boolean;
   qoder_app_path: string;
+  qoder_cn_app_path: string;
   zcode_app_path: string;
   t3code_app_path: string;
   trae_app_path: string;
@@ -221,6 +225,8 @@ interface GeneralConfig {
   codebuddy_cn_quota_alert_threshold: number;
   qoder_quota_alert_enabled: boolean;
   qoder_quota_alert_threshold: number;
+  qoder_cn_quota_alert_enabled: boolean;
+  qoder_cn_quota_alert_threshold: number;
   trae_quota_alert_enabled: boolean;
   trae_quota_alert_threshold: number;
   trae_solo_quota_alert_enabled: boolean;
@@ -249,6 +255,7 @@ export type QuickSettingsType =
   | 'codebuddy'
   | 'codebuddy_cn'
   | 'qoder'
+  | 'qoder_cn'
   | 'zcode'
   | 't3code'
   | 'trae'
@@ -271,6 +278,7 @@ type AppPathTarget =
   | 'codebuddy'
   | 'codebuddy_cn'
   | 'qoder'
+  | 'qoder_cn'
   | 'zcode'
   | 't3code'
   | 'trae'
@@ -293,6 +301,7 @@ type QuotaAlertEnabledKey =
   | 'codebuddy_quota_alert_enabled'
   | 'codebuddy_cn_quota_alert_enabled'
   | 'qoder_quota_alert_enabled'
+  | 'qoder_cn_quota_alert_enabled'
   | 'trae_quota_alert_enabled'
   | 'trae_solo_quota_alert_enabled'
   | 'trae_cn_quota_alert_enabled'
@@ -312,6 +321,7 @@ type QuotaAlertThresholdKey =
   | 'codebuddy_quota_alert_threshold'
   | 'codebuddy_cn_quota_alert_threshold'
   | 'qoder_quota_alert_threshold'
+  | 'qoder_cn_quota_alert_threshold'
   | 'trae_quota_alert_threshold'
   | 'trae_solo_quota_alert_threshold'
   | 'trae_cn_quota_alert_threshold'
@@ -359,6 +369,8 @@ const getAppPathKeyForTarget = (target: AppPathTarget): keyof GeneralConfig => {
       return 'codebuddy_cn_app_path';
     case 'qoder':
       return 'qoder_app_path';
+    case 'qoder_cn':
+      return 'qoder_cn_app_path';
     case 'zcode':
       return 'zcode_app_path';
     case 't3code':
@@ -414,6 +426,8 @@ const getCurrentAccountRefreshPlatformForType = (
       return 'codebuddy_cn';
     case 'qoder':
       return 'qoder';
+    case 'qoder_cn':
+      return 'qoder_cn';
     case 'zcode':
       return 'zcode';
     case 't3code':
@@ -545,7 +559,7 @@ export function QuickSettingsPopover({
         return {
           id: account.id,
           label: account.email,
-          badge: <span className={`tier-badge ${badge.className}`}>{badge.label}</span>,
+          badge: <span className={`tier-badge ${badge.className}`} title={badge.rawTier || badge.label}>{badge.label}</span>,
           searchableText: account.email,
           tags: account.tags || [],
           type: typeValue,
@@ -870,6 +884,7 @@ export function QuickSettingsPopover({
       case 'codebuddy': return 'codebuddy_auto_refresh_minutes';
       case 'codebuddy_cn': return 'codebuddy_cn_auto_refresh_minutes';
       case 'qoder': return 'qoder_auto_refresh_minutes';
+      case 'qoder_cn': return 'qoder_cn_auto_refresh_minutes';
       case 'zcode': return 'zcode_auto_refresh_minutes';
       case 't3code': return 't3code_auto_refresh_minutes';
       case 'trae': return 'trae_auto_refresh_minutes';
@@ -1040,6 +1055,8 @@ export function QuickSettingsPopover({
           return 'CodeBuddy CN';
         case 'qoder':
           return 'Qoder';
+        case 'qoder_cn':
+          return 'Qoder CN';
         case 'zcode':
           return 'ZCode';
         case 't3code':
@@ -1121,6 +1138,8 @@ export function QuickSettingsPopover({
         return 'codebuddy_cn_quota_alert_enabled';
       case 'qoder':
         return 'qoder_quota_alert_enabled';
+      case 'qoder_cn':
+        return 'qoder_cn_quota_alert_enabled';
       case 'trae':
         return 'trae_quota_alert_enabled';
       case 'trae_solo':
@@ -1162,6 +1181,8 @@ export function QuickSettingsPopover({
         return 'codebuddy_cn_quota_alert_threshold';
       case 'qoder':
         return 'qoder_quota_alert_threshold';
+      case 'qoder_cn':
+        return 'qoder_cn_quota_alert_threshold';
       case 'trae':
         return 'trae_quota_alert_threshold';
       case 'trae_solo':
@@ -1204,6 +1225,7 @@ export function QuickSettingsPopover({
       case 'codebuddy_cn':
         return t('quickSettings.refreshInterval', '配额自动刷新');
       case 'qoder':
+      case 'qoder_cn':
         return t('quickSettings.refreshInterval', '配额自动刷新');
       case 'zcode':
       case 't3code':
@@ -1252,6 +1274,8 @@ export function QuickSettingsPopover({
         return config.codebuddy_cn_app_path;
       case 'qoder':
         return config.qoder_app_path;
+      case 'qoder_cn':
+        return config.qoder_cn_app_path;
       case 'zcode':
         return config.zcode_app_path || '';
       case 't3code':
@@ -1298,7 +1322,9 @@ export function QuickSettingsPopover({
       case 'codebuddy_cn':
         return t('quickSettings.codebuddyCn.appPath', 'CodeBuddy CN 路径');
       case 'qoder':
-        return t('quickSettings.qoder.appPath', 'Qoder 路径');
+        return t('appPath.missing.pathLabel', { app: t('qoder.clientTarget.ide') });
+      case 'qoder_cn':
+        return t('settings.general.qoderCnAppPath', 'Qoder CN 启动路径');
       case 'zcode':
         return t('quickSettings.zcode.appPath', 'ZCode 启动路径');
       case 't3code':
@@ -1344,6 +1370,8 @@ export function QuickSettingsPopover({
         return 'codebuddy_cn';
       case 'qoder':
         return 'qoder';
+      case 'qoder_cn':
+        return 'qoder_cn';
       case 'zcode':
         return 'zcode';
       case 't3code':
@@ -2405,7 +2433,7 @@ export function QuickSettingsPopover({
                       {t(
                         'settings.general.antigravityLaunchOnSwitch',
                         '切换时启动 Antigravity',
-                  )}
+                      )}
                     </span>
                   </div>
                   <div className="qs-row-control">
@@ -2426,15 +2454,21 @@ export function QuickSettingsPopover({
                 <div className="qs-hint">
                   {t(
                     'antigravityLaunch.quickSwitchSetting',
-              )}
+                  )}
                 </div>
+                <AntigravityDesktopSettingsFields
+                  settings={readAntigravityDesktopSettings(config)}
+                  variant="quick"
+                  onChange={updates => void saveConfig(updates)}
+                />
+                <div className="qs-hint">{t('antigravityLaunch.desktopSettingsHint')}</div>
               </div>
             )}
 
             {/* ─── App Path ─── */}
             {showAppPathSection && (
               <div className="qs-section">
-                {type !== 'codebuddy' && type !== 'codebuddy_cn' && (
+                {type !== 'codebuddy' && type !== 'codebuddy_cn' && type !== 'qoder' && type !== 'qoder_cn' && (
                   <div className="qs-section-header">
                     <FolderOpen size={15} />
                     <span>{getAppPathLabel()}</span>
@@ -2507,6 +2541,8 @@ export function QuickSettingsPopover({
                     <PlatformLaunchPathField key={type} target={type} />
                     <PlatformLaunchPathField target="codebuddy_cli" />
                   </>
+                ) : type === 'qoder' || type === 'qoder_cn' ? (
+                  <QoderLaunchPathFields region={type === 'qoder_cn' ? 'cn' : 'global'} />
                 ) : config && (
 	                <div className="qs-path-control">
                   <input

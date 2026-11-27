@@ -46,11 +46,37 @@ test('missing Antigravity plans use the neutral badge and remain filterable', ()
     assert.equal(filter?.label, '未知 (1)');
   }
 
-  const fixture = account([]);
-  fixture.quota!.subscription_tier = 'g1-pro-tier';
-  const presentation = buildAntigravityAccountPresentation(fixture, [], t);
-  assert.equal(presentation.planLabel, 'g1-pro-tier');
-  assert.equal(presentation.planClass, 'pro');
+  const cases: Array<[string, string, string, boolean]> = [
+    ['g1-pro-tier', 'PRO', 'pro', true],
+    ['g1-ultra-tier', 'ULTRA', 'ultra', true],
+    ['g1-ultra-lite-tier', 'ULTRA LITE', 'ultra', true],
+    ['g1-plus-tier', 'PLUS', 'plus', true],
+    ['free-tier', 'FREE', 'free', false],
+    ['standard-tier', 'FREE', 'free', false],
+    ['legacy-tier', 'FREE', 'free', false],
+    ['gcp-ge-ultra-tier', 'ULTRA', 'ultra', true],
+    ['gcp-ge-plus-tier', 'PLUS', 'plus', true],
+    ['gcp-ge-standard-tier', 'FREE', 'free', false],
+    ['gcp-enterprise-tier', 'ENTERPRISE', 'enterprise', true],
+    ['ge-business-tier', 'BUSINESS', 'business', true],
+    ['agy-business-paygo-tier', 'PAYGO', 'business', true],
+    ['gcp-ge-edu-pro-tier', 'EDU PRO', 'pro', true],
+    ['gcp-ge-edu-tier', 'EDU', 'individual', true],
+    ['g1-unrecognized-tier', 'g1-unrecognized-tier', 'unknown', true],
+  ];
+  for (const [subscriptionTier, expectedLabel, expectedClass, expectsShortWindow] of cases) {
+    const fixture = account([model('gemini-5h', 80), model('gemini-weekly', 90)]);
+    fixture.quota!.subscription_tier = subscriptionTier;
+    const presentation = buildAntigravityAccountPresentation(fixture, [], t);
+    assert.equal(presentation.planLabel, expectedLabel, subscriptionTier);
+    assert.equal(presentation.planClass, expectedClass, subscriptionTier);
+    assert.equal(presentation.planTitle, subscriptionTier, subscriptionTier);
+    assert.equal(
+      presentation.quotaItems.some((item) => item.key === 'gemini:5h'),
+      expectsShortWindow,
+      subscriptionTier,
+    );
+  }
 });
 
 test('list disclosure shows each real model and keeps account-wide windows separate', () => {
@@ -352,4 +378,38 @@ test('Antigravity card time picker can show the quota refresh time without selec
   rendered.props.onClick({ stopPropagation: () => { stopped += 1; } });
   assert.equal(stopped, 1);
   h.unmount();
+});
+
+test('dynamic summary groups render unknown pools and keep their bucket IDs out of model rows', () => {
+  const fixture = account([
+    model('gemini-5h', 54),
+    model('gemini-weekly', 72),
+    model('neon-weekly', 42),
+    { ...model('gemini-4-neon-high', 54), display_name: 'Gemini 4 Neon (High)' },
+  ]);
+  fixture.quota!.quota_summary_groups = [
+    {
+      id: 'gemini',
+      name: 'Gemini Models',
+      windows: [
+        { id: 'gemini-5h', period: '5h', percentage: 54 },
+        { id: 'gemini-weekly', period: 'weekly', percentage: 72 },
+      ],
+    },
+    {
+      id: 'neon',
+      name: 'Neon Preview',
+      windows: [
+        { id: 'neon-weekly', period: 'weekly', percentage: 42, reset_time: futureReset },
+      ],
+    },
+  ];
+  const items = getAntigravityQuotaDisplayItems(fixture, []);
+  assert.deepEqual(items.map(({ key, label, percentage }) => [key, label, percentage]), [
+    ['gemini:5h', 'Gemini (5h)', 54],
+    ['gemini:weekly', 'Gemini (Weekly)', 72],
+    ['neon:weekly', 'Neon Preview (Weekly)', 42],
+  ]);
+  const modelItems = getAntigravityModelQuotaDisplayItems(fixture);
+  assert.deepEqual(modelItems.map(({ key }) => key), ['gemini-4-neon-high']);
 });

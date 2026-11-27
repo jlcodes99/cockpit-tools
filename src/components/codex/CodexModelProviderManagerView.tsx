@@ -71,6 +71,7 @@ export function CodexModelProviderManagerView(props: CodexModelProviderManagerVi
     handleDeleteBatchTestResults,
     handleDeleteProvider,
     handleEnableProvider,
+    handleOpenUninitializedInstance,
     handleOpenInstanceConfig,
     handleProviderCustomSortDragMove,
     handleProviderCustomSortDragStart,
@@ -88,6 +89,7 @@ export function CodexModelProviderManagerView(props: CodexModelProviderManagerVi
     loading,
     maskAccountText,
     maskApiKey,
+    openingInstanceId,
     moveProviderCustomSortProvider,
     notice,
     openBatchTestModal,
@@ -741,17 +743,18 @@ export function CodexModelProviderManagerView(props: CodexModelProviderManagerVi
                           className={usageState?.loading ? "loading-spinner" : undefined}
                         />
                       </button>}
-                      <button
+                      {!targetInstanceReady && targetInstance ? (
+                        <button type="button" className="btn btn-secondary btn-sm"
+                          disabled={openingInstanceId !== null}
+                          title={t("instances.initGuide.title")}
+                          onClick={() => void handleOpenUninitializedInstance(targetInstance)}>
+                          {openingInstanceId === targetInstance.id ? <RefreshCw size={14} className="loading-spinner" /> : <Play size={14} />}
+                          {t("common.open")}
+                        </button>
+                      ) : <button
                         className="card-action-btn success"
-                        disabled={!primaryApiKey || enabling || !targetInstanceReady}
-                        title={
-                          targetInstanceReady
-                            ? t("codex.modelProviders.enableAndStart", "启用并启动")
-                            : t(
-                                "codex.modelProviders.instance.uninitializedHint",
-                                "目标实例尚未初始化，请先到应用多开页启动一次。",
-                              )
-                        }
+                        disabled={!primaryApiKey || enabling}
+                        title={t("codex.modelProviders.enableAndStart", "启用并启动")}
                         onClick={() =>
                           primaryApiKey &&
                           void handleEnableProvider(
@@ -767,7 +770,7 @@ export function CodexModelProviderManagerView(props: CodexModelProviderManagerVi
                         ) : (
                           <Play size={14} />
                         )}
-                      </button>
+                      </button>}
                       <button
                         type="button"
                         className="card-action-btn"

@@ -1,5 +1,5 @@
 import { CSSProperties } from 'react';
-import kiroIcon from '../../assets/icons/kiro-ghost3.svg';
+import kiroIcon from '../../assets/icons/kiro-menu.png';
 
 type KiroIconProps = {
   className?: string;

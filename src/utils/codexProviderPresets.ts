@@ -479,6 +479,14 @@ export const CODEX_API_PROVIDER_PRESETS: readonly CodexApiProviderPreset[] = [
     website: "https://www.worldrouter.ai/",
     apiKeyUrl: "https://www.worldrouter.ai/dashboard/api-keys",
   },
+  {
+    id: "onomeo",
+    name: "onomeo",
+    baseUrls: ["https://onomeo.com/v1"],
+    modelCatalog: ["gpt-6.2-sol", "gpt-6.2-astra"],
+    website: "https://onomeo.com/",
+    apiKeyUrl: "https://onomeo.com/dashboard",
+  },
 ];
 
 function normalizeCodexProviderBaseUrl(value: string): string | null {

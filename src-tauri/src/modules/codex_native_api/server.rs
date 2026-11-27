@@ -83,6 +83,7 @@ pub(super) struct AppState {
     pub options: Options,
     pub stop: StopSignal,
     pub anthropic_search: Arc<super::anthropic_search_cache::Cache>,
+    pub workbuddy_delegate: Arc<super::workbuddy_delegate_runtime::Registry>,
     activity: Arc<Activity>,
     capacity: Arc<Semaphore>,
 }
@@ -177,9 +178,15 @@ pub struct Handle {
     activity: Arc<Activity>,
     task: Option<JoinHandle<Result<(), std::io::Error>>>,
     maintenance_task: Option<JoinHandle<()>>,
+    #[cfg(test)]
+    workbuddy_delegate: Arc<super::workbuddy_delegate_runtime::Registry>,
 }
 
 impl Handle {
+    #[cfg(test)]
+    pub(crate) fn set_workbuddy_test_cli(&self, executable: PathBuf, cli_path: PathBuf) {
+        self.workbuddy_delegate.set_test_cli(executable, cli_path);
+    }
     pub fn identity_store(&self) -> Arc<IdentityStore> {
         Arc::clone(&self.identity)
     }
@@ -319,6 +326,7 @@ pub async fn start(
     let state = Arc::new(AppState {
         reasoning_proofs: Default::default(),
         anthropic_search: Default::default(),
+        workbuddy_delegate: Default::default(),
         host: host.clone(),
         identity: identity.clone(),
         capacity: Arc::new(Semaphore::new(options.max_in_flight)),
@@ -441,6 +449,9 @@ pub async fn start(
             "/v1/realtime/translations",
             post(super::auxiliary::http).get(super::auxiliary::http),
         );
+    let delegate_registry = Arc::clone(&state.workbuddy_delegate);
+    #[cfg(test)]
+    let test_delegate_registry = Arc::clone(&delegate_registry);
     let router = router
         .fallback(|| async {
             ServiceError::new(
@@ -470,6 +481,7 @@ pub async fn start(
         )
         .with_graceful_shutdown(async move {
             StopSignal(receiver).wait().await;
+            delegate_registry.shutdown().await;
         })
         .await
     });
@@ -481,6 +493,8 @@ pub async fn start(
         activity,
         task: Some(task),
         maintenance_task: Some(maintenance_task),
+        #[cfg(test)]
+        workbuddy_delegate: test_delegate_registry,
     })
 }
 
@@ -843,6 +857,7 @@ mod shutdown_handoff_tests {
             activity: activity.clone(),
             task: Some(tokio::spawn(async { Ok(()) })),
             maintenance_task: None,
+            workbuddy_delegate: Default::default(),
         };
         assert!(handle.shutdown(Duration::from_millis(5)).await.is_err());
         assert!(
@@ -862,6 +877,7 @@ mod shutdown_handoff_tests {
             let state = AppState {
                 reasoning_proofs: Default::default(),
                 anthropic_search: Default::default(),
+                workbuddy_delegate: Default::default(),
                 host: Arc::new(UnusedHost),
                 identity: Arc::new(
                     IdentityStore::open(temp.path().join("identity.sqlite")).unwrap(),
@@ -899,6 +915,7 @@ mod shutdown_handoff_tests {
             let state = Arc::new(AppState {
                 reasoning_proofs: Default::default(),
                 anthropic_search: Default::default(),
+                workbuddy_delegate: Default::default(),
                 host: Arc::new(UnusedHost),
                 identity: Arc::new(
                     IdentityStore::open(temp.path().join("identity.sqlite")).unwrap(),
@@ -939,6 +956,7 @@ mod shutdown_handoff_tests {
                 activity: activity.clone(),
                 task: Some(tokio::spawn(async { Ok(()) })),
                 maintenance_task: None,
+                workbuddy_delegate: Default::default(),
             };
             assert_eq!(activity.tasks.load(Ordering::SeqCst), 1);
             assert!(handle.shutdown(Duration::from_millis(10)).await.is_err());

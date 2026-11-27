@@ -59,6 +59,7 @@ import {
 import {
   listInstances as listCodexInstances,
   openCodexInstanceConfigToml,
+  openInstanceWindow as openCodexInstanceWindow,
   startInstance as startCodexInstance,
   switchInstanceAccount,
   updateInstance as updateCodexInstance,
@@ -591,6 +592,8 @@ export function useCodexModelProviderManagerController({
     null,
   );
   const [codexInstances, setCodexInstances] = useState<InstanceProfile[]>([]);
+  const [openingInstanceId, setOpeningInstanceId] = useState<string | null>(null);
+  const [recheckInstanceOnFocus, setRecheckInstanceOnFocus] = useState(false);
   const [localAccessState, setLocalAccessState] =
     useState<CodexLocalAccessState | null>(null);
   const [lastEnabledProviderId, setLastEnabledProviderId] = useState<
@@ -1001,6 +1004,16 @@ export function useCodexModelProviderManagerController({
       setCodexInstances([]);
     }
   }, []);
+
+  useEffect(() => {
+    if (!recheckInstanceOnFocus) return;
+    const recheck = () => {
+      setRecheckInstanceOnFocus(false);
+      void reloadCodexInstances();
+    };
+    window.addEventListener("focus", recheck, { once: true });
+    return () => window.removeEventListener("focus", recheck);
+  }, [recheckInstanceOnFocus, reloadCodexInstances]);
 
   useEffect(() => {
     if (!active && !editingAccountId) return;
@@ -3023,6 +3036,28 @@ export function useCodexModelProviderManagerController({
     }
   }, [parseServiceError, t]);
 
+  async function handleOpenUninitializedInstance(instance: InstanceProfile) {
+    if (openingInstanceId) return;
+    setOpeningInstanceId(instance.id);
+    setNotice(null);
+    try {
+      if (instance.running) {
+        await openCodexInstanceWindow(instance.id);
+      } else {
+        await startCodexInstance(instance.id);
+      }
+      setRecheckInstanceOnFocus(true);
+      await reloadCodexInstances();
+    } catch (error) {
+      setNotice({ tone: "error", text: t("messages.actionFailed", {
+        action: t("common.open"),
+        error: parseServiceError(error),
+      }) });
+    } finally {
+      setOpeningInstanceId(null);
+    }
+  }
+
   const handleEnableProvider = useCallback(
     async (
       provider: CodexModelProvider,
@@ -3596,6 +3631,7 @@ export function useCodexModelProviderManagerController({
     handleDeleteBatchTestResults,
     handleDeleteProvider,
     handleEnableProvider,
+    handleOpenUninitializedInstance,
     handleOpenInstanceConfig,
     handleProviderCustomSortDragMove,
     handleProviderCustomSortDragStart,
@@ -3622,6 +3658,7 @@ export function useCodexModelProviderManagerController({
     moveProviderCustomSortProvider,
     mutateForm,
     notice,
+    openingInstanceId,
     openBatchTestModal,
     openProviderPelican,
     openCreateModal,

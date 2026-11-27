@@ -1,0 +1,26 @@
+.client-initialization-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin-top: 10px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.client-initialization-status > svg {
+  flex-shrink: 0;
+}
+
+.client-initialization-status-global {
+  position: fixed;
+  inset-block-start: 52px;
+  inset-inline-end: 24px;
+  max-width: calc(100vw - 48px);
+  z-index: 20;
+  pointer-events: none;
+}

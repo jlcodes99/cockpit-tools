@@ -23,6 +23,7 @@ import { useCodebuddyCnAccountStore } from '../stores/useCodebuddyCnAccountStore
 import { useWorkbuddyAccountStore } from '../stores/useWorkbuddyAccountStore';
 import { useMinimaxCodeAccountStore } from '../stores/useMinimaxCodeAccountStore';
 import { useQoderAccountStore } from '../stores/useQoderAccountStore';
+import { useQoderCnAccountStore } from '../stores/useQoderCnAccountStore';
 import { useZcodeAccountStore } from '../stores/useZcodeAccountStore';
 import { useT3codeAccountStore } from '../stores/useT3codeAccountStore';
 import { useTraeAccountStore } from '../stores/useTraeAccountStore';
@@ -86,6 +87,7 @@ interface GeneralConfig {
   workbuddy_auto_refresh_minutes: number;
   minimax_code_auto_refresh_minutes: number;
   qoder_auto_refresh_minutes: number;
+  qoder_cn_auto_refresh_minutes: number;
   zcode_auto_refresh_minutes: number;
   t3code_auto_refresh_minutes: number;
   trae_auto_refresh_minutes: number;
@@ -190,6 +192,7 @@ function getCurrentAccountEmails(): Record<OtherRefreshPlatform, string | null> 
     workbuddy: getProviderEmail(useWorkbuddyAccountStore, getWorkbuddyAccountDisplayEmail),
     minimaxcode: getProviderEmail(useMinimaxCodeAccountStore, getMinimaxCodeAccountDisplayEmail),
     qoder: getProviderEmail(useQoderAccountStore, getQoderAccountDisplayEmail),
+    qoder_cn: getProviderEmail(useQoderCnAccountStore, getQoderAccountDisplayEmail),
     zcode: getProviderEmail(useZcodeAccountStore, getZcodeAccountDisplayEmail),
     t3code: getProviderEmail(useT3codeAccountStore, getT3codeAccountDisplayEmail),
     zed: getProviderEmail(useZedAccountStore, getZedAccountDisplayEmail),
@@ -233,6 +236,9 @@ export function useAutoRefresh() {
   const refreshAllQoderTokens = useQoderAccountStore((state) => state.refreshAllTokens);
   const fetchCurrentQoderAccountId = useQoderAccountStore((state) => state.fetchCurrentAccountId);
   const refreshQoderToken = useQoderAccountStore((state) => state.refreshToken);
+  const refreshAllQoderCnTokens = useQoderCnAccountStore((state) => state.refreshAllTokens);
+  const fetchCurrentQoderCnAccountId = useQoderCnAccountStore((state) => state.fetchCurrentAccountId);
+  const refreshQoderCnToken = useQoderCnAccountStore((state) => state.refreshToken);
   const refreshAllZcodeTokens = useZcodeAccountStore((state) => state.refreshAllTokens);
   const fetchCurrentZcodeAccountId = useZcodeAccountStore((state) => state.fetchCurrentAccountId);
   const refreshZcodeToken = useZcodeAccountStore((state) => state.refreshToken);
@@ -269,6 +275,8 @@ export function useAutoRefresh() {
   const minimaxcodeCurrentRefreshingRef = useRef(false);
   const qoderRefreshingRef = useRef(false);
   const qoderCurrentRefreshingRef = useRef(false);
+  const qoderCnRefreshingRef = useRef(false);
+  const qoderCnCurrentRefreshingRef = useRef(false);
   const zcodeRefreshingRef = useRef(false);
   const zcodeCurrentRefreshingRef = useRef(false);
   const t3codeRefreshingRef = useRef(false);
@@ -654,6 +662,24 @@ export function useAutoRefresh() {
               },
             },
             {
+              key: 'qoder_cn',
+              label: 'Qoder CN',
+              intervalMinutes: config.qoder_cn_auto_refresh_minutes,
+              currentMinutes: resolveCurrentMinutes(
+                'qoder_cn',
+                currentAccountEmails.qoder_cn,
+                currentRefreshMinutesMap,
+              ),
+              fullRefreshingRef: qoderCnRefreshingRef,
+              currentRefreshingRef: qoderCnCurrentRefreshingRef,
+              runFullRefresh: async () => {
+                await refreshAllQoderCnTokens();
+              },
+              runCurrentRefresh: async () => {
+                await runProviderCurrentRefresh(fetchCurrentQoderCnAccountId, refreshQoderCnToken);
+              },
+            },
+            {
               key: 'zcode',
               label: 'ZCode',
               intervalMinutes: config.zcode_auto_refresh_minutes,
@@ -880,6 +906,7 @@ export function useAutoRefresh() {
     fetchCurrentGhcpAccountId,
     fetchCurrentKiroAccountId,
     fetchCurrentQoderAccountId,
+    fetchCurrentQoderCnAccountId,
     fetchCurrentZcodeAccountId,
     fetchCurrentT3codeAccountId,
     fetchTraeAccounts,
@@ -895,6 +922,7 @@ export function useAutoRefresh() {
     refreshAllGhcpTokens,
     refreshAllKiroTokens,
     refreshAllQoderTokens,
+    refreshAllQoderCnTokens,
     refreshAllZcodeTokens,
     refreshAllT3codeTokens,
     refreshAllWindsurfTokens,
@@ -909,6 +937,7 @@ export function useAutoRefresh() {
     refreshGhcpToken,
     refreshKiroToken,
     refreshQoderToken,
+    refreshQoderCnToken,
     refreshZcodeToken,
     refreshT3codeToken,
     refreshTraeToken,

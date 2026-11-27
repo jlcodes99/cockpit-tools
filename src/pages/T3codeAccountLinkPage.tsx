@@ -84,7 +84,7 @@ export function T3codeAccountLinkPage({ onNavigate }: T3codeAccountLinkPageProps
           <span>{controller.loadError}</span>
           <button
             type="button"
-            onClick={() => void controller.loadWorkspace()}
+            onClick={() => void controller.loadWorkspace(controller.targetId)}
             title={t('common.retry')}
           >
             <RefreshCw size={14} />
@@ -110,6 +110,12 @@ export function T3codeAccountLinkPage({ onNavigate }: T3codeAccountLinkPageProps
 
       <T3codeOverviewSection
         workspace={controller.activeWorkspace}
+        instanceOptions={controller.instances.map((instance) => ({
+          value: instance.id,
+          label: instance.isDefault ? t('t3code.providerWorkspace.defaultInstance') : instance.name,
+        }))}
+        targetId={controller.targetId}
+        onSelectTarget={controller.selectTarget}
         providers={controller.providers}
         t3Running={controller.t3Running}
         injectionConnected={controller.injectionConnected}
@@ -127,6 +133,7 @@ export function T3codeAccountLinkPage({ onNavigate }: T3codeAccountLinkPageProps
           if (driver === 'codex') void controller.loadApiServiceQuota();
         }}
         onSetDefault={(instance) => void controller.promoteProviderAccount(instance)}
+        onSwitch={(instance) => setModal({ kind: 'switch', instance })}
         onRemove={(instance) => setModal({ kind: 'remove', instance })}
         onConfigureRuntime={(instance) => setModal({ kind: 'runtime', instance })}
         onRefreshAll={() => void controller.handleRefreshAll()}
@@ -142,6 +149,7 @@ export function T3codeAccountLinkPage({ onNavigate }: T3codeAccountLinkPageProps
           renderPlanBadge={controller.renderPlanBadge}
           onClose={() => setModal(null)}
           onAdd={controller.addProviderAccount}
+          onSwitch={controller.switchProviderAccount}
           onRemove={controller.removeProviderInstance}
           onNavigate={onNavigate}
         />

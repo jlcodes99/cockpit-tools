@@ -501,6 +501,12 @@
   border: 1px solid var(--plan-pro-border);
 }
 
+.tier-badge.plus {
+  background: var(--plan-plus-bg);
+  color: var(--plan-plus-color);
+  border: 1px solid var(--plan-plus-border);
+}
+
 .tier-badge.pro-plus,
 .tier-badge.pro-ultimate {
   background: var(--plan-ultra-bg);
@@ -1136,4 +1142,60 @@
   align-items: center;
   gap: 4px;
   flex-shrink: 0;
+}
+
+.accounts-page .ag-account-proxy-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.accounts-page .card-actions .ag-account-proxy-btn {
+  height: 24px;
+}
+
+.accounts-page .ag-account-proxy-btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--primary);
+  border-color: color-mix(in srgb, var(--primary) 35%, var(--border));
+}
+
+.accounts-page .ag-account-proxy-btn.is-bound {
+  background: color-mix(in srgb, var(--success) 10%, var(--bg-card));
+  color: var(--text-primary);
+  border-color: color-mix(in srgb, var(--success) 45%, var(--border));
+}
+
+.accounts-page .ag-account-proxy-btn.is-bound svg {
+  color: var(--success);
+}
+
+.accounts-page .ag-account-proxy-btn.is-bound:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--success) 18%, var(--bg-card));
+}
+
+.accounts-page .ag-account-proxy-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.accounts-page .ag-account-proxy-btn:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
 }

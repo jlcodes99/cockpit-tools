@@ -79,6 +79,20 @@ export const T3CODE_PLATFORM_SPECS: readonly T3codePlatformSpec[] = [
     navPage: 'minimaxcode',
     getAccounts: (workspace) => workspace?.extraAccounts?.minimaxcode ?? [],
   },
+  {
+    driver: 'qoder',
+    label: 'Qoder',
+    platformId: 'qoder',
+    navPage: 'qoder',
+    getAccounts: (workspace) => workspace?.extraAccounts?.qoder ?? [],
+  },
+  {
+    driver: 'qoder_cn',
+    label: 'Qoder CN',
+    platformId: 'qoder_cn',
+    navPage: 'qoder-cn',
+    getAccounts: (workspace) => workspace?.extraAccounts?.qoder_cn ?? [],
+  },
 ];
 
 const PLATFORM_SPEC_MAP = new Map<T3CodeDriverKind, T3codePlatformSpec>(

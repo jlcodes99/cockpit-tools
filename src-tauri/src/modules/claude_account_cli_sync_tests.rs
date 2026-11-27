@@ -150,7 +150,7 @@ fn cli_sync_before_quota_refresh_adopts_rotation_only_from_still_bound_identity(
     assert!(sync_cli_account_from_config_dir(
         &account.id,
         &dir,
-        CliCredentialSource::BoundInstance,
+        CliCredentialSource::BoundInstance(None),
         |_| {
             fs::write(&config_path, other_org.to_string()).unwrap();
             Ok(rotated.clone())
@@ -163,7 +163,7 @@ fn cli_sync_before_quota_refresh_adopts_rotation_only_from_still_bound_identity(
     let adopted = sync_cli_account_from_config_dir(
         &account.id,
         &dir,
-        CliCredentialSource::BoundInstance,
+        CliCredentialSource::BoundInstance(None),
         |_| Ok(rotated.clone()),
     )
     .unwrap()
@@ -176,12 +176,27 @@ fn cli_sync_before_quota_refresh_adopts_rotation_only_from_still_bound_identity(
     store.instances.clear();
     crate::modules::claude_instance::save_instance_store(&store).unwrap();
     let rotated_again = credentials("newer", "newer-refresh", Some(now_ts_ms() + 7_200_000));
+    let unbound = read_cli_oauth_before_refresh_blocking(&account.id, Some(dir.clone()), |_| {
+        panic!("an unbound default CLI must not be read before refresh")
+    })
+    .unwrap();
+    assert_eq!(unbound.claude_credentials_raw, Some(rotated.clone()));
+
+    store.default_settings.bind_account_id = Some(account.id.clone());
+    store.default_settings.launch_mode = crate::models::InstanceLaunchMode::App;
+    crate::modules::claude_instance::save_instance_store(&store).unwrap();
+    let app_mode = read_cli_oauth_before_refresh_blocking(&account.id, Some(dir.clone()), |_| {
+        panic!("a default instance in app mode must not be read before refresh")
+    })
+    .unwrap();
+    assert_eq!(app_mode.claude_credentials_raw, Some(rotated.clone()));
+
+    store.default_settings.launch_mode = crate::models::InstanceLaunchMode::Cli;
+    crate::modules::claude_instance::save_instance_store(&store).unwrap();
     fs::write(&config_path, other_org.to_string()).unwrap();
-    let unchanged = read_cli_oauth_before_refresh_blocking(
-        &account.id,
-        Some(dir.clone()),
-        |_| panic!("a different organization must be rejected before reading credentials"),
-    )
+    let unchanged = read_cli_oauth_before_refresh_blocking(&account.id, Some(dir.clone()), |_| {
+        panic!("a different organization must be rejected before reading credentials")
+    })
     .unwrap();
     assert_eq!(unchanged.claude_credentials_raw, Some(rotated));
     fs::write(&config_path, config.to_string()).unwrap();

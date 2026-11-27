@@ -244,3 +244,21 @@ fn chat_compaction_omits_tool_choice_when_no_tools_remain() {
         assert_eq!(wire["tools"].as_array().unwrap().len(), 1);
     }
 }
+
+#[test]
+fn chat_conversion_drops_codex_client_metadata_but_native_chat_keeps_client_fields() {
+    let request = json!({
+        "model": "fixture",
+        "input": "hi",
+        "client_metadata": {"session_id": "s", "thread_id": "t"},
+        "prompt_cache_key": "cache",
+        "text": {"verbosity": "low"}
+    });
+    let wire = chat_upstream::responses_to_chat(&request).unwrap();
+    assert!(wire.get("client_metadata").is_none());
+    // These are valid Chat Completions fields; an explicit upstream rejection removes them.
+    assert_eq!(wire["prompt_cache_key"], "cache");
+    assert_eq!(wire["verbosity"], "low");
+    let native = chat_upstream::responses_to_native_chat(&request).unwrap();
+    assert_eq!(native["client_metadata"]["session_id"], "s");
+}

@@ -1,4 +1,6 @@
+import { QoderLaunchPathFields } from '../components/QoderCnLaunchDialog';
 import { PlatformLaunchPathField } from '../components/PlatformLaunchPathField';
+import { AntigravityDesktopSettingsFields } from '../components/antigravity/AntigravityDesktopSettings';
 import { LaunchPathSettingsButton } from '../components/LaunchPathSettingsButton';
 import { MenuBarLeftClickSetting } from '../components/MenuBarLeftClickSetting';
 import { invoke } from '@tauri-apps/api/core';
@@ -35,6 +37,7 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
     antigravityAccountGroups,
     antigravityDualSwitchNoRestartEnabled,
     antigravityLaunchOnSwitch,
+    antigravityDesktopSettings,
     antigravityScopeAccounts,
     antigravityScopeTypeOptions,
     antigravitySeamlessSwitchUnlocked,
@@ -155,7 +158,6 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
     normalizeNumberInput,
     openMenuBarQuotaModal,
     platformSettingsOrder,
-    qoderAppPath,
     qoderAutoRefresh,
     qoderAutoRefreshCustomMode,
     qoderAutoRefreshIsPreset,
@@ -163,6 +165,13 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
     qoderQuotaAlertThreshold,
     qoderQuotaAlertThresholdCustomMode,
     qoderQuotaAlertThresholdIsPreset,
+    qoderCnAutoRefresh,
+    qoderCnAutoRefreshCustomMode,
+    qoderCnAutoRefreshIsPreset,
+    qoderCnQuotaAlertEnabled,
+    qoderCnQuotaAlertThreshold,
+    qoderCnQuotaAlertThresholdCustomMode,
+    qoderCnQuotaAlertThresholdIsPreset,
     quotaAlertEnabled,
     quotaAlertThreshold,
     quotaAlertThresholdCustomMode,
@@ -180,6 +189,7 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
     saveGrokCliPath,
     setAntigravityDualSwitchNoRestartEnabled,
     setAntigravityLaunchOnSwitch,
+    setAntigravityDesktopSettings,
     setAppAutoLaunchEnabled,
     setAutoImportFromLocalEnabled,
     setAutoImportScanBusy,
@@ -251,12 +261,16 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
     setKiroQuotaAlertThresholdCustomMode,
     setLanguage,
     setMenuBarQuotaEnabled,
-    setQoderAppPath,
     setQoderAutoRefresh,
     setQoderAutoRefreshCustomMode,
     setQoderQuotaAlertEnabled,
     setQoderQuotaAlertThreshold,
     setQoderQuotaAlertThresholdCustomMode,
+    setQoderCnAutoRefresh,
+    setQoderCnAutoRefreshCustomMode,
+    setQoderCnQuotaAlertEnabled,
+    setQoderCnQuotaAlertThreshold,
+    setQoderCnQuotaAlertThresholdCustomMode,
     setQuotaAlertEnabled,
     setQuotaAlertThreshold,
     setQuotaAlertThresholdCustomMode,
@@ -1201,6 +1215,12 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
               </div>
 
               <div className="settings-row"><PlatformLaunchPathField target="antigravity_legacy" /></div>
+              <AntigravityDesktopSettingsFields
+                settings={antigravityDesktopSettings}
+                variant="general"
+                onChange={updates => setAntigravityDesktopSettings(current => ({ ...current, ...updates }))}
+              />
+              <p className="row-desc">{t('antigravityLaunch.desktopSettingsHint')}</p>
               <div className="settings-row"><PlatformLaunchPathField target="antigravity" /></div>
 
               {antigravitySeamlessSwitchUnlocked && (
@@ -2428,40 +2448,7 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                   {renderCurrentAccountRefreshRow('qoder')}
                   {renderAccountLevelRefreshConfig('qoder')}
 
-                  <div className="settings-row">
-                    <div className="row-label">
-                      <div className="row-title">{t('settings.general.qoderAppPath', 'Qoder 启动路径')}</div>
-                      <div className="row-desc">{t('settings.general.qoderAppPathDesc', '留空则使用默认路径')}</div>
-                    </div>
-                    <div className="row-control row-control--grow">
-                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flex: 1 }}>
-                        <input
-                          type="text"
-                          className="settings-input settings-input--path"
-                          value={qoderAppPath}
-                          placeholder={t('settings.general.qoderAppPathPlaceholder', '默认路径')}
-                          onChange={(e) => setQoderAppPath(e.target.value)}
-                        />
-                        <button
-                          className="btn btn-secondary"
-                          onClick={() => handlePickAppPath('qoder')}
-                          disabled={isAppPathResetDetecting('qoder')}
-                        >
-                          {t('settings.general.qoderPathSelect', '选择')}
-                        </button>
-                        <button
-                          className="btn btn-secondary"
-                          onClick={() => handleResetAppPath('qoder')}
-                          disabled={isAppPathResetDetecting('qoder')}
-                        >
-                          <RefreshCw size={16} className={isAppPathResetDetecting('qoder') ? 'spin' : undefined} />
-                          {isAppPathResetDetecting('qoder')
-                            ? t('common.loading', '加载中...')
-                            : getResetLabelByTarget('qoder')}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
+                  <QoderLaunchPathFields region="global" settingsRows />
 
                   <div className="settings-row">
                     <div className="row-label">
@@ -2525,6 +2512,33 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                       </div>
                     </div>
                   )}
+                </div>
+              </PlatformSettingsSection>
+
+              <PlatformSettingsSection platformId={'qoder_cn'} order={platformSettingsOrder.qoder_cn}>
+                <div className="group-title">{t('quickSettings.qoderCn.title', 'Qoder CN 设置')}</div>
+                <div className="settings-group">
+                  {renderPlatformAutoRefreshRow({
+                    title: t('settings.general.qoderCnAutoRefresh', 'Qoder CN 自动刷新配额'),
+                    description: t('settings.general.qoderAutoRefreshDesc', '后台自动更新频率'),
+                    value: qoderCnAutoRefresh,
+                    setValue: setQoderCnAutoRefresh,
+                    customMode: qoderCnAutoRefreshCustomMode,
+                    setCustomMode: setQoderCnAutoRefreshCustomMode,
+                    isPreset: qoderCnAutoRefreshIsPreset,
+                  })}
+                  {renderCurrentAccountRefreshRow('qoder_cn')}
+                  {renderAccountLevelRefreshConfig('qoder_cn')}
+                  {renderPlatformQuotaAlertRows({
+                    enabled: qoderCnQuotaAlertEnabled,
+                    setEnabled: setQoderCnQuotaAlertEnabled,
+                    threshold: qoderCnQuotaAlertThreshold,
+                    setThreshold: setQoderCnQuotaAlertThreshold,
+                    customMode: qoderCnQuotaAlertThresholdCustomMode,
+                    setCustomMode: setQoderCnQuotaAlertThresholdCustomMode,
+                    isPreset: qoderCnQuotaAlertThresholdIsPreset,
+                  })}
+                  <QoderLaunchPathFields region="cn" settingsRows />
                 </div>
               </PlatformSettingsSection>
 

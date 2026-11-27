@@ -2,7 +2,7 @@ use std::time::Instant;
 use tauri::{AppHandle, Emitter};
 
 use crate::models::qoder::{QoderAccount, QoderOAuthStartResponse};
-use crate::modules::{logger, qoder_account, qoder_oauth};
+use crate::modules::{logger, qoder_account, qoder_native, qoder_oauth};
 
 #[tauri::command]
 pub fn list_qoder_accounts() -> Result<Vec<QoderAccount>, String> {
@@ -42,6 +42,72 @@ pub async fn import_qoder_from_local(app: AppHandle) -> Result<Vec<QoderAccount>
         }
         None => Err("未找到本地 Qoder 登录信息".to_string()),
     }
+}
+
+/// Reads the credentials the installed global client holds. The CN platform has
+/// its own command, so a region mismatch is rejected instead of guessed.
+#[tauri::command]
+pub async fn import_qoder_native(
+    region: Option<String>,
+    client: String,
+) -> Result<Vec<QoderAccount>, String> {
+    let region = qoder_native::NativeRegion::parse(region.as_deref())?;
+    if region != qoder_native::NativeRegion::Global {
+        return Err("QODER_PLATFORM_MISMATCH".into());
+    }
+    let client = qoder_native::NativeClient::parse(&client)?;
+    let account = tauri::async_runtime::spawn_blocking(move || qoder_native::import(region, client))
+        .await
+        .map_err(|_| "QODER_NATIVE_WORKER_FAILED".to_string())??;
+    Ok(vec![account])
+}
+
+/// Result of writing into a native client and optionally launching it.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QoderNativeSwitchOutcome {
+    account_id: String,
+    relaunched: bool,
+}
+
+/// Writes one account into the installed global desktop or CLI client.
+#[tauri::command]
+pub async fn inject_qoder_native(
+    app: AppHandle,
+    account_id: String,
+    client: String,
+    launch: Option<bool>,
+    working_dir: Option<String>,
+    terminal: Option<String>,
+) -> Result<QoderNativeSwitchOutcome, String> {
+    let launch = launch.unwrap_or(false);
+    if client == "ide" {
+        let result = if launch {
+            super::qoder_instance::start_qoder_instance("__default__".into(), Some(account_id.clone()))
+                .await.map(|_| ())
+        } else {
+            super::qoder_instance::switch_qoder_ide_only(account_id.clone()).await
+        };
+        if result.is_ok() || result.as_ref().is_err_and(|error| error.starts_with("QODER_SWITCH_LAUNCH_FAILED:")) {
+            let _ = crate::modules::tray::update_tray_menu(&app);
+        }
+        result?;
+        return Ok(QoderNativeSwitchOutcome { account_id, relaunched: launch });
+    }
+    let target = qoder_native::NativeClient::parse(&client)?;
+    qoder_oauth::prepare_account_for_switch(&account_id).await?;
+    let id = account_id.clone();
+    let relaunched = tauri::async_runtime::spawn_blocking(move || {
+        crate::modules::qoder_cn_clients::switch_global_native(
+            &id, target, launch, working_dir.map(std::path::PathBuf::from), terminal,
+        )
+    })
+    .await
+    .map_err(|_| "QODER_NATIVE_WORKER_FAILED".to_string())??;
+    Ok(QoderNativeSwitchOutcome {
+        account_id,
+        relaunched,
+    })
 }
 
 #[tauri::command]
@@ -149,6 +215,9 @@ pub async fn refresh_qoder_token(
             if let Some(error) = &account.quota_query_last_error {
                 return Err(error.clone());
             }
+            if let Err(error) = qoder_account::run_quota_alert_if_needed() {
+                logger::log_warn(&format!("[Qoder Command] 配额预警检查失败: {error}"));
+            }
             Ok(account)
         }
         Err(err) => {
@@ -169,6 +238,9 @@ pub async fn refresh_all_qoder_tokens(app: AppHandle) -> Result<i32, String> {
     logger::log_info("[Qoder Command] 批量刷新开始");
     let refreshed = qoder_oauth::refresh_all_accounts_from_openapi().await?;
     let _ = crate::modules::tray::update_tray_menu(&app);
+    if let Err(error) = qoder_account::run_quota_alert_if_needed() {
+        logger::log_warn(&format!("[Qoder Command] 配额预警检查失败: {error}"));
+    }
     logger::log_info(&format!(
         "[Qoder Command] 批量刷新完成: refreshed={}, elapsed={}ms",
         refreshed,

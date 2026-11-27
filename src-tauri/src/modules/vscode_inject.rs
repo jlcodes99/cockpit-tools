@@ -65,6 +65,9 @@ enum SafeStorageReadMode {
     CodeBuddyOnly,
     CodeBuddyCnOnly,
     QoderOnly,
+    QoderDesktopOnly,
+    QoderCnDesktopOnly,
+    QoderCnIdeOnly,
     WorkBuddyOnly,
 }
 
@@ -577,6 +580,19 @@ fn build_macos_safe_storage_candidates(
             ("Qoder Safe Storage".to_string(), None),
             ("Qoder App Safe Storage".to_string(), None),
         ]);
+    }
+
+    if matches!(mode, SafeStorageReadMode::QoderDesktopOnly) {
+        return vec![("Qoder App Safe Storage".to_string(), None)];
+    }
+    if matches!(mode, SafeStorageReadMode::QoderCnDesktopOnly) {
+        return vec![("Qoder CN App Safe Storage".to_string(), None)];
+    }
+    if matches!(mode, SafeStorageReadMode::QoderCnIdeOnly) {
+        return vec![
+            ("Qoder CN Safe Storage".to_string(), None),
+            ("QoderCN Safe Storage".to_string(), None),
+        ];
     }
 
     if matches!(mode, SafeStorageReadMode::WorkBuddyOnly) {
@@ -1880,11 +1896,78 @@ pub(crate) fn qoder_storage_ready(data_root: &Path) -> Result<bool, String> {
     }
 }
 
+pub(crate) fn client_secret_storage_ready(platform: &str, root: &Path) -> Result<bool, String> {
+    #[cfg(target_os = "macos")]
+    {
+        let mode = match platform {
+            "qoder_desktop" | "qoder_cn_desktop" => qoder_desktop_safe_storage_mode(root)?,
+            "qoder_cn_ide" => SafeStorageReadMode::QoderCnIdeOnly,
+            "qoder" => SafeStorageReadMode::QoderOnly,
+            "codebuddy" => SafeStorageReadMode::CodeBuddyOnly,
+            "codebuddy_cn" => SafeStorageReadMode::CodeBuddyCnOnly,
+            _ => SafeStorageReadMode::Default,
+        };
+        match get_macos_safe_storage_password(Some(root), mode) {
+            Ok(_) => Ok(true),
+            Err(error) if error == "Failed to read Safe Storage password from Keychain" => Ok(false),
+            Err(error) => Err(error),
+        }
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let _ = platform;
+        match get_windows_encryption_key(Some(root)) {
+            Ok(_) => Ok(true),
+            Err(error) if error.starts_with("VS Code Local State not found:")
+                || error == "Cannot find os_crypt.encrypted_key in Local State" => Ok(false),
+            Err(error) => Err(error),
+        }
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        let _ = (platform, root);
+        Ok(true)
+    }
+}
+
 pub fn inject_qoder_secret_snapshot(
     db_path: &Path,
     entries: &[(&str, &str)],
 ) -> Result<(), String> {
     inject_secret_batch_with_mode(db_path, entries, SafeStorageReadMode::QoderOnly)
+}
+
+#[cfg(target_os = "macos")]
+fn qoder_desktop_safe_storage_mode(root: &Path) -> Result<SafeStorageReadMode, String> {
+    match root.file_name().and_then(|name| name.to_str()) {
+        Some("com.qoder.app.stable") => Ok(SafeStorageReadMode::QoderDesktopOnly),
+        Some("com.qodercn.app.stable") => Ok(SafeStorageReadMode::QoderCnDesktopOnly),
+        _ => Err("QODER_NATIVE_DESKTOP_UNSUPPORTED".into()),
+    }
+}
+
+#[cfg(target_os = "macos")]
+pub(crate) fn decode_qoder_desktop(root: &Path, bytes: &[u8]) -> Result<Vec<u8>, String> {
+    let mode = qoder_desktop_safe_storage_mode(root)?;
+    let password = get_macos_safe_storage_password(Some(root), mode)?;
+    decrypt_cbc_prefixed(bytes, V10_PREFIX, &pbkdf2_sha1_key(&password, 1003))
+        .map_err(|_| "QODER_NATIVE_DECRYPT_FAILED".into())
+}
+
+#[cfg(target_os = "macos")]
+pub(crate) fn encode_qoder_desktop(root: &Path, bytes: &[u8]) -> Result<Vec<u8>, String> {
+    let mode = qoder_desktop_safe_storage_mode(root)?;
+    let password = get_macos_safe_storage_password(Some(root), mode)?;
+    encrypt_cbc_prefixed(V10_PREFIX, &pbkdf2_sha1_key(&password, 1003), bytes)
+        .map_err(|_| "QODER_NATIVE_ENCRYPT_FAILED".into())
+}
+
+#[cfg(target_os = "macos")]
+pub(crate) fn inject_qoder_cn_ide_secret_snapshot(
+    db_path: &Path,
+    entries: &[(&str, &str)],
+) -> Result<(), String> {
+    inject_secret_batch_with_mode(db_path, entries, SafeStorageReadMode::QoderCnIdeOnly)
 }
 
 pub fn inject_secret_to_state_db_for_workbuddy(
@@ -1925,18 +2008,23 @@ fn inject_secret_batch_with_mode(
             )
         })?;
 
-    if let Some(parent) = db_path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| format!("Failed to create state.vscdb parent dir: {}", e))?;
+    let cn_ide = matches!(mode, SafeStorageReadMode::QoderCnIdeOnly);
+    let mut conn = if cn_ide {
+        rusqlite::Connection::open_with_flags(db_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_WRITE)
+    } else {
+        if let Some(parent) = db_path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("Failed to create state.vscdb parent dir: {}", e))?;
+        }
+        rusqlite::Connection::open(db_path)
+    }.map_err(|e| format!("Failed to open state.vscdb: {}", e))?;
+    if !cn_ide {
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS ItemTable (key TEXT PRIMARY KEY, value TEXT)",
+            [],
+        )
+        .map_err(|e| format!("Failed to init ItemTable: {}", e))?;
     }
-
-    let mut conn = rusqlite::Connection::open(db_path)
-        .map_err(|e| format!("Failed to open state.vscdb: {}", e))?;
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS ItemTable (key TEXT PRIMARY KEY, value TEXT)",
-        [],
-    )
-    .map_err(|e| format!("Failed to init ItemTable: {}", e))?;
 
     let mut prepared = Vec::with_capacity(entries.len());
     // Finish keychain/encryption work before taking the SQLite write transaction.
@@ -1967,6 +2055,12 @@ fn inject_secret_batch_with_mode(
             mode,
         )?;
 
+        if cn_ide
+            && decrypt_secret_payload_with_mode(&encrypted, Some(data_root), mode)? != plaintext.as_bytes()
+        {
+            return Err("QODER_NATIVE_READBACK_FAILED".into());
+        }
+
         let buffer_json = serde_json::json!({
             "type": "Buffer",
             "data": encrypted
@@ -1993,12 +2087,36 @@ fn write_secret_snapshot(
         )
         .map_err(|e| e.to_string())?;
     }
+    for (key, value) in entries {
+        let stored: String = tx.query_row("SELECT value FROM ItemTable WHERE key = ?1", [key], |row| row.get(0))
+            .map_err(|error| error.to_string())?;
+        if stored != *value {
+            return Err("QODER_NATIVE_READBACK_FAILED".into());
+        }
+    }
     tx.commit().map_err(|e| e.to_string())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn qoder_desktop_profiles_use_separate_keychain_services() {
+        for (directory, service) in [
+            ("com.qoder.app.stable", "Qoder App Safe Storage"),
+            ("com.qodercn.app.stable", "Qoder CN App Safe Storage"),
+        ] {
+            let root = Path::new(directory);
+            let mode = qoder_desktop_safe_storage_mode(root).unwrap();
+            assert_eq!(
+                build_macos_safe_storage_candidates(Some(root), mode),
+                vec![(service.to_owned(), None)],
+            );
+        }
+        assert!(qoder_desktop_safe_storage_mode(Path::new("Qoder")).is_err());
+    }
 
     #[cfg(target_os = "macos")]
     #[test]

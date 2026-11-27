@@ -166,7 +166,12 @@ impl ProviderProfileSnapshot {
                         extra_files.extend([home.join("auth.json"), home.join("auth-state.json")]);
                         &[]
                     }
-                    _ => return Err(super::message("switchTargetChanged")),
+                    platform => {
+                        let provider = extensions::QoderProvider::from_platform(platform)
+                            .ok_or_else(|| super::message("switchTargetChanged"))?;
+                        extra_files.extend(provider.auth_paths(state_dir, instance, account_id));
+                        &[]
+                    }
                 };
                 extra_files.push(root.join("binding-meta.json"));
                 (root, names, ProfileStore::Files)

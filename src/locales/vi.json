@@ -1,5 +1,17 @@
 {
   "antigravityLaunch": {
+    "desktopLanguage": "Ngôn ngữ giao diện máy tính",
+    "desktopLanguageEnglish": "Tiếng Anh",
+    "desktopLayout": "Bố cục",
+    "desktopLayoutEngineering": "Kỹ thuật phần mềm",
+    "desktopLayoutKnowledge": "Công việc tri thức",
+    "desktopPermission": "Quyền cục bộ mặc định",
+    "desktopPermissionReview": "Yêu cầu xem xét",
+    "desktopPermissionDefault": "Mặc định",
+    "desktopPermissionAuto": "Tự động",
+    "desktopPermissionTurbo": "Hoàn toàn tự động",
+    "desktopSettingsHint": "Bố cục và quyền cục bộ được áp dụng khi khởi chạy Antigravity từ Cockpit Tools.",
+    "desktopLanguageChinese": "Tiếng Trung giản thể",
     "initializeTitle": "Antigravity IDE chưa được khởi tạo",
     "initializeThenSwitch": "Mở IDE một lần để có thể chuyển tài khoản.",
     "initializeThenBind": "Khởi chạy phiên bản một lần để liên kết tài khoản.",
@@ -20,7 +32,6 @@
     "sharedInstanceStarted": "Đã cập nhật đăng nhập và gửi yêu cầu khởi chạy.",
     "sharedInstanceLaunchFailed": "Đã cập nhật đăng nhập nhưng không thể khởi chạy: {{error}}",
     "sharedCopySource": "Sao chép thư mục cấu hình của phiên bản đã chọn.",
-    "quickSwitchSetting": "Áp dụng khi đổi nhanh tài khoản Antigravity IDE. Trong hộp thoại tài khoản, bạn có thể chọn có mở ứng dụng ở mỗi lần đổi.",
     "title": "Chọn ứng dụng",
     "switchOnly": "Chỉ đổi tài khoản",
     "switchAndLaunch": "Đổi và mở",
@@ -33,7 +44,8 @@
     "cliAuth": "agy dùng thiết lập xác thực riêng. Khóa API hoặc thông tin xác thực Google Cloud sẽ được ưu tiên nếu đã cấu hình.",
     "cliMissing": "Không tìm thấy agy. Hãy cài Antigravity CLI chính thức và thử lại.",
     "terminalFailed": "Không chuẩn bị được cửa sổ dòng lệnh. {{error}}",
-    "switchedTerminalFailed": "Đã đổi tài khoản nhưng không mở được cửa sổ dòng lệnh. {{error}}"
+    "switchedTerminalFailed": "Đã đổi tài khoản nhưng không mở được cửa sổ dòng lệnh. {{error}}",
+    "quickSwitchSetting": "Áp dụng khi đổi nhanh tài khoản Antigravity IDE. Trong hộp thoại tài khoản, bạn có thể chọn có mở ứng dụng ở mỗi lần đổi."
   },
   "pelican": {
     "caseKinds": {
@@ -194,6 +206,7 @@
     "providerClear": "Bỏ chọn"
   },
   "common": {
+    "commonSettings": "Cài đặt thường dùng",
     "automation": {
       "invalidPlatform": "Không nhận ra nền tảng tài khoản. Chạy cockpit-cli account platforms để xem các mã được hỗ trợ.",
       "hostUnavailable": "Khởi động ứng dụng Cockpit Tools với thư mục dữ liệu này rồi thử lại.",
@@ -233,6 +246,7 @@
     "dataQueryBusy": "Dữ liệu đang được xử lý. Vui lòng thử lại sau ít phút.",
     "historyRestoring": "Đang khôi phục lịch sử…",
     "apiBudget": {
+      "sharedPool": "Hạn mức chung",
       "keyScope": "Khóa này",
       "upgradeRequired": "Cập nhật Cockpit Tools trên máy tính cổng để xem thống kê và lịch sử yêu cầu.",
       "gatewayName": "Cổng Cockpit",
@@ -279,7 +293,10 @@
       "proxyAuth": "Xác thực proxy “{{proxy}}” thất bại. Hãy kiểm tra tên người dùng hoặc mật khẩu proxy.",
       "localProxyUnavailable": "Không thể kết nối đến proxy cục bộ “{{proxy}}”. Hãy kiểm tra dịch vụ proxy có đang chạy không.",
       "directConnection": "Không thể kết nối đến {{target}}. Hãy kiểm tra mạng và thử lại.",
-      "directTimeout": "Kết nối đến {{target}} đã hết thời gian chờ. Hãy kiểm tra mạng và thử lại."
+      "directTimeout": "Kết nối đến {{target}} đã hết thời gian chờ. Hãy kiểm tra mạng và thử lại.",
+      "recoveryExhaustedLargeRequest": "Các lỗi hoặc hết thời gian chờ lặp lại từ upstream đã dừng tự động thử lại cho yêu cầu lớn này ({{size}}). Lịch sử hội thoại hoặc dữ liệu hình ảnh quá lớn có thể đã vượt quá thời gian tải lên hoặc chờ phản hồi; hãy nén hội thoại hoặc tạo hội thoại mới rồi thử lại. Lỗi này không có nghĩa là hết hạn mức tài khoản.",
+      "proxyLargeRequestTimeout": "Gửi yêu cầu lớn ({{size}}) tới {{target}} qua proxy “{{proxy}}” đã hết thời gian chờ trước khi nhận phản hồi. Lịch sử hoặc hình ảnh quá lớn có thể vượt quá giới hạn của proxy hoặc upstream; hãy nén hội thoại, tạo hội thoại mới hoặc kiểm tra proxy.",
+      "directLargeRequestTimeout": "Gửi yêu cầu lớn ({{size}}) tới {{target}} đã hết thời gian chờ trước khi nhận phản hồi. Lịch sử hoặc hình ảnh quá lớn có thể vượt quá thời gian tải lên hoặc xử lý upstream; hãy nén hội thoại hoặc tạo hội thoại mới rồi thử lại."
     },
     "codexUsage": {
       "responseSpeed": "Tốc độ trả lời",
@@ -836,7 +853,8 @@
     "apiRelay": "Trạm chuyển",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "qoderCn": "Qoder CN"
   },
   "sponsors": {
     "pageTitle": "Nhà tài trợ",
@@ -948,6 +966,7 @@
       "syncThreads": "Bổ sung phiên còn thiếu vào mọi phiên bản và chỉ nối thêm nội dung mới khi phiên bản đích đã dừng và lịch sử khớp. Các byte hiện có được giữ nguyên. Từ chối cập nhật lịch sử phân nhánh hoặc đích đang chạy. Sao lưu tệp đích trước khi ghi. Tiếp tục?"
     },
     "status": {
+      "firstLaunchInitializing": "Đang chuẩn bị lần khởi động đầu tiên…",
       "running": "Đang chạy",
       "stopped": "Đã dừng",
       "restarting": "Đang khởi động lại",
@@ -1117,6 +1136,7 @@
       "empty": "Không có hạn ngạch trong bộ nhớ đệm"
     },
     "messages": {
+      "firstLaunchTimedOut": "Thiết lập ban đầu chưa hoàn tất. Nếu ứng dụng yêu cầu đăng nhập hoặc cấp quyền truy cập, hãy hoàn tất bước đó rồi thử lại.",
       "created": "Đã tạo phiên bản",
       "emptyCreated": "Đã tạo phiên bản trống. Hãy khởi chạy một lần trước khi liên kết tài khoản.",
       "existingDirCreated": "Đã tạo phiên bản bằng thư mục đã chọn.",
@@ -1555,8 +1575,6 @@
       "claudeShareCodeSessionsOnSwitchDesc": "Chia sẻ danh sách phiên Code giữa các tài khoản cục bộ khi chuyển hồ sơ Claude Desktop mặc định trên macOS.",
       "claudeAppPath": "Mục tiêu khởi chạy Claude Desktop",
       "claudeAppPathDesc": "Hồ sơ mặc định có thể dùng mục tiêu Microsoft Store; hồ sơ đa phiên bản cần Claude.exe thật.",
-      "antigravityLaunchOnSwitch": "Khởi chạy Antigravity IDE khi chuyển",
-      "antigravityLaunchOnSwitchDesc": "Khi tắt, việc chuyển chỉ ghi dữ liệu tài khoản mặc định của Antigravity IDE và không đóng, khởi chạy hoặc khởi động lại ứng dụng.",
       "tokenKeeper": "Giữ auth",
       "tokenKeeperDesc": "Chỉ làm mới Token tài khoản theo từng nhóm nhỏ khi ủy quyền sắp hết hạn, giảm áp lực yêu cầu nền khi có nhiều tài khoản.",
       "platformAutoRefresh": "Tự động làm mới hạn ngạch {{platform}}",
@@ -1643,7 +1661,14 @@
       "t3codeAutoRefresh": "Tự động làm mới hạn mức T3 Code",
       "t3codeAutoRefreshDesc": "Chu kỳ làm mới hạn mức dưới nền",
       "t3codeAppUiInjection": "Viên nang hạn mức trong cuộc trò chuyện T3 Code",
-      "t3codeAppUiInjectionDesc": "Khi khởi chạy T3 Code từ Cockpit, ô soạn thảo hiển thị dòng mô hình đã chọn và hạn mức còn lại. Nhấp để xem chi tiết tài khoản và mức sử dụng."
+      "t3codeAppUiInjectionDesc": "Khi khởi chạy T3 Code từ Cockpit, ô soạn thảo hiển thị dòng mô hình đã chọn và hạn mức còn lại. Nhấp để xem chi tiết tài khoản và mức sử dụng.",
+      "qoderCnAppPath": "Đường dẫn khởi chạy Qoder CN",
+      "qoderCnAppPathDesc": "Để trống để tự động phát hiện. Khi chuyển tài khoản, ứng dụng máy tính sẽ đóng và khởi động lại.",
+      "qoderCnAppPathPlaceholder": "Đường dẫn mặc định",
+      "qoderCnPathReset": "Đặt lại mặc định",
+      "antigravityLaunchOnSwitch": "Khởi chạy Antigravity IDE khi chuyển",
+      "antigravityLaunchOnSwitchDesc": "Khi tắt, việc chuyển chỉ ghi dữ liệu tài khoản mặc định của Antigravity IDE và không đóng, khởi chạy hoặc khởi động lại ứng dụng.",
+      "qoderCnAutoRefresh": "Tự động làm mới hạn ngạch Qoder CN"
     },
     "network": {
       "apiTitle": "API Antigravity Cockpit",
@@ -5295,7 +5320,12 @@
         "maxConcurrentImageRequests": "Yêu cầu ảnh mỗi tài khoản",
         "maxAccountConcurrency": "Đồng thời mỗi tài khoản",
         "accountConcurrencyWait": "Chờ (giây)",
-        "optionsSaved": "Đã lưu tùy chọn định tuyến"
+        "optionsSaved": "Đã lưu tùy chọn định tuyến",
+        "accountConcurrencyLimit": "Giới hạn đồng thời",
+        "accountConcurrencyUnlimited": "Không giới hạn",
+        "accountConcurrencyHint": "Ghi đè mức đồng thời cho tài khoản này (0 là không giới hạn, tối đa 64). Để trống để dùng giới hạn chung.",
+        "accountConcurrencyInvalid": "Nhập số nguyên từ 0 đến 64.",
+        "accountConcurrencySaveFailed": "Không thể lưu giới hạn đồng thời của tài khoản."
       },
       "validation": {
         "numberRange": "Nhập số từ {{min}} đến {{max}}"
@@ -6575,7 +6605,8 @@
         "canceled": "Máy khách đã hủy yêu cầu; đây không phải lỗi hết thời gian mở luồng.",
         "gateway": "HTTP 504 là lỗi hết thời gian chờ cổng. Bản ghi chưa xác định nguyên nhân; xem lỗi máy chủ nguồn và giai đoạn yêu cầu.",
         "threshold": "Ngưỡng áp dụng cho yêu cầu này: {{seconds}} giây.",
-        "settings": "Chỉnh thời gian chờ"
+        "settings": "Chỉnh thời gian chờ",
+        "largeRequest": "Kích thước yêu cầu đã ghi nhận: {{size}}. Lịch sử quá lớn hoặc hình ảnh nhúng dễ gây hết thời gian khi tải lên hoặc chờ phản hồi đầu tiên; nên nén hội thoại hoặc tạo hội thoại mới."
       },
       "identity": {
         "title": "Danh tính phiên và tài khoản",
@@ -7101,6 +7132,14 @@
     "t3code": {
       "title": "Cài đặt T3 Code",
       "appPath": "Đường dẫn khởi chạy T3 Code"
+    },
+    "validation": {
+      "refreshIntervalInvalid": "Nhập số nguyên từ 1 đến 999, hoặc -1 để tắt tự động làm mới.",
+      "quotaAlertThresholdInvalid": "Nhập số nguyên từ 0 đến 100."
+    },
+    "disableRefreshHint": "-1 sẽ tắt tự động làm mới.",
+    "qoderCn": {
+      "title": "Cài đặt Qoder CN"
     }
   },
   "quotaAlert": {
@@ -7802,7 +7841,21 @@
       "switchLaunchFailed": "Đã ghi tài khoản nhưng không khởi động được Qoder IDE. {{detail}}",
       "refreshCount": "Đã làm mới {{count}} trên {{total}} tài khoản.",
       "launchUnconfirmed": "Không xác nhận được Qoder IDE đã khởi chạy.",
-      "workerFailed": "Tác vụ nền Qoder thất bại. {{detail}}"
+      "workerFailed": "Tác vụ nền Qoder thất bại. {{detail}}",
+      "oauthUrlEmpty": "URL ủy quyền Qoder OAuth đang trống.",
+      "qoderCnPathMissing": "Không tìm thấy Qoder CN Desktop. Hãy đặt đường dẫn khởi chạy trong Cài đặt hoặc cài đặt ứng dụng rồi thử lại.",
+      "platformMismatch": "Tài khoản này thuộc bản dựng của khu vực khác và không thể ghi vào ứng dụng hiện tại.",
+      "cnRelaunchFailed": "Đã chuyển tài khoản nhưng không khởi động được ứng dụng Qoder CN. {{detail}}",
+      "cnDesktopUnsupported": "Dùng CLI để chuyển tài khoản Qoder CN trên hệ thống này.",
+      "clientInvalid": "Loại ứng dụng không hợp lệ. Hãy chọn lại mục tiêu chuyển đổi.",
+      "nativeTokenMissing": "Tài khoản này thiếu thông tin đăng nhập có thể ghi. Hãy cấp quyền lại hoặc nhập lại.",
+      "nativeWriteVerifyFailed": "Xác minh thông tin đăng nhập sau khi ghi thất bại và đã thử khôi phục trạng thái ban đầu. Hãy đóng ứng dụng rồi thử lại.",
+      "nativeKeyUnreadable": "Không đọc được khóa thông tin đăng nhập cục bộ. Hãy đảm bảo Cockpit và Qoder chạy dưới cùng một tài khoản hệ thống.",
+      "nativeImportInvalid": "Thông tin đăng nhập đã nhập không có thông tin tài khoản nên không thể xác định tài khoản.",
+      "nativeImportFailed": "Nhập thông tin đăng nhập Qoder cục bộ thất bại. Hãy đăng nhập trong ứng dụng trước rồi thử lại.",
+      "nativeProcessProbeFailed": "Không phát hiện được trạng thái tiến trình Qoder. Hãy thử lại sau.",
+      "regionUnsupported": "Không xác định được bản dựng khu vực của tài khoản. Hãy cấp quyền lại.",
+      "clientRunning": "Hãy đóng {{client}} trước khi chuyển tài khoản."
     },
     "title": "Quản lý tài khoản Qoder",
     "comingSoon": {
@@ -7844,6 +7897,38 @@
     },
     "empty": {
       "desc": "Nhấp vào \"Thêm tài khoản\" để sử dụng đăng nhập xác thực, nhập cục bộ hoặc nhập JSON."
+    },
+    "region": {
+      "cn": "Qoder CN · Trung Quốc",
+      "global": "Qoder · Quốc tế"
+    },
+    "clientTarget": {
+      "importSource": "Nguồn nhập cục bộ",
+      "initializeHint": "Mở ứng dụng đã chọn, hoàn tất thiết lập rồi thử lại.",
+      "label": "Đích chuyển đổi / nhập cục bộ",
+      "ariaLabel": "Ứng dụng khách Qoder",
+      "desktop": "Qoder Desktop",
+      "desktopCn": "Qoder CN Desktop",
+      "cli": "Qoder CLI",
+      "cliCn": "Qoder CN CLI",
+      "ide": "Qoder IDE",
+      "switchSuccess": "Đã chuyển tài khoản. Hãy mở lại ứng dụng khách đích.",
+      "windowsOnly": " (chỉ Windows)",
+      "desktopSwitchSuccess": "Đã chuyển tài khoản. {{client}} đã được khởi động lại.",
+      "relaunchFailed": "Đã chuyển tài khoản nhưng không thể tự động khởi chạy {{client}}. Hãy mở thủ công."
+    },
+    "cn": {
+      "nativeOnly": "Chọn Desktop hoặc CLI cho tài khoản Qoder CN.",
+      "ideUnavailable": "Chọn Desktop hoặc CLI cho tài khoản Qoder CN. Bộ chuyển đổi IDE tại đây chỉ dành cho phiên bản quốc tế.",
+      "instancesUnsupported": "Qoder CN Desktop và CLI hỗ trợ chuyển tài khoản cho ứng dụng khách mặc định. Chưa hỗ trợ chạy nhiều phiên bản ứng dụng.",
+      "flowNoticeDesc": "Hỗ trợ đăng nhập chính thức, nhập cục bộ từ ứng dụng máy tính hoặc CLI, nhập JSON và kiểm tra hạn mức. Bạn có thể chỉ chuyển tài khoản hoặc mở luôn ứng dụng đã chọn.",
+      "flowNoticePermission": "Tính năng nhập cục bộ đọc phiên đăng nhập của ứng dụng máy tính hoặc CLI. Thao tác chuyển tài khoản chỉ cập nhật phiên đăng nhập cục bộ của ứng dụng Qoder CN đã chọn.",
+      "flowNoticeNetwork": "Phạm vi mạng: đăng nhập chính thức kết nối với dịch vụ Qoder CN để hoàn tất callback; truy vấn hạn mức lấy dữ liệu sử dụng qua API Qoder CN. Khóa và thông tin đăng nhập cục bộ không bao giờ được tải lên.",
+      "flowNoticeTitle": "Huong dan tai khoan Qoder CN (nhan de mo rong/thu gon)",
+      "oauthHint": "Nhấp vào nút bên dưới để hoàn tất ủy quyền OAuth tài khoản Qoder CN trong trình duyệt.",
+      "importJsonHint": "Nhập file Qoder CN JSON được xuất từ công cụ này.",
+      "importLocalDesc": "Đọc trạng thái đăng nhập hiện tại từ ứng dụng Qoder CN cục bộ, bao gồm thông tin người dùng, gói và mức sử dụng tín dụng.",
+      "importLocalSuccess": "Đã nhập tài khoản từ Qoder CN cục bộ."
     }
   },
   "trae": {
@@ -8231,7 +8316,38 @@
       "logHits": "Khớp {{count}} lần trong nhật ký"
     },
     "exposeToCodex": {
-      "title": "Kết nối qua cổng Native Rust mà không sao chép token WorkBuddy"
+      "title": "Kết nối qua cổng Native Rust mà không sao chép token WorkBuddy",
+      "textOnlyTitle": "Chế độ Native ACP cũ chỉ hỗ trợ văn bản thuần. Để đọc, ghi tệp và chạy lệnh, hãy dùng cầu nối công cụ Codex.",
+      "textOnlyAction": "Kết nối Codex (chỉ văn bản)"
+    },
+    "nativeCodex": {
+      "managedKeyRotation": "Key này do cầu nối công cụ gốc của WorkBuddy quản lý. Để thay đổi, hãy thu hồi cấu hình này rồi tạo cấu hình mới.",
+      "nativeRequired": "Trước tiên, hãy tạo và bật dịch vụ Native Rust trên trang dịch vụ API. Chế độ sẽ không tự động thay đổi.",
+      "enterpriseUnsupported": "Phiên bản đầu tiên chưa bảo đảm ràng buộc chính xác với bên thuê doanh nghiệp; chỉ hỗ trợ tài khoản WorkBuddy cá nhân.",
+      "revokedFilesPreserved": "Key chuyên dụng đã được thu hồi. Các tệp cấu hình đã bị sửa đổi hoặc không thể dọn dẹp an toàn, nên toàn bộ tệp đã sửa và dữ liệu phiên đều được giữ lại. Bạn có thể kiểm tra tệp rồi thử khôi phục lại.",
+      "notOwned": "Bằng chứng sở hữu cấu hình không khớp với Key chuyên dụng. Không có Key nào bị thay đổi. Hãy kiểm tra dấu xác nhận quyền sở hữu trong thư mục cấu hình.",
+      "profileChanged": "Cấu hình độc lập này đã bị sửa đổi. Chương trình sẽ không ghi đè thay đổi của bạn.",
+      "selectionChanged": "Mô hình hoặc mức suy luận không còn khả dụng. Hãy tải lại danh mục và chọn lại.",
+      "sourceUnavailable": "Tài khoản nguồn WorkBuddy này không khả dụng. Hãy kiểm tra trạng thái đăng nhập. Hệ thống sẽ không thử tài khoản khác.",
+      "operationFailed": "Thao tác thất bại. Hãy kiểm tra WorkBuddy CLI đã được cài đặt và tài khoản còn hợp lệ, rồi tải lại danh mục.",
+      "title": "WorkBuddy → Codex — cầu nối công cụ gốc",
+      "scope": "Tạo Key cục bộ chuyên dụng gắn với một tài khoản nguồn cố định và CODEX_HOME độc lập. Codex tự thực thi công cụ. Mã thông báo WorkBuddy không được ghi vào cấu hình Codex; thông tin đăng nhập mặc định và Key chính của dịch vụ API cũng không bị thay đổi.",
+      "account": "Tài khoản nguồn WorkBuddy",
+      "noSourceSelected": "Chưa có tài khoản nguồn khả dụng; bạn vẫn có thể quản lý các cấu hình đã tạo",
+      "model": "Mô hình hiện có của CLI",
+      "readCatalog": "Hãy tải danh mục hiện tại",
+      "effort": "Mức suy luận",
+      "metadataOnly": "Việc tải danh mục chỉ khởi tạo CLI, không gửi lời nhắc đến mô hình. Mô hình và mức suy luận sẽ được kiểm tra lại trước khi tạo. Nếu tài khoản nguồn mất hiệu lực, hệ thống báo lỗi ngay và không chuyển sang tài khoản khác. Chỉ hỗ trợ HTTP Responses. Tìm kiếm web (web_search) đã bị tắt trong cấu hình độc lập; không hỗ trợ hình ảnh, các công cụ được lưu trữ khác, compact hoặc WebSocket.",
+      "refreshCatalog": "Tải lại danh mục",
+      "managedProfile": "Cấu hình độc lập đã tạo",
+      "profileSource": "Tài khoản nguồn: ",
+      "profileSourceMissing": "Tài khoản nguồn đã bị xóa; bạn vẫn có thể thu hồi Key chuyên dụng và khôi phục cấu hình độc lập.",
+      "profileSourceUnavailable": "Tài khoản nguồn hiện không khả dụng. Việc thu hồi và khôi phục không phụ thuộc vào trạng thái đăng nhập của tài khoản nguồn.",
+      "launchHelp": "Trong terminal, chuyển đến thư mục dự án rồi chạy lệnh bên dưới. Cấu hình này chỉ áp dụng cho lần khởi chạy Codex đó.",
+      "retryRestore": "Thử khôi phục lại (Key đã thu hồi)",
+      "restore": "Thu hồi Key chuyên dụng và khôi phục cấu hình này",
+      "create": "Tạo Key chuyên dụng và cấu hình độc lập",
+      "open": "Cầu nối công cụ Codex"
     }
   },
   "minimaxCode": {
@@ -8989,7 +9105,6 @@
     "quota": {
       "cliUnavailable": "Không có dữ liệu dùng CLI",
       "weekly": "Mức dùng hằng tuần",
-      "sharedPool": "Hạn mức chung",
       "monthly": "Mức dùng tháng",
       "onDemand": "Mức dùng theo nhu cầu",
       "balance": "Số dư và tín dụng",
@@ -9622,6 +9737,15 @@
     "saved": "Đã lưu. Áp dụng cho yêu cầu mới."
   },
   "antigravityTokenUsage": {
+    "context": {
+      "requestContext": "Ngữ cảnh yêu cầu",
+      "coverage": "{{reported}} lượt ghi nhận · {{estimated}} lượt ước tính · {{missing}} lượt thiếu dữ liệu",
+      "largestGrowth": "Tăng nhiều nhất {{total}} tại bước #{{step}}",
+      "growthParts": "Đầu vào {{input}} · Đọc bộ đệm {{read}} · Ghi bộ đệm {{write}}",
+      "method": "Ngữ cảnh yêu cầu là tổng token đầu vào và bộ nhớ đệm. Mức thay đổi so sánh các yêu cầu liên tiếp có số đo. Không có số liệu riêng cho tin nhắn, công cụ và tệp đính kèm.",
+      "unplacedCompactions": "Số lần nén thiếu số bước {{count}}",
+      "compactionStep": "Nén ngữ cảnh"
+    },
     "tab": "Mức dùng phiên",
     "subtitle": "Thống kê token cục bộ từ phiên Antigravity",
     "title": "Thống kê Token sử dụng (Antigravity)",
@@ -9776,7 +9900,6 @@
       "codexCatalogPending": "Khóa bên thứ ba đang chờ đồng bộ mô hình: {{count}}"
     },
     "commonSettings": {
-      "title": "Cài đặt thường dùng",
       "language": "Ngôn ngữ T3 Code"
     },
     "platformOrder": {
@@ -9996,6 +10119,14 @@
       "searchAccountsPlaceholder": "Tìm tài khoản {{platform}}...",
       "goAddSourceAccount": "Thêm tại {{platform}}",
       "emptyPoolDesc": "Hãy thêm tài khoản trên trang {{platform}} trước, sau đó chuyển vào T3 Code."
+    }
+  },
+  "antigravity": {
+    "proxy": {
+      "followHint": "Sử dụng proxy toàn cục trong Cài đặt; nếu tắt sẽ dùng mạng mặc định.",
+      "independentHint": "Chỉ áp dụng cho tài khoản này và được ưu tiên hơn proxy toàn cục.",
+      "invalidUrl": "URL proxy không được hỗ trợ. Chỉ hỗ trợ http, https, socks5 và socks5h.",
+      "restartHint": "Sau khi liên kết, thay đổi hoặc xóa proxy, hãy khởi động lại Antigravity (desktop hoặc phiên CLI mới) để áp dụng. Proxy lỗi sẽ không chuyển sang kết nối trực tiếp."
     }
   }
 }

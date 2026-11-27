@@ -339,6 +339,18 @@
   min-width: 120px;
 }
 
+.checkin-account-name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.checkin-account-name-row .checkin-account-name {
+  min-width: 0;
+}
+
 .checkin-account-name {
   font-size: 13px;
   font-weight: 500;

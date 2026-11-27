@@ -1,5 +1,17 @@
 {
   "antigravityLaunch": {
+    "desktopLanguage": "Bahasa antarmuka desktop",
+    "desktopLanguageEnglish": "Inggris",
+    "desktopLayout": "Tata letak",
+    "desktopLayoutEngineering": "Rekayasa perangkat lunak",
+    "desktopLayoutKnowledge": "Pekerjaan pengetahuan",
+    "desktopPermission": "Izin lokal bawaan",
+    "desktopPermissionReview": "Minta peninjauan",
+    "desktopPermissionDefault": "Bawaan",
+    "desktopPermissionAuto": "Otomatis",
+    "desktopPermissionTurbo": "Otomatis penuh",
+    "desktopSettingsHint": "Tata letak dan izin lokal berlaku saat Antigravity dijalankan dari Cockpit Tools.",
+    "desktopLanguageChinese": "Tionghoa Sederhana",
     "initializeTitle": "Antigravity IDE perlu diinisialisasi",
     "initializeThenSwitch": "Buka IDE sekali agar dapat beralih akun.",
     "initializeThenBind": "Jalankan instans sekali agar dapat menautkan akun.",
@@ -20,7 +32,6 @@
     "sharedInstanceStarted": "Login bersama diperbarui. Permintaan peluncuran dikirim.",
     "sharedInstanceLaunchFailed": "Login bersama diperbarui, tetapi instans gagal dijalankan: {{error}}",
     "sharedCopySource": "Salin folder konfigurasi instans terpilih.",
-    "quickSwitchSetting": "Berlaku untuk penggantian cepat di Antigravity IDE. Di dialog akun, Anda dapat memilih untuk menjalankan klien setiap kali mengganti akun.",
     "title": "Pilih klien",
     "switchOnly": "Ganti saja",
     "switchAndLaunch": "Ganti dan jalankan",
@@ -33,7 +44,8 @@
     "cliAuth": "agy mengikuti pengaturan autentikasinya. Kunci API atau kredensial Google Cloud yang dikonfigurasi diprioritaskan.",
     "cliMissing": "agy tidak ditemukan. Instal Antigravity CLI resmi lalu coba lagi.",
     "terminalFailed": "Terminal tidak dapat disiapkan. {{error}}",
-    "switchedTerminalFailed": "Akun sudah diganti, tetapi terminal tidak dapat dibuka. {{error}}"
+    "switchedTerminalFailed": "Akun sudah diganti, tetapi terminal tidak dapat dibuka. {{error}}",
+    "quickSwitchSetting": "Berlaku untuk penggantian cepat di Antigravity IDE. Di dialog akun, Anda dapat memilih untuk menjalankan klien setiap kali mengganti akun."
   },
   "pelican": {
     "caseKinds": {
@@ -194,6 +206,7 @@
     "providerClear": "Hapus pilihan"
   },
   "common": {
+    "commonSettings": "Pengaturan umum",
     "automation": {
       "invalidPlatform": "Platform akun tidak dikenal. Jalankan cockpit-cli account platforms untuk melihat ID yang didukung.",
       "hostUnavailable": "Jalankan aplikasi desktop Cockpit Tools dengan direktori data ini, lalu coba lagi.",
@@ -233,6 +246,7 @@
     "dataQueryBusy": "Data sedang diproses. Coba lagi sebentar lagi.",
     "historyRestoring": "Memulihkan riwayat…",
     "apiBudget": {
+      "sharedPool": "Kuota bersama",
       "keyScope": "Kunci ini",
       "upgradeRequired": "Perbarui Cockpit Tools di komputer gerbang untuk melihat statistik dan riwayat permintaan.",
       "gatewayName": "Gerbang Cockpit",
@@ -279,7 +293,10 @@
       "proxyAuth": "Autentikasi proksi “{{proxy}}” gagal. Periksa nama pengguna atau kata sandi proksi.",
       "localProxyUnavailable": "Tidak dapat terhubung ke proksi lokal “{{proxy}}”. Pastikan layanan proksi sedang berjalan.",
       "directConnection": "Gagal terhubung ke {{target}}. Periksa jaringan dan coba lagi.",
-      "directTimeout": "Koneksi ke {{target}} kehabisan waktu. Periksa jaringan dan coba lagi."
+      "directTimeout": "Koneksi ke {{target}} kehabisan waktu. Periksa jaringan dan coba lagi.",
+      "recoveryExhaustedLargeRequest": "Kegagalan atau batas waktu berulang dari upstream menghentikan percobaan ulang otomatis untuk permintaan besar ini ({{size}}). Riwayat percakapan atau data gambar yang besar mungkin melebihi batas waktu unggah atau respons; padatkan percakapan atau mulai yang baru lalu coba lagi. Kesalahan ini bukan berarti kuota akun habis.",
+      "proxyLargeRequestTimeout": "Mengirim permintaan besar ({{size}}) ke {{target}} melalui proxy “{{proxy}}” kehabisan waktu sebelum menerima respons. Riwayat atau gambar yang terlalu besar mungkin melebihi batas proxy atau upstream; padatkan percakapan, mulai yang baru, atau periksa proxy.",
+      "directLargeRequestTimeout": "Mengirim permintaan besar ({{size}}) ke {{target}} kehabisan waktu sebelum menerima respons. Riwayat atau gambar yang terlalu besar mungkin melebihi batas unggah atau upstream; padatkan percakapan atau mulai yang baru lalu coba lagi."
     },
     "codexUsage": {
       "responseSpeed": "Kecepatan respons",
@@ -883,7 +900,8 @@
     "apiRelay": "Relay API",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "qoderCn": "Qoder CN"
   },
   "sponsors": {
     "pageTitle": "Sponsor",
@@ -1007,6 +1025,7 @@
       "syncThreads": "Menambahkan sesi yang belum ada di semua instans dan menambahkan konten baru hanya jika instans tujuan berhenti dan riwayatnya cocok. Byte yang sudah ada dipertahankan. Pembaruan riwayat yang bercabang atau tujuan yang sedang berjalan ditolak. Berkas tujuan dicadangkan sebelum ditulis. Lanjutkan?"
     },
     "status": {
+      "firstLaunchInitializing": "Menyiapkan peluncuran awal…",
       "running": "Berjalan",
       "stopped": "Berhenti",
       "restarting": "Memulai Ulang",
@@ -1176,6 +1195,7 @@
       "empty": "Tidak ada kuota tersimpan"
     },
     "messages": {
+      "firstLaunchTimedOut": "Penyiapan awal belum selesai. Jika aplikasi meminta Anda masuk atau memberikan akses, selesaikan langkah tersebut lalu coba lagi.",
       "created": "Instansi berhasil dibuat",
       "emptyCreated": "Instansi kosong berhasil dibuat. Jalankan sekali sebelum menautkan akun.",
       "existingDirCreated": "Instansi berhasil dibuat menggunakan direktori yang dipilih.",
@@ -1602,8 +1622,6 @@
       "claudeShareCodeSessionsOnSwitchDesc": "Bagikan daftar sesi Code antarakun lokal saat beralih profil bawaan Claude Desktop di macOS.",
       "claudeAppPath": "Target peluncuran Claude Desktop",
       "claudeAppPathDesc": "Profil default dapat memakai target Microsoft Store; profil multi-instans membutuhkan Claude.exe asli.",
-      "antigravityLaunchOnSwitch": "Jalankan Antigravity IDE saat beralih",
-      "antigravityLaunchOnSwitchDesc": "Jika nonaktif, perpindahan hanya menulis data akun default Antigravity IDE dan tidak menutup, menjalankan, atau memulai ulang aplikasi.",
       "tokenKeeper": "Jaga auth",
       "tokenKeeperDesc": "Menyegarkan Token akun dalam batch kecil hanya saat otorisasi hampir kedaluwarsa, sehingga mengurangi permintaan latar belakang.",
       "platformAutoRefresh": "Penyegaran otomatis kuota {{platform}}",
@@ -1690,7 +1708,14 @@
       "t3codeAutoRefresh": "Segarkan Otomatis Kuota T3 Code",
       "t3codeAutoRefreshDesc": "Interval penyegaran kuota di latar belakang",
       "t3codeAppUiInjection": "Kapsul Kuota Chat T3 Code",
-      "t3codeAppUiInjectionDesc": "Saat T3 Code dibuka dari Cockpit, kolom pesan menampilkan seri model yang dipilih dan sisa kuota. Klik untuk melihat detail akun dan penggunaan."
+      "t3codeAppUiInjectionDesc": "Saat T3 Code dibuka dari Cockpit, kolom pesan menampilkan seri model yang dipilih dan sisa kuota. Klik untuk melihat detail akun dan penggunaan.",
+      "qoderCnAppPath": "Jalur peluncuran Qoder CN",
+      "qoderCnAppPathDesc": "Biarkan kosong untuk deteksi otomatis. Saat berganti akun, klien desktop akan ditutup dan diluncurkan ulang.",
+      "qoderCnAppPathPlaceholder": "Jalur default",
+      "qoderCnPathReset": "Atur ulang ke default",
+      "antigravityLaunchOnSwitch": "Jalankan Antigravity IDE saat beralih",
+      "antigravityLaunchOnSwitchDesc": "Jika nonaktif, perpindahan hanya menulis data akun default Antigravity IDE dan tidak menutup, menjalankan, atau memulai ulang aplikasi.",
+      "qoderCnAutoRefresh": "Auto Refresh Kuota Qoder CN"
     },
     "network": {
       "apiTitle": "API Antigravity Cockpit",
@@ -5342,7 +5367,12 @@
         "maxConcurrentImageRequests": "Permintaan gambar per akun",
         "maxAccountConcurrency": "Konkurensi akun",
         "accountConcurrencyWait": "Tunggu (dtk)",
-        "optionsSaved": "Opsi routing tersimpan"
+        "optionsSaved": "Opsi routing tersimpan",
+        "accountConcurrencyLimit": "Batas konkurensi",
+        "accountConcurrencyUnlimited": "Tanpa batas",
+        "accountConcurrencyHint": "Timpa batas konkurensi untuk akun ini (0 tanpa batas, maks. 64). Kosongkan untuk mengikuti batas global.",
+        "accountConcurrencyInvalid": "Masukkan bilangan bulat dari 0 hingga 64.",
+        "accountConcurrencySaveFailed": "Gagal menyimpan batas konkurensi akun."
       },
       "validation": {
         "numberRange": "Masukkan angka dari {{min}} hingga {{max}}"
@@ -6622,7 +6652,8 @@
         "canceled": "Klien membatalkan permintaan ini; bukan batas waktu pembukaan aliran.",
         "gateway": "HTTP 504 menandakan batas waktu gateway habis. Catatan ini belum memastikan penyebabnya; periksa kesalahan hulu dan tahap permintaan.",
         "threshold": "Batas yang berlaku untuk permintaan ini: {{seconds}} detik.",
-        "settings": "Atur batas waktu"
+        "settings": "Atur batas waktu",
+        "largeRequest": "Ukuran permintaan tercatat: {{size}}. Riwayat atau gambar sebaris yang sangat besar dapat kehabisan waktu saat mengunggah atau menunggu respons awal; disarankan memadatkan percakapan atau memulai yang baru."
       },
       "identity": {
         "title": "Identitas sesi dan akun",
@@ -7273,6 +7304,14 @@
     "t3code": {
       "title": "Pengaturan T3 Code",
       "appPath": "Jalur Peluncuran T3 Code"
+    },
+    "validation": {
+      "refreshIntervalInvalid": "Masukkan bilangan bulat antara 1 dan 999, atau -1 untuk menonaktifkan penyegaran otomatis.",
+      "quotaAlertThresholdInvalid": "Masukkan bilangan bulat antara 0 dan 100."
+    },
+    "disableRefreshHint": "-1 menonaktifkan penyegaran otomatis.",
+    "qoderCn": {
+      "title": "Pengaturan Qoder CN"
     }
   },
   "quotaAlert": {
@@ -7849,7 +7888,21 @@
       "switchLaunchFailed": "Akun sudah ditulis, tetapi Qoder IDE gagal dijalankan. {{detail}}",
       "refreshCount": "{{count}} dari {{total}} akun diperbarui.",
       "launchUnconfirmed": "Peluncuran Qoder IDE tidak dapat dikonfirmasi.",
-      "workerFailed": "Operasi latar belakang Qoder gagal. {{detail}}"
+      "workerFailed": "Operasi latar belakang Qoder gagal. {{detail}}",
+      "oauthUrlEmpty": "URL otorisasi Qoder OAuth kosong.",
+      "qoderCnPathMissing": "Qoder CN Desktop tidak ditemukan. Atur jalur peluncurannya di Pengaturan atau pasang aplikasinya, lalu coba lagi.",
+      "platformMismatch": "Akun ini milik build wilayah lain dan tidak dapat ditulis ke klien saat ini.",
+      "cnRelaunchFailed": "Akun telah diganti, tetapi klien Qoder CN gagal dijalankan. {{detail}}",
+      "cnDesktopUnsupported": "Gunakan CLI untuk mengganti akun Qoder CN di sistem ini.",
+      "clientInvalid": "Jenis klien tidak valid. Pilih ulang target penggantian.",
+      "nativeTokenMissing": "Akun ini tidak memiliki kredensial masuk yang dapat ditulis. Otorisasi ulang atau impor ulang.",
+      "nativeWriteVerifyFailed": "Verifikasi kredensial setelah ditulis gagal dan pemulihan ke keadaan semula telah dicoba. Tutup klien lalu coba lagi.",
+      "nativeKeyUnreadable": "Tidak dapat membaca kunci kredensial lokal. Pastikan Cockpit dan Qoder berjalan di akun sistem yang sama.",
+      "nativeImportInvalid": "Kredensial yang diimpor tidak berisi informasi akun, sehingga akun tidak dapat dikenali.",
+      "nativeImportFailed": "Gagal mengimpor info masuk Qoder lokal. Masuk di klien terlebih dahulu, lalu coba lagi.",
+      "nativeProcessProbeFailed": "Tidak dapat mendeteksi status proses Qoder. Coba lagi nanti.",
+      "regionUnsupported": "Tidak dapat menentukan build wilayah akun. Otorisasi ulang.",
+      "clientRunning": "Tutup {{client}} sebelum mengganti akun."
     },
     "title": "Akun Qoder",
     "flowNotice": {
@@ -7891,6 +7944,38 @@
     },
     "empty": {
       "desc": "Klik \"Tambah Akun\" untuk menggunakan login auth, import lokal, atau import JSON."
+    },
+    "region": {
+      "cn": "Qoder CN · Tiongkok",
+      "global": "Qoder · Internasional"
+    },
+    "clientTarget": {
+      "importSource": "Sumber impor lokal",
+      "initializeHint": "Buka klien yang dipilih, selesaikan penyiapan, lalu coba lagi.",
+      "label": "Target ganti / impor lokal",
+      "ariaLabel": "Klien Qoder",
+      "desktop": "Qoder Desktop",
+      "desktopCn": "Qoder CN Desktop",
+      "cli": "Qoder CLI",
+      "cliCn": "Qoder CN CLI",
+      "ide": "Qoder IDE",
+      "switchSuccess": "Akun diganti. Buka kembali klien tujuan.",
+      "windowsOnly": " (hanya Windows)",
+      "desktopSwitchSuccess": "Akun diganti. {{client}} telah diluncurkan ulang.",
+      "relaunchFailed": "Akun diganti, tetapi {{client}} tidak dapat diluncurkan otomatis. Buka secara manual."
+    },
+    "cn": {
+      "nativeOnly": "Pilih Desktop atau CLI untuk akun Qoder CN.",
+      "ideUnavailable": "Pilih Desktop atau CLI untuk akun Qoder CN. Adaptor IDE di sini hanya untuk versi internasional.",
+      "instancesUnsupported": "Qoder CN Desktop dan CLI mendukung pergantian akun klien default. Multi-instans aplikasi belum didukung.",
+      "flowNoticeDesc": "Mendukung login resmi, impor lokal dari aplikasi desktop atau CLI, impor JSON, dan pemeriksaan kuota. Anda dapat mengganti akun saja atau sekaligus membuka klien yang dipilih.",
+      "flowNoticePermission": "Impor lokal membaca sesi aplikasi desktop atau CLI. Pergantian akun hanya memperbarui sesi lokal klien Qoder CN yang dipilih.",
+      "flowNoticeNetwork": "Akses jaringan: login resmi menghubungi layanan Qoder CN untuk menyelesaikan callback; kueri kuota mengambil data penggunaan melalui API Qoder CN. Kunci dan kredensial lokal tidak pernah diunggah.",
+      "flowNoticeTitle": "Panduan akun Qoder CN (klik untuk perluas/ciutkan)",
+      "oauthHint": "Klik tombol di bawah untuk menyelesaikan otorisasi OAuth akun Qoder CN di peramban Anda.",
+      "importJsonHint": "Impor file Qoder CN JSON yang diekspor dari alat ini.",
+      "importLocalDesc": "Baca status masuk saat ini dari klien Qoder CN lokal, termasuk info pengguna, paket, dan penggunaan kredit.",
+      "importLocalSuccess": "Akun berhasil diimpor dari Qoder CN lokal."
     }
   },
   "zcode": {
@@ -8412,7 +8497,38 @@
       "logHits": "Cocok {{count}} kali di log"
     },
     "exposeToCodex": {
-      "title": "Terhubung melalui gateway Native Rust tanpa menyalin token WorkBuddy"
+      "title": "Terhubung melalui gateway Native Rust tanpa menyalin token WorkBuddy",
+      "textOnlyTitle": "Native ACP lama hanya mendukung teks. Untuk membaca dan menulis berkas serta menjalankan perintah, gunakan Penghubung alat Codex.",
+      "textOnlyAction": "Hubungkan ke Codex (teks saja)"
+    },
+    "nativeCodex": {
+      "managedKeyRotation": "Key ini dikelola oleh penghubung alat native WorkBuddy. Untuk menggantinya, cabut konfigurasi ini lalu buat konfigurasi baru.",
+      "nativeRequired": "Buat dan aktifkan layanan Native Rust terlebih dahulu di halaman layanan API. Mode tidak akan dialihkan secara otomatis.",
+      "enterpriseUnsupported": "Versi awal belum dapat mengikat tenant perusahaan tertentu secara ketat; hanya sumber WorkBuddy pribadi yang didukung.",
+      "revokedFilesPreserved": "Key khusus telah dicabut. Berkas konfigurasi telah diubah atau tidak dapat dibersihkan dengan aman. Semua berkas yang diubah dan data sesi tetap disimpan; periksa berkas tersebut, lalu coba pemulihan lagi.",
+      "notOwned": "Bukti kepemilikan konfigurasi tidak cocok dengan Key khusus. Tidak ada Key yang diubah. Periksa penanda kepemilikan di direktori konfigurasi.",
+      "profileChanged": "Konfigurasi terpisah ini telah diubah. Program tidak akan menimpa perubahan Anda.",
+      "selectionChanged": "Model atau tingkat penalaran sudah tidak tersedia. Muat ulang katalog dan pilih kembali.",
+      "sourceUnavailable": "Sumber WorkBuddy ini tidak tersedia. Periksa status login. Akun lain tidak akan dicoba.",
+      "operationFailed": "Operasi gagal. Pastikan WorkBuddy CLI terpasang dan akun masih valid, lalu muat ulang katalog.",
+      "title": "WorkBuddy → Codex: penghubung alat native",
+      "scope": "Buat Key lokal khusus dengan sumber tetap dan CODEX_HOME terpisah. Codex menjalankan alatnya sendiri; token WorkBuddy tidak ditulis ke konfigurasi Codex, dan login default maupun Key utama layanan API tidak akan diubah.",
+      "account": "Sumber WorkBuddy",
+      "noSourceSelected": "Tidak ada sumber yang tersedia; konfigurasi yang sudah dibuat tetap dapat dikelola",
+      "model": "Model CLI yang tersedia saat ini",
+      "readCatalog": "Muat katalog terkini",
+      "effort": "Tingkat penalaran",
+      "metadataOnly": "Memuat katalog hanya menginisialisasi CLI tanpa mengirim prompt ke model. Model dan tingkat penalaran akan diperiksa kembali sebelum pembuatan; jika sumber tidak valid, kesalahan langsung ditampilkan tanpa beralih ke akun lain. Hanya HTTP Responses yang didukung; pencarian web (web_search) dinonaktifkan dalam konfigurasi terpisah. Gambar, alat terkelola lainnya, compact, dan WebSocket tidak didukung.",
+      "refreshCatalog": "Muat ulang katalog",
+      "managedProfile": "Konfigurasi terpisah yang telah dibuat",
+      "profileSource": "Sumber: ",
+      "profileSourceMissing": "Sumber telah dihapus; Anda tetap dapat mencabut Key khusus dan memulihkan konfigurasi terpisah.",
+      "profileSourceUnavailable": "Sumber sedang tidak tersedia; pencabutan dan pemulihan tidak bergantung pada status login sumber.",
+      "launchHelp": "Buka direktori proyek Anda di terminal, lalu jalankan perintah di bawah ini. Hanya peluncuran Codex kali ini yang menggunakan konfigurasi tersebut.",
+      "retryRestore": "Coba pemulihan lagi (Key telah dicabut)",
+      "restore": "Cabut Key khusus dan pulihkan konfigurasi ini",
+      "create": "Buat Key khusus dan konfigurasi terpisah",
+      "open": "Penghubung alat Codex"
     }
   },
   "minimaxCode": {
@@ -8989,7 +9105,6 @@
     "quota": {
       "cliUnavailable": "Pemakaian CLI tidak tersedia",
       "weekly": "Penggunaan mingguan",
-      "sharedPool": "Kuota bersama",
       "monthly": "Pemakaian bulanan",
       "onDemand": "Penggunaan sesuai permintaan",
       "balance": "Saldo dan kredit",
@@ -9622,6 +9737,15 @@
     "saved": "Tersimpan. Berlaku untuk permintaan baru."
   },
   "antigravityTokenUsage": {
+    "context": {
+      "requestContext": "Konteks permintaan",
+      "coverage": "{{reported}} tercatat · {{estimated}} perkiraan · {{missing}} tidak tersedia",
+      "largestGrowth": "Kenaikan terbesar {{total}} pada langkah #{{step}}",
+      "growthParts": "Masukan {{input}} · Baca tembolok {{read}} · Tulis tembolok {{write}}",
+      "method": "Konteks permintaan menjumlahkan token masukan dan tembolok. Perubahan membandingkan permintaan berurutan yang terukur. Rincian pesan, alat, dan lampiran tidak tersedia.",
+      "unplacedCompactions": "Kompresi tanpa nomor langkah {{count}}",
+      "compactionStep": "Kompresi konteks"
+    },
     "tab": "Pemakaian Sesi",
     "subtitle": "Pemakaian token lokal dari sesi Antigravity",
     "title": "Pemakaian Token Sesi Antigravity",
@@ -9776,7 +9900,6 @@
       "codexCatalogPending": "Kunci pihak ketiga menunggu sinkronisasi model: {{count}}"
     },
     "commonSettings": {
-      "title": "Pengaturan umum",
       "language": "Bahasa T3 Code"
     },
     "platformOrder": {
@@ -9996,6 +10119,14 @@
       "searchAccountsPlaceholder": "Cari akun {{platform}}...",
       "goAddSourceAccount": "Tambah di {{platform}}",
       "emptyPoolDesc": "Tambahkan akun di halaman {{platform}} terlebih dahulu sebelum mengalihkannya ke T3 Code."
+    }
+  },
+  "antigravity": {
+    "proxy": {
+      "followHint": "Gunakan proxy global dari Pengaturan; jika nonaktif, jaringan bawaan yang digunakan.",
+      "independentHint": "Hanya berlaku untuk akun ini dan menimpa proxy global.",
+      "invalidUrl": "URL proxy tidak didukung. Hanya http, https, socks5, dan socks5h yang didukung.",
+      "restartHint": "Setelah mengikat, mengganti, atau menghapus proxy, mulai ulang Antigravity (desktop atau sesi CLI baru) untuk menerapkannya. Proxy yang gagal tidak dialihkan ke koneksi langsung."
     }
   }
 }

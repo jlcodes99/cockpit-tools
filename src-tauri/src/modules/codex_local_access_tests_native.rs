@@ -1728,3 +1728,20 @@ async fn go_limits_host_ignores_legacy_total_timeout_and_wait_queue_releases_on_
     assert_eq!(host.account_waiters.load(Ordering::Acquire), 0);
     drop(busy);
 }
+
+#[tokio::test]
+async fn native_execution_policy_aligns_network_recovery_timeout_with_open_timeout() {
+    let mut collection = native_test_collection();
+    collection.timeouts.sidecar_stream_open_timeout_ms = 60_000;
+    let default_host = NativeHostBridge::for_collection(collection);
+    let default_policy = native_contract::Host::execution_policy(&default_host).await.unwrap();
+    assert_eq!(default_policy.open_timeout, Duration::from_secs(60));
+    assert_eq!(default_policy.network_recovery_timeout, Duration::from_secs(120));
+
+    let mut large_open = native_test_collection();
+    large_open.timeouts.sidecar_stream_open_timeout_ms = 240_000;
+    let large_host = NativeHostBridge::for_collection(large_open);
+    let large_policy = native_contract::Host::execution_policy(&large_host).await.unwrap();
+    assert_eq!(large_policy.open_timeout, Duration::from_secs(240));
+    assert_eq!(large_policy.network_recovery_timeout, Duration::from_secs(240));
+}

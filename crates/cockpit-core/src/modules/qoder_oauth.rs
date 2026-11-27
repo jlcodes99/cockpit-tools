@@ -1,7 +1,7 @@
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
 use rand::RngCore;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
@@ -13,7 +13,9 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::models::qoder::{QoderAccount, QoderOAuthStartResponse};
-use crate::modules::qoder_channel::{ide_source, preserve_refresh_source, CredentialSource};
+use crate::modules::qoder_channel::{
+    ide_source, preserve_refresh_source, Channel, CredentialSource,
+};
 use crate::modules::{logger, qoder_account, qoder_identity, qoder_instance};
 
 const REAUTH_REQUIRED: &str = "QODER_REAUTH_REQUIRED";
@@ -51,6 +53,7 @@ const WHITELIST_NOT_ALLOW: i64 = 7;
 #[derive(Debug, Clone)]
 struct PendingOAuthState {
     login_id: String,
+    channel: Channel,
     expected_nonce: String,
     code_verifier: String,
     challenge_method: String,
@@ -130,12 +133,12 @@ fn generate_pkce_verifier() -> String {
     URL_SAFE_NO_PAD.encode(bytes)
 }
 
-fn generate_pkce_challenge(verifier: &str) -> String {
+pub(crate) fn generate_pkce_challenge(verifier: &str) -> String {
     let digest = Sha256::digest(verifier.as_bytes());
     URL_SAFE_NO_PAD.encode(digest)
 }
 
-fn generate_login_nonce() -> String {
+pub(crate) fn generate_login_nonce() -> String {
     Uuid::new_v4().simple().to_string()
 }
 
@@ -885,14 +888,20 @@ pub(crate) fn token_expiry(info: Option<&Value>, key: &str) -> Option<i64> {
 }
 
 fn session_endpoint(account: &QoderAccount) -> Result<String, String> {
-    let source = ide_source(account)?;
-    if matches!(source, CredentialSource::LegacyCnIde | CredentialSource::DedicatedIde) {
+    let source = crate::modules::qoder_channel::credential_source(account)?;
+    if matches!(
+        source,
+        CredentialSource::LegacyCnIde | CredentialSource::DedicatedIde
+    ) {
         if let Some(origin) = account.verified_openapi_origin.as_deref() {
             return Ok(origin.to_string());
         }
     }
     match source {
         CredentialSource::GlobalIde => Ok(DEFAULT_OPENAPI_BASE_URL.to_string()),
+        CredentialSource::PublicCn => Channel::for_source(CredentialSource::PublicCn)
+            .map(|channel| channel.openapi_base_url().to_string())
+            .ok_or_else(|| OPENAPI_UNAVAILABLE.into()),
         CredentialSource::DedicatedIde => {
             let root = qoder_instance::get_default_qoder_user_data_dir()?;
             if !qoder_account::local_session_matches(&root, account)? {
@@ -1031,7 +1040,7 @@ async fn renew_device_token(
     let verified_origin = (endpoint != DEFAULT_OPENAPI_BASE_URL).then(|| endpoint.to_string());
     let account = account.clone();
     tokio::task::spawn_blocking(move || {
-        qoder_account::save_refresh(
+        save_refreshed_account(
             &account,
             Value::Object(updated),
             None,
@@ -1045,12 +1054,77 @@ async fn renew_device_token(
 }
 
 async fn load_refresh_target(account_id: &str) -> Result<QoderAccount, String> {
+    load_refresh_target_for_source(account_id, None).await
+}
+
+async fn load_refresh_target_for_source(
+    account_id: &str,
+    source: Option<CredentialSource>,
+) -> Result<QoderAccount, String> {
     let id = account_id.to_string();
     tokio::task::spawn_blocking(move || {
-        qoder_account::load_account(&id).ok_or_else(|| "QODER_SESSION_CHANGED".to_string())
+        if source != Some(CredentialSource::PublicCn) {
+            if let Some(account) = qoder_account::load_account(&id) {
+                if let Some(expected) = source {
+                    if crate::modules::qoder_channel::credential_source(&account)? != expected {
+                        return Err("QODER_PLATFORM_MISMATCH".into());
+                    }
+                }
+                return Ok(account);
+            }
+            if source.is_some() {
+                return Err("QODER_SESSION_CHANGED".into());
+            }
+        }
+        crate::modules::qoder_cn_account::QoderCnAccountStore::default_store()
+            .map_err(|_| "QODER_SESSION_CHANGED".to_string())?
+            .load_account(&id)?
+            .ok_or_else(|| "QODER_SESSION_CHANGED".to_string())
     })
     .await
     .map_err(|_| "QODER_ACCOUNT_BUSY")?
+}
+
+/// Stores a refreshed snapshot in the channel that owns the account.
+fn save_refreshed_account(
+    account: &QoderAccount,
+    user_info: Value,
+    plan: Option<Value>,
+    usage: Option<Value>,
+    quota_error: Option<String>,
+    verified_origin: Option<String>,
+) -> Result<QoderAccount, String> {
+    match crate::modules::qoder_channel::credential_source(account)? {
+        CredentialSource::PublicCn => {
+            crate::modules::qoder_cn_account::QoderCnAccountStore::default_store()?.save_refresh(
+                account,
+                user_info,
+                plan,
+                usage,
+                quota_error,
+            )
+        }
+        _ => qoder_account::save_refresh(
+            account,
+            user_info,
+            plan,
+            usage,
+            quota_error,
+            verified_origin,
+        ),
+    }
+}
+
+/// Records a failed quota query on the account that was queried, which for the
+/// public CN client means the CN store rather than the IDE index.
+fn mark_refresh_error(account: &QoderAccount, error: String) -> Result<(), String> {
+    match crate::modules::qoder_channel::credential_source(account)? {
+        CredentialSource::PublicCn => {
+            crate::modules::qoder_cn_account::QoderCnAccountStore::default_store()?
+                .mark_quota_query_error(account, error)
+        }
+        _ => qoder_account::mark_quota_query_error(account, error),
+    }
 }
 
 async fn account_endpoint(account: &QoderAccount) -> Result<String, String> {
@@ -1063,6 +1137,30 @@ async fn account_endpoint(account: &QoderAccount) -> Result<String, String> {
 pub(crate) async fn prepare_account_for_switch(account_id: &str) -> Result<(), String> {
     let target = load_refresh_target(account_id).await?;
     ide_source(&target)?;
+    prepare_target_for_switch(target, None).await
+}
+
+/// Same preparation for the public CN client, which writes credentials into its
+/// own store instead of the IDE database.
+pub(crate) async fn prepare_cn_account_for_switch(account_id: &str) -> Result<(), String> {
+    prepare_account_for_client(account_id, CredentialSource::PublicCn).await
+}
+
+pub(crate) async fn prepare_account_for_client(
+    account_id: &str,
+    source: CredentialSource,
+) -> Result<(), String> {
+    let target = load_refresh_target_for_source(account_id, Some(source)).await?;
+    prepare_target_for_switch(target, Some(source)).await
+}
+
+/// Guarantees the account has a usable access token, renewing it when the
+/// recorded expiry has passed.
+async fn prepare_target_for_switch(
+    target: QoderAccount,
+    source: Option<CredentialSource>,
+) -> Result<(), String> {
+    let account_id = target.id.clone();
     let info = target.auth_user_info_raw.as_ref();
     access_token_from_info(info).ok_or(REAUTH_REQUIRED)?;
     if !token_expiry(info, "expireTime")
@@ -1070,9 +1168,9 @@ pub(crate) async fn prepare_account_for_switch(account_id: &str) -> Result<(), S
     {
         return Ok(());
     }
-    let lock = refresh_lock(account_id)?;
+    let lock = refresh_lock(&account_id)?;
     let _guard = lock.lock().await;
-    let target = load_refresh_target(account_id).await?;
+    let target = load_refresh_target_for_source(&account_id, source).await?;
     let info = target.auth_user_info_raw.as_ref();
     access_token_from_info(info).ok_or(REAUTH_REQUIRED)?;
     if token_expiry(info, "expireTime")
@@ -1141,7 +1239,7 @@ async fn refresh_account_from_openapi_once(
     };
     let verified_origin = (endpoint != DEFAULT_OPENAPI_BASE_URL).then_some(endpoint);
     tokio::task::spawn_blocking(move || {
-        qoder_account::save_refresh(
+        save_refreshed_account(
             &target,
             user_info,
             plan,
@@ -1155,17 +1253,21 @@ async fn refresh_account_from_openapi_once(
 }
 
 pub async fn refresh_account_from_openapi(account_id: &str) -> Result<QoderAccount, String> {
+    refresh_account_for_source(account_id, None).await
+}
+
+pub(crate) async fn refresh_account_for_source(
+    account_id: &str,
+    source: Option<CredentialSource>,
+) -> Result<QoderAccount, String> {
     let lock = refresh_lock(account_id)?;
     let _guard = lock.lock().await;
-    let target = load_refresh_target(account_id).await?;
+    let target = load_refresh_target_for_source(account_id, source).await?;
     let result = refresh_account_from_openapi_once(target.clone()).await;
     if let Err(error) = &result {
         if error != "QODER_SESSION_CHANGED" {
             let error = error.clone();
-            let _ = tokio::task::spawn_blocking(move || {
-                qoder_account::mark_quota_query_error(&target, error)
-            })
-            .await;
+            let _ = tokio::task::spawn_blocking(move || mark_refresh_error(&target, error)).await;
         }
     }
     result
@@ -1182,6 +1284,28 @@ pub async fn refresh_all_accounts_from_openapi() -> Result<i32, String> {
             Ok(_) => {}
             Err(error) => logger::log_warn(&format!(
                 "[Qoder Refresh] 批量刷新失败: account_id={account_id}, error={error}"
+            )),
+        }
+    }
+
+    Ok(success_count)
+}
+
+/// Refreshes every account of the public CN client. The CN store owns its own
+/// account list, so it cannot reuse `refresh_all_accounts_from_openapi`.
+pub async fn refresh_all_cn_accounts_from_openapi() -> Result<i32, String> {
+    let account_ids = tokio::task::spawn_blocking(|| {
+        crate::modules::qoder_cn_account::QoderCnAccountStore::default_store()?.list_account_ids()
+    })
+    .await
+    .map_err(|_| "QODER_ACCOUNT_BUSY")??;
+    let mut success_count = 0;
+    for account_id in account_ids {
+        match refresh_account_from_openapi(&account_id).await {
+            Ok(account) if account.quota_query_last_error.is_none() => success_count += 1,
+            Ok(_) => {}
+            Err(error) => logger::log_warn(&format!(
+                "[Qoder CN Refresh] 批量刷新失败: account_id={account_id}, error={error}"
             )),
         }
     }
@@ -1346,12 +1470,25 @@ fn get_string_from_object(
     get_object_field(object, keys).and_then(value_to_string)
 }
 pub async fn start_login() -> Result<QoderOAuthStartResponse, String> {
-    tokio::task::spawn_blocking(start_login_blocking)
+    tokio::task::spawn_blocking(|| start_login_blocking(global_channel()))
         .await
         .map_err(|_| "QODER_ACCOUNT_BUSY")?
 }
 
-fn start_login_blocking() -> Result<QoderOAuthStartResponse, String> {
+/// Starts a login against the public CN client instead of the global IDE.
+pub async fn start_cn_login() -> Result<QoderOAuthStartResponse, String> {
+    let channel = Channel::for_source(CredentialSource::PublicCn)
+        .ok_or_else(|| "QODER_REGION_UNSUPPORTED".to_string())?;
+    tokio::task::spawn_blocking(move || start_login_blocking(channel))
+        .await
+        .map_err(|_| "QODER_ACCOUNT_BUSY")?
+}
+
+fn global_channel() -> Channel {
+    Channel::for_source(CredentialSource::GlobalIde).expect("global channel is always available")
+}
+
+fn start_login_blocking(channel: Channel) -> Result<QoderOAuthStartResponse, String> {
     logger::log_info("[Qoder OAuth] 开始创建登录会话");
     let login_base_url = resolve_qoder_cli_login_endpoint();
     let machine_info = match read_qoder_machine_info_cache() {
@@ -1382,15 +1519,24 @@ fn start_login_blocking() -> Result<QoderOAuthStartResponse, String> {
     let code_verifier = generate_pkce_verifier();
     let challenge_method = QODER_DEVICE_LOGIN_CHALLENGE_METHOD.to_string();
     let code_challenge = generate_pkce_challenge(&code_verifier);
-    let verification_uri = build_cli_device_login_url(
-        &login_base_url,
-        installed_ide_redirect_uri(),
-        &expected_nonce,
-        &code_challenge,
-        &challenge_method,
-        machine_info.as_ref().map(|info| info.token.as_str()),
-        login_machine_id,
-    )?;
+    let verification_uri = if channel.source() == CredentialSource::PublicCn {
+        channel.sign_in_url(
+            &expected_nonce,
+            &code_challenge,
+            &challenge_method,
+            login_machine_id,
+        )?
+    } else {
+        build_cli_device_login_url(
+            &login_base_url,
+            installed_ide_redirect_uri(),
+            &expected_nonce,
+            &code_challenge,
+            &challenge_method,
+            machine_info.as_ref().map(|info| info.token.as_str()),
+            login_machine_id,
+        )?
+    };
     let login_machine_id_source = if machine_id.is_some() {
         "machine_info"
     } else if login_machine_id.is_some() {
@@ -1416,10 +1562,11 @@ fn start_login_blocking() -> Result<QoderOAuthStartResponse, String> {
 
     let state = PendingOAuthState {
         login_id: login_id.clone(),
+        channel,
         expected_nonce: expected_nonce.clone(),
         code_verifier,
         challenge_method: challenge_method.clone(),
-        openapi_base_url: DEFAULT_OPENAPI_BASE_URL.to_string(),
+        openapi_base_url: channel.openapi_base_url().to_string(),
         machine_info,
         verification_uri: verification_uri.clone(),
         expires_at: now_timestamp() + OAUTH_TIMEOUT_SECONDS,
@@ -1484,6 +1631,7 @@ pub async fn complete_login(login_id: &str) -> Result<QoderAccount, String> {
                 state.challenge_method.clone(),
                 state.openapi_base_url.clone(),
                 state.machine_info.clone(),
+                state.channel,
             )
         };
 
@@ -1571,6 +1719,7 @@ pub async fn complete_login(login_id: &str) -> Result<QoderAccount, String> {
                 };
 
                 let id = login_id.to_string();
+                let channel = snapshot.5;
                 let account = tokio::task::spawn_blocking(move || {
                     let state = {
                         let mut pending = PENDING_OAUTH_STATE
@@ -1585,7 +1734,8 @@ pub async fn complete_login(login_id: &str) -> Result<QoderAccount, String> {
                         }
                         pending.take()
                     };
-                    let result = qoder_account::upsert_account_from_snapshot(
+                    let result = persist_login_snapshot(
+                        channel,
                         user_info_raw,
                         user_plan_raw,
                         credit_usage_raw,
@@ -1630,10 +1780,41 @@ pub async fn complete_login(login_id: &str) -> Result<QoderAccount, String> {
     }
 }
 
+/// Stores a finished login in the channel that started it: the IDE keeps the
+/// global store, the public CN client has its own encrypted one.
+fn persist_login_snapshot(
+    channel: Channel,
+    user_info_raw: Value,
+    user_plan_raw: Option<Value>,
+    credit_usage_raw: Option<Value>,
+) -> Result<QoderAccount, String> {
+    match channel.source() {
+        CredentialSource::PublicCn => {
+            crate::modules::qoder_cn_account::QoderCnAccountStore::default_store()?
+                .upsert_from_snapshot(user_info_raw, user_plan_raw, credit_usage_raw)
+        }
+        _ => qoder_account::upsert_account_from_snapshot(
+            user_info_raw,
+            user_plan_raw,
+            credit_usage_raw,
+        ),
+    }
+}
+
 pub fn peek_pending_login() -> Option<QoderOAuthStartResponse> {
+    peek_login_for(|channel| channel.source() != CredentialSource::PublicCn)
+}
+
+/// Peeks only a login started by the public CN client, so the CN page never
+/// resumes a login that the IDE page owns.
+pub fn peek_pending_cn_login() -> Option<QoderOAuthStartResponse> {
+    peek_login_for(|channel| channel.source() == CredentialSource::PublicCn)
+}
+
+fn peek_login_for(channel_matches: impl Fn(Channel) -> bool) -> Option<QoderOAuthStartResponse> {
     let guard = PENDING_OAUTH_STATE.lock().ok()?;
     let state = guard.as_ref()?;
-    if state.cancelled {
+    if state.cancelled || !channel_matches(state.channel) {
         return None;
     }
     let now = now_timestamp();
@@ -1672,6 +1853,311 @@ pub fn cancel_login(login_id: Option<&str>) -> Result<(), String> {
 
     *guard = None;
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Check-in campaigns
+//
+// The daily credit check-in runs on the same origin as the account's OpenAPI
+// endpoint, so it reuses the channel resolution above instead of a second base
+// URL. Only the CN client exposes it today; an account without the campaign is
+// reported as inactive rather than as an error.
+// ---------------------------------------------------------------------------
+
+const CAMPAIGNS_PATH: &str = "/sash/api/v1/me/campaigns";
+const CAMPAIGNS_QUERY: &str = "?forceRefresh=true";
+const SASH_CLIENT_TYPE: &str = "10";
+const SASH_USER_AGENT: &str = "Qoder";
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QoderCheckinStatus {
+    pub checked_in: bool,
+    pub active: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub amount: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub validity_days: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next_refresh_at: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub campaign_key: Option<String>,
+    pub message: String,
+}
+
+#[derive(Debug, Clone)]
+struct QoderCampaign {
+    campaign_id: String,
+    campaign_key: Option<String>,
+    action_type: String,
+    claim_status: String,
+    amount: Option<f64>,
+    validity_days: Option<i64>,
+    end_at: Option<i64>,
+}
+
+struct QoderSashResponse {
+    status: u16,
+    body: String,
+}
+
+fn json_number(value: &Value) -> Option<f64> {
+    value
+        .as_f64()
+        .or_else(|| value.as_i64().map(|number| number as f64))
+        .or_else(|| value.as_str().and_then(|raw| raw.trim().parse().ok()))
+}
+
+fn parse_campaign_rows(value: &Value) -> Vec<QoderCampaign> {
+    let rows = value
+        .get("campaigns")
+        .and_then(Value::as_array)
+        .or_else(|| {
+            value
+                .get("data")
+                .and_then(|data| data.get("campaigns"))
+                .and_then(Value::as_array)
+        });
+    rows.into_iter()
+        .flatten()
+        .filter_map(|entry| {
+            let campaign_id = entry.get("campaignId").and_then(Value::as_str)?.trim();
+            if campaign_id.is_empty() {
+                return None;
+            }
+            let benefit = entry.get("benefit");
+            let validity = benefit.and_then(|value| value.get("validity"));
+            let validity_days = validity
+                .filter(|value| value.get("mode").and_then(Value::as_str) == Some("RELATIVE_DAYS"))
+                .and_then(|value| value.get("days"))
+                .and_then(Value::as_i64);
+            Some(QoderCampaign {
+                campaign_id: campaign_id.to_string(),
+                campaign_key: entry
+                    .get("campaignKey")
+                    .and_then(Value::as_str)
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                    .map(str::to_string),
+                action_type: entry
+                    .get("actionType")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string(),
+                claim_status: entry
+                    .get("claimStatus")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string(),
+                amount: benefit
+                    .and_then(|value| value.get("amount"))
+                    .and_then(json_number)
+                    .or_else(|| entry.get("amount").and_then(json_number)),
+                validity_days,
+                end_at: entry.get("endAt").and_then(Value::as_i64),
+            })
+        })
+        .collect()
+}
+
+fn checkin_status_from_campaigns(
+    campaigns: &[QoderCampaign],
+    force_checked_in: bool,
+) -> QoderCheckinStatus {
+    let daily = campaigns
+        .iter()
+        .find(|campaign| campaign.action_type.eq_ignore_ascii_case("CLAIM_BENEFIT"));
+    let Some(daily) = daily else {
+        return QoderCheckinStatus {
+            checked_in: false,
+            active: false,
+            amount: None,
+            validity_days: None,
+            next_refresh_at: None,
+            campaign_key: None,
+            message: "当前没有可领取的签到活动".to_string(),
+        };
+    };
+    let claimed = daily.claim_status.eq_ignore_ascii_case("CLAIMED");
+    let claimable = daily.claim_status.eq_ignore_ascii_case("CLAIMABLE");
+    let checked_in = force_checked_in || claimed;
+    QoderCheckinStatus {
+        checked_in,
+        active: checked_in || claimable,
+        amount: daily.amount,
+        validity_days: daily.validity_days,
+        next_refresh_at: daily.end_at.and_then(|value| value.checked_mul(1000)),
+        campaign_key: daily.campaign_key.clone(),
+        message: if checked_in {
+            "本周期已领取".to_string()
+        } else if claimable {
+            "本周期可领取".to_string()
+        } else {
+            format!("当前状态：{}", daily.claim_status)
+        },
+    }
+}
+
+fn build_sash_headers(token: &str) -> reqwest::header::HeaderMap {
+    use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, USER_AGENT};
+
+    let mut headers = HeaderMap::new();
+    if let Ok(value) = HeaderValue::from_str(&format!("Bearer {}", token)) {
+        headers.insert(AUTHORIZATION, value);
+    }
+    if let Ok(value) = HeaderValue::from_str("application/json") {
+        headers.insert(ACCEPT, value);
+    }
+    if let Ok(value) = HeaderValue::from_str(SASH_CLIENT_TYPE) {
+        headers.insert("cosy-clienttype", value);
+    }
+    if let Ok(value) = HeaderValue::from_str(SASH_USER_AGENT) {
+        headers.insert(USER_AGENT, value);
+    }
+    headers
+}
+
+/// One request against the account's OpenAPI origin, renewing the token once if
+/// the service rejects it.
+async fn qoder_sash_request(
+    account_id: &str,
+    method: reqwest::Method,
+    path_and_query: &str,
+    body: Option<Value>,
+) -> Result<QoderSashResponse, String> {
+    let mut target = load_refresh_target(account_id).await?;
+    let endpoint = account_endpoint(&target).await?;
+    let client = build_reqwest_client()?;
+    let mut renewed = false;
+    loop {
+        let access =
+            access_token_from_info(target.auth_user_info_raw.as_ref()).ok_or(REAUTH_REQUIRED)?;
+        // endpoint 由 `session_endpoint` 按渠道给出，固定为 https（国际站与 CN 的
+        // origin 都是常量，IDE 渠道用已校验的存储 origin）；凭证只走 Authorization
+        // 头，URL 里只有接口路径。Rust 侧的 CodeQL 没有行内抑制（codeql#21637），
+        // 所以这条 rust/cleartext-transmission 只能靠误报 dismiss 处理。
+        let mut request = client
+            .request(method.clone(), format!("{}{}", endpoint, path_and_query))
+            .headers(build_sash_headers(&access));
+        if let Some(payload) = body.as_ref() {
+            request = request.json(payload);
+        }
+        let response = request
+            .send()
+            .await
+            .map_err(|error| format!("请求 Qoder 活动接口失败: {}", error))?;
+        let status = response.status();
+        if status == reqwest::StatusCode::UNAUTHORIZED {
+            if renewed {
+                return Err(UNAUTHORIZED.into());
+            }
+            target = renew_device_token(&client, &endpoint, &target).await?;
+            renewed = true;
+            continue;
+        }
+        let status_code = status.as_u16();
+        let body = response.text().await.unwrap_or_default();
+        return Ok(QoderSashResponse {
+            status: status_code,
+            body,
+        });
+    }
+}
+
+fn parse_sash_json(response: &QoderSashResponse, action: &str) -> Result<Value, String> {
+    if !(200..300).contains(&response.status) {
+        return Err(format!(
+            "{}失败 (HTTP {}): body_len={}",
+            action,
+            response.status,
+            response.body.len()
+        ));
+    }
+    serde_json::from_str(&response.body)
+        .map_err(|error| format!("解析 {} 响应失败: {}", action, error))
+}
+
+pub async fn get_qoder_checkin_status(account_id: &str) -> Result<QoderCheckinStatus, String> {
+    let path = format!("{}{}", CAMPAIGNS_PATH, CAMPAIGNS_QUERY);
+    let response = qoder_sash_request(account_id, reqwest::Method::GET, &path, None).await?;
+    let value = parse_sash_json(&response, "获取签到状态")?;
+    let status = checkin_status_from_campaigns(&parse_campaign_rows(&value), false);
+    logger::log_info(&format!(
+        "[Qoder Checkin] 状态查询: account_id={}, checked_in={}, active={}, amount={:?}",
+        account_id, status.checked_in, status.active, status.amount
+    ));
+    Ok(status)
+}
+
+pub async fn claim_qoder_checkin(account_id: &str) -> Result<QoderCheckinStatus, String> {
+    let path = format!("{}{}", CAMPAIGNS_PATH, CAMPAIGNS_QUERY);
+    let response = qoder_sash_request(account_id, reqwest::Method::GET, &path, None).await?;
+    let value = parse_sash_json(&response, "获取签到活动")?;
+    let campaigns = parse_campaign_rows(&value);
+    let Some(daily) = campaigns
+        .iter()
+        .find(|campaign| campaign.action_type.eq_ignore_ascii_case("CLAIM_BENEFIT"))
+        .cloned()
+    else {
+        return Ok(checkin_status_from_campaigns(&campaigns, false));
+    };
+    if daily.claim_status.eq_ignore_ascii_case("CLAIMED") {
+        return Ok(checkin_status_from_campaigns(&campaigns, true));
+    }
+    if !daily.claim_status.eq_ignore_ascii_case("CLAIMABLE") {
+        return Ok(checkin_status_from_campaigns(&campaigns, false));
+    }
+
+    let encoded_id: String =
+        url::form_urlencoded::byte_serialize(daily.campaign_id.as_bytes()).collect();
+    let claim_path = format!("{}/{}/claim", CAMPAIGNS_PATH, encoded_id);
+    let response = qoder_sash_request(
+        account_id,
+        reqwest::Method::POST,
+        &claim_path,
+        Some(serde_json::json!({})),
+    )
+    .await?;
+    if response.status == reqwest::StatusCode::CONFLICT.as_u16() {
+        logger::log_info(&format!(
+            "[Qoder Checkin] 领取幂等命中: account_id={}, campaign_id={}",
+            account_id, daily.campaign_id
+        ));
+        return Ok(checkin_status_from_campaigns(&campaigns, true));
+    }
+    let claimed_body = parse_sash_json(&response, "领取签到积分")?;
+    let upstream_status = claimed_body
+        .get("status")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let confirmed = upstream_status.eq_ignore_ascii_case("CLAIMED")
+        || upstream_status.eq_ignore_ascii_case("SUCCESS")
+        || claimed_body.get("success").and_then(Value::as_bool) == Some(true)
+        || claimed_body.get("replayed").and_then(Value::as_bool) == Some(true);
+    if !confirmed {
+        return Err(format!(
+            "领取签到积分未完成（上游状态 {}）",
+            if upstream_status.is_empty() {
+                "未知"
+            } else {
+                upstream_status
+            }
+        ));
+    }
+    logger::log_info(&format!(
+        "[Qoder Checkin] 领取成功: account_id={}, campaign_id={}, amount={:?}",
+        account_id, daily.campaign_id, daily.amount
+    ));
+    match get_qoder_checkin_status(account_id).await {
+        Ok(status) => Ok(status),
+        Err(error) => {
+            logger::log_warn(&format!(
+                "[Qoder Checkin] 领取后状态复查失败（不影响领取结果）: account_id={}, {}",
+                account_id, error
+            ));
+            Ok(checkin_status_from_campaigns(&campaigns, true))
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1724,7 +2210,10 @@ mod tests {
         assert_eq!(session_endpoint(&global).unwrap(), DEFAULT_OPENAPI_BASE_URL);
         for (marker, endpoint) in [
             ("qodercn", "https://legacy.qoder.cn"),
-            ("dedicated_qodercn", "https://tenant-openapi.example.invalid"),
+            (
+                "dedicated_qodercn",
+                "https://tenant-openapi.example.invalid",
+            ),
         ] {
             let mut account = account_fixture(None, Some(marker));
             account.verified_openapi_origin = Some(endpoint.into());
@@ -1733,17 +2222,21 @@ mod tests {
     }
 
     #[test]
-    fn ide_rejects_public_cn_and_conflicting_sources_before_resolving_an_origin() {
+    fn public_cn_resolves_its_own_endpoint_and_ide_rejects_conflicts() {
         use crate::modules::qoder_channel::account_fixture;
 
-        for (info, plan) in [(None, Some("qoder_cn")), (Some("qodercn"), Some("qoder"))] {
-            let mut account = account_fixture(info, plan);
-            account.verified_openapi_origin = Some("https://legacy.qoder.cn".into());
-            assert_eq!(
-                session_endpoint(&account).unwrap_err(),
-                "QODER_PLATFORM_MISMATCH"
-            );
-        }
+        let mut cn = account_fixture(None, Some("qoder_cn"));
+        cn.verified_openapi_origin = Some("https://legacy.qoder.cn".into());
+        assert_eq!(
+            session_endpoint(&cn).unwrap(),
+            "https://openapi.qoder.com.cn"
+        );
+
+        let conflicting = account_fixture(Some("qodercn"), Some("qoder"));
+        assert_eq!(
+            session_endpoint(&conflicting).unwrap_err(),
+            "QODER_PLATFORM_MISMATCH"
+        );
     }
 
     #[test]
@@ -1876,5 +2369,90 @@ mod tests {
         assert_eq!(headers["Cosy-MachineHostname"], "machine-hostname");
         assert_eq!(headers["Cosy-MachineOS"], "aarch64_darwin");
         assert_eq!(headers["Cosy-ClientType"], "0");
+    }
+
+    #[test]
+    fn checkin_status_follows_the_claim_benefit_campaign() {
+        let campaigns = parse_campaign_rows(&serde_json::json!({
+            "data": { "campaigns": [
+                {
+                    "campaignId": "daily-1",
+                    "campaignKey": "daily",
+                    "actionType": "CLAIM_BENEFIT",
+                    "claimStatus": "CLAIMABLE",
+                    "benefit": { "amount": "20", "validity": { "mode": "RELATIVE_DAYS", "days": 7 } },
+                    "endAt": 1_800_000_000,
+                },
+                { "campaignId": "other", "actionType": "SHARE" },
+            ]}
+        }));
+        let status = checkin_status_from_campaigns(&campaigns, false);
+        assert!(!status.checked_in);
+        assert!(status.active);
+        assert_eq!(status.amount, Some(20.0));
+        assert_eq!(status.validity_days, Some(7));
+        assert_eq!(status.next_refresh_at, Some(1_800_000_000_000));
+        assert_eq!(status.campaign_key.as_deref(), Some("daily"));
+
+        let claimed = checkin_status_from_campaigns(&campaigns, true);
+        assert!(claimed.checked_in);
+    }
+
+    #[test]
+    fn checkin_without_a_campaign_is_inactive_not_an_error() {
+        let campaigns = parse_campaign_rows(&serde_json::json!({ "campaigns": [] }));
+        let status = checkin_status_from_campaigns(&campaigns, false);
+        assert!(!status.active);
+        assert!(!status.checked_in);
+        assert!(status.amount.is_none());
+    }
+
+    #[test]
+    fn peek_pending_login_isolates_cn_and_global_channels() {
+        static PENDING_LOGIN_TEST_MUTEX: Mutex<()> = Mutex::new(());
+        let _guard = PENDING_LOGIN_TEST_MUTEX
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let cn = Channel::for_source(CredentialSource::PublicCn).expect("CN channel");
+        let global = Channel::for_source(CredentialSource::GlobalIde).expect("global channel");
+        let expires_at = now_timestamp() + 120;
+
+        {
+            let mut pending = PENDING_OAUTH_STATE.lock().unwrap();
+            *pending = Some(PendingOAuthState {
+                login_id: "cn-login".into(),
+                channel: cn,
+                expected_nonce: "n".into(),
+                code_verifier: "v".into(),
+                challenge_method: "S256".into(),
+                openapi_base_url: cn.openapi_base_url().into(),
+                machine_info: None,
+                verification_uri: "https://qoder.com.cn/oauth".into(),
+                expires_at,
+                cancelled: false,
+            });
+        }
+        assert!(peek_pending_login().is_none());
+        assert_eq!(peek_pending_cn_login().map(|r| r.login_id), Some("cn-login".into()));
+
+        {
+            let mut pending = PENDING_OAUTH_STATE.lock().unwrap();
+            *pending = Some(PendingOAuthState {
+                login_id: "global-login".into(),
+                channel: global,
+                expected_nonce: "n".into(),
+                code_verifier: "v".into(),
+                challenge_method: "S256".into(),
+                openapi_base_url: global.openapi_base_url().into(),
+                machine_info: None,
+                verification_uri: "https://qoder.com/oauth".into(),
+                expires_at,
+                cancelled: false,
+            });
+        }
+        assert_eq!(peek_pending_login().map(|r| r.login_id), Some("global-login".into()));
+        assert!(peek_pending_cn_login().is_none());
+
+        *PENDING_OAUTH_STATE.lock().unwrap() = None;
     }
 }

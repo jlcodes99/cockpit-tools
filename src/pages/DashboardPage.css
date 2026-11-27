@@ -558,6 +558,12 @@
   border: 1px solid var(--plan-pro-border);
 }
 
+.account-mini-card .tier-badge.plus {
+  background: var(--plan-plus-bg);
+  color: var(--plan-plus-color);
+  border: 1px solid var(--plan-plus-border);
+}
+
 .account-mini-card .tier-badge.codex-plus {
   background: linear-gradient(135deg, #ecfdf5 0%, #a7f3d0 52%, #5eead4 100%);
   color: #064e3b;

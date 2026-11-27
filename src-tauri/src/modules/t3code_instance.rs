@@ -217,7 +217,7 @@ fn copy_default_to_root(root: &Path) -> Result<(), String> {
         }
         let _ = fs::copy(&src_clerk, &dst_clerk);
     }
-    Ok(())
+    modules::t3code_provider_bindings::remove_copied_qoder_bindings(&default_state, &target_state)
 }
 
 pub fn create_instance(params: CreateInstanceParams) -> Result<InstanceProfile, String> {
@@ -263,7 +263,14 @@ pub fn create_instance(params: CreateInstanceParams) -> Result<InstanceProfile, 
                 .iter()
                 .find(|instance| instance.id == source_id)
                 .ok_or_else(|| "复制来源实例不存在".to_string())?;
-            instance_store::copy_dir_recursive(Path::new(&source.user_data_dir), &root)?;
+            let source_root = Path::new(&source.user_data_dir);
+            let source_state = modules::t3code_account::state_dir_for_instance_root(source_root);
+            let target_state = modules::t3code_account::state_dir_for_instance_root(&root);
+            let private_roots = modules::t3code_provider_bindings::qoder_profile_roots(&source_state);
+            instance_store::copy_dir_recursive_where(source_root, &root, &|path| {
+                !private_roots.iter().any(|private| private == path)
+            })?;
+            modules::t3code_provider_bindings::remove_copied_qoder_bindings(&source_state, &target_state)?;
         } else {
             copy_default_to_root(&root)?;
         }
@@ -458,6 +465,8 @@ pub fn detect_t3code_exec_path() -> Option<PathBuf> {
                 ("T3 Code (Beta)", "T3 Code (Beta).exe"),
                 ("T3 Code", "T3 Code.exe"),
                 ("t3code", "T3 Code.exe"),
+                ("t3code", "T3 Code (Beta).exe"),
+                ("t3code", "T3 Code (Nightly).exe"),
                 ("T3 Code (Nightly)", "T3 Code (Nightly).exe"),
             ] {
                 candidates.push(programs.join(folder).join(exe));

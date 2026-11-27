@@ -221,10 +221,6 @@ pub(crate) async fn switch_github_copilot(
             account_id
         ));
     }
-    crate::modules::provider_current_state::set_current_account_id(
-        "github_copilot",
-        Some(account_id.as_str()),
-    )?;
 
     let mut opencode_updated = false;
     if user_config.ghcp_opencode_auth_overwrite_on_switch {
@@ -285,6 +281,11 @@ pub(crate) async fn switch_github_copilot(
         logger::log_info("已关闭切换 GitHub Copilot 时自动启动 GitHub Copilot");
         None
     };
+
+    crate::modules::provider_current_state::set_current_account_id(
+        "github_copilot",
+        Some(account_id.as_str()),
+    )?;
 
     logger::log_info(&format!(
         "GitHub Copilot 账号切换完成: {}",

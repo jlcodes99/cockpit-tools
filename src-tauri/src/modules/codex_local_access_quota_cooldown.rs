@@ -128,6 +128,65 @@ fn prune_account_quota_floors(collection: &mut CodexLocalAccessCollection) -> bo
     len != collection.account_quota_floors.len()
 }
 
+fn prune_account_concurrency_limits(collection: &mut CodexLocalAccessCollection) -> bool {
+    let mut changed = false;
+    let len = collection.account_concurrency_limits.len();
+    collection
+        .account_concurrency_limits
+        .retain(|id, _| collection.account_ids.contains(id));
+    if collection.account_concurrency_limits.len() != len {
+        changed = true;
+    }
+    for limit in collection.account_concurrency_limits.values_mut() {
+        let clamped = (*limit).min(MAX_ACCOUNT_CONCURRENCY_LIMIT);
+        if clamped != *limit {
+            *limit = clamped;
+            changed = true;
+        }
+    }
+    changed
+}
+
+fn effective_account_concurrency_limit(
+    collection: &CodexLocalAccessCollection,
+    account_id: &str,
+) -> u16 {
+    collection
+        .account_concurrency_limits
+        .get(account_id)
+        .copied()
+        .unwrap_or(collection.max_account_concurrency)
+        .min(MAX_ACCOUNT_CONCURRENCY_LIMIT)
+}
+
+fn persist_account_concurrency_limit(
+    path: &Path,
+    account_id: &str,
+    max_concurrency: Option<u16>,
+) -> Result<CodexLocalAccessCollection, String> {
+    let mut published = None;
+    update_string_atomic(path, |current| {
+        let mut collection: CodexLocalAccessCollection = serde_json::from_str(
+            current.ok_or("本地接入集合尚未创建")?,
+        ).map_err(|error| error.to_string())?;
+        if !collection.account_ids.iter().any(|id| id == account_id) {
+            return Err("CODEX_LOCAL_ACCESS_CONCURRENCY_LIMIT_ACCOUNT_UNAVAILABLE".into());
+        }
+        if let Some(limit) = max_concurrency {
+            collection
+                .account_concurrency_limits
+                .insert(account_id.to_owned(), limit.min(MAX_ACCOUNT_CONCURRENCY_LIMIT));
+        } else {
+            collection.account_concurrency_limits.remove(account_id);
+        }
+        collection.updated_at = collection.updated_at.max(now_ms());
+        let content = serde_json::to_string_pretty(&collection).map_err(|error| error.to_string())?;
+        published = Some(collection);
+        Ok(content)
+    })?;
+    published.ok_or_else(|| "CODEX_LOCAL_ACCESS_CONCURRENCY_LIMIT_STORAGE".into())
+}
+
 fn persist_account_quota_floor(
     path: &Path,
     account_id: &str,

@@ -1404,6 +1404,7 @@ fn windows_proxy_url_from_server(proxy_server: &str, target_scheme: &str) -> Opt
 #[cfg(target_os = "windows")]
 fn windows_internet_settings_proxy_from_registry(
     target_scheme: &str,
+    bypass_target: Option<&Url>,
 ) -> Result<Option<String>, String> {
     use std::ffi::OsStr;
     use std::os::windows::ffi::OsStrExt;
@@ -1411,7 +1412,7 @@ fn windows_internet_settings_proxy_from_registry(
     use windows::Win32::Foundation::{ERROR_FILE_NOT_FOUND, ERROR_SUCCESS};
     use windows::Win32::System::Registry::{
         RegCloseKey, RegOpenKeyExW, RegQueryValueExW, HKEY, HKEY_CURRENT_USER, KEY_READ, REG_DWORD,
-        REG_EXPAND_SZ, REG_SZ, REG_VALUE_TYPE,
+        REG_VALUE_TYPE,
     };
 
     fn to_wide(value: &str) -> Vec<u16> {
@@ -1474,15 +1475,81 @@ fn windows_internet_settings_proxy_from_registry(
         return Ok(None);
     }
 
-    let server_name = to_wide("ProxyServer");
-    let mut server_type = REG_VALUE_TYPE::default();
+    let Some(proxy_server) = windows_proxy_registry_string(hkey, "ProxyServer")? else {
+        return Ok(None);
+    };
+    if let Some(target) = bypass_target {
+        let bypass = windows_proxy_registry_string(hkey, "ProxyOverride")?.unwrap_or_default();
+        return Ok(windows_proxy_url_for_request(
+            &proxy_server,
+            &bypass,
+            target,
+        ));
+    }
+    Ok(windows_proxy_url_from_server(&proxy_server, target_scheme))
+}
+
+#[cfg(any(test, target_os = "windows"))]
+fn windows_proxy_url_for_request(proxy_server: &str, bypass: &str, target: &Url) -> Option<String> {
+    let host = target.host_str()?;
+    let host_with_port = target
+        .port_or_known_default()
+        .map(|port| format!("{host}:{port}"));
+    for entry in bypass
+        .split(';')
+        .map(str::trim)
+        .filter(|entry| !entry.is_empty())
+    {
+        if entry.eq_ignore_ascii_case("<local>") {
+            if matches!(target.host(), Some(url::Host::Domain(domain)) if !domain.contains('.')) {
+                return None;
+            }
+            continue;
+        }
+        let pattern = if let Some((scheme, pattern)) = entry.split_once("://") {
+            if !scheme.eq_ignore_ascii_case(target.scheme()) {
+                continue;
+            }
+            pattern
+        } else {
+            entry
+        };
+        let pattern = regex::escape(pattern).replace(r"\*", ".*");
+        let matcher = regex::RegexBuilder::new(&format!("^{pattern}$"))
+            .case_insensitive(true)
+            .build()
+            .ok()?;
+        if matcher.is_match(host)
+            || host_with_port
+                .as_deref()
+                .is_some_and(|value| matcher.is_match(value))
+        {
+            return None;
+        }
+    }
+    windows_proxy_url_from_server(proxy_server, target.scheme())
+}
+
+#[cfg(target_os = "windows")]
+fn windows_proxy_registry_string(
+    hkey: windows::Win32::System::Registry::HKEY,
+    name: &str,
+) -> Result<Option<String>, String> {
+    use windows::core::PCWSTR;
+    use windows::Win32::Foundation::{ERROR_FILE_NOT_FOUND, ERROR_SUCCESS};
+    use windows::Win32::System::Registry::{
+        RegQueryValueExW, REG_EXPAND_SZ, REG_SZ, REG_VALUE_TYPE,
+    };
+
+    let value_name: Vec<u16> = name.encode_utf16().chain(std::iter::once(0)).collect();
+    let mut value_type = REG_VALUE_TYPE::default();
     let mut byte_len: u32 = 0;
     let size_status = unsafe {
         RegQueryValueExW(
             hkey,
-            PCWSTR(server_name.as_ptr()),
+            PCWSTR(value_name.as_ptr()),
             None,
-            Some(&mut server_type),
+            Some(&mut value_type),
             None,
             Some(&mut byte_len),
         )
@@ -1491,25 +1558,27 @@ fn windows_internet_settings_proxy_from_registry(
         return Ok(None);
     }
     if size_status != ERROR_SUCCESS
-        || (server_type != REG_SZ && server_type != REG_EXPAND_SZ)
+        || (value_type != REG_SZ && value_type != REG_EXPAND_SZ)
         || byte_len > 16 * 1024
     {
-        return Err(format!("RegQueryValueExW(ProxyServer size) failed: {:?}", size_status));
+        return Err(format!(
+            "RegQueryValueExW({name} size) failed: {size_status:?}"
+        ));
     }
 
     let mut raw_bytes = vec![0u8; byte_len as usize];
     let read_status = unsafe {
         RegQueryValueExW(
             hkey,
-            PCWSTR(server_name.as_ptr()),
+            PCWSTR(value_name.as_ptr()),
             None,
-            Some(&mut server_type),
+            Some(&mut value_type),
             Some(raw_bytes.as_mut_ptr()),
             Some(&mut byte_len),
         )
     };
     if read_status != ERROR_SUCCESS {
-        return Err(format!("RegQueryValueExW(ProxyServer) failed: {:?}", read_status));
+        return Err(format!("RegQueryValueExW({name}) failed: {read_status:?}"));
     }
     raw_bytes.truncate(byte_len as usize);
     let wide_len = raw_bytes.len() / 2;
@@ -1521,14 +1590,29 @@ fn windows_internet_settings_proxy_from_registry(
         }
         wide_chars.push(ch);
     }
-    let proxy_server = String::from_utf16_lossy(&wide_chars);
-    Ok(windows_proxy_url_from_server(&proxy_server, target_scheme))
+    Ok(Some(String::from_utf16_lossy(&wide_chars)))
 }
 
 #[cfg(target_os = "windows")]
 pub(crate) fn system_proxy_url_for_target(target_url: &str) -> Option<String> {
+    windows_system_proxy_url_for_target(target_url, None)
+}
+
+#[cfg(target_os = "windows")]
+pub(crate) fn windows_system_proxy_url_for_target_with_bypass(target_url: &str) -> Option<String> {
+    let target = Url::parse(target_url).ok()?;
+    windows_system_proxy_url_for_target(target_url, Some(&target))
+}
+
+#[cfg(target_os = "windows")]
+fn windows_system_proxy_url_for_target(
+    target_url: &str,
+    bypass_target: Option<&Url>,
+) -> Option<String> {
     let target_scheme = system_proxy_target_scheme(target_url);
-    if let Ok(resolved) = windows_internet_settings_proxy_from_registry(&target_scheme) {
+    if let Ok(resolved) =
+        windows_internet_settings_proxy_from_registry(&target_scheme, bypass_target)
+    {
         return resolved;
     }
 
@@ -1553,7 +1637,15 @@ pub(crate) fn system_proxy_url_for_target(target_url: &str) -> Option<String> {
     if !windows_reg_dword_enabled(values.get("ProxyEnable")) {
         return None;
     }
-    windows_proxy_url_from_server(values.get("ProxyServer")?, &target_scheme)
+    let proxy_server = values.get("ProxyServer")?;
+    if let Some(target) = bypass_target {
+        let bypass = values
+            .get("ProxyOverride")
+            .map(String::as_str)
+            .unwrap_or_default();
+        return windows_proxy_url_for_request(proxy_server, bypass, target);
+    }
+    windows_proxy_url_from_server(proxy_server, &target_scheme)
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "windows")))]
@@ -1856,6 +1948,8 @@ fn preserve_runtime_collection_fields(
     collection.multi_agent = current.multi_agent.clone();
     collection.account_quota_floors = current.account_quota_floors.clone();
     prune_account_quota_floors(collection);
+    collection.account_concurrency_limits = current.account_concurrency_limits.clone();
+    prune_account_concurrency_limits(collection);
     prune_multi_agent_references(collection);
     prune_capability_fallback_references(collection);
     // Image main-model choices use their own field transaction, like the catalog.
@@ -1868,6 +1962,7 @@ fn preserve_runtime_collection_fields(
     {
         copy_image_model_catalog_fields(collection, current);
     }
+    merge_workbuddy_delegate_revocations(collection, &current.api_keys, &current.workbuddy_delegate_revoked_key_ids);
     for api_key in &mut collection.api_keys {
         if let Some(current_api_key) = current.api_keys.iter().find(|item| item.id == api_key.id) {
             api_key.token_used = api_key.token_used.max(current_api_key.token_used);

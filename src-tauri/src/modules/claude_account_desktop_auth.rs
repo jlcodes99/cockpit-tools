@@ -621,7 +621,7 @@ pub fn sync_cli_account_from_config_dir_if_same(
 fn sync_cli_account_from_config_dir(
     account_id: &str,
     config_dir: &Path,
-    source: CliCredentialSource,
+    source: CliCredentialSource<'_>,
     read_credentials: impl FnOnce(&Path) -> Result<Value, String>,
 ) -> Result<Option<ClaudeAccount>, String> {
     let existing = load_account(account_id).ok_or_else(|| "Claude 账号不存在".to_string())?;
@@ -693,15 +693,16 @@ fn sync_cli_account_from_config_dir(
         return Ok(Some(existing));
     }
 
-    if source == CliCredentialSource::BoundInstance
-        && !bound_cli_config_dirs(
+    if let CliCredentialSource::BoundInstance(bound_default_dir) = source {
+        if !bound_cli_config_dirs(
             &crate::modules::claude_instance::load_instance_store()?,
             account_id,
-            get_default_claude_code_config_dir().ok(),
+            bound_default_dir.map(Path::to_path_buf),
         )
         .contains(config_dir)
-    {
-        return Ok(None);
+        {
+            return Ok(None);
+        }
     }
 
     logger::log_info(&format!(
@@ -710,14 +711,6 @@ fn sync_cli_account_from_config_dir(
         config_dir.display()
     ));
     update_oauth_account_if_current(account_id, &existing.claude_credentials_raw, |current| {
-        if source == CliCredentialSource::DefaultCli
-            && !incoming
-                .claude_config_raw
-                .as_ref()
-                .is_some_and(|config| source.matches_account(current, config))
-        {
-            return Ok(());
-        }
         *current = derive_account_from_snapshots(
             incoming.claude_credentials_raw.clone().unwrap_or(Value::Null),
             incoming.claude_config_raw.clone().unwrap_or(Value::Null),

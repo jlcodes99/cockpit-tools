@@ -1,5 +1,17 @@
 {
   "antigravityLaunch": {
+    "desktopLanguage": "لغة واجهة سطح المكتب",
+    "desktopLanguageEnglish": "الإنجليزية",
+    "desktopLayout": "تخطيط الواجهة",
+    "desktopLayoutEngineering": "هندسة البرمجيات",
+    "desktopLayoutKnowledge": "العمل المعرفي",
+    "desktopPermission": "الأذونات المحلية الافتراضية",
+    "desktopPermissionReview": "طلب مراجعة",
+    "desktopPermissionDefault": "افتراضي",
+    "desktopPermissionAuto": "تلقائي",
+    "desktopPermissionTurbo": "تلقائي بالكامل",
+    "desktopSettingsHint": "يُطبَّق التخطيط والأذونات المحلية عند تشغيل Antigravity من Cockpit Tools.",
+    "desktopLanguageChinese": "الصينية المبسطة",
     "initializeTitle": "يحتاج Antigravity IDE إلى التهيئة",
     "initializeThenSwitch": "افتح IDE مرة واحدة لتتمكّن من تبديل الحساب.",
     "initializeThenBind": "شغّل المثيل مرة واحدة لتتمكّن من ربط حساب.",
@@ -20,7 +32,6 @@
     "sharedInstanceStarted": "تم تحديث تسجيل الدخول المشترك وإرسال طلب التشغيل.",
     "sharedInstanceLaunchFailed": "تم تحديث تسجيل الدخول المشترك، لكن تعذر التشغيل: {{error}}",
     "sharedCopySource": "نسخ مجلد إعدادات النسخة المحددة.",
-    "quickSwitchSetting": "ينطبق على التبديل السريع في Antigravity IDE. يمكنك اختيار التشغيل في كل مرة من نافذة الحساب.",
     "title": "اختيار العميل",
     "switchOnly": "تبديل فقط",
     "switchAndLaunch": "تبديل وتشغيل",
@@ -33,7 +44,8 @@
     "cliAuth": "يستخدم agy إعدادات المصادقة الخاصة به. إذا ضُبط مفتاح API أو بيانات اعتماد Google Cloud، فستكون لها الأولوية.",
     "cliMissing": "لم يُعثر على agy. ثبّت Antigravity CLI الرسمي وحاول مرة أخرى.",
     "terminalFailed": "تعذّر تجهيز الطرفية. {{error}}",
-    "switchedTerminalFailed": "تم تبديل الحساب، لكن تعذّر فتح الطرفية. {{error}}"
+    "switchedTerminalFailed": "تم تبديل الحساب، لكن تعذّر فتح الطرفية. {{error}}",
+    "quickSwitchSetting": "ينطبق على التبديل السريع في Antigravity IDE. يمكنك اختيار التشغيل في كل مرة من نافذة الحساب."
   },
   "pelican": {
     "caseKinds": {
@@ -194,6 +206,7 @@
     "providerClear": "مسح التحديد"
   },
   "common": {
+    "commonSettings": "إعدادات شائعة",
     "automation": {
       "invalidPlatform": "منصة حساب غير معروفة. شغّل cockpit-cli account platforms لعرض المعرّفات المدعومة.",
       "hostUnavailable": "شغّل تطبيق Cockpit Tools لسطح المكتب باستخدام مجلد البيانات هذا، ثم أعد المحاولة.",
@@ -233,6 +246,7 @@
     "dataQueryBusy": "تجري معالجة البيانات. يُرجى المحاولة مرة أخرى بعد قليل.",
     "historyRestoring": "جارٍ استعادة السجل…",
     "apiBudget": {
+      "sharedPool": "الحصة المشتركة",
       "keyScope": "هذا المفتاح",
       "upgradeRequired": "حدّث Cockpit Tools على حاسوب البوابة لعرض الإحصاءات وسجل الطلبات.",
       "gatewayName": "بوابة Cockpit",
@@ -279,7 +293,10 @@
       "proxyAuth": "فشلت مصادقة الوكيل «{{proxy}}». تحقق من اسم مستخدم الوكيل أو كلمة مروره.",
       "localProxyUnavailable": "تعذر الاتصال بالوكيل المحلي «{{proxy}}». تحقق من تشغيل خدمة الوكيل.",
       "directConnection": "تعذر الاتصال بـ {{target}}. تحقق من الشبكة وحاول مجددًا.",
-      "directTimeout": "انتهت مهلة الاتصال بـ {{target}}. تحقق من الشبكة وحاول مجددًا."
+      "directTimeout": "انتهت مهلة الاتصال بـ {{target}}. تحقق من الشبكة وحاول مجددًا.",
+      "recoveryExhaustedLargeRequest": "أدت حالات الفشل أو انتهاء المهلة المتكررة من الخادم المصدر إلى إيقاف إعادة المحاولة التلقائية لهذا الطلب الكبير ({{size}}). قد يكون سجل المحادثة أو الصور الكبيرة قد تجاوزت مهلة الرفع أو انتظار الاستجابة؛ قم بضغط المحادثة أو بدء محادثة جديدة ثم أعد المحاولة. لا يشير هذا الخطأ إلى نفاد حصة الحساب.",
+      "proxyLargeRequestTimeout": "انتهت مهلة إرسال هذا الطلب الكبير ({{size}}) إلى {{target}} عبر الوكيل «{{proxy}}» قبل استلام الاستجابة. قد يتجاوز السجل الكبير أو الصور مهلة الوكيل أو الخادم المصدر؛ قم بضغط المحادثة أو بدء محادثة جديدة أو التحقق من الوكيل.",
+      "directLargeRequestTimeout": "انتهت مهلة إرسال هذا الطلب الكبير ({{size}}) إلى {{target}} قبل استلام الاستجابة. قد يتجاوز السجل الكبير أو الصور مهلة الرفع أو الخادم المصدر؛ قم بضغط المحادثة أو بدء محادثة جديدة ثم أعد المحاولة."
     },
     "codexUsage": {
       "responseSpeed": "سرعة الرد",
@@ -883,7 +900,8 @@
     "apiRelay": "الترحيل",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "qoderCn": "Qoder CN"
   },
   "sponsors": {
     "pageTitle": "الرعاة",
@@ -995,6 +1013,7 @@
       "syncThreads": "تُضاف الجلسات المفقودة إلى جميع المثيلات، ويُلحَق المحتوى الجديد فقط إذا كان المثيل الهدف متوقفًا وسجله مطابقًا. تُحفظ البايتات الموجودة. تُرفض تحديثات السجلات المتفرعة أو الأهداف العاملة. تُنسخ الملفات الهدف احتياطيًا قبل الكتابة. هل تريد المتابعة؟"
     },
     "status": {
+      "firstLaunchInitializing": "تهيئة التشغيل الأول…",
       "running": "قيد التشغيل",
       "stopped": "متوقف",
       "restarting": "إعادة التشغيل",
@@ -1164,6 +1183,7 @@
       "empty": "لا يوجد ذاكرة تخزين مؤقت للحصة"
     },
     "messages": {
+      "firstLaunchTimedOut": "لم يكتمل إعداد التشغيل الأول. أكمل تسجيل الدخول أو التفويض في التطبيق إذا طُلب منك ذلك، ثم أعد المحاولة.",
       "created": "تم إنشاء المثيل",
       "emptyCreated": "تم إنشاء مثيل فارغ. شغّله مرة واحدة أولاً ثم اربط الحساب.",
       "existingDirCreated": "تم إنشاء المثيل باستخدام المجلد المحدد.",
@@ -1602,8 +1622,6 @@
       "claudeShareCodeSessionsOnSwitchDesc": "مشاركة قائمة جلسات Code بين الحسابات المحلية عند تبديل ملف Claude Desktop الافتراضي على macOS.",
       "claudeAppPath": "هدف تشغيل Claude Desktop",
       "claudeAppPathDesc": "يمكن للملف الافتراضي استخدام هدف Microsoft Store؛ أما الملفات متعددة المثيلات فتحتاج Claude.exe الحقيقي.",
-      "antigravityLaunchOnSwitch": "تشغيل Antigravity IDE عند التبديل",
-      "antigravityLaunchOnSwitchDesc": "عند الإيقاف، يكتب التبديل بيانات الحساب الافتراضي في Antigravity IDE فقط، ولا يغلق التطبيق أو يشغله أو يعيد تشغيله.",
       "tokenKeeper": "إبقاء التفويض",
       "tokenKeeperDesc": "يحدّث رموز Token للحسابات على دفعات صغيرة فقط عند اقتراب انتهاء التفويض، مما يقلل طلبات الخلفية عند كثرة الحسابات.",
       "platformAutoRefresh": "تحديث حصة {{platform}} تلقائيًا",
@@ -1690,7 +1708,14 @@
       "t3codeAutoRefresh": "تحديث حصة T3 Code تلقائياً",
       "t3codeAutoRefreshDesc": "الفاصل الزمني لتحديث الحصة في الخلفية",
       "t3codeAppUiInjection": "كبسولة الحصة في شريط محادثة T3 Code",
-      "t3codeAppUiInjectionDesc": "عند تشغيل T3 Code من Cockpit، يظهر نوع النموذج المحدد والحصة المتبقية أسفل مربع الكتابة. انقر لعرض تفاصيل الحساب والاستخدام."
+      "t3codeAppUiInjectionDesc": "عند تشغيل T3 Code من Cockpit، يظهر نوع النموذج المحدد والحصة المتبقية أسفل مربع الكتابة. انقر لعرض تفاصيل الحساب والاستخدام.",
+      "qoderCnAppPath": "مسار تشغيل Qoder CN",
+      "qoderCnAppPathDesc": "اتركه فارغًا للكشف التلقائي. عند تبديل الحساب يتم إغلاق تطبيق سطح المكتب وإعادة تشغيله.",
+      "qoderCnAppPathPlaceholder": "المسار الافتراضي",
+      "qoderCnPathReset": "إعادة التعيين إلى الافتراضي",
+      "antigravityLaunchOnSwitch": "تشغيل Antigravity IDE عند التبديل",
+      "antigravityLaunchOnSwitchDesc": "عند الإيقاف، يكتب التبديل بيانات الحساب الافتراضي في Antigravity IDE فقط، ولا يغلق التطبيق أو يشغله أو يعيد تشغيله.",
+      "qoderCnAutoRefresh": "تحديث تلقائي لحصة Qoder CN"
     },
     "network": {
       "apiTitle": "واجهة برمجة تطبيقات قمرة القيادة المضادة للجاذبية",
@@ -5342,7 +5367,12 @@
         "maxConcurrentImageRequests": "طلبات الصور لكل حساب",
         "maxAccountConcurrency": "تزامن الحساب",
         "accountConcurrencyWait": "انتظار التزامن (ث)",
-        "optionsSaved": "تم حفظ خيارات التوجيه"
+        "optionsSaved": "تم حفظ خيارات التوجيه",
+        "accountConcurrencyLimit": "حد التزامن",
+        "accountConcurrencyUnlimited": "غير محدود",
+        "accountConcurrencyHint": "يُخصص حد التزامن لهذا الحساب (0 يعني غير محدود، والحد الأقصى 64). اتركه فارغًا لاستخدام الحد العام.",
+        "accountConcurrencyInvalid": "أدخل عددًا صحيحًا من 0 إلى 64.",
+        "accountConcurrencySaveFailed": "تعذر حفظ حد التزامن للحساب."
       },
       "validation": {
         "numberRange": "أدخل رقما بين {{min}} و {{max}}"
@@ -6622,7 +6652,8 @@
         "canceled": "ألغى العميل هذا الطلب؛ لا يتعلق ذلك بمهلة فتح التدفق.",
         "gateway": "يشير HTTP 504 إلى انتهاء مهلة البوابة. لا يحدد هذا السجل السبب؛ راجع خطأ الخادم المصدر ومرحلة الطلب.",
         "threshold": "الحد المطبق على هذا الطلب: {{seconds}} ثانية.",
-        "settings": "تعديل المهلة"
+        "settings": "تعديل المهلة",
+        "largeRequest": "حجم الطلب المسجل: {{size}}. قد يؤدي السجل الكبير جدًا أو الصور المضمنة إلى انتهاء المهلة أثناء الرفع أو انتظار الاستجابة الأولى؛ يُنصح بضغط المحادثة أو بدء محادثة جديدة."
       },
       "identity": {
         "title": "هوية الجلسة والحساب",
@@ -7148,6 +7179,14 @@
     "t3code": {
       "title": "إعدادات T3 Code",
       "appPath": "مسار تشغيل T3 Code"
+    },
+    "validation": {
+      "refreshIntervalInvalid": "أدخل عددًا صحيحًا بين 1 و999، أو -1 لتعطيل التحديث التلقائي.",
+      "quotaAlertThresholdInvalid": "أدخل عددًا صحيحًا بين 0 و100."
+    },
+    "disableRefreshHint": "-1 يعطّل التحديث التلقائي.",
+    "qoderCn": {
+      "title": "إعدادات Qoder CN"
     }
   },
   "quotaAlert": {
@@ -7849,7 +7888,21 @@
       "switchLaunchFailed": "حُفظ الحساب، لكن تعذر تشغيل Qoder IDE. {{detail}}",
       "refreshCount": "تم تحديث {{count}} من أصل {{total}} حسابًا.",
       "launchUnconfirmed": "تعذر تأكيد تشغيل Qoder IDE.",
-      "workerFailed": "فشلت عملية Qoder في الخلفية. {{detail}}"
+      "workerFailed": "فشلت عملية Qoder في الخلفية. {{detail}}",
+      "oauthUrlEmpty": "رابط تفويض Qoder OAuth فارغ.",
+      "qoderCnPathMissing": "لم يتم العثور على Qoder CN Desktop. حدّد مسار التشغيل في الإعدادات أو ثبّته ثم أعد المحاولة.",
+      "platformMismatch": "ينتمي هذا الحساب إلى إصدار منطقة أخرى، لذا لا يمكن كتابته في العميل الحالي.",
+      "cnRelaunchFailed": "تم تبديل الحساب، لكن تعذر تشغيل عميل Qoder CN. {{detail}}",
+      "cnDesktopUnsupported": "استخدم واجهة الأوامر لتبديل حساب Qoder CN على هذا النظام.",
+      "clientInvalid": "نوع العميل غير صالح. أعد اختيار هدف التبديل.",
+      "nativeTokenMissing": "يفتقر هذا الحساب إلى بيانات اعتماد قابلة للكتابة. أعد التفويض أو أعد الاستيراد.",
+      "nativeWriteVerifyFailed": "فشل التحقق من بيانات الاعتماد بعد كتابتها، وجرت محاولة التراجع إلى الحالة الأصلية. أغلق العميل ثم أعد المحاولة.",
+      "nativeKeyUnreadable": "تعذر قراءة مفتاح بيانات الاعتماد المحلي. تأكد من تشغيل Cockpit وQoder تحت حساب النظام نفسه.",
+      "nativeImportInvalid": "لا تتضمن بيانات الاعتماد المستوردة معلومات الحساب، لذا يتعذر تحديد الحساب.",
+      "nativeImportFailed": "تعذر استيراد معلومات تسجيل الدخول المحلية لـ Qoder. سجّل الدخول في العميل أولاً ثم أعد المحاولة.",
+      "nativeProcessProbeFailed": "تعذر اكتشاف حالة عملية Qoder. أعد المحاولة لاحقًا.",
+      "regionUnsupported": "تعذر تحديد إصدار المنطقة الذي ينتمي إليه الحساب. أعد التفويض.",
+      "clientRunning": "أغلق {{client}} قبل تبديل الحسابات."
     },
     "title": "إدارة حسابات Qoder",
     "comingSoon": {
@@ -7891,6 +7944,38 @@
     },
     "empty": {
       "desc": "انقر على \"إضافة حساب\" لاستخدام تسجيل الدخول، الاستيراد المحلي، أو استيراد JSON."
+    },
+    "region": {
+      "cn": "Qoder CN · الصين",
+      "global": "Qoder · الدولي"
+    },
+    "clientTarget": {
+      "importSource": "مصدر الاستيراد المحلي",
+      "initializeHint": "افتح العميل المحدد وأكمل الإعداد، ثم حاول مجددًا.",
+      "label": "هدف التبديل / الاستيراد المحلي",
+      "ariaLabel": "عميل Qoder",
+      "desktop": "Qoder Desktop",
+      "desktopCn": "Qoder CN Desktop",
+      "cli": "Qoder CLI",
+      "cliCn": "Qoder CN CLI",
+      "ide": "Qoder IDE",
+      "switchSuccess": "تم تبديل الحساب. أعد فتح العميل الهدف.",
+      "windowsOnly": " (Windows فقط)",
+      "desktopSwitchSuccess": "تم تبديل الحساب. تمت إعادة تشغيل {{client}}.",
+      "relaunchFailed": "تم تبديل الحساب، لكن تعذر تشغيل {{client}} تلقائيًا. افتحه يدويًا."
+    },
+    "cn": {
+      "nativeOnly": "اختر Desktop أو CLI لحسابات Qoder CN.",
+      "ideUnavailable": "اختر Desktop أو CLI لحسابات Qoder CN. محول IDE هنا مخصص للنسخة الدولية فقط.",
+      "instancesUnsupported": "يدعم Qoder CN Desktop وCLI تبديل حساب العميل الافتراضي. تعدد مثيلات التطبيق غير مدعوم بعد.",
+      "flowNoticeDesc": "يتوفر تسجيل الدخول الرسمي والاستيراد المحلي من تطبيق سطح المكتب أو واجهة الأوامر واستيراد JSON والتحقق من الحصة. يمكنك تبديل الحساب فقط أو تشغيل العميل المحدد أيضًا.",
+      "flowNoticePermission": "يقرأ الاستيراد المحلي جلسة تطبيق سطح المكتب أو واجهة الأوامر. يحدّث تبديل الحساب الجلسة المحلية لعميل Qoder CN المحدد فقط.",
+      "flowNoticeNetwork": "نطاق الشبكة: يتصل تسجيل الدخول الرسمي بخدمات Qoder CN لإكمال الاستدعاء؛ وتجلب استعلامات الحصة بيانات الاستخدام عبر واجهة Qoder CN API. لا يتم رفع المفاتيح أو بيانات الاعتماد المحلية.",
+      "flowNoticeTitle": "دليل حساب Qoder CN (انقر للتوسيع أو الطي)",
+      "oauthHint": "انقر على الزر أدناه لإكمال تفويض OAuth لحساب Qoder CN في المتصفح.",
+      "importJsonHint": "استورد ملف JSON الخاص بـ Qoder CN المُصدَّر من هذه الأداة.",
+      "importLocalDesc": "يقرأ حالة تسجيل الدخول الحالية من عميل Qoder CN المحلي، بما في ذلك معلومات المستخدم والخطة واستخدام الرصيد.",
+      "importLocalSuccess": "تم استيراد الحساب من Qoder CN المحلي."
     }
   },
   "trae": {
@@ -8278,7 +8363,38 @@
       "logHits": "تطابق {{count}} مرات في السجلات"
     },
     "exposeToCodex": {
-      "title": "يتصل عبر بوابة Native Rust دون نسخ رمز WorkBuddy"
+      "title": "يتصل عبر بوابة Native Rust دون نسخ رمز WorkBuddy",
+      "textOnlyTitle": "يدعم Native ACP القديم النصوص فقط؛ لقراءة الملفات وكتابتها وتشغيل الأوامر، استخدم «جسر أدوات Codex».",
+      "textOnlyAction": "الاتصال بـ Codex (نص فقط)"
+    },
+    "nativeCodex": {
+      "managedKeyRotation": "يتولى جسر الأدوات الأصلي في WorkBuddy إدارة هذا المفتاح. لتغييره، ألغِ الإعداد ثم أنشئ إعدادًا جديدًا.",
+      "nativeRequired": "أنشئ خدمة Native Rust وفعّلها أولاً من صفحة خدمة API؛ لن يتغيّر الوضع تلقائياً.",
+      "enterpriseUnsupported": "لا يدعم الإصدار الأول ربط المستأجر المؤسسي بدقة؛ تُدعم مصادر WorkBuddy الشخصية فقط.",
+      "revokedFilesPreserved": "أُلغي Key المخصّص. عُدّلت ملفات الإعداد أو تعذّر تنظيفها بأمان، لذا احتُفظ بجميع الملفات المعدّلة وبيانات الجلسات؛ يمكنك فحص الملفات ثم إعادة محاولة الاستعادة.",
+      "notOwned": "لا يتطابق إثبات ملكية الإعداد مع Key المخصّص. لم يُعدَّل أي Key. تحقّق من علامة الملكية في مجلد الإعداد.",
+      "profileChanged": "عُدّل هذا الإعداد المستقل، ولن يستبدل البرنامج تعديلاتك.",
+      "selectionChanged": "لم يعد النموذج أو مستوى الاستدلال متاحاً. أعد جلب القائمة واختر من جديد.",
+      "sourceUnavailable": "مصدر WorkBuddy هذا غير متاح. تحقّق من حالة تسجيل الدخول. لن يُجرَّب أي حساب آخر.",
+      "operationFailed": "فشلت العملية. تأكّد من تثبيت WorkBuddy CLI وصلاحية الحساب، ثم أعد جلب القائمة.",
+      "title": "WorkBuddy → Codex: جسر الأدوات الأصلي",
+      "scope": "أنشئ Key محلياً مخصّصاً لمصدر ثابت وCODEX_HOME مستقلاً. ينفّذ Codex الأدوات بنفسه؛ لن يُكتب رمز WorkBuddy في إعداد Codex، ولن يتغيّر تسجيل الدخول الافتراضي أو Key الرئيسي لخدمة API.",
+      "account": "مصدر WorkBuddy",
+      "noSourceSelected": "لا يوجد مصدر متاح؛ لا يزال بإمكانك إدارة الإعدادات التي أنشأتها",
+      "model": "نماذج CLI المتاحة حالياً",
+      "readCatalog": "اجلب قائمة النماذج الحالية",
+      "effort": "مستوى الاستدلال",
+      "metadataOnly": "يهيّئ جلب القائمة CLI فقط، ولا يرسل أي مطالبات إلى النموذج. يُعاد التحقّق من النموذج ومستوى الاستدلال قبل الإنشاء؛ إذا أصبح المصدر غير صالح، يظهر خطأ مباشرةً دون اللجوء إلى حساب آخر. يُدعم HTTP Responses فقط؛ البحث عبر الإنترنت (web_search) معطّل في الإعداد المستقل، ولا تُدعم الصور أو الأدوات المستضافة الأخرى أو compact أو WebSocket.",
+      "refreshCatalog": "إعادة جلب القائمة",
+      "managedProfile": "الإعداد المستقل المُنشأ",
+      "profileSource": "المصدر: ",
+      "profileSourceMissing": "حُذف المصدر؛ لا يزال بإمكانك إلغاء Key المخصّص واستعادة الإعداد المستقل.",
+      "profileSourceUnavailable": "المصدر غير متاح حالياً؛ لا يعتمد الإلغاء أو الاستعادة على تسجيل الدخول إلى المصدر.",
+      "launchHelp": "انتقل إلى مجلد مشروعك في الطرفية، ثم شغّل الأمر أدناه. يستخدم تشغيل Codex هذا وحده هذا الإعداد.",
+      "retryRestore": "إعادة محاولة الاستعادة (أُلغي Key)",
+      "restore": "إلغاء Key المخصّص واستعادة هذا الإعداد",
+      "create": "إنشاء Key مخصّص وإعداد مستقل",
+      "open": "جسر أدوات Codex"
     }
   },
   "minimaxCode": {
@@ -8989,7 +9105,6 @@
     "quota": {
       "cliUnavailable": "استخدام CLI غير متاح",
       "weekly": "الاستخدام الأسبوعي",
-      "sharedPool": "الحصة المشتركة",
       "monthly": "الاستخدام الشهري",
       "onDemand": "الاستخدام عند الطلب",
       "balance": "الرصيد والنقاط",
@@ -9622,6 +9737,15 @@
     "saved": "تم الحفظ. تُطبّق الإعدادات على الطلبات الجديدة."
   },
   "antigravityTokenUsage": {
+    "context": {
+      "requestContext": "سياق الطلب",
+      "coverage": "مسجّل {{reported}} · تقديري {{estimated}} · غير متاح {{missing}}",
+      "largestGrowth": "أكبر زيادة {{total}} في الخطوة #{{step}}",
+      "growthParts": "إدخال {{input}} · قراءة ذاكرة مؤقتة {{read}} · كتابة ذاكرة مؤقتة {{write}}",
+      "method": "يجمع سياق الطلب رموز الإدخال والذاكرة المؤقتة. تُحسب التغيرات بين الطلبات المتتالية ذات القياسات المسجّلة. لا تتوفر حصص الرسائل والأدوات والمرفقات.",
+      "unplacedCompactions": "عمليات ضغط بلا رقم خطوة {{count}}",
+      "compactionStep": "ضغط السياق"
+    },
     "tab": "استهلاك الجلسات",
     "subtitle": "استهلاك الرموز المحلي من جلسات Antigravity",
     "title": "استهلاك رموز جلسات Antigravity",
@@ -9776,7 +9900,6 @@
       "codexCatalogPending": "مفاتيح الطرف الثالث بانتظار مزامنة النماذج: {{count}}"
     },
     "commonSettings": {
-      "title": "إعدادات شائعة",
       "language": "لغة T3 Code"
     },
     "platformOrder": {
@@ -9996,6 +10119,14 @@
       "searchAccountsPlaceholder": "ابحث في حسابات {{platform}}...",
       "goAddSourceAccount": "إضافة في {{platform}}",
       "emptyPoolDesc": "أضف حسابًا متاحًا في صفحة {{platform}} أولاً ثم قم بتبديله إلى T3 Code."
+    }
+  },
+  "antigravity": {
+    "proxy": {
+      "followHint": "استخدم الوكيل العام من الإعدادات؛ عند تعطيله تُستخدم الشبكة الافتراضية.",
+      "independentHint": "ينطبق على هذا الحساب فقط ويتجاوز الوكيل العام.",
+      "invalidUrl": "رابط الوكيل غير مدعوم؛ البروتوكولات المدعومة هي http وhttps وsocks5 وsocks5h فقط.",
+      "restartHint": "بعد الربط أو التغيير أو مسح الوكيل، أعد تشغيل Antigravity (تطبيق سطح المكتب أو جلسة CLI جديدة) حتى يسري المفعول. لا يتراجع الوكيل الفاشل إلى الاتصال المباشر."
     }
   }
 }

@@ -28,7 +28,7 @@ export function T3codeRuntimeSetup({
     setInstalling(true);
     try {
       if (workspace?.injectionConnected && !instance.explicitRuntimePath) {
-        await installT3codeAntigravityRuntime(instance.instanceId);
+        await installT3codeAntigravityRuntime(instance.instanceId, workspace.t3InstanceId);
         setStarted(true);
       } else {
         await openUrl(ANTIGRAVITY_RUNTIME_GUIDE);

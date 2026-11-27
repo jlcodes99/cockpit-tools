@@ -497,26 +497,36 @@ async fn send_inner(
         }
         let mut stop = state.stop.clone();
         let mut connect_failed = false;
+        if let Some(bytes) = request.body().and_then(reqwest::Body::as_bytes) {
+            tracker.network_recovery.observe_request_bytes(bytes.len() as u64);
+        }
         let open_deadline = deadline.cap(attempt_execution.prepare_deadline());
         if tokio::time::Instant::now() >= open_deadline {
             return Err(if tokio::time::Instant::now() >= deadline {
                 total_timeout()
             } else {
-                super::connection_error::timeout(&prepared.route)
+                super::connection_error::timeout_with_request_bytes(
+                    &prepared.route,
+                    tracker.max_request_bytes(),
+                )
             });
         }
         let mut inspecting_rejection = false;
+        let opening = super::request_upload::Opening::new(open_deadline, deadline, policy.open_timeout);
+        let native_upload = codex_backend && !prepared.route.chatgpt_plan;
+        let progress_opening = super::request_upload::Opening::eligible(&request, native_upload)
+            || plain_request.as_ref().is_some_and(|plain| super::request_upload::Opening::eligible(plain, native_upload));
         let result = tokio::select! {
             biased;
             _ = stop.wait() => Err(stopping_error()),
-            result = deadline::timeout_at(open_deadline, async {
+            result = opening.run_if(progress_opening, async {
                 tracker.begin_attempt("http");
                 if let Some(bytes) = request.body().and_then(reqwest::Body::as_bytes) { tracker.upstream_request_bytes(bytes.len()); }
                 tracker.capability_fallback(prepared.capability_fallback.clone());
                 tracker.payload_with("upstream_request", "http", request.headers(), || body.to_string());
                 tracker.upstream_headers(request.headers());
                 tracker.quota_request_started();
-                let response = client.execute(request).await?;
+                let response = opening.execute(&client, request, native_upload).await?;
                 tracker.network_recovery.recovered();
                 // Keep decoder/read failures separate from connection failures:
                 // an error body is not permission to replay a dispatched turn.
@@ -534,7 +544,7 @@ async fn send_inner(
                         tracker.begin_attempt("http");
                         if let Some(bytes) = plain.body().and_then(reqwest::Body::as_bytes) { tracker.upstream_request_bytes(bytes.len()); }
                         tracker.upstream_headers(plain.headers());
-                        return client.execute(plain).await.map(Ok);
+                        return opening.execute(&client, plain, native_upload).await.map(Ok);
                     }
                 }
                 Ok(Ok(response))
@@ -542,11 +552,18 @@ async fn send_inner(
                 Ok(Ok(value)) => Ok(value),
                 Ok(Err(error)) => {
                     connect_failed = error.is_connect() || error.is_builder();
-                    Err(super::connection_error::request(&prepared.route, &error))
+                    Err(super::connection_error::request_with_request_bytes(
+                        &prepared.route,
+                        &error,
+                        tracker.max_request_bytes(),
+                    ))
                 },
                 Err(_) if inspecting_rejection => Ok(Err(ServiceError::new(504, "upstream_idle_timeout", "Upstream compression rejection body did not complete before the deadline"))),
                 Err(_) if tokio::time::Instant::now() >= deadline => Err(total_timeout()),
-                Err(_) => Err(super::connection_error::timeout(&prepared.route)),
+                Err(_) => Err(super::connection_error::timeout_with_request_bytes(
+                    &prepared.route,
+                    tracker.max_request_bytes(),
+                )),
             }
         };
         let mut response = match result {
@@ -758,7 +775,11 @@ async fn send_inner(
             exhausted = inspected.10.as_ref().and_then(super::quota_exhaustion::code);
             explicit_capacity = inspected.10.as_ref().is_some_and(super::overload::event);
             if explicit_capacity { tracker.observe_overload(); }
-            if prepared.route.wire_api == WireApi::Responses && !prepared.route.chatgpt_plan && inspected.10.as_ref().is_some_and(|error| tracker.field_compat.rejected_for(prepared, &body, inspected.0.status().as_u16(), error)) {
+            if match prepared.route.wire_api {
+                WireApi::Responses => !prepared.route.chatgpt_plan,
+                WireApi::Chat => !prepared.route.chatgpt,
+                WireApi::Anthropic => false,
+            } && inspected.10.as_ref().is_some_and(|error| tracker.field_compat.rejected_for(prepared, &body, inspected.0.status().as_u16(), error)) {
                 tracker.field_compat.commit_reasoning(prepared);
                 tracker.attempt_result(400, false, Some(tracker.field_compat.reason()));
                 continue;

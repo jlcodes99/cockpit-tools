@@ -1,5 +1,17 @@
 {
   "antigravityLaunch": {
+    "desktopLanguage": "Masaüstü arayüz dili",
+    "desktopLanguageEnglish": "İngilizce",
+    "desktopLayout": "Arayüz düzeni",
+    "desktopLayoutEngineering": "Yazılım mühendisliği",
+    "desktopLayoutKnowledge": "Bilgi işleri",
+    "desktopPermission": "Varsayılan yerel izinler",
+    "desktopPermissionReview": "İnceleme iste",
+    "desktopPermissionDefault": "Varsayılan",
+    "desktopPermissionAuto": "Otomatik",
+    "desktopPermissionTurbo": "Tam otomatik",
+    "desktopSettingsHint": "Düzen ve yerel izinler, Antigravity Cockpit Tools üzerinden başlatıldığında uygulanır.",
+    "desktopLanguageChinese": "Basitleştirilmiş Çince",
     "initializeTitle": "Antigravity IDE henüz başlatılmadı",
     "initializeThenSwitch": "Hesap değiştirmek için IDE’yi bir kez açın.",
     "initializeThenBind": "Hesap bağlamak için örneği bir kez başlatın.",
@@ -20,7 +32,6 @@
     "sharedInstanceStarted": "Ortak oturum güncellendi. Başlatma istendi.",
     "sharedInstanceLaunchFailed": "Ortak oturum güncellendi ancak örnek başlatılamadı: {{error}}",
     "sharedCopySource": "Seçilen örneğin yapılandırma klasörünü kopyalar.",
-    "quickSwitchSetting": "Antigravity IDE hızlı geçişi için geçerlidir. Hesap penceresinde istemciyi başlatıp başlatmamayı her seferinde seçebilirsiniz.",
     "title": "İstemci seç",
     "switchOnly": "Yalnızca değiştir",
     "switchAndLaunch": "Değiştir ve başlat",
@@ -33,7 +44,8 @@
     "cliAuth": "agy kendi kimlik doğrulama ayarlarını kullanır. Yapılandırılmış API anahtarı veya Google Cloud kimlik bilgileri önceliklidir.",
     "cliMissing": "agy bulunamadı. Resmî Antigravity CLI’ı kurup yeniden deneyin.",
     "terminalFailed": "Terminal hazırlanamadı. {{error}}",
-    "switchedTerminalFailed": "Hesap değiştirildi ancak terminal açılamadı. {{error}}"
+    "switchedTerminalFailed": "Hesap değiştirildi ancak terminal açılamadı. {{error}}",
+    "quickSwitchSetting": "Antigravity IDE hızlı geçişi için geçerlidir. Hesap penceresinde istemciyi başlatıp başlatmamayı her seferinde seçebilirsiniz."
   },
   "pelican": {
     "caseKinds": {
@@ -194,6 +206,7 @@
     "providerClear": "Seçimi temizle"
   },
   "common": {
+    "commonSettings": "Sık kullanılan ayarlar",
     "automation": {
       "invalidPlatform": "Bilinmeyen hesap platformu. Desteklenen kimlikleri görmek için cockpit-cli account platforms komutunu çalıştırın.",
       "hostUnavailable": "Cockpit Tools masaüstü uygulamasını bu veri diziniyle başlatıp yeniden deneyin.",
@@ -233,6 +246,7 @@
     "dataQueryBusy": "Veriler işleniyor. Lütfen biraz sonra tekrar deneyin.",
     "historyRestoring": "Geçmiş geri yükleniyor…",
     "apiBudget": {
+      "sharedPool": "Ortak kota",
       "keyScope": "Bu anahtar",
       "upgradeRequired": "İstatistikleri ve istek geçmişini görmek için ağ geçidi bilgisayarındaki Cockpit Tools uygulamasını güncelleyin.",
       "gatewayName": "Cockpit Ağ Geçidi",
@@ -279,7 +293,10 @@
       "proxyAuth": "“{{proxy}}” proxy’sinde kimlik doğrulama başarısız oldu. Proxy kullanıcı adını veya parolasını denetleyin.",
       "localProxyUnavailable": "Yerel “{{proxy}}” proxy’sine bağlanılamıyor. Proxy hizmetinin çalıştığını denetleyin.",
       "directConnection": "{{target}} bağlantısı başarısız oldu. Ağı denetleyip yeniden deneyin.",
-      "directTimeout": "{{target}} bağlantısı zaman aşımına uğradı. Ağı denetleyip yeniden deneyin."
+      "directTimeout": "{{target}} bağlantısı zaman aşımına uğradı. Ağı denetleyip yeniden deneyin.",
+      "recoveryExhaustedLargeRequest": "Bu büyük istek ({{size}}) için tekrarlanan upstream hataları veya zaman aşımları nedeniyle otomatik yeniden deneme durduruldu. Büyük sohbet geçmişi veya görseller yükleme ya da yanıt başlığı süresini aşmış olabilir; sohbeti sıkıştırın veya yeni bir sohbet başlatıp tekrar deneyin. Bu hata hesap kotasının tükendiği anlamına gelmez.",
+      "proxyLargeRequestTimeout": "“{{proxy}}” proxy'si üzerinden {{target}} hedefine bu büyük isteği ({{size}}) gönderirken yanıt alınmadan zaman aşımı oluştu. Büyük geçmiş veya görseller proxy ya da upstream süresini aşmış olabilir; sohbeti sıkıştırın, yeni sohbet başlatın veya proxy'yi kontrol edin.",
+      "directLargeRequestTimeout": "{{target}} hedefine bu büyük isteği ({{size}}) gönderirken yanıt alınmadan zaman aşımı oluştu. Büyük geçmiş veya görseller yükleme ya da upstream süresini aşmış olabilir; sohbeti sıkıştırın veya yeni bir sohbet başlatıp tekrar deneyin."
     },
     "codexUsage": {
       "responseSpeed": "Yanıt hızı",
@@ -836,7 +853,8 @@
     "apiRelay": "Aktarım",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "qoderCn": "Qoder CN"
   },
   "sponsors": {
     "pageTitle": "Sponsorlar",
@@ -948,6 +966,7 @@
       "syncThreads": "Tüm örneklerde eksik oturumları ekler ve yeni içeriği yalnızca hedef örnek durmuş ve geçmişi eşleşmişse sona ekler. Mevcut baytlar korunur. Ayrışan geçmişlerin veya çalışan hedeflerin güncellemeleri reddedilir. Yazmadan önce hedef dosyalar yedeklenir. Devam edilsin mi?"
     },
     "status": {
+      "firstLaunchInitializing": "İlk açılış hazırlanıyor…",
       "running": "Çalışıyor",
       "stopped": "Durduruldu",
       "restarting": "Yeniden başlatılıyor",
@@ -1117,6 +1136,7 @@
       "empty": "Önbelleğe alınmış kota yok"
     },
     "messages": {
+      "firstLaunchTimedOut": "İlk kurulum henüz tamamlanmadı. Uygulama oturum açmanızı veya erişim izni vermenizi isterse bu adımı tamamlayıp tekrar deneyin.",
       "created": "Oturum oluşturuldu",
       "emptyCreated": "Boş örnek oluşturuldu. Hesap bağlamadan önce bir kez başlatın.",
       "existingDirCreated": "Seçilen dizin kullanılarak örnek oluşturuldu.",
@@ -1555,8 +1575,6 @@
       "claudeShareCodeSessionsOnSwitchDesc": "macOS’te varsayılan Claude Desktop profili değiştirildiğinde Code oturum listesi yerel hesaplar arasında paylaşılır.",
       "claudeAppPath": "Claude Desktop başlatma hedefi",
       "claudeAppPathDesc": "Varsayılan profil Microsoft Store hedefi kullanabilir; çoklu örnekler gerçek Claude.exe ister.",
-      "antigravityLaunchOnSwitch": "Geçişte Antigravity IDE başlat",
-      "antigravityLaunchOnSwitchDesc": "Kapalıyken geçiş yalnızca varsayılan Antigravity IDE hesap verilerini yazar; uygulamayı kapatmaz, başlatmaz veya yeniden başlatmaz.",
       "tokenKeeper": "Auth canlı tutma",
       "tokenKeeperDesc": "Yetki süresi dolmaya yaklaşınca hesap Tokenlarını küçük gruplar halinde yeniler ve çok hesaplı kullanımda arka plan isteklerini azaltır.",
       "platformAutoRefresh": "{{platform}} kota otomatik yenileme",
@@ -1643,7 +1661,14 @@
       "t3codeAutoRefresh": "T3 Code Otomatik Kota Yenileme",
       "t3codeAutoRefreshDesc": "Arka plan kota yenileme aralığı",
       "t3codeAppUiInjection": "T3 Code Sohbet Kota Kapsülü",
-      "t3codeAppUiInjectionDesc": "T3 Code, Cockpit üzerinden başlatıldığında mesaj alanında seçili model ailesi ve kalan kota gösterilir. Hesap ve kullanım ayrıntılarını görmek için tıklayın."
+      "t3codeAppUiInjectionDesc": "T3 Code, Cockpit üzerinden başlatıldığında mesaj alanında seçili model ailesi ve kalan kota gösterilir. Hesap ve kullanım ayrıntılarını görmek için tıklayın.",
+      "qoderCnAppPath": "Qoder CN başlatma yolu",
+      "qoderCnAppPathDesc": "Otomatik algılama için boş bırakın. Hesap değiştirirken masaüstü istemcisi kapatılıp yeniden başlatılır.",
+      "qoderCnAppPathPlaceholder": "Varsayılan yol",
+      "qoderCnPathReset": "Varsayılana sıfırla",
+      "antigravityLaunchOnSwitch": "Geçişte Antigravity IDE başlat",
+      "antigravityLaunchOnSwitchDesc": "Kapalıyken geçiş yalnızca varsayılan Antigravity IDE hesap verilerini yazar; uygulamayı kapatmaz, başlatmaz veya yeniden başlatmaz.",
+      "qoderCnAutoRefresh": "Qoder CN Otomatik Kota Yenileme"
     },
     "network": {
       "apiTitle": "Yerçekimine Karşı Kokpit API'si",
@@ -5295,7 +5320,12 @@
         "maxConcurrentImageRequests": "Hesap başına görsel isteği",
         "maxAccountConcurrency": "Hesap eşzamanlılığı",
         "accountConcurrencyWait": "Bekleme (sn)",
-        "optionsSaved": "Yönlendirme seçenekleri kaydedildi"
+        "optionsSaved": "Yönlendirme seçenekleri kaydedildi",
+        "accountConcurrencyLimit": "Eşzamanlılık sınırı",
+        "accountConcurrencyUnlimited": "Sınırsız",
+        "accountConcurrencyHint": "Bu hesap için eşzamanlılık sınırını geçersiz kılar (0 sınırsız, en fazla 64). Genel sınırı devralmak için boş bırakın.",
+        "accountConcurrencyInvalid": "0 ile 64 arasında bir tam sayı girin.",
+        "accountConcurrencySaveFailed": "Hesap eşzamanlılık sınırı kaydedilemedi."
       },
       "validation": {
         "numberRange": "{{min}} ile {{max}} arasında bir sayı girin"
@@ -6575,7 +6605,8 @@
         "canceled": "İstemci bu isteği iptal etti; bu bir akış açma zaman aşımı değildir.",
         "gateway": "HTTP 504, ağ geçidi zaman aşımıdır. Bu kayıt nedeni doğrulamaz; üst sunucu hatasını ve istek aşamasını inceleyin.",
         "threshold": "Bu istekte uygulanan eşik: {{seconds}} saniye.",
-        "settings": "Süreyi ayarla"
+        "settings": "Süreyi ayarla",
+        "largeRequest": "Kaydedilen istek boyutu: {{size}}. Çok büyük geçmiş veya satır içi görseller yükleme ya da ilk yanıtı bekleme sırasında zaman aşımına yol açabilir; sohbeti sıkıştırmanız veya yeni sohbet başlatmanız önerilir."
       },
       "identity": {
         "title": "Oturum ve hesap kimliği",
@@ -7101,6 +7132,14 @@
     "t3code": {
       "title": "T3 Code Ayarları",
       "appPath": "T3 Code Başlatma Yolu"
+    },
+    "validation": {
+      "refreshIntervalInvalid": "1-999 arasında bir tam sayı girin veya otomatik yenilemeyi kapatmak için -1 girin.",
+      "quotaAlertThresholdInvalid": "0-100 arasında bir tam sayı girin."
+    },
+    "disableRefreshHint": "-1 otomatik yenilemeyi devre dışı bırakır.",
+    "qoderCn": {
+      "title": "Qoder CN Ayarları"
     }
   },
   "quotaAlert": {
@@ -7802,7 +7841,21 @@
       "switchLaunchFailed": "Hesap yazıldı ancak Qoder IDE başlatılamadı. {{detail}}",
       "refreshCount": "{{total}} hesaptan {{count}} tanesi yenilendi.",
       "launchUnconfirmed": "Qoder IDE’nin başladığı doğrulanamadı.",
-      "workerFailed": "Qoder arka plan işlemi başarısız oldu. {{detail}}"
+      "workerFailed": "Qoder arka plan işlemi başarısız oldu. {{detail}}",
+      "oauthUrlEmpty": "Qoder OAuth yetkilendirme URL'si boş.",
+      "qoderCnPathMissing": "Qoder CN Masaüstü bulunamadı. Ayarlarda başlatma yolunu belirtin veya yükleyip yeniden deneyin.",
+      "platformMismatch": "Bu hesap başka bir bölgenin derlemesine ait ve geçerli istemciye yazılamaz.",
+      "cnRelaunchFailed": "Hesap değiştirildi ancak Qoder CN istemcisi başlatılamadı. {{detail}}",
+      "cnDesktopUnsupported": "Bu sistemde Qoder CN hesabını değiştirmek için CLI’ı kullanın.",
+      "clientInvalid": "İstemci türü geçersiz. Değiştirme hedefini yeniden seçin.",
+      "nativeTokenMissing": "Bu hesapta yazılabilir oturum açma kimlik bilgisi yok. Yeniden yetkilendirin veya yeniden içe aktarın.",
+      "nativeWriteVerifyFailed": "Yazılan kimlik bilgilerinin doğrulanması başarısız oldu ve özgün duruma geri dönüş denendi. İstemciyi kapatıp yeniden deneyin.",
+      "nativeKeyUnreadable": "Yerel kimlik bilgisi anahtarı okunamadı. Cockpit ile Qoder'ın aynı sistem hesabında çalıştığından emin olun.",
+      "nativeImportInvalid": "İçe aktarılan kimlik bilgilerinde hesap bilgisi yok, bu yüzden hesap tanımlanamıyor.",
+      "nativeImportFailed": "Yerel Qoder oturum bilgileri içe aktarılamadı. Önce istemcide oturum açın ve yeniden deneyin.",
+      "nativeProcessProbeFailed": "Qoder işlem durumu algılanamadı. Daha sonra yeniden deneyin.",
+      "regionUnsupported": "Hesabın bölge derlemesi belirlenemedi. Yeniden yetkilendirin.",
+      "clientRunning": "Hesap değiştirmeden önce {{client}} uygulamasını kapatın."
     },
     "title": "Qoder Hesap Yönetimi",
     "comingSoon": {
@@ -7844,6 +7897,38 @@
     },
     "empty": {
       "desc": "Auth girişini, yerel içe aktarmayı veya JSON içe aktarmayı kullanmak için \"Hesap Ekle\"ye tıklayın."
+    },
+    "region": {
+      "cn": "Qoder CN · Çin",
+      "global": "Qoder · Uluslararası"
+    },
+    "clientTarget": {
+      "importSource": "Yerel içe aktarma kaynağı",
+      "initializeHint": "Seçili istemciyi açın, kurulumu tamamlayın ve yeniden deneyin.",
+      "label": "Değiştirme / yerel içe aktarma hedefi",
+      "ariaLabel": "Qoder istemcisi",
+      "desktop": "Qoder Desktop",
+      "desktopCn": "Qoder CN Desktop",
+      "cli": "Qoder CLI",
+      "cliCn": "Qoder CN CLI",
+      "ide": "Qoder IDE",
+      "switchSuccess": "Hesap değiştirildi. Hedef istemciyi yeniden açın.",
+      "windowsOnly": " (yalnızca Windows)",
+      "desktopSwitchSuccess": "Hesap değiştirildi. {{client}} yeniden başlatıldı.",
+      "relaunchFailed": "Hesap değiştirildi ancak {{client}} otomatik olarak başlatılamadı. El ile açın."
+    },
+    "cn": {
+      "nativeOnly": "Qoder CN hesapları için Desktop veya CLI seçin.",
+      "ideUnavailable": "Qoder CN hesapları için Desktop veya CLI seçin. Buradaki IDE bağdaştırıcısı yalnızca uluslararası sürüm içindir.",
+      "instancesUnsupported": "Qoder CN Desktop ve CLI, varsayılan istemci hesap değişimini destekler. Uygulama çoklu örneği henüz desteklenmiyor.",
+      "flowNoticeDesc": "Resmî oturum açma, masaüstü uygulamasından veya CLI’dan yerel içe aktarma, JSON içe aktarma ve kota sorgulama desteklenir. Yalnızca hesabı değiştirebilir veya seçili istemciyi de başlatabilirsiniz.",
+      "flowNoticePermission": "Yerel içe aktarma, masaüstü uygulamasının veya CLI’ın oturumunu okur. Hesap değişikliği yalnızca seçili Qoder CN istemcisinin yerel oturumunu günceller.",
+      "flowNoticeNetwork": "Ağ erişimi: resmi oturum açma, geri çağırmayı tamamlamak için Qoder CN hizmetlerine bağlanır; kota sorguları kullanım verilerini Qoder CN API'sinden alır. Yerel anahtarlar ve kimlik bilgileri hiçbir zaman yüklenmez.",
+      "flowNoticeTitle": "Qoder CN hesap kilavuzu (genisletmek/daraltmak icin tiklayin)",
+      "oauthHint": "Tarayıcınızda Qoder CN OAuth yetkilendirmesini tamamlamak için aşağıdaki düğmeye tıklayın.",
+      "importJsonHint": "Bu araçtan dışa aktarılan Qoder CN JSON dosyasını içe aktarın.",
+      "importLocalDesc": "Yerel Qoder CN istemcisinden mevcut oturum durumunu okur; kullanıcı bilgileri, plan ve kredi kullanımı dahildir.",
+      "importLocalSuccess": "Hesap yerel Qoder CN'dan içe aktarıldı."
     }
   },
   "trae": {
@@ -8231,7 +8316,38 @@
       "logHits": "Günlükte {{count}} eşleşme"
     },
     "exposeToCodex": {
-      "title": "WorkBuddy belirtecini kopyalamadan Native Rust ağ geçidi üzerinden bağlanır"
+      "title": "WorkBuddy belirtecini kopyalamadan Native Rust ağ geçidi üzerinden bağlanır",
+      "textOnlyTitle": "Eski Native ACP modu yalnızca düz metni destekler. Dosya okumak, yazmak ve komut çalıştırmak için Codex araç köprüsünü kullanın.",
+      "textOnlyAction": "Codex bağlantısı (yalnızca metin)"
+    },
+    "nativeCodex": {
+      "managedKeyRotation": "Bu Key, WorkBuddy yerel araç köprüsü tarafından yönetilir. Değiştirmek için yapılandırmayı iptal edin ve yeni bir yapılandırma oluşturun.",
+      "nativeRequired": "Önce API hizmeti sayfasında Native Rust hizmetini oluşturup etkinleştirin. Mod otomatik olarak değiştirilmez.",
+      "enterpriseUnsupported": "İlk sürümde kurumsal kiracıya kesin bağlama henüz sağlanamıyor. Yalnızca kişisel WorkBuddy hesapları desteklenir.",
+      "revokedFilesPreserved": "Özel Key iptal edildi. Yapılandırma dosyaları değiştirilmiş veya güvenle temizlenemiyor; değiştirilen tüm dosyalar ve oturum verileri korundu. Dosyaları kontrol ettikten sonra geri yüklemeyi yeniden deneyebilirsiniz.",
+      "notOwned": "Yapılandırmanın sahiplik kanıtı özel Key ile eşleşmiyor. Hiçbir Key değiştirilmedi. Yapılandırma dizinindeki sahiplik işaretini kontrol edin.",
+      "profileChanged": "Bu bağımsız yapılandırma değiştirilmiş. Program değişikliklerinizin üzerine yazmaz.",
+      "selectionChanged": "Model veya akıl yürütme düzeyi artık kullanılamıyor. Kataloğu yeniden yükleyip tekrar seçin.",
+      "sourceUnavailable": "Bu WorkBuddy kaynak hesabı kullanılamıyor. Oturum açma durumunu kontrol edin. Başka bir hesap denenmez.",
+      "operationFailed": "İşlem başarısız oldu. WorkBuddy CLI kurulumunu ve hesabın geçerliliğini kontrol edip kataloğu yeniden yükleyin.",
+      "title": "WorkBuddy → Codex yerel araç köprüsü",
+      "scope": "Sabit bir kaynak hesaba bağlı özel bir yerel Key ve bağımsız bir CODEX_HOME oluşturur. Araçları Codex kendisi çalıştırır. WorkBuddy belirteci Codex yapılandırmasına yazılmaz; varsayılan oturum açma bilgileri ve API hizmetinin ana Key değeri değiştirilmez.",
+      "account": "WorkBuddy kaynak hesabı",
+      "noSourceSelected": "Kullanılabilir kaynak hesap yok; oluşturulmuş yapılandırmaları yönetmeye devam edebilirsiniz",
+      "model": "CLI güncel modelleri",
+      "readCatalog": "Güncel kataloğu yükleyin",
+      "effort": "Akıl yürütme düzeyi",
+      "metadataOnly": "Katalog yüklenirken yalnızca CLI başlatılır, modele istem gönderilmez. Oluşturmadan önce model ve akıl yürütme düzeyi tekrar doğrulanır. Kaynak hesap geçersiz olursa başka bir hesaba geçilmeden doğrudan hata döndürülür. Yalnızca HTTP Responses desteklenir. Bağımsız yapılandırmada web araması (web_search) devre dışıdır; görseller, diğer barındırılan araçlar, compact ve WebSocket desteklenmez.",
+      "refreshCatalog": "Kataloğu yeniden yükle",
+      "managedProfile": "Oluşturulan bağımsız yapılandırma",
+      "profileSource": "Kaynak hesap: ",
+      "profileSourceMissing": "Kaynak hesap silinmiş. Özel Key değerini iptal edip bağımsız yapılandırmayı geri yükleyebilirsiniz.",
+      "profileSourceUnavailable": "Kaynak hesap şu anda kullanılamıyor. İptal ve geri yükleme için kaynak hesapta oturum açılması gerekmez.",
+      "launchHelp": "Terminalde proje dizininize geçin ve aşağıdaki komutu çalıştırın. Bu yapılandırma yalnızca bu Codex başlatmasında kullanılır.",
+      "retryRestore": "Geri yüklemeyi yeniden dene (Key iptal edildi)",
+      "restore": "Özel Key değerini iptal et ve bu yapılandırmayı geri yükle",
+      "create": "Özel Key ve bağımsız yapılandırma oluştur",
+      "open": "Codex araç köprüsü"
     }
   },
   "minimaxCode": {
@@ -8989,7 +9105,6 @@
     "quota": {
       "cliUnavailable": "CLI kullanımı görülemiyor",
       "weekly": "Haftalık kullanım",
-      "sharedPool": "Ortak kota",
       "monthly": "Aylık kullanım",
       "onDemand": "İsteğe bağlı kullanım",
       "balance": "Bakiye ve krediler",
@@ -9622,6 +9737,15 @@
     "saved": "Kaydedildi. Yeni isteklerde uygulanır."
   },
   "antigravityTokenUsage": {
+    "context": {
+      "requestContext": "İstek bağlamı",
+      "coverage": "{{reported}} ölçülen · {{estimated}} tahmini · {{missing}} veri yok",
+      "largestGrowth": "En büyük artış {{total}} · Adım #{{step}}",
+      "growthParts": "Girdi {{input}} · Önbellek okuma {{read}} · Önbellek yazma {{write}}",
+      "method": "İstek bağlamı girdi ve önbellek jetonlarının toplamıdır. Değişimler, ölçümü olan ardışık istekleri karşılaştırır. İleti, araç ve ek payları bilinmiyor.",
+      "unplacedCompactions": "Adım numarası olmayan sıkıştırma {{count}}",
+      "compactionStep": "Bağlam sıkıştırma"
+    },
     "tab": "Oturum Kullanımı",
     "subtitle": "Antigravity oturumlarından yerel token kullanımı",
     "title": "Antigravity Oturum Token Kullanımı",
@@ -9776,7 +9900,6 @@
       "codexCatalogPending": "Model eşitlemesi bekleyen üçüncü taraf anahtarları: {{count}}"
     },
     "commonSettings": {
-      "title": "Sık kullanılan ayarlar",
       "language": "T3 Code dili"
     },
     "platformOrder": {
@@ -9996,6 +10119,14 @@
       "searchAccountsPlaceholder": "{{platform}} hesaplarını ara...",
       "goAddSourceAccount": "{{platform}} İçinde Ekle",
       "emptyPoolDesc": "T3 Code içine bağlamak için önce {{platform}} sayfasında bir hesap ekleyin."
+    }
+  },
+  "antigravity": {
+    "proxy": {
+      "followHint": "Ayarlar'daki global proxy'yi kullanır; devre dışıysa varsayılan ağı kullanır.",
+      "independentHint": "Yalnızca bu hesap için geçerlidir ve global proxy'ye göre önceliklidir.",
+      "invalidUrl": "Desteklenmeyen proxy URL'si. Yalnızca http, https, socks5 ve socks5h desteklenir.",
+      "restartHint": "Bağlama, değiştirme veya temizleme işleminden sonra Antigravity'yi (masaüstü veya yeni bir CLI oturumu) yeniden başlatın. Başarısız olan proxy doğrudan bağlantıya düşmez."
     }
   }
 }

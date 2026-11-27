@@ -7,11 +7,11 @@ English · [Portuguese (BR)](README.pt-br.md) · [한국어](README.ko.md) · [�
 [![GitHub release](https://img.shields.io/github/v/release/jlcodes99/cockpit-tools?style=flat)](https://github.com/jlcodes99/cockpit-tools/releases)
 [![GitHub issues](https://img.shields.io/github/issues/jlcodes99/cockpit-tools)](https://github.com/jlcodes99/cockpit-tools/issues)
 
-A **universal AI IDE account management tool**, currently supporting **Antigravity IDE**, **Codex**, **GitHub Copilot**, **Windsurf**, **Kiro**, **Cursor**, **Grok CLI**, **CodeBuddy**, **CodeBuddy CN**, **Qoder**, **Trae**, **TraeWork**, **Trae CN**, **TraeWork CN**, **Zed**, **ZCode**, and **WorkBuddy AI**, with multi-instance parallel workflows.
+A **universal AI IDE account management tool**, currently supporting **Antigravity IDE**, **Codex**, **GitHub Copilot**, **Windsurf**, **Kiro**, **Cursor**, **Grok CLI**, **CodeBuddy**, **CodeBuddy CN**, **Qoder**, **Qoder CN**, **Trae**, **TraeWork**, **Trae CN**, **TraeWork CN**, **Zed**, **ZCode**, and **WorkBuddy AI**, with multi-instance parallel workflows.
 
 > Designed to help users efficiently manage multiple AI IDE accounts, this tool supports one-click switching, quota monitoring, wake-up tasks, and multi-instance parallel runs, helping you fully utilize resources from different accounts.
 
-**Features**: One-click Switch · Multi-account Management · Multi-instance · Quota Monitoring · Wake-up Tasks · Plugin Integration · GitHub Copilot Management · Windsurf Management · Kiro Management · Cursor Management · Grok CLI Management · CodeBuddy Management · CodeBuddy CN Management · Qoder Management · Trae Suite Management · Zed Management · ZCode Management
+**Features**: One-click Switch · Multi-account Management · Multi-instance · Quota Monitoring · Wake-up Tasks · Plugin Integration · GitHub Copilot Management · Windsurf Management · Kiro Management · Cursor Management · Grok CLI Management · CodeBuddy Management · CodeBuddy CN Management · Qoder / Qoder CN Management · Trae Suite Management · Zed Management · ZCode Management
 
 **WorkBuddy AI** (macOS and Windows) supports browser sign-in, import from the desktop app or JSON, credit balance, and desktop account switching.
 
@@ -330,7 +330,7 @@ To switch the Antigravity desktop app and the `agy` CLI that shares its system c
 ```
 
 - `runtime_target: "antigravity"`: reuses desktop authentication rules; version 2.0 and later write the system credential and synchronize the desktop fallback file `~/.gemini/jetski-standalone-oauth-token` and the initialized `agy` session. Credential files preserve `id_token` and use `0600` permissions on Unix. Older desktop App versions write local SQLite login state. The current account, default-instance binding and switch notification are updated only after the credential and fallback writes succeed. A fallback synchronization failure explicitly reports that the system credential was written and asks you to retry.
-- `launch_on_switch`: only supported with `"antigravity"`, defaults to `false`; the client is neither closed nor started, and a running desktop app may use the new account on its next start. Explicit `true` uses the same close/write/relaunch flow as the desktop UI. Omit this field for IDE requests to keep using existing settings.
+- `launch_on_switch`: only supported with `"antigravity"`. The default `false` leaves clients running as is, and a running desktop app may pick up the account on its next start. Explicit `true` starts or restarts only the desktop app. IDE requests use the saved implicit launch preference and seamless-switch setting.
 - `request_id`: optional; when supplied, receives the corresponding `response.success` or `response.error`. Unsupported targets, credential-write failures and concurrent desktop switches return errors instead of success. A launch failure after a successful credential switch is explicitly reported as a launch error. Invalid targets return `WS_SWITCH_TARGET_INVALID`; supplying a launch policy for an IDE request returns `WS_SWITCH_LAUNCH_POLICY_INVALID`. Concurrent desktop switches return `ANTIGRAVITY_SWITCH_BUSY`, and account-preparation timeouts return `ANTIGRAVITY_SWITCH_PREPARATION_TIMEOUT`.
 - `ANTIGRAVITY_SWITCH_STATE_SAVE_FAILED` means the client credential changed but saving Tools' current-account state failed; retry the switch. A shared sign-in updates the default bindings for both clients.
 

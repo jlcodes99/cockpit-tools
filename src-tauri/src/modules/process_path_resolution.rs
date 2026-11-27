@@ -585,6 +585,32 @@ fn spawn_open_app_with_options_and_env_and_egress(
     Ok(pid)
 }
 
+/// macOS `open -n -a` 启动 Antigravity，显式注入出口代理（账号代理优先，回落全局）。
+#[cfg(target_os = "macos")]
+pub(crate) fn spawn_open_app_with_antigravity_proxy(
+    app_root: &str,
+    args: &[String],
+    force_new_instance: bool,
+    egress_proxy_url: Option<&str>,
+) -> Result<u32, String> {
+    let mut cmd = Command::new("open");
+    sanitize_macos_gui_launch_env(&mut cmd);
+    append_antigravity_proxy_env_to_open_args(&mut cmd, egress_proxy_url);
+    if force_new_instance {
+        cmd.arg("-n");
+    }
+    cmd.arg("-a").arg(app_root);
+    if !args.is_empty() {
+        cmd.arg("--args");
+        for arg in args {
+            if !arg.trim().is_empty() {
+                cmd.arg(arg);
+            }
+        }
+    }
+    spawn_detached_unix(&mut cmd).map_err(|e| format!("启动失败: {}", e))
+}
+
 fn find_antigravity_process_exe() -> Option<std::path::PathBuf> {
     #[cfg(target_os = "macos")]
     {
@@ -1476,7 +1502,7 @@ fn detect_qoder_exec_path() -> Option<std::path::PathBuf> {
         return ["Qoder IDE.app", "Qoder.app"]
             .into_iter()
             .flat_map(|name| roots.iter().map(move |root| root.join(name)))
-            .find_map(|path| resolve_qoder_macos_exec_path(&path.to_string_lossy()));
+            .find_map(|path| crate::modules::qoder_cn_clients::mac_global_ide_executable(&path));
     }
 
     #[cfg(target_os = "windows")]
@@ -1489,7 +1515,7 @@ fn detect_qoder_exec_path() -> Option<std::path::PathBuf> {
         return [r"Qoder IDE\Qoder IDE.exe", r"Qoder\Qoder.exe"]
             .into_iter()
             .flat_map(|name| roots.iter().flatten().map(move |root| root.join(name)))
-            .find(|path| can_probe_passive_windows_path(&path.to_string_lossy()) && path.is_file());
+            .find(|path| can_probe_passive_windows_path(&path.to_string_lossy()) && is_qoder_ide_executable(path));
     }
 
     #[cfg(target_os = "linux")]
@@ -1497,11 +1523,85 @@ fn detect_qoder_exec_path() -> Option<std::path::PathBuf> {
         return ["/usr/share/qoder-ide/qoder-ide", "/usr/bin/qoder-ide", "/usr/bin/qoder", "/usr/local/bin/qoder", "/opt/qoder/qoder"]
             .into_iter()
             .map(std::path::PathBuf::from)
+            .find(|path| is_qoder_ide_executable(path));
+    }
+
+    #[allow(unreachable_code)]
+    None
+}
+
+pub(crate) fn detect_qoder_cn_exec_path() -> Option<std::path::PathBuf> {
+    #[cfg(target_os = "macos")]
+    {
+        let mut roots = vec![std::path::PathBuf::from("/Applications")];
+        if let Some(home) = dirs::home_dir() {
+            roots.push(home.join("Applications"));
+        }
+        return ["Qoder CN.app", "QoderCN.app"]
+            .into_iter()
+            .flat_map(|name| roots.iter().map(move |root| root.join(name)))
+            .find_map(|path| {
+                super::qoder_cn_clients::mac_executable(&path, super::qoder_cn_clients::Client::Desktop)
+            })
+            .or_else(|| super::qoder_native::qoder_cn_desktop_executable(&sysinfo::System::new_all()));
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let roots = [
+            std::env::var_os("LOCALAPPDATA").map(|dir| std::path::PathBuf::from(dir).join("Programs")),
+            std::env::var_os("PROGRAMFILES").map(std::path::PathBuf::from),
+            std::env::var_os("PROGRAMFILES(X86)").map(std::path::PathBuf::from),
+        ];
+        let common_paths = [
+            r"Qoder CN\Qoder CN.exe",
+            r"Qoder CN\Qoder.exe",
+            r"Qoder CN\Qoder Launcher.exe",
+            r"QoderCN\Qoder CN.exe",
+        ];
+        if let Some(path) = common_paths
+            .into_iter()
+            .flat_map(|name| roots.iter().flatten().map(move |root| root.join(name)))
+            .find(|path| can_probe_passive_windows_path(&path.to_string_lossy()) && path.is_file())
+        {
+            return Some(path);
+        }
+        if let Some(path) = detect_windows_exec_path_by_signatures(
+            "Qoder CN",
+            &[
+                "Qoder CN.exe",
+                "Qoder.exe",
+                "Qoder Launcher.exe",
+                "QoderLauncher.exe",
+                "Electron.exe",
+            ],
+            &["qoder-cn"],
+            &["qoder-cn"],
+            &["qoder cn", "qoder-cn", "qodercn"],
+        ) {
+            return Some(path);
+        }
+        return running_qoder_cn_executable();
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        return ["/usr/bin/qoder-cn", "/usr/local/bin/qoder-cn", "/opt/qoder-cn/qoder-cn"]
+            .into_iter()
+            .map(std::path::PathBuf::from)
             .find(|path| path.is_file());
     }
 
     #[allow(unreachable_code)]
     None
+}
+
+/// 运行中的 CN 桌面端可执行文件。走 `qoder_native` 的判定，只有落在 CN 安装目录里的进程才算，
+/// 避免把全局版 `Qoder Launcher.exe` 当成 CN 客户端。
+#[cfg(target_os = "windows")]
+fn running_qoder_cn_executable() -> Option<std::path::PathBuf> {
+    let system = sysinfo::System::new_all();
+    crate::modules::qoder_native::qoder_cn_desktop_executable(&system)
 }
 
 fn detect_zcode_exec_path() -> Option<std::path::PathBuf> {
@@ -2856,17 +2956,64 @@ fn resolve_codebuddy_cn_launch_path() -> Result<std::path::PathBuf, String> {
     Err(app_path_missing_error("codebuddy_cn"))
 }
 
+#[cfg(not(target_os = "macos"))]
+pub(crate) fn is_qoder_ide_executable(path: &std::path::Path) -> bool {
+    if !crate::commands::cli_launch_path::executable_file(path) {
+        return false;
+    }
+    let executable = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+    if path.file_name().is_some_and(|name| {
+        name.eq_ignore_ascii_case(if cfg!(windows) { "Qoder IDE.exe" } else { "qoder-ide" })
+    }) {
+        return true;
+    }
+    executable.parent().is_some_and(|dir| dir.join("resources/app/product.json").is_file())
+        && executable.file_stem().is_some_and(|name| name.eq_ignore_ascii_case("qoder"))
+}
+
+pub(crate) fn qoder_ide_launch_candidate(configured: Option<&str>) -> Option<std::path::PathBuf> {
+    if let Some(custom) = normalize_custom_path(configured) {
+        #[cfg(target_os = "macos")]
+        return crate::modules::qoder_cn_clients::mac_global_ide_executable(std::path::Path::new(&custom));
+        #[cfg(not(target_os = "macos"))]
+        return {
+            let path = std::path::PathBuf::from(custom);
+            is_qoder_ide_executable(&path).then_some(path)
+        };
+    }
+    detect_qoder_exec_path()
+}
+
 pub(crate) fn resolve_qoder_launch_path() -> Result<std::path::PathBuf, String> {
-    if let Some(custom) = normalize_custom_path(Some(&config::get_user_config().qoder_app_path)) {
-        if let Some(exec) = resolve_qoder_macos_exec_path(&custom) {
+    qoder_ide_launch_candidate(Some(&config::get_user_config().qoder_app_path))
+        .ok_or_else(|| app_path_missing_error("qoder"))
+}
+
+pub(crate) fn resolve_qoder_cn_launch_path() -> Result<std::path::PathBuf, String> {
+    if let Some(custom) =
+        normalize_custom_path(Some(&config::get_user_config().qoder_cn_app_path))
+    {
+        #[cfg(target_os = "macos")]
+        let resolved = super::qoder_cn_clients::mac_executable(
+            std::path::Path::new(&custom), super::qoder_cn_clients::Client::Desktop,
+        );
+        #[cfg(not(target_os = "macos"))]
+        let resolved = resolve_qoder_macos_exec_path(&custom);
+        if let Some(exec) = resolved {
             return Ok(exec);
         }
-        return Err(app_path_missing_error("qoder"));
+        return Err(app_path_missing_error("qoder_cn"));
     }
 
-    if let Some(detected) = detect_qoder_exec_path() {
+    if let Some(detected) = detect_qoder_cn_exec_path() {
         let detected_str = detected.to_string_lossy();
         if let Some(exec) = resolve_qoder_macos_exec_path(&detected_str) {
+            // 探测结果落盘，避免每次切号都重跑一遍注册表/快捷方式扫描。
+            update_app_path_in_config(
+                "qoder_cn",
+                &exec,
+                &config::get_user_config().qoder_cn_app_path,
+            );
             return Ok(exec);
         }
         #[cfg(target_os = "macos")]
@@ -2875,11 +3022,16 @@ pub(crate) fn resolve_qoder_launch_path() -> Result<std::path::PathBuf, String> 
         }
         #[cfg(not(target_os = "macos"))]
         if detected.exists() {
+            update_app_path_in_config(
+                "qoder_cn",
+                &detected,
+                &config::get_user_config().qoder_cn_app_path,
+            );
             return Ok(detected);
         }
     }
 
-    Err(app_path_missing_error("qoder"))
+    Err(app_path_missing_error("qoder_cn"))
 }
 
 pub fn resolve_zcode_launch_path() -> Result<std::path::PathBuf, String> {
@@ -3175,6 +3327,15 @@ fn detect_and_save_app_path_raw(app: &str, force: bool) -> Option<String> {
             if let Some(detected) = detect_qoder_exec_path() {
                 update_app_path_in_config("qoder", &detected, &current.qoder_app_path);
                 return Some(config::get_user_config().qoder_app_path);
+            }
+        }
+        "qoder_cn" => {
+            if !force && !current.qoder_cn_app_path.trim().is_empty() {
+                return Some(current.qoder_cn_app_path);
+            }
+            if let Some(detected) = detect_qoder_cn_exec_path() {
+                update_app_path_in_config("qoder_cn", &detected, &current.qoder_cn_app_path);
+                return Some(config::get_user_config().qoder_cn_app_path);
             }
         }
         "zcode" => {

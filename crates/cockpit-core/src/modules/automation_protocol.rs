@@ -34,6 +34,7 @@ platforms! {
     Codebuddy => "codebuddy",
     CodebuddyCn => "codebuddy_cn",
     Qoder => "qoder",
+    QoderCn => "qoder_cn",
     Zcode => "zcode",
     Trae => "trae",
     TraeSolo => "trae_solo",

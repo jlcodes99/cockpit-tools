@@ -58,6 +58,62 @@ fn windows_terminal_available_on_paths(path: Option<std::ffi::OsString>) -> bool
     }
 }
 
+fn resolve_windows_pwsh_executable(
+    path: Option<std::ffi::OsString>,
+    local_app_data: Option<std::ffi::OsString>,
+    program_files: Option<std::ffi::OsString>,
+) -> Option<std::path::PathBuf> {
+    if let Some(candidate) =
+        std::env::split_paths(path.as_deref().unwrap_or_else(|| std::ffi::OsStr::new("")))
+            .map(|dir| dir.join("pwsh.exe"))
+            .find(|candidate| candidate.is_file())
+    {
+        return Some(candidate);
+    }
+    if let Some(root) = local_app_data.as_deref() {
+        let candidate = std::path::Path::new(root)
+            .join("Microsoft")
+            .join("WindowsApps")
+            .join("pwsh.exe");
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+    if let Some(root) = program_files.as_deref() {
+        let candidate = std::path::Path::new(root)
+            .join("PowerShell")
+            .join("7")
+            .join("pwsh.exe");
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+    None
+}
+
+pub(crate) fn windows_pwsh_executable() -> Option<std::path::PathBuf> {
+    resolve_windows_pwsh_executable(
+        std::env::var_os("PATH"),
+        std::env::var_os("LOCALAPPDATA"),
+        std::env::var_os("ProgramFiles"),
+    )
+}
+
+#[cfg(target_os = "windows")]
+pub(crate) fn windows_pwsh_available() -> bool {
+    windows_pwsh_executable().is_some()
+}
+
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+pub(crate) fn is_powershell_program(program: &str) -> bool {
+    let name = program
+        .rsplit(['/', '\\'])
+        .next()
+        .unwrap_or(program)
+        .to_ascii_lowercase();
+    matches!(name.as_str(), "powershell" | "powershell.exe" | "pwsh" | "pwsh.exe")
+}
+
 #[cfg_attr(not(any(target_os = "windows", test)), allow(dead_code))]
 fn format_terminal_display_command(program: &str, args: &[String]) -> String {
     std::iter::once(program.to_string())
@@ -135,11 +191,18 @@ fn build_windows_codex_terminal_launch_plan_with_availability(
             "PowerShell",
         )
     };
+    let program = if normalized == "pwsh" {
+        windows_pwsh_executable()
+            .map(|path| path.to_string_lossy().into_owned())
+            .unwrap_or_else(|| program.to_string())
+    } else {
+        program.to_string()
+    };
     let args = args.into_iter().map(str::to_string).collect::<Vec<_>>();
 
     CodexTerminalLaunchPlan {
-        program: program.to_string(),
-        display_command: format_terminal_display_command(program, &args),
+        display_command: format_terminal_display_command(&program, &args),
+        program,
         args,
         terminal_name: terminal_name.to_string(),
     }
@@ -302,7 +365,7 @@ pub(super) fn execute_codex_terminal_command(
     #[cfg(target_os = "windows")]
     {
         use std::os::windows::process::CommandExt;
-        let flags = if matches!(plan.program.as_str(), "powershell" | "pwsh") {
+        let flags = if is_powershell_program(&plan.program) {
             0x00000010 // The user selected an interactive PowerShell window.
         } else {
             0x08000000
@@ -457,7 +520,8 @@ mod tests {
         assert_eq!(legacy_powershell.terminal_name, "PowerShell");
 
         let pwsh = build_windows_codex_terminal_launch_plan("codex", "pwsh");
-        assert_eq!(pwsh.program, "pwsh");
+        assert!(pwsh.program.to_ascii_lowercase().contains("pwsh"));
+        assert_eq!(pwsh.terminal_name, "PowerShell Core");
         assert_eq!(pwsh.args, ["-NoExit", "-Command", "codex"]);
 
         let windows_terminal = build_windows_codex_terminal_launch_plan("codex", "wt");
@@ -630,5 +694,30 @@ mod tests {
             !windows_terminal_available_on_paths(None),
             "missing PATH should never report Windows Terminal available"
         );
+    }
+
+    #[test]
+    fn powershell_program_detection_accepts_resolved_pwsh_paths() {
+        assert!(is_powershell_program("pwsh"));
+        assert!(is_powershell_program("PowerShell"));
+        assert!(is_powershell_program(r"C:\Program Files\PowerShell\7\pwsh.exe"));
+        assert!(!is_powershell_program("cmd.exe"));
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn pwsh_resolver_finds_store_execution_alias_outside_path() {
+        let root =
+            std::env::temp_dir().join(format!("cockpit-pwsh-probe-{}", uuid::Uuid::new_v4()));
+        let windows_apps = root.join("Microsoft").join("WindowsApps");
+        std::fs::create_dir_all(&windows_apps).expect("create temp dir");
+        let pwsh = windows_apps.join("pwsh.exe");
+        std::fs::write(&pwsh, b"").expect("create pwsh probe");
+
+        let found =
+            resolve_windows_pwsh_executable(None, Some(root.clone().into_os_string()), None);
+
+        assert_eq!(found.as_deref(), Some(pwsh.as_path()));
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

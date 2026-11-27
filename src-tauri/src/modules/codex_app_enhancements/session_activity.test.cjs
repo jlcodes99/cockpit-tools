@@ -74,6 +74,21 @@ test("a complete idle response or empty loaded list allows progress", async () =
   assert.equal((await probe({ pages: empty })).state, "idle");
 });
 
+test("terminal systemError threads do not block idle detection when no active turn exists", async () => {
+  assert.equal((await probe({
+    pages: twoPages,
+    states: { first: "idle", second: "systemError" },
+  })).state, "idle");
+  assert.equal((await probe({
+    pages: twoPages,
+    states: { first: "systemError", second: "active" },
+  })).state, "busy");
+  assert.equal((await probe({
+    pages: twoPages,
+    states: { first: "systemError", second: "notLoaded" },
+  })).state, "unknown");
+});
+
 test("an unconfirmed turn, incomplete list, or broken bridge gives no idle signal", async () => {
   assert.equal((await probe({
     pages: twoPages,

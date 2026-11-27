@@ -74,6 +74,136 @@ fn provider_gateway_template_preserves_enabled_and_disabled_concurrency() {
 }
 
 #[test]
+fn per_account_concurrency_overrides_clamp_prune_and_persist() {
+    let dir = make_temp_dir("codex-account-concurrency-limits");
+    let path = dir.join("local_access.json");
+    let mut collection = test_local_access_collection(vec!["acct-a".into(), "acct-b".into()]);
+    collection.max_account_concurrency = 2;
+    collection
+        .account_concurrency_limits
+        .insert("acct-a".into(), 99);
+    collection
+        .account_concurrency_limits
+        .insert("removed".into(), 4);
+    assert!(super::prune_account_concurrency_limits(&mut collection));
+    assert_eq!(collection.account_concurrency_limits.get("acct-a"), Some(&64));
+    assert!(!collection.account_concurrency_limits.contains_key("removed"));
+    assert_eq!(
+        super::effective_account_concurrency_limit(&collection, "acct-a"),
+        64
+    );
+    assert_eq!(
+        super::effective_account_concurrency_limit(&collection, "acct-b"),
+        2
+    );
+
+    std::fs::write(&path, serde_json::to_string_pretty(&collection).unwrap()).unwrap();
+    let updated = super::persist_account_concurrency_limit(&path, "acct-a", Some(1)).unwrap();
+    assert_eq!(updated.account_concurrency_limits.get("acct-a"), Some(&1));
+    let updated = super::persist_account_concurrency_limit(&path, "acct-b", Some(0)).unwrap();
+    assert_eq!(updated.account_concurrency_limits.get("acct-b"), Some(&0));
+    assert_eq!(
+        super::effective_account_concurrency_limit(&updated, "acct-b"),
+        0
+    );
+    assert!(super::persist_account_concurrency_limit(&path, "missing", Some(3)).is_err());
+    let cleared = super::persist_account_concurrency_limit(&path, "acct-a", None).unwrap();
+    assert!(!cleared.account_concurrency_limits.contains_key("acct-a"));
+    assert_eq!(
+        super::effective_account_concurrency_limit(&cleared, "acct-a"),
+        2
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[tokio::test]
+async fn native_concurrency_permit_enforces_distinct_per_account_limits_and_zero_unlimited() {
+    let mut collection = test_local_access_collection(vec![
+        "acct-one".into(),
+        "acct-three".into(),
+        "acct-unlimited".into(),
+    ]);
+    collection.max_account_concurrency = 2;
+    collection.account_concurrency_wait_ms = 0;
+    collection
+        .account_concurrency_limits
+        .insert("acct-one".into(), 1);
+    collection
+        .account_concurrency_limits
+        .insert("acct-three".into(), 3);
+    collection
+        .account_concurrency_limits
+        .insert("acct-unlimited".into(), 0);
+
+    let host = super::NativeHostBridge::for_collection(collection.clone());
+    let acct_one = test_oauth_account_with_quota("acct-one", 90, 90, Some(true), Some(true));
+    let acct_three = test_oauth_account_with_quota("acct-three", 90, 90, Some(true), Some(true));
+    let acct_unlimited =
+        test_oauth_account_with_quota("acct-unlimited", 90, 90, Some(true), Some(true));
+
+    // acct-one has limit 1: first acquires, second fails immediately.
+    let (idx1, permit1) = super::native_acquire_account_concurrency_permit(
+        &host,
+        &collection,
+        std::slice::from_ref(&acct_one),
+        true,
+    )
+    .await
+    .unwrap();
+    assert_eq!(idx1, 0);
+    assert!(permit1.is_some());
+    assert!(super::native_acquire_account_concurrency_permit(
+        &host,
+        &collection,
+        std::slice::from_ref(&acct_one),
+        true,
+    )
+    .await
+    .is_err());
+
+    // Mixed pool [acct-one (full), acct-three (limit 3)] spills over to acct-three up to 3 times.
+    let pool = vec![acct_one.clone(), acct_three.clone()];
+    let mut three_permits = Vec::new();
+    for _ in 0..3 {
+        let (idx, permit) = super::native_acquire_account_concurrency_permit(
+            &host,
+            &collection,
+            &pool,
+            true,
+        )
+        .await
+        .unwrap();
+        assert_eq!(idx, 1);
+        assert!(permit.is_some());
+        three_permits.push(permit);
+    }
+    assert!(super::native_acquire_account_concurrency_permit(
+        &host,
+        &collection,
+        &pool,
+        true,
+    )
+    .await
+    .is_err());
+
+    // acct-unlimited overrides global limit 2 to 0 (unlimited): never blocks even when others are full.
+    let mixed_with_unlimited = vec![acct_one.clone(), acct_three.clone(), acct_unlimited.clone()];
+    let (idx_u, permit_u) = super::native_acquire_account_concurrency_permit(
+        &host,
+        &collection,
+        &mixed_with_unlimited,
+        true,
+    )
+    .await
+    .unwrap();
+    assert_eq!(idx_u, 2);
+    assert!(permit_u.is_none());
+
+    drop(permit1);
+    drop(three_permits);
+}
+
+#[test]
 fn automatic_catalog_keeps_explicit_future_models_without_guessing() {
     let models = vec![
         "gpt-future-test".into(),

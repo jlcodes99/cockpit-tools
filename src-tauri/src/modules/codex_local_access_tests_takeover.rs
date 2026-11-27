@@ -752,6 +752,7 @@ experimental_bearer_token = "agt_codex_test"
         let mut collection = test_local_access_collection(Vec::new());
         let key = "deepseek-local-key".to_string();
         collection.api_keys.push(CodexLocalAccessApiKey {
+            workbuddy_delegate: None,
             max_reasoning_effort: None,
             id: "provider_gateway_deepseek".to_string(),
             label: "Provider Gateway: DeepSeek".to_string(),

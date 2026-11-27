@@ -281,15 +281,38 @@
 
   function displayPlan(driver, value) {
     const raw = slug(value);
+    if (driver === 'antigravity') {
+      const antigravityPlans = {
+        'g1-ultra-lite-tier': 'Ultra Lite', 'g1-ultra-lite': 'Ultra Lite', 'ultra-lite': 'Ultra Lite',
+        'g1-ultra-tier': 'Ultra', 'g1-ultra': 'Ultra', 'gcp-ge-ultra-tier': 'Ultra', 'ws-ai-ultra-business-tier': 'Ultra', ultra: 'Ultra',
+        'gcp-ge-edu-pro-tier': 'Edu Pro', 'gcp-ge-edu-pro-emerging-tier': 'Edu Pro', 'edu-pro': 'Edu Pro',
+        'gdp-premium-tier': 'Premium', premium: 'Premium',
+        'g1-pro-tier': 'Pro', 'g1-pro': 'Pro', pro: 'Pro',
+        'g1-plus-tier': 'Plus', 'g1-plus': 'Plus', 'gcp-ge-plus-tier': 'Plus', plus: 'Plus',
+        'free-tier': 'Free', free: 'Free', 'standard-tier': 'Free', standard: 'Free',
+        'cs-standard-tier': 'Free', 'gcp-standard-tier': 'Free', 'gcp-ge-standard-tier': 'Free',
+        'gcp-ge-standard-emerging-tier': 'Free', 'legacy-tier': 'Free', legacy: 'Free', 'unlicensed-tier': 'Free',
+        'gcp-enterprise-tier': 'Enterprise', 'enterprise-agent-tier': 'Enterprise', enterprise: 'Enterprise',
+        'ge-business-tier': 'Business', business: 'Business',
+        'ge-business-trial-tier': 'Trial', trial: 'Trial',
+        'agy-business-paygo-tier': 'Paygo', 'gcp-ge-paygo-tier': 'Paygo', paygo: 'Paygo',
+        'gcp-ge-edu-tier': 'Edu', 'gcp-ge-edu-emerging-tier': 'Edu', edu: 'Edu',
+        'gcp-ge-frontline-worker-tier': 'Frontline', 'gcp-ge-frontline-starter-tier': 'Frontline',
+        'googler-tier': 'Googler', 'googler-dogfood-tier': 'Googler', 'aida-tier': 'Aida',
+      };
+      const stripped = raw.replace(/^(?:antigravity|google-one-ai|google-one|google-ai|g1)-/, '').replace(/-tier$/, '');
+      if (Object.hasOwn(antigravityPlans, raw)) return antigravityPlans[raw];
+      if (Object.hasOwn(antigravityPlans, stripped)) return antigravityPlans[stripped];
+      return labels.unknownPlan;
+    }
     const plans = {
       free: 'Free', pro: 'Pro', ultra: 'Ultra', plus: 'Plus', max: 'Max',
       team: 'Team', business: 'Business', enterprise: 'Enterprise', edu: 'Edu',
       'api-key': 'API Key', 'max-5x': 'max-5x', 'max-20x': 'max-20x',
     };
     const key = raw.replace(/^(g1|google-one|google-ai|chatgpt|(?:default-)?claude)-/, '').replace(/-tier$/, '');
-    if (driver === 'antigravity' && key === 'standard') return 'Free';
     if (Object.hasOwn(plans, key)) return plans[key];
-    if (driver === 'antigravity' || raw === 'unknown') return labels.unknownPlan;
+    if (raw === 'unknown') return labels.unknownPlan;
     return value || '';
   }
 
@@ -302,7 +325,7 @@
     const kind = instance.boundAccountPlanBadgeKind;
     const appearance = kind ?? (known ? displayPlan(selection.driver, plan) : undefined);
     const normalizedAntigravity = selection.driver === 'antigravity' &&
-      /^(?:g1-)?(?:pro|ultra|free|standard)(?:-tier)?$/i.test(plan || '');
+      Boolean(known && appearance && appearance !== labels.unknownPlan);
     const showRaw = !normalizedAntigravity && (!kind || kind === 'cockpit-api');
     return badge(known ? plan : '—', showRaw, selection.driver === 'codex' ? codexStyle : '', appearance);
   }

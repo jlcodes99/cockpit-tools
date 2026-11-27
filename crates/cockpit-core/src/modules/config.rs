@@ -7,6 +7,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{OnceLock, RwLock};
 
+#[path = "antigravity_launch_preferences.rs"]
+mod antigravity_launch_preferences;
+pub use antigravity_launch_preferences::{AntigravityDesktopLayout, AntigravityDesktopPermission};
+
 /// 默认 WebSocket 端口
 pub const DEFAULT_WS_PORT: u16 = 19528;
 /// 默认网页查询服务端口
@@ -221,6 +225,17 @@ pub struct UserConfig {
     /// Qoder 启动路径（为空则使用默认路径）
     #[serde(default = "default_qoder_app_path")]
     pub qoder_app_path: String,
+    #[serde(default)]
+    pub qoder_desktop_app_path: String,
+    /// Qoder CN 启动路径（为空则使用自动探测）
+    #[serde(default = "default_qoder_cn_app_path")]
+    pub qoder_cn_app_path: String,
+    #[serde(default)]
+    pub qoder_cn_ide_path: String,
+    #[serde(default)]
+    pub qoder_cn_cli_path: String,
+    #[serde(default)]
+    pub qoder_cli_path: String,
     /// Trae 启动路径（为空则使用默认路径）
     #[serde(default = "default_trae_app_path")]
     pub trae_app_path: String,
@@ -281,6 +296,12 @@ pub struct UserConfig {
     /// Antigravity 切号是否启用“本地落盘 + 扩展无感”且不重启
     #[serde(default = "default_antigravity_dual_switch_no_restart_enabled")]
     pub antigravity_dual_switch_no_restart_enabled: bool,
+    #[serde(default)]
+    pub antigravity_desktop_chinese_enabled: bool,
+    #[serde(default)]
+    pub antigravity_desktop_layout: AntigravityDesktopLayout,
+    #[serde(default)]
+    pub antigravity_desktop_permission: AntigravityDesktopPermission,
     /// 是否启用自动切号
     #[serde(default = "default_auto_switch_enabled")]
     pub auto_switch_enabled: bool,
@@ -628,6 +649,9 @@ fn default_codebuddy_cn_app_path() -> String {
 fn default_qoder_app_path() -> String {
     String::new()
 }
+fn default_qoder_cn_app_path() -> String {
+    String::new()
+}
 fn default_trae_app_path() -> String {
     String::new()
 }
@@ -851,6 +875,11 @@ impl Default for UserConfig {
             codebuddy_share_sessions_on_switch: default_codebuddy_share_sessions_on_switch(),
             codebuddy_cn_app_path: default_codebuddy_cn_app_path(),
             qoder_app_path: default_qoder_app_path(),
+            qoder_desktop_app_path: String::new(),
+            qoder_cn_app_path: default_qoder_cn_app_path(),
+            qoder_cn_ide_path: String::new(),
+            qoder_cn_cli_path: String::new(),
+            qoder_cli_path: String::new(),
             trae_app_path: default_trae_app_path(),
             trae_solo_app_path: default_trae_app_path(),
             trae_cn_app_path: default_trae_app_path(),
@@ -877,6 +906,9 @@ impl Default for UserConfig {
             codex_preserve_verified_external_bridge: false,
             antigravity_dual_switch_no_restart_enabled:
                 default_antigravity_dual_switch_no_restart_enabled(),
+            antigravity_desktop_chinese_enabled: false,
+            antigravity_desktop_layout: AntigravityDesktopLayout::default(),
+            antigravity_desktop_permission: AntigravityDesktopPermission::default(),
             auto_switch_enabled: default_auto_switch_enabled(),
             auto_switch_threshold: default_auto_switch_threshold(),
             auto_switch_scope_mode: default_auto_switch_scope_mode(),

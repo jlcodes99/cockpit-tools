@@ -2727,6 +2727,7 @@ fn normalize_api_key_label(label: Option<&str>, fallback: &str) -> String {
 fn build_local_access_api_key(label: Option<&str>) -> CodexLocalAccessApiKey {
     let now = now_ms();
     CodexLocalAccessApiKey {
+        workbuddy_delegate: None,
         max_reasoning_effort: None,
         id: generate_local_api_key_id(),
         label: normalize_api_key_label(label, &default_local_api_key_label()),
@@ -2763,6 +2764,7 @@ fn normalize_collection_api_keys(collection: &mut CodexLocalAccessCollection) ->
             collection.api_key.trim().to_string()
         };
         collection.api_keys.push(CodexLocalAccessApiKey {
+            workbuddy_delegate: None,
             max_reasoning_effort: None,
             id: generate_local_api_key_id(),
             label: default_local_api_key_label(),

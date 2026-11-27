@@ -158,3 +158,29 @@ fn cloud_code_routing_keeps_override_gcp_internal_daily_priority() {
         );
     }
 }
+
+#[test]
+fn tier_identifier_prefers_id_and_falls_back_to_metadata_fields() {
+    let response: LoadProjectResponse = serde_json::from_value(json!({
+        "paidTier": {
+            "id": "g1-ultra-tier",
+            "name": "Google AI Ultra",
+            "description": "Google AI Ultra",
+            "clientExperienceTag": "ULTRA"
+        },
+        "currentTier": {
+            "id": "  ",
+            "clientExperienceTag": "PRO",
+            "name": "Google AI Pro"
+        }
+    }))
+    .unwrap();
+    assert_eq!(
+        response.paid_tier.as_ref().and_then(super::Tier::resolved_identifier).as_deref(),
+        Some("g1-ultra-tier")
+    );
+    assert_eq!(
+        response.current_tier.as_ref().and_then(super::Tier::resolved_identifier).as_deref(),
+        Some("PRO")
+    );
+}

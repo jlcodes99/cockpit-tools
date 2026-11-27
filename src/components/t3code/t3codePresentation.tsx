@@ -6,6 +6,7 @@ import { CodexAccountPlanBadge } from '../codex/CodexAccountPlanBadge';
 import type { Account } from '../../types/account';
 import { getClaudePlanBadge, getClaudePlanBadgeClass, type ClaudeAccount } from '../../types/claude';
 import type { CodexAccount } from '../../types/codex';
+import { resolveQoderPlanBadgeClass } from '../../types/qoder';
 import type {
   T3CodeAntigravityQuotaGroup,
   T3CodeBindableAccountView,
@@ -434,14 +435,16 @@ export function T3codeAccountPlanBadge({
         ? { subscription_tier: plan }
         : undefined;
     const badge = getAntigravityTierBadge(quotaSource);
-    const rawTier = quotaSource?.subscription_tier ?? '';
-    const knownTier = /^(?:g1-)?(?:pro|ultra|free|standard)(?:-tier)?$/i.test(rawTier.trim());
-    const text = knownTier ? badge.tier : badge.label !== '—' ? badge.label : t('common.unknown');
+    const text = badge.label !== '—' ? badge.label : t('common.unknown');
     return (
-      <span className={`tier-badge ${badge.className}`} title={rawTier || text}>
+      <span className={`tier-badge ${badge.className}`} title={badge.rawTier || text}>
         {text}
       </span>
     );
+  }
+  if (driver === 'qoder' || driver === 'qoder_cn') {
+    const label = plan?.trim() || 'UNKNOWN';
+    return <span className={`tier-badge raw-value ${resolveQoderPlanBadgeClass(label)}`} title={label}>{label}</span>;
   }
   if (!plan?.trim() || plan.trim().toLowerCase() === 'unknown') {
     return <span className="tier-badge t3code-plan-neutral" title={t('common.unknown')}>—</span>;

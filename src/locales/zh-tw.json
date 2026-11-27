@@ -1,5 +1,17 @@
 {
   "antigravityLaunch": {
+    "desktopLanguage": "桌面介面語言",
+    "desktopLanguageEnglish": "英文",
+    "desktopLayout": "頁面配置",
+    "desktopLayoutEngineering": "軟體工程",
+    "desktopLayoutKnowledge": "知識工作",
+    "desktopPermission": "本機預設權限",
+    "desktopPermissionReview": "要求審查",
+    "desktopPermissionDefault": "預設",
+    "desktopPermissionAuto": "自動",
+    "desktopPermissionTurbo": "全自動",
+    "desktopSettingsHint": "從 Cockpit Tools 啟動 Antigravity 桌面版時，會套用版面配置和本機預設權限。",
+    "desktopLanguageChinese": "簡體中文",
     "initializeTitle": "Antigravity IDE 尚未初始化",
     "initializeThenSwitch": "先開啟 IDE，初始化後即可切換帳號。",
     "initializeThenBind": "初始化後即可綁定帳號。",
@@ -20,7 +32,6 @@
     "sharedInstanceStarted": "已更新共用登入並送出啟動要求。",
     "sharedInstanceLaunchFailed": "共用登入已更新，但執行個體啟動失敗：{{error}}",
     "sharedCopySource": "複製所選執行個體的設定目錄。",
-    "quickSwitchSetting": "適用於 Antigravity IDE 快速切換帳號。在帳號對話框中，每次都可選擇是否啟動。",
     "title": "選擇用戶端",
     "switchOnly": "僅切換帳號",
     "switchAndLaunch": "切換並啟動",
@@ -33,7 +44,8 @@
     "cliAuth": "agy 依自身的驗證設定啟動。若已設定 API Key 或 Google Cloud 憑證，會優先使用該驗證方式。",
     "cliMissing": "找不到 agy，請安裝官方 Antigravity CLI 後再試。",
     "terminalFailed": "無法準備終端機。{{error}}",
-    "switchedTerminalFailed": "帳號已切換，但終端機未開啟。{{error}}"
+    "switchedTerminalFailed": "帳號已切換，但終端機未開啟。{{error}}",
+    "quickSwitchSetting": "適用於 Antigravity IDE 快速切換帳號。在帳號對話框中，每次都可選擇是否啟動。"
   },
   "pelican": {
     "caseKinds": {
@@ -194,6 +206,7 @@
     "providerClear": "清除選取"
   },
   "common": {
+    "commonSettings": "常用設定",
     "automation": {
       "invalidPlatform": "未知的帳號平台。執行 cockpit-cli account platforms 可查看支援的平台 ID。",
       "hostUnavailable": "請啟動使用此資料目錄的 Cockpit Tools 桌面版後再試一次。",
@@ -233,6 +246,7 @@
     "dataQueryBusy": "資料正在處理中，請稍後再試。",
     "historyRestoring": "正在還原歷史記錄…",
     "apiBudget": {
+      "sharedPool": "共用額度",
       "keyScope": "目前 Key",
       "upgradeRequired": "請升級閘道所在電腦的 Cockpit Tools，以查看統計和請求記錄。",
       "gatewayName": "Cockpit 閘道",
@@ -279,7 +293,10 @@
       "proxyAuth": "代理「{{proxy}}」驗證失敗，請檢查代理使用者名稱或密碼。",
       "localProxyUnavailable": "無法連線至本機代理「{{proxy}}」，請檢查代理服務是否執行中。",
       "directConnection": "連線至 {{target}} 失敗，請檢查網路後重試。",
-      "directTimeout": "連線至 {{target}} 逾時，請檢查網路後重試。"
+      "directTimeout": "連線至 {{target}} 逾時，請檢查網路後重試。",
+      "recoveryExhaustedLargeRequest": "目前請求體積較大（{{size}}），連線至上游時多次失敗或逾時，本次自動重試已停止。可能是歷史對話或圖片資料過多導致上傳或等待回應逾時，建議先壓縮會話或開啟新對話後重試；此錯誤不代表帳號額度耗盡。",
+      "proxyLargeRequestTimeout": "透過代理「{{proxy}}」向 {{target}} 傳送較大請求（{{size}}）逾時，可能因歷史對話或圖片體積過大導致上傳或上游處理逾時，建議壓縮會話、開啟新對話或檢查代理。",
+      "directLargeRequestTimeout": "向 {{target}} 傳送較大請求（{{size}}）逾時，可能因歷史對話或圖片體積過大導致上傳或上游處理逾時，建議先壓縮會話或開啟新對話後重試。"
     },
     "codexUsage": {
       "responseSpeed": "正文速度",
@@ -836,7 +853,8 @@
     "apiRelay": "中轉站",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "qoderCn": "Qoder CN"
   },
   "sponsors": {
     "pageTitle": "贊助商",
@@ -948,6 +966,7 @@
       "syncThreads": "將補齊所有執行個體中缺少的工作階段，並在目標執行個體已停止且歷程一致時追加新增內容，不覆寫既有位元組。歷程分叉或目標仍在執行時，既有工作階段的更新將被拒絕。寫入前會備份目標檔案。確定繼續？"
     },
     "status": {
+      "firstLaunchInitializing": "首次啟動初始化…",
       "running": "運行中",
       "stopped": "已停止",
       "restarting": "正在重啟",
@@ -1117,6 +1136,7 @@
       "empty": "暫無緩存額度"
     },
     "messages": {
+      "firstLaunchTimedOut": "用戶端首次啟動尚未完成。如用戶端要求登入或授權，請完成後再重試。",
       "created": "實例已創建",
       "emptyCreated": "空白實例已建立，請先啟動一次後再綁定帳號",
       "existingDirCreated": "已使用所選目錄建立實例",
@@ -1555,8 +1575,6 @@
       "claudeShareCodeSessionsOnSwitchDesc": "切換 macOS 預設 Claude Desktop 的登入帳號時，在本機帳號之間共用 Code 工作階段清單。",
       "claudeAppPath": "Claude Desktop 啟動目標",
       "claudeAppPathDesc": "預設實例可使用 Microsoft Store 應用目標；應用多開請選擇真實 Claude.exe。",
-      "antigravityLaunchOnSwitch": "切換時啟動 Antigravity IDE",
-      "antigravityLaunchOnSwitchDesc": "關閉後切號只寫入 Antigravity IDE 預設帳號資料，不會關閉、啟動或重啟應用程式。",
       "tokenKeeper": "背景授權保活",
       "tokenKeeperDesc": "僅在授權快過期時分批刷新帳號 Token，降低大量帳號場景下的背景請求壓力。",
       "platformAutoRefresh": "{{platform}} 自動刷新配額",
@@ -1643,7 +1661,14 @@
       "t3codeAutoRefresh": "T3 Code 配額自動重新整理",
       "t3codeAutoRefreshDesc": "背景配額重新整理間隔",
       "t3codeAppUiInjection": "T3 Code 聊天額度膠囊",
-      "t3codeAppUiInjectionDesc": "透過 Cockpit 啟動 T3 Code 後，輸入框底部會顯示目前的模型系列與剩餘額度。點開可查看帳號與用量詳情。"
+      "t3codeAppUiInjectionDesc": "透過 Cockpit 啟動 T3 Code 後，輸入框底部會顯示目前的模型系列與剩餘額度。點開可查看帳號與用量詳情。",
+      "qoderCnAppPath": "Qoder CN 啟動路徑",
+      "qoderCnAppPathDesc": "留空則自動偵測；切換帳號時會自動關閉並重新啟動桌面端",
+      "qoderCnAppPathPlaceholder": "預設路徑",
+      "qoderCnPathReset": "重設預設",
+      "antigravityLaunchOnSwitch": "切換時啟動 Antigravity IDE",
+      "antigravityLaunchOnSwitchDesc": "關閉後切號只寫入 Antigravity IDE 預設帳號資料，不會關閉、啟動或重啟應用程式。",
+      "qoderCnAutoRefresh": "Qoder CN 自動刷新配額"
     },
     "network": {
       "apiTitle": "反重力駕駛艙 API",
@@ -5295,7 +5320,12 @@
         "maxConcurrentImageRequests": "每個帳戶的圖片請求數",
         "maxAccountConcurrency": "帳號併發數",
         "accountConcurrencyWait": "併發等待（秒）",
-        "optionsSaved": "調度選項已儲存"
+        "optionsSaved": "調度選項已儲存",
+        "accountConcurrencyLimit": "帳號併發上限",
+        "accountConcurrencyUnlimited": "不限",
+        "accountConcurrencyHint": "覆蓋此帳號的併發上限（0 表示不限，1–64 為上限）。留空則沿用全域併發數。",
+        "accountConcurrencyInvalid": "請輸入 0 到 64 的整數。",
+        "accountConcurrencySaveFailed": "無法儲存帳號併發上限。"
       },
       "validation": {
         "numberRange": "請輸入 {{min}} 到 {{max}} 之間的數字"
@@ -6575,7 +6605,8 @@
         "canceled": "請求已由用戶端取消，不屬於串流開啟逾時。",
         "gateway": "HTTP 504 表示閘道等待逾時；目前紀錄不足以確定原因，請查看上游錯誤及請求階段。",
         "threshold": "本次生效門檻：{{seconds}} 秒。",
-        "settings": "調整逾時"
+        "settings": "調整逾時",
+        "largeRequest": "本次記錄的請求體積為 {{size}}。歷史記錄或內嵌圖片過大容易在上傳或等待首響階段逾時，建議先壓縮會話或開啟新對話。"
       },
       "identity": {
         "title": "會話與帳號身分",
@@ -7101,6 +7132,14 @@
     "t3code": {
       "title": "T3 Code 設定",
       "appPath": "T3 Code 啟動路徑"
+    },
+    "validation": {
+      "refreshIntervalInvalid": "重新整理間隔需填寫 1-999 的整數，或填 -1 關閉自動重新整理。",
+      "quotaAlertThresholdInvalid": "預警閾值需填寫 0-100 的整數。"
+    },
+    "disableRefreshHint": "-1 表示停用",
+    "qoderCn": {
+      "title": "Qoder CN 設定"
     }
   },
   "quotaAlert": {
@@ -7802,7 +7841,21 @@
       "switchLaunchFailed": "帳號已寫入，但 Qoder IDE 啟動失敗。{{detail}}",
       "refreshCount": "已重新整理 {{count}}／{{total}} 個帳號。",
       "launchUnconfirmed": "未確認 Qoder IDE 已啟動。",
-      "workerFailed": "Qoder 背景作業失敗。{{detail}}"
+      "workerFailed": "Qoder 背景作業失敗。{{detail}}",
+      "oauthUrlEmpty": "Qoder OAuth 授權連結為空",
+      "qoderCnPathMissing": "未找到 Qoder CN 桌面端。請在設定中填寫啟動路徑，或安裝後重試。",
+      "platformMismatch": "此帳號屬於其他區域版本，無法寫入目前用戶端。",
+      "cnRelaunchFailed": "帳號已切換，但 Qoder CN 用戶端啟動失敗。{{detail}}",
+      "cnDesktopUnsupported": "目前系統不支援 Qoder CN 桌面版切換帳號，請選擇 CLI。",
+      "clientInvalid": "用戶端類型無效，請重新選擇切換目標。",
+      "nativeTokenMissing": "此帳號缺少可寫入的登入憑證，請重新授權或重新匯入。",
+      "nativeWriteVerifyFailed": "憑證寫入後驗證失敗，已嘗試還原到原始狀態。請關閉用戶端後重試。",
+      "nativeKeyUnreadable": "無法讀取本機憑證金鑰。請確認 Cockpit 與 Qoder 使用同一個系統帳號。",
+      "nativeImportInvalid": "匯入的憑證缺少帳號資訊，無法辨識是哪一個帳號。",
+      "nativeImportFailed": "匯入本機 Qoder 登入資訊失敗。請先在用戶端登入後重試。",
+      "nativeProcessProbeFailed": "無法偵測 Qoder 處理程序狀態，請稍後重試。",
+      "regionUnsupported": "無法辨識此帳號所屬的區域版本，請重新授權。",
+      "clientRunning": "請先結束 {{client}} 再切換帳號。"
     },
     "title": "Qoder 帳號管理",
     "comingSoon": {
@@ -7844,6 +7897,38 @@
     },
     "empty": {
       "desc": "點擊「新增帳號」以使用驗證登入、本機匯入或 JSON 匯入。"
+    },
+    "region": {
+      "cn": "Qoder CN · 中國版",
+      "global": "Qoder · 國際版"
+    },
+    "clientTarget": {
+      "importSource": "匯入來源",
+      "initializeHint": "請先開啟此用戶端，完成首次啟動設定後再試一次。",
+      "label": "切換／本機匯入目標",
+      "ariaLabel": "Qoder 用戶端",
+      "desktop": "Qoder 桌面端",
+      "desktopCn": "Qoder CN 桌面端",
+      "cli": "Qoder CLI",
+      "cliCn": "Qoder CN CLI",
+      "ide": "Qoder IDE",
+      "switchSuccess": "帳號已切換，請重新開啟對應用戶端。",
+      "windowsOnly": "（僅 Windows）",
+      "desktopSwitchSuccess": "帳號已切換，{{client}}已重新啟動。",
+      "relaunchFailed": "帳號已切換，但 {{client}}自動啟動失敗，請手動開啟。"
+    },
+    "cn": {
+      "nativeOnly": "國內帳號請選擇桌面端或 CLI。",
+      "ideUnavailable": "國內帳號請選擇桌面端或 CLI；此處 IDE 適配器僅用於國際版。",
+      "instancesUnsupported": "國內版桌面端與 CLI 支援預設用戶端帳號切換，目前暫不支援應用多開。",
+      "flowNoticeDesc": "支援官方授權、桌面版或 CLI 本機匯入、JSON 匯入及用量查詢。切換帳號時可只更新登入，或同時啟動所選用戶端。",
+      "flowNoticePermission": "本機匯入會讀取桌面版或 CLI 的登入狀態。切換帳號只會更新所選 Qoder CN 用戶端的本機登入資料。",
+      "flowNoticeNetwork": "網路範圍：官方授權登入需連網請求 Qoder CN 官方服務完成回呼；配額查詢透過 Qoder CN API 取得用量資料。不上傳本機金鑰或憑證。",
+      "flowNoticeTitle": "Qoder CN 帳號接入說明（點擊展開/收起）",
+      "oauthHint": "點擊下方按鈕，在瀏覽器中完成 Qoder CN 帳號 OAuth 授權。",
+      "importJsonHint": "匯入從此工具匯出的 Qoder CN JSON 檔案。",
+      "importLocalDesc": "從本機 Qoder CN 用戶端讀取目前登入狀態（包含使用者資訊、方案與 Credits 使用情況）。",
+      "importLocalSuccess": "已從本機 Qoder CN 匯入帳號。"
     }
   },
   "trae": {
@@ -8231,7 +8316,38 @@
       "logHits": "日誌命中 {{count}} 次"
     },
     "exposeToCodex": {
-      "title": "僅透過 Native Rust 閘道接入，不會複製 WorkBuddy Token"
+      "title": "僅透過 Native Rust 閘道接入，不會複製 WorkBuddy Token",
+      "textOnlyTitle": "舊版 Native ACP 僅支援純文字；如需讀寫檔案與執行命令，請使用「Codex 工具橋接」。",
+      "textOnlyAction": "接入 Codex（純文字）"
+    },
+    "nativeCodex": {
+      "managedKeyRotation": "此 Key 由 WorkBuddy 原生工具橋接管理；如需更換，請撤銷此設定後重新建立。",
+      "nativeRequired": "請先在 API 服務頁面建立並啟用 Native Rust 服務；不會自動切換模式。",
+      "enterpriseUnsupported": "首版尚無法嚴格綁定企業租用戶，僅支援個人 WorkBuddy 來源。",
+      "revokedFilesPreserved": "專用 Key 已撤銷。設定檔已被修改或無法安全清理，所有修改過的檔案與工作階段資料均已保留；可檢查檔案後重試還原。",
+      "notOwned": "設定的所有權憑證與專用 Key 不符，未修改任何 Key。請檢查設定目錄的所有權標記。",
+      "profileChanged": "此獨立設定已被修改，程式不會覆寫你的修改。",
+      "selectionChanged": "模型或推理強度已無法使用，請重新讀取目錄並選擇。",
+      "sourceUnavailable": "此 WorkBuddy 來源無法使用，請檢查登入狀態。不會嘗試其他帳號。",
+      "operationFailed": "操作失敗，請檢查 WorkBuddy CLI 是否已安裝、帳號是否有效，並重新讀取目錄。",
+      "title": "WorkBuddy → Codex 原生工具橋接",
+      "scope": "建立綁定固定來源的專用本機 Key 與獨立 CODEX_HOME。Codex 自行執行工具；WorkBuddy 權杖不會寫入 Codex 設定，也不會修改預設登入或 API 服務主 Key。",
+      "account": "WorkBuddy 來源",
+      "noSourceSelected": "目前沒有可用來源；仍可管理已建立的設定",
+      "model": "CLI 即時模型",
+      "readCatalog": "請讀取即時目錄",
+      "effort": "推理強度",
+      "metadataOnly": "讀取目錄僅會初始化 CLI，不會傳送模型提示詞。建立前會再次驗證模型與強度；來源失效時會直接報錯，不會改用其他帳號。僅支援 HTTP Responses；獨立設定已停用網路搜尋（web_search），不支援圖片、其他託管工具、compact 或 WebSocket。",
+      "refreshCatalog": "重新讀取目錄",
+      "managedProfile": "已建立的獨立設定",
+      "profileSource": "來源：",
+      "profileSourceMissing": "來源已刪除；仍可撤銷此專用 Key 並還原獨立設定。",
+      "profileSourceUnavailable": "來源目前無法使用；撤銷與還原不依賴來源的登入狀態。",
+      "launchHelp": "在終端機進入你的專案目錄，再執行下方命令。僅此次 Codex 啟動會使用此設定。",
+      "retryRestore": "重試還原（Key 已撤銷）",
+      "restore": "撤銷專用 Key 並還原此設定",
+      "create": "建立專用 Key 與獨立設定",
+      "open": "Codex 工具橋接"
     }
   },
   "minimaxCode": {
@@ -8989,7 +9105,6 @@
     "quota": {
       "cliUnavailable": "暫無 CLI 用量",
       "weekly": "每週用量",
-      "sharedPool": "共用額度",
       "monthly": "每月用量",
       "onDemand": "按量用量",
       "balance": "餘額與點數",
@@ -9622,6 +9737,15 @@
     "saved": "已儲存，後續請求使用新設定。"
   },
   "antigravityTokenUsage": {
+    "context": {
+      "requestContext": "請求上下文",
+      "coverage": "{{reported}} 輪有紀錄 · {{estimated}} 輪估算 · {{missing}} 輪缺少資料",
+      "largestGrowth": "第 #{{step}} 步增幅最大 {{total}}",
+      "growthParts": "輸入 {{input}} · 快取讀取 {{read}} · 快取寫入 {{write}}",
+      "method": "請求上下文由輸入和快取 Token 相加。變化量比較相鄰兩輪有實測資料的請求。紀錄未提供訊息、工具輸出和附件各自的用量。",
+      "unplacedCompactions": "有 {{count}} 次壓縮缺少步驟編號",
+      "compactionStep": "上下文壓縮"
+    },
     "tab": "工作階段用量",
     "subtitle": "Antigravity 本機工作階段 Token 用量統計",
     "title": "Antigravity 工作階段 Token 用量",
@@ -9776,7 +9900,6 @@
       "codexCatalogPending": "第三方金鑰等待同步模型目錄：{{count}} 個"
     },
     "commonSettings": {
-      "title": "常用設定",
       "language": "T3 Code 語言"
     },
     "platformOrder": {
@@ -9996,6 +10119,14 @@
       "searchAccountsPlaceholder": "搜尋 {{platform}} 帳號...",
       "goAddSourceAccount": "前往 {{platform}} 新增帳號",
       "emptyPoolDesc": "請先在 {{platform}} 頁面新增可用帳號，隨後即可一鍵切入 T3 Code。"
+    }
+  },
+  "antigravity": {
+    "proxy": {
+      "followHint": "使用設定中的全域代理；未啟用時使用預設網路。",
+      "independentHint": "只變更這個帳號，優先於全域代理。",
+      "invalidUrl": "代理位址不支援，僅支援 http、https、socks5、socks5h 協定。",
+      "restartHint": "首次綁定、更換或清除代理後，重新啟動 Antigravity（桌面端或新開 CLI 會話）後生效。代理連線失敗時不會回退直連。"
     }
   }
 }

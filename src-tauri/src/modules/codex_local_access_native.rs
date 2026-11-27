@@ -128,6 +128,14 @@ fn native_patch_mode(current: &str, mode: CodexLocalAccessGatewayMode) -> Result
     {
         return Err("CHATGPT_PLAN_NATIVE_REQUIRED".into());
     }
+    if mode != CodexLocalAccessGatewayMode::Native
+        && value.get("apiKeys").and_then(Value::as_array).is_some_and(|keys| {
+            keys.iter().any(|key| key.get("enabled").and_then(Value::as_bool).unwrap_or(true)
+                && key.get("workbuddyDelegate").is_some_and(|value| !value.is_null()))
+        })
+    {
+        return Err("WORKBUDDY_DELEGATE_NATIVE_REQUIRED".into());
+    }
     value["gatewayMode"] = serde_json::to_value(mode).map_err(|error| error.to_string())?;
     value["nativeGatewayDefaultMigrated"] = json!(true);
     value["updatedAt"] = json!(now_ms());
@@ -180,6 +188,11 @@ fn native_validate_chatgpt_plan_mode(
     mode: CodexLocalAccessGatewayMode,
 ) -> Result<(), String> {
     if mode != CodexLocalAccessGatewayMode::Native
+        && collection.api_keys.iter().any(|key| key.enabled && key.workbuddy_delegate.is_some())
+    {
+        return Err("WORKBUDDY_DELEGATE_NATIVE_REQUIRED".into());
+    }
+    if mode != CodexLocalAccessGatewayMode::Native
         && (!collection.official_account_bindings.is_empty()
             || effective_sidecar_account_ids(collection)
                 .iter()
@@ -215,6 +228,10 @@ struct NativeHostBridge {
     routing_sequence: AtomicU64,
     #[cfg(test)]
     identity_fixture: Arc<NativeIdentityFixture>,
+    /// In-memory credential fixtures only. Live opt-in tests never persist the
+    /// user's WorkBuddy token or modify their account store.
+    #[cfg(test)]
+    workbuddy_delegate_test_sources: HashMap<String, crate::models::workbuddy::WorkbuddyAccount>,
 }
 
 #[cfg(test)]
@@ -1172,18 +1189,19 @@ impl native_contract::Host for NativeHostBridge {
         Box::pin(async {
             let collection = self.collection().await?;
             let limits = &collection.timeouts;
+            let open_timeout = Duration::from_millis(
+                limits.sidecar_stream_open_timeout_ms.max(1000),
+            );
             Ok(native_contract::ExecutionPolicy {
                 // Rebuilding is native protocol behavior, not a persisted user setting.
                 account_switch_rebuild: true,
-                open_timeout: Duration::from_millis(
-                    limits.sidecar_stream_open_timeout_ms.max(1000),
-                ),
+                open_timeout,
                 idle_timeout: Duration::from_millis(
                     limits.sidecar_stream_idle_timeout_ms.max(1000),
                 ),
                 // Go ordinary requests have no total deadline, including active streams.
                 total_timeout: Duration::ZERO,
-                network_recovery_timeout: Duration::from_secs(120),
+                network_recovery_timeout: Duration::from_secs(120).max(open_timeout),
                 network_recovery_max_failures: 4,
                 image_open_timeout: Duration::from_millis(
                     limits.sidecar_image_stream_open_timeout_ms.max(1000),
@@ -1249,6 +1267,14 @@ impl native_contract::Host for NativeHostBridge {
         Box::pin(native_select_route_with_owner_wait(self, caller, request, true))
     }
 
+    fn workbuddy_delegate_route<'a>(
+        &'a self,
+        caller: &'a native_contract::Caller,
+        public_model: &'a str,
+    ) -> futures_util::future::BoxFuture<'a, Result<Option<native_contract::WorkbuddyDelegateSelection>, native_contract::ServiceError>> {
+        Box::pin(native_workbuddy_delegate_selection(self, caller, public_model))
+    }
+
     fn route<'a>(
         &'a self,
         caller: &'a native_contract::Caller,
@@ -1303,7 +1329,15 @@ impl native_contract::Host for NativeHostBridge {
         &'a self,
         caller: &'a native_contract::Caller,
     ) -> futures_util::future::BoxFuture<'a, Result<Value, native_contract::ServiceError>> {
-        Box::pin(native_models(self, caller))
+        Box::pin(async move {
+            let collection = self.collection().await?;
+            let key = native_caller_key(&collection, caller)?;
+            if let Some(config) = key.and_then(|key| key.workbuddy_delegate.as_ref()) {
+                workbuddy_delegate_validate_key_scope(&collection, key.unwrap(), config, &config.public_model)?;
+                return Ok(workbuddy_delegate_catalog(config));
+            }
+            native_models(self, caller).await
+        })
     }
 
     fn token_count_model<'a>(

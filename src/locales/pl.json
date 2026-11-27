@@ -1,5 +1,17 @@
 {
   "antigravityLaunch": {
+    "desktopLanguage": "Język interfejsu",
+    "desktopLanguageEnglish": "Angielski",
+    "desktopLayout": "Układ",
+    "desktopLayoutEngineering": "Inżynieria oprogramowania",
+    "desktopLayoutKnowledge": "Praca umysłowa",
+    "desktopPermission": "Domyślne uprawnienia lokalne",
+    "desktopPermissionReview": "Poproś o sprawdzenie",
+    "desktopPermissionDefault": "Domyślne",
+    "desktopPermissionAuto": "Automatycznie",
+    "desktopPermissionTurbo": "W pełni automatycznie",
+    "desktopSettingsHint": "Układ i domyślne uprawnienia lokalne są stosowane przy uruchamianiu Antigravity z Cockpit Tools.",
+    "desktopLanguageChinese": "Chiński uproszczony",
     "initializeTitle": "Antigravity IDE wymaga inicjalizacji",
     "initializeThenSwitch": "Otwórz IDE raz, aby móc przełączyć konto.",
     "initializeThenBind": "Uruchom instancję raz, aby powiązać konto.",
@@ -20,7 +32,6 @@
     "sharedInstanceStarted": "Zaktualizowano logowanie. Wysłano żądanie uruchomienia.",
     "sharedInstanceLaunchFailed": "Zaktualizowano logowanie, ale uruchomienie się nie powiodło: {{error}}",
     "sharedCopySource": "Kopiuje folder konfiguracji wybranej instancji.",
-    "quickSwitchSetting": "Dotyczy szybkiego przełączania w Antigravity IDE. W oknie konta można za każdym razem wybrać, czy uruchomić klienta.",
     "title": "Wybierz klienta",
     "switchOnly": "Tylko przełącz",
     "switchAndLaunch": "Przełącz i uruchom",
@@ -33,7 +44,8 @@
     "cliAuth": "agy korzysta z własnych ustawień logowania. Skonfigurowany klucz API lub dane logowania Google Cloud mają pierwszeństwo.",
     "cliMissing": "Nie znaleziono agy. Zainstaluj oficjalny Antigravity CLI i spróbuj ponownie.",
     "terminalFailed": "Nie można przygotować terminala. {{error}}",
-    "switchedTerminalFailed": "Konto zostało przełączone, ale nie udało się otworzyć terminala. {{error}}"
+    "switchedTerminalFailed": "Konto zostało przełączone, ale nie udało się otworzyć terminala. {{error}}",
+    "quickSwitchSetting": "Dotyczy szybkiego przełączania w Antigravity IDE. W oknie konta można za każdym razem wybrać, czy uruchomić klienta."
   },
   "pelican": {
     "caseKinds": {
@@ -194,6 +206,7 @@
     "providerClear": "Wyczyść wybór"
   },
   "common": {
+    "commonSettings": "Częste ustawienia",
     "automation": {
       "invalidPlatform": "Nieznana platforma konta. Polecenie cockpit-cli account platforms wyświetla obsługiwane identyfikatory.",
       "hostUnavailable": "Uruchom aplikację Cockpit Tools z tym katalogiem danych i spróbuj ponownie.",
@@ -233,6 +246,7 @@
     "dataQueryBusy": "Dane są przetwarzane. Spróbuj ponownie za chwilę.",
     "historyRestoring": "Przywracanie historii…",
     "apiBudget": {
+      "sharedPool": "Wspólny limit",
       "keyScope": "Ten klucz",
       "upgradeRequired": "Zaktualizuj Cockpit Tools na komputerze bramy, aby wyświetlić statystyki i historię żądań.",
       "gatewayName": "Brama Cockpit",
@@ -279,7 +293,10 @@
       "proxyAuth": "Uwierzytelnianie proxy „{{proxy}}” nie powiodło się. Sprawdź nazwę użytkownika lub hasło proxy.",
       "localProxyUnavailable": "Nie można połączyć się z lokalnym proxy „{{proxy}}”. Sprawdź, czy usługa proxy działa.",
       "directConnection": "Nie udało się połączyć z {{target}}. Sprawdź sieć i spróbuj ponownie.",
-      "directTimeout": "Przekroczono czas połączenia z {{target}}. Sprawdź sieć i spróbuj ponownie."
+      "directTimeout": "Przekroczono czas połączenia z {{target}}. Sprawdź sieć i spróbuj ponownie.",
+      "recoveryExhaustedLargeRequest": "Powtarzające się błędy lub przekroczenia limitu czasu po stronie upstream zatrzymały automatyczne ponowienia dla tego dużego żądania ({{size}}). Duża historia rozmowy lub obrazy mogły przekroczyć limit wysyłania lub oczekiwania na odpowiedź; skompresuj rozmowę lub zacznij nową i spróbuj ponownie. Ten błąd nie oznacza wyczerpania limitu konta.",
+      "proxyLargeRequestTimeout": "Wysyłanie dużego żądania ({{size}}) do {{target}} przez proxy „{{proxy}}” przekroczyło limit czasu przed uzyskaniem odpowiedzi. Duża historia lub obrazy mogły przekroczyć limit proxy albo upstream; skompresuj rozmowę, rozpocznij nową lub sprawdź proxy.",
+      "directLargeRequestTimeout": "Wysyłanie dużego żądania ({{size}}) do {{target}} przekroczyło limit czasu przed uzyskaniem odpowiedzi. Duża historia lub obrazy mogły przekroczyć limit wysyłania lub upstream; skompresuj rozmowę albo rozpocznij nową i spróbuj ponownie."
     },
     "codexUsage": {
       "responseSpeed": "Tempo odpowiedzi",
@@ -836,7 +853,8 @@
     "apiRelay": "Relay API",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "qoderCn": "Qoder CN"
   },
   "sponsors": {
     "pageTitle": "Sponsorzy",
@@ -948,6 +966,7 @@
       "syncThreads": "Uzupełnia brakujące sesje we wszystkich instancjach i dopisuje nową zawartość tylko wtedy, gdy instancja docelowa jest zatrzymana, a jej historia jest zgodna. Istniejące bajty zostają zachowane. Aktualizacje rozbieżnych historii lub uruchomionych celów są odrzucane. Przed zapisem tworzone są kopie plików docelowych. Kontynuować?"
     },
     "status": {
+      "firstLaunchInitializing": "Przygotowywanie pierwszego uruchomienia…",
       "running": "Uruchomiona",
       "stopped": "Zatrzymana",
       "restarting": "Restartowanie",
@@ -1117,6 +1136,7 @@
       "empty": "Brak limitu w pamięci podręcznej"
     },
     "messages": {
+      "firstLaunchTimedOut": "Konfiguracja początkowa jest nadal w toku. Jeśli aplikacja poprosi o zalogowanie lub przyznanie dostępu, wykonaj ten krok i spróbuj ponownie.",
       "created": "Utworzono instancję",
       "emptyCreated": "Utworzono pustą instancję. Przed powiązaniem konta uruchom ją raz.",
       "existingDirCreated": "Instancja utworzona przy użyciu wybranego katalogu.",
@@ -1555,8 +1575,6 @@
       "claudeShareCodeSessionsOnSwitchDesc": "Udostępnia listę sesji Code między kontami lokalnymi przy przełączaniu domyślnego profilu Claude Desktop w macOS.",
       "claudeAppPath": "Cel uruchamiania Claude Desktop",
       "claudeAppPathDesc": "Profil domyślny może używać celu Microsoft Store; wiele instancji wymaga prawdziwego Claude.exe.",
-      "antigravityLaunchOnSwitch": "Uruchamiaj Antigravity IDE przy przełączaniu",
-      "antigravityLaunchOnSwitchDesc": "Po wyłączeniu przełączanie tylko zapisuje dane domyślnego konta Antigravity IDE i nie zamyka, nie uruchamia ani nie restartuje aplikacji.",
       "tokenKeeper": "Podtrzymanie auth",
       "tokenKeeperDesc": "Odświeża Tokeny kont małymi partiami tylko tuż przed wygaśnięciem autoryzacji, ograniczając żądania w tle przy wielu kontach.",
       "platformAutoRefresh": "Automatyczne odświeżanie limitu {{platform}}",
@@ -1643,7 +1661,14 @@
       "t3codeAutoRefresh": "Automatyczne odświeżanie limitu T3 Code",
       "t3codeAutoRefreshDesc": "Interwał odświeżania limitu w tle",
       "t3codeAppUiInjection": "Kapsuła limitu w czacie T3 Code",
-      "t3codeAppUiInjectionDesc": "Po uruchomieniu T3 Code z Cockpitu pole wiadomości pokazuje rodzinę wybranego modelu i pozostały limit. Kliknij, aby zobaczyć konto i szczegóły użycia."
+      "t3codeAppUiInjectionDesc": "Po uruchomieniu T3 Code z Cockpitu pole wiadomości pokazuje rodzinę wybranego modelu i pozostały limit. Kliknij, aby zobaczyć konto i szczegóły użycia.",
+      "qoderCnAppPath": "Ścieżka uruchamiania Qoder CN",
+      "qoderCnAppPathDesc": "Pozostaw puste, aby wykryć automatycznie. Podczas przełączania konta klient pulpitu zostanie zamknięty i uruchomiony ponownie.",
+      "qoderCnAppPathPlaceholder": "Domyślna ścieżka",
+      "qoderCnPathReset": "Przywróć domyślne",
+      "antigravityLaunchOnSwitch": "Uruchamiaj Antigravity IDE przy przełączaniu",
+      "antigravityLaunchOnSwitchDesc": "Po wyłączeniu przełączanie tylko zapisuje dane domyślnego konta Antigravity IDE i nie zamyka, nie uruchamia ani nie restartuje aplikacji.",
+      "qoderCnAutoRefresh": "Automatyczne odświeżanie limitu Qoder CN"
     },
     "network": {
       "apiTitle": "API kokpitu antygrawitacyjnego",
@@ -5295,7 +5320,12 @@
         "maxConcurrentImageRequests": "Żądania obrazów na konto",
         "maxAccountConcurrency": "Współbieżność konta",
         "accountConcurrencyWait": "Oczekiwanie (s)",
-        "optionsSaved": "Opcje routingu zapisane"
+        "optionsSaved": "Opcje routingu zapisane",
+        "accountConcurrencyLimit": "Limit współbieżności",
+        "accountConcurrencyUnlimited": "Bez limitu",
+        "accountConcurrencyHint": "Nadpisuje limit współbieżności dla tego konta (0 = bez limitu, maks. 64). Pozostaw puste, aby odziedziczyć limit globalny.",
+        "accountConcurrencyInvalid": "Wpisz liczbę całkowitą od 0 do 64.",
+        "accountConcurrencySaveFailed": "Nie udało się zapisać limitu współbieżności konta."
       },
       "validation": {
         "numberRange": "Wpisz liczbę od {{min}} do {{max}}"
@@ -6575,7 +6605,8 @@
         "canceled": "Klient anulował żądanie; to nie limit czasu otwarcia strumienia.",
         "gateway": "HTTP 504 oznacza przekroczenie czasu bramy. Ten zapis nie określa przyczyny; sprawdź błąd serwera i etap żądania.",
         "threshold": "Próg zastosowany do tego żądania: {{seconds}} sekund.",
-        "settings": "Zmień limit"
+        "settings": "Zmień limit",
+        "largeRequest": "Zarejestrowany rozmiar żądania: {{size}}. Bardzo duża historia lub osadzone obrazy mogą powodować przekroczenie limitu czasu podczas wysyłania lub oczekiwania na pierwszą odpowiedź; zaleca się kompresję rozmowy lub rozpoczęcie nowej."
       },
       "identity": {
         "title": "Tożsamość sesji i konta",
@@ -7101,6 +7132,14 @@
     "t3code": {
       "title": "Ustawienia T3 Code",
       "appPath": "Ścieżka uruchamiania T3 Code"
+    },
+    "validation": {
+      "refreshIntervalInvalid": "Wpisz liczbę całkowitą od 1 do 999 lub -1, aby wyłączyć automatyczne odświeżanie.",
+      "quotaAlertThresholdInvalid": "Wpisz liczbę całkowitą od 0 do 100."
+    },
+    "disableRefreshHint": "-1 wyłącza automatyczne odświeżanie.",
+    "qoderCn": {
+      "title": "Ustawienia Qoder CN"
     }
   },
   "quotaAlert": {
@@ -7802,7 +7841,21 @@
       "switchLaunchFailed": "Zapisano konto, ale nie udało się uruchomić Qoder IDE. {{detail}}",
       "refreshCount": "Odświeżono {{count}} z {{total}} kont.",
       "launchUnconfirmed": "Nie udało się potwierdzić uruchomienia Qoder IDE.",
-      "workerFailed": "Operacja Qoder w tle nie powiodła się. {{detail}}"
+      "workerFailed": "Operacja Qoder w tle nie powiodła się. {{detail}}",
+      "oauthUrlEmpty": "Adres URL autoryzacji Qoder OAuth jest pusty.",
+      "qoderCnPathMissing": "Nie znaleziono Qoder CN Desktop. Ustaw ścieżkę uruchamiania w ustawieniach lub zainstaluj klienta i spróbuj ponownie.",
+      "platformMismatch": "To konto należy do kompilacji innego regionu i nie można go zapisać w bieżącym kliencie.",
+      "cnRelaunchFailed": "Konto zostało przełączone, ale nie udało się uruchomić klienta Qoder CN. {{detail}}",
+      "cnDesktopUnsupported": "Aby zmienić konto Qoder CN w tym systemie, użyj CLI.",
+      "clientInvalid": "Nieprawidłowy typ klienta. Wybierz ponownie cel przełączenia.",
+      "nativeTokenMissing": "Temu kontu brakuje zapisywalnych danych logowania. Autoryzuj je ponownie lub zaimportuj jeszcze raz.",
+      "nativeWriteVerifyFailed": "Weryfikacja zapisanych danych logowania nie powiodła się i podjęto próbę przywrócenia poprzedniego stanu. Zamknij klienta i spróbuj ponownie.",
+      "nativeKeyUnreadable": "Nie można odczytać lokalnego klucza danych logowania. Upewnij się, że Cockpit i Qoder działają na tym samym koncie systemowym.",
+      "nativeImportInvalid": "Zaimportowane dane logowania nie zawierają informacji o koncie, więc nie można go zidentyfikować.",
+      "nativeImportFailed": "Import lokalnych danych logowania Qoder nie powiódł się. Najpierw zaloguj się w kliencie i spróbuj ponownie.",
+      "nativeProcessProbeFailed": "Nie można wykryć stanu procesu Qoder. Spróbuj ponownie później.",
+      "regionUnsupported": "Nie można ustalić kompilacji regionalnej konta. Autoryzuj je ponownie.",
+      "clientRunning": "Zamknij {{client}} przed przełączeniem kont."
     },
     "title": "Zarządzanie kontami Qoder",
     "comingSoon": {
@@ -7844,6 +7897,38 @@
     },
     "empty": {
       "desc": "Kliknij Dodaj konto, aby użyć logowania auth, importu lokalnego lub importu JSON."
+    },
+    "region": {
+      "cn": "Qoder CN · Chiny",
+      "global": "Qoder · Międzynarodowy"
+    },
+    "clientTarget": {
+      "importSource": "Źródło importu lokalnego",
+      "initializeHint": "Otwórz wybranego klienta, dokończ konfigurację i spróbuj ponownie.",
+      "label": "Cel przełączania / importu lokalnego",
+      "ariaLabel": "Klient Qoder",
+      "desktop": "Qoder Desktop",
+      "desktopCn": "Qoder CN Desktop",
+      "cli": "Qoder CLI",
+      "cliCn": "Qoder CN CLI",
+      "ide": "Qoder IDE",
+      "switchSuccess": "Konto zostało przełączone. Otwórz ponownie docelowego klienta.",
+      "windowsOnly": " (tylko Windows)",
+      "desktopSwitchSuccess": "Konto zostało przełączone. {{client}} został ponownie uruchomiony.",
+      "relaunchFailed": "Konto zostało przełączone, ale nie udało się automatycznie uruchomić {{client}}. Otwórz go ręcznie."
+    },
+    "cn": {
+      "nativeOnly": "Dla kont Qoder CN wybierz Desktop lub CLI.",
+      "ideUnavailable": "Dla kont Qoder CN wybierz Desktop lub CLI. Adapter IDE jest tutaj tylko dla wersji międzynarodowej.",
+      "instancesUnsupported": "Qoder CN Desktop i CLI obsługują przełączanie konta domyślnego klienta. Wiele instancji aplikacji nie jest jeszcze obsługiwanych.",
+      "flowNoticeDesc": "Dostępne są oficjalne logowanie, import lokalny z aplikacji lub CLI, import JSON i sprawdzanie limitów. Możesz zmienić konto i zdecydować, czy uruchomić wybranego klienta.",
+      "flowNoticePermission": "Import lokalny odczytuje sesję aplikacji lub CLI. Zmiana konta aktualizuje wyłącznie lokalną sesję wybranego klienta Qoder CN.",
+      "flowNoticeNetwork": "Dostęp sieciowy: oficjalne logowanie łączy się z usługami Qoder CN w celu zakończenia callbacku; zapytania o limity pobierają dane użycia przez API Qoder CN. Klucze i dane logowania nigdy nie są przesyłane.",
+      "flowNoticeTitle": "Przewodnik po kontach Qoder CN (kliknij, aby rozwinac/zwinac)",
+      "oauthHint": "Kliknij przycisk poniżej, aby ukończyć autoryzację OAuth konta Qoder CN w przeglądarce.",
+      "importJsonHint": "Importuj plik Qoder CN JSON wyeksportowany z tego narzędzia.",
+      "importLocalDesc": "Odczytuje bieżący stan logowania z lokalnego klienta Qoder CN, w tym informacje o użytkowniku, planie i wykorzystaniu kredytów.",
+      "importLocalSuccess": "Konto zostało zaimportowane z lokalnego Qoder CN CN."
     }
   },
   "trae": {
@@ -8231,7 +8316,38 @@
       "logHits": "Trafienia w logach: {{count}}"
     },
     "exposeToCodex": {
-      "title": "Łączy przez bramę Native Rust bez kopiowania tokenu WorkBuddy"
+      "title": "Łączy przez bramę Native Rust bez kopiowania tokenu WorkBuddy",
+      "textOnlyTitle": "Starszy tryb Native ACP obsługuje wyłącznie zwykły tekst. Aby odczytywać i zapisywać pliki oraz wykonywać polecenia, użyj mostu narzędzi Codex.",
+      "textOnlyAction": "Połącz z Codex (tylko tekst)"
+    },
+    "nativeCodex": {
+      "managedKeyRotation": "Ten Key jest zarządzany przez natywny most narzędzi WorkBuddy. Aby go zmienić, unieważnij konfigurację i utwórz nową.",
+      "nativeRequired": "Najpierw utwórz i włącz usługę Native Rust na stronie usługi API. Tryb nie zostanie przełączony automatycznie.",
+      "enterpriseUnsupported": "Pierwsza wersja nie zapewnia jeszcze ścisłego przypisania do dzierżawy firmowej. Obsługiwane są tylko osobiste konta WorkBuddy.",
+      "revokedFilesPreserved": "Dedykowany Key został unieważniony. Pliki konfiguracji zostały zmienione lub nie można ich bezpiecznie usunąć, więc zachowano wszystkie zmodyfikowane pliki i dane sesji. Po sprawdzeniu plików możesz ponowić przywracanie.",
+      "notOwned": "Potwierdzenie własności konfiguracji nie pasuje do dedykowanego Key. Nie zmieniono żadnego Key. Sprawdź znacznik własności w katalogu konfiguracji.",
+      "profileChanged": "Ta niezależna konfiguracja została zmodyfikowana. Program nie nadpisze Twoich zmian.",
+      "selectionChanged": "Model lub poziom rozumowania nie jest już dostępny. Wczytaj ponownie katalog i wybierz inne ustawienie.",
+      "sourceUnavailable": "To konto WorkBuddy jest niedostępne. Sprawdź stan logowania. Inne konta nie będą próbowane.",
+      "operationFailed": "Operacja nie powiodła się. Sprawdź, czy WorkBuddy CLI jest zainstalowane i czy konto jest ważne, a następnie wczytaj ponownie katalog.",
+      "title": "WorkBuddy → Codex — natywny most narzędzi",
+      "scope": "Tworzy dedykowany lokalny Key przypisany do jednego konta oraz niezależny CODEX_HOME. Codex sam wykonuje narzędzia. Token WorkBuddy nie trafia do konfiguracji Codex; domyślne logowanie i główny Key usługi API pozostają bez zmian.",
+      "account": "Konto źródłowe WorkBuddy",
+      "noSourceSelected": "Brak dostępnego konta źródłowego; nadal możesz zarządzać utworzonymi konfiguracjami",
+      "model": "Bieżące modele CLI",
+      "readCatalog": "Wczytaj aktualny katalog",
+      "effort": "Poziom rozumowania",
+      "metadataOnly": "Wczytanie katalogu jedynie inicjalizuje CLI i nie wysyła promptu do modelu. Przed utworzeniem model i poziom rozumowania są ponownie sprawdzane. Jeśli konto źródłowe przestanie działać, zwracany jest błąd bez przełączania na inne konto. Obsługiwane jest tylko HTTP Responses. W niezależnej konfiguracji wyłączono wyszukiwanie w sieci (web_search); obrazy, inne narzędzia hostowane, compact i WebSocket nie są obsługiwane.",
+      "refreshCatalog": "Wczytaj katalog ponownie",
+      "managedProfile": "Utworzona niezależna konfiguracja",
+      "profileSource": "Konto źródłowe: ",
+      "profileSourceMissing": "Konto źródłowe zostało usunięte. Nadal możesz unieważnić dedykowany Key i przywrócić niezależną konfigurację.",
+      "profileSourceUnavailable": "Konto źródłowe jest obecnie niedostępne. Unieważnienie i przywracanie nie wymagają zalogowania na to konto.",
+      "launchHelp": "W terminalu przejdź do katalogu projektu, a następnie uruchom poniższe polecenie. Ta konfiguracja będzie używana tylko przy tym uruchomieniu Codex.",
+      "retryRestore": "Ponów przywracanie (Key unieważniony)",
+      "restore": "Unieważnij dedykowany Key i przywróć tę konfigurację",
+      "create": "Utwórz dedykowany Key i niezależną konfigurację",
+      "open": "Most narzędzi Codex"
     }
   },
   "minimaxCode": {
@@ -8989,7 +9105,6 @@
     "quota": {
       "cliUnavailable": "Użycie CLI niedostępne",
       "weekly": "Użycie tygodniowe",
-      "sharedPool": "Wspólny limit",
       "monthly": "Użycie miesięczne",
       "onDemand": "Użycie na żądanie",
       "balance": "Saldo i kredyty",
@@ -9622,6 +9737,15 @@
     "saved": "Zapisano. Dotyczy nowych żądań."
   },
   "antigravityTokenUsage": {
+    "context": {
+      "requestContext": "Kontekst żądania",
+      "coverage": "{{reported}} zmierzonych · {{estimated}} szacowanych · {{missing}} bez danych",
+      "largestGrowth": "Największy wzrost {{total}} w kroku #{{step}}",
+      "growthParts": "Wejście {{input}} · Odczyt z pamięci {{read}} · Zapis do pamięci {{write}}",
+      "method": "Kontekst sumuje tokeny wejścia i pamięci podręcznej. Zmiany porównują kolejne żądania z pomiarami. Podział na wiadomości, narzędzia i załączniki jest niedostępny.",
+      "unplacedCompactions": "Kompresje bez numeru kroku {{count}}",
+      "compactionStep": "Kompresja kontekstu"
+    },
     "tab": "Zużycie sesji",
     "subtitle": "Lokalne zużycie tokenów w sesjach Antigravity",
     "title": "Zużycie tokenów sesji Antigravity",
@@ -9776,7 +9900,6 @@
       "codexCatalogPending": "Klucze zewnętrzne czekające na synchronizację modeli: {{count}}"
     },
     "commonSettings": {
-      "title": "Częste ustawienia",
       "language": "Język T3 Code"
     },
     "platformOrder": {
@@ -9996,6 +10119,14 @@
       "searchAccountsPlaceholder": "Szukaj kont {{platform}}...",
       "goAddSourceAccount": "Dodaj w {{platform}}",
       "emptyPoolDesc": "Najpierw dodaj konto na stronie {{platform}}, aby przełączyć je do T3 Code."
+    }
+  },
+  "antigravity": {
+    "proxy": {
+      "followHint": "Używa globalnego proxy z ustawień; gdy wyłączone, używa sieci domyślnej.",
+      "independentHint": "Dotyczy tylko tego konta i ma pierwszeństwo przed globalnym proxy.",
+      "invalidUrl": "Nieobsługiwany adres proxy. Obsługiwane są tylko http, https, socks5 i socks5h.",
+      "restartHint": "Po powiązaniu, zmianie lub usunięciu proxy uruchom ponownie Antigravity (aplikację desktopową lub nową sesję CLI), aby zastosować zmiany. Niedziałające proxy nie przełącza się na połączenie bezpośrednie."
     }
   }
 }

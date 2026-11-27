@@ -2480,7 +2480,7 @@ export function WakeupTasksPage({ onNavigate }: WakeupPageProps) {
                               {maskedEmail}
                             </span>
                             {planBadge && (
-                              <span className={`tier-badge ${planBadge.className}`}>
+                              <span className={`tier-badge ${planBadge.className}`} title={planBadge.rawTier || planBadge.label}>
                                 {planBadge.label}
                               </span>
                             )}
@@ -2829,7 +2829,7 @@ export function WakeupTasksPage({ onNavigate }: WakeupPageProps) {
                               {maskedEmail}
                             </span>
                             {planBadge && (
-                              <span className={`tier-badge ${planBadge.className}`}>
+                              <span className={`tier-badge ${planBadge.className}`} title={planBadge.rawTier || planBadge.label}>
                                 {planBadge.label}
                               </span>
                             )}

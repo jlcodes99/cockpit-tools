@@ -15,6 +15,7 @@ import { presentWindowsOperationError } from '../../utils/windowsOperationDialog
 import { CODEBUDDY_CN_LAUNCH_MODE_STORAGE_KEY, previewDurableUiSetting } from '../../utils/durableUiSettings';
 import { CodebuddyIcon } from '../icons/CodebuddyIcon';
 import { ModalErrorMessage } from '../ModalErrorMessage';
+import { ClientInitializationStatus } from '../ClientInitializationStatus';
 import { PlatformLaunchPathField } from '../PlatformLaunchPathField';
 import '../ClientLaunchDialog.css';
 import './CodebuddyLaunchDialog.css';
@@ -226,6 +227,7 @@ export function CodebuddyLaunchDialog({
                 disabled={disabled} />
             </div>
           )}
+          {!isCli && <ClientInitializationStatus platform={account.region === 'china' ? 'codebuddy_cn' : 'codebuddy'} targetId="__default__" />}
           <ModalErrorMessage
             message={error ?? (isCli && directoryReadFailed
               ? t('codebuddyCli.errors.storageError')

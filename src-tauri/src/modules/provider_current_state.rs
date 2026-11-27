@@ -34,6 +34,7 @@ fn normalize_platform(platform: &str) -> Result<&'static str, String> {
         "codebuddy" => Ok("codebuddy"),
         "codebuddy_cn" | "codebuddy-cn" => Ok("codebuddy_cn"),
         "qoder" => Ok("qoder"),
+        "qoder_cn" => Ok("qoder_cn"),
         "zcode" => Ok("zcode"),
         "t3code" => Ok("t3code"),
         "trae" => Ok("trae"),

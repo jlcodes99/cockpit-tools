@@ -84,9 +84,14 @@ pub(super) fn write_at<T: Serialize>(
         if previous["id"] != next["id"] {
             return Err("账号 ID 与原详情不一致".into());
         }
+        // The guard exists so a clock skew cannot move the stamp backwards, but it
+        // compares raw values: a millisecond leftover is always larger than any
+        // second-based write, so the field would stay pinned at the stale value
+        // forever. Normalize both sides before taking the maximum.
         if let Some(timestamp) = previous["last_switched_at"]
             .as_i64()
-            .max(next["last_switched_at"].as_i64())
+            .map(super::epoch_time::epoch_seconds)
+            .max(next["last_switched_at"].as_i64().map(super::epoch_time::epoch_seconds))
         {
             next["last_switched_at"] = timestamp.into();
         }

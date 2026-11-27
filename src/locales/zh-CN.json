@@ -1,5 +1,17 @@
 {
   "antigravityLaunch": {
+    "desktopLanguage": "桌面界面语言",
+    "desktopLanguageEnglish": "英文",
+    "desktopLayout": "页面布局",
+    "desktopLayoutEngineering": "软件工程",
+    "desktopLayoutKnowledge": "知识工作",
+    "desktopPermission": "本机默认权限",
+    "desktopPermissionReview": "请求审核",
+    "desktopPermissionDefault": "默认",
+    "desktopPermissionAuto": "自动",
+    "desktopPermissionTurbo": "全自动",
+    "desktopSettingsHint": "从 Cockpit Tools 启动 Antigravity 桌面版时，应用布局和本机默认权限。",
+    "desktopLanguageChinese": "简体中文",
     "initializeTitle": "Antigravity IDE 尚未初始化",
     "initializeThenSwitch": "先打开 IDE，初始化后即可切号。",
     "initializeThenBind": "初始化后即可绑定账号。",
@@ -20,7 +32,6 @@
     "sharedInstanceStarted": "共享登录已更新，启动请求已发送。",
     "sharedInstanceLaunchFailed": "共享登录已更新，但实例启动失败：{{error}}",
     "sharedCopySource": "复制所选实例的配置目录。",
-    "quickSwitchSetting": "适用于 Antigravity IDE 快捷切号。通过账号弹框切换时，每次可单独选择是否启动。",
     "title": "选择客户端",
     "switchOnly": "仅切号",
     "switchAndLaunch": "切换并启动",
@@ -33,7 +44,8 @@
     "cliAuth": "agy 按自身认证设置启动。若已配置 API Key 或 Google Cloud 凭据，会优先使用该认证方式。",
     "cliMissing": "未找到 agy，请安装官方 Antigravity CLI 后重试。",
     "terminalFailed": "无法准备终端。{{error}}",
-    "switchedTerminalFailed": "账号已切换，但终端未打开。{{error}}"
+    "switchedTerminalFailed": "账号已切换，但终端未打开。{{error}}",
+    "quickSwitchSetting": "适用于 Antigravity IDE 快捷切号。通过账号弹框切换时，每次可单独选择是否启动。"
   },
   "pelican": {
     "caseKinds": {
@@ -194,6 +206,7 @@
     "providerClear": "清空选择"
   },
   "common": {
+    "commonSettings": "常用设置",
     "automation": {
       "invalidPlatform": "未知账号平台。运行 cockpit-cli account platforms 查看支持的平台 ID。",
       "hostUnavailable": "请启动使用此数据目录的 Cockpit Tools 桌面端后重试。",
@@ -233,6 +246,7 @@
     "dataQueryBusy": "数据正在处理中，请稍后重试。",
     "historyRestoring": "正在恢复历史记录…",
     "apiBudget": {
+      "sharedPool": "共享额度",
       "keyScope": "当前 Key",
       "upgradeRequired": "请升级网关所在电脑的 Cockpit Tools，以查看统计和请求记录。",
       "gatewayName": "Cockpit 网关",
@@ -279,7 +293,10 @@
       "proxyAuth": "代理“{{proxy}}”认证失败，请检查代理用户名或密码。",
       "localProxyUnavailable": "无法连接本地代理“{{proxy}}”，请检查代理服务是否运行。",
       "directConnection": "连接 {{target}} 失败，请检查网络后重试。",
-      "directTimeout": "连接 {{target}} 超时，请检查网络后重试。"
+      "directTimeout": "连接 {{target}} 超时，请检查网络后重试。",
+      "recoveryExhaustedLargeRequest": "当前请求体积较大（{{size}}），连接上游时多次失败或超时，本次自动重试已停止。可能是历史对话或图片数据过多导致上传或等待响应超时，建议先压缩会话或新开对话后重试；此错误不代表账号额度耗尽。",
+      "proxyLargeRequestTimeout": "通过代理“{{proxy}}”向 {{target}} 发送较大请求（{{size}}）超时，可能因历史对话或图片体积过大导致上传或上游处理超时，建议压缩会话、新开对话或检查代理。",
+      "directLargeRequestTimeout": "向 {{target}} 发送较大请求（{{size}}）超时，可能因历史对话或图片体积过大导致上传或上游处理超时，建议先压缩会话或新开对话后重试。"
     },
     "codexUsage": {
       "responseSpeed": "正文速度",
@@ -883,7 +900,8 @@
     "2faManager": "2FA 管理",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "qoderCn": "Qoder CN"
   },
   "sponsors": {
     "pageTitle": "赞助商",
@@ -1205,6 +1223,7 @@
       "syncThreads": "将补齐所有实例中缺失的会话，并在目标实例已停止且历史一致时追加新增内容，不覆盖已有字节。分叉历史或运行中目标的已有会话更新会被拒绝。写入前会备份目标文件。确认继续？"
     },
     "status": {
+      "firstLaunchInitializing": "首次启动初始化…",
       "running": "运行中",
       "stopped": "未运行",
       "ready": "已准备",
@@ -1374,6 +1393,7 @@
       "empty": "暂无配额缓存"
     },
     "messages": {
+      "firstLaunchTimedOut": "客户端首次启动尚未完成。如客户端要求登录或授权，请完成后再重试。",
       "created": "实例已创建",
       "emptyCreated": "空白实例已创建，请先启动一次后再绑定账号",
       "existingDirCreated": "已使用所选目录创建实例",
@@ -1807,8 +1827,6 @@
       "claudeShareCodeSessionsOnSwitchDesc": "切换 macOS 默认 Claude Desktop 的登录账号时，在本地账号之间共享 Code 会话列表。",
       "claudeAppPath": "Claude Desktop 启动目标",
       "claudeAppPathDesc": "默认实例可使用 Microsoft Store 应用目标；应用多开请选择真实 Claude.exe。",
-      "antigravityLaunchOnSwitch": "切换时启动 Antigravity IDE",
-      "antigravityLaunchOnSwitchDesc": "关闭后切号只写入 Antigravity 默认账号数据，不会关闭、启动或重启应用。",
       "tokenKeeper": "后台授权保活",
       "tokenKeeperDesc": "仅在授权快过期时分批刷新账号 Token，降低大量账号场景下的后台请求压力。",
       "autoImportFromLocal": "本机账号自动导入",
@@ -1882,7 +1900,14 @@
       "menuBarQuotaLayoutDesc": "横向单行使用较大字体；紧凑双行同时展示两种窗口期剩余额度，节省菜单栏占用空间，仅有一个窗口期时回落为横向单行。",
       "menuBarQuotaLayoutPreview": "布局示意，额度为示例数据",
       "menuBarQuotaLayoutHorizontal": "横向单行",
-      "menuBarQuotaLayoutStacked": "紧凑双行"
+      "menuBarQuotaLayoutStacked": "紧凑双行",
+      "qoderCnAppPath": "Qoder CN 启动路径",
+      "qoderCnAppPathDesc": "留空则自动检测；切换账号时会自动关闭并重新启动桌面端",
+      "qoderCnAppPathPlaceholder": "默认路径",
+      "qoderCnPathReset": "重置默认",
+      "antigravityLaunchOnSwitch": "切换时启动 Antigravity IDE",
+      "antigravityLaunchOnSwitchDesc": "关闭后切号只写入 Antigravity 默认账号数据，不会关闭、启动或重启应用。",
+      "qoderCnAutoRefresh": "Qoder CN 自动刷新配额"
     },
     "tabs": {
       "general": "通用",
@@ -5589,7 +5614,12 @@
         "maxConcurrentImageRequests": "每个账户的图片请求数",
         "maxAccountConcurrency": "账号并发数",
         "accountConcurrencyWait": "并发等待（秒）",
-        "optionsSaved": "调度选项已保存"
+        "optionsSaved": "调度选项已保存",
+        "accountConcurrencyLimit": "账号并发上限",
+        "accountConcurrencyUnlimited": "不限",
+        "accountConcurrencyHint": "覆盖此账号的并发上限（0 表示不限，1–64 为上限）。留空则沿用全局并发数。",
+        "accountConcurrencyInvalid": "请输入 0 到 64 的整数。",
+        "accountConcurrencySaveFailed": "无法保存账号并发上限。"
       },
       "timeouts": {
         "retryTitle": "发送与账号重试",
@@ -6820,7 +6850,8 @@
         "canceled": "请求已由客户端取消，不属于流打开超时。",
         "gateway": "HTTP 504 表示网关等待超时；当前记录不足以确定原因，请查看上游错误和请求阶段。",
         "threshold": "本次生效阈值：{{seconds}} 秒。",
-        "settings": "调整超时"
+        "settings": "调整超时",
+        "largeRequest": "本次记录的请求体积为 {{size}}。历史记录或内联图片过大容易在上传或等待首响阶段超时，建议先压缩会话或新开对话。"
       },
       "identity": {
         "title": "会话与账号身份",
@@ -7471,6 +7502,14 @@
     "traeSoloCn": {
       "title": "TraeWork CN 设置",
       "appPath": "TraeWork CN 路径"
+    },
+    "validation": {
+      "refreshIntervalInvalid": "刷新间隔需填写 1-999 的整数，或填 -1 关闭自动刷新。",
+      "quotaAlertThresholdInvalid": "预警阈值需填写 0-100 的整数。"
+    },
+    "disableRefreshHint": "-1 表示禁用",
+    "qoderCn": {
+      "title": "Qoder CN 设置"
     }
   },
   "quotaAlert": {
@@ -8047,7 +8086,21 @@
       "sessionChanged": "Qoder 会话已变更，请刷新账号列表后重试。",
       "endpointUnavailable": "无法确认该 Qoder 会话的服务地址。请在对应的 Qoder IDE 中检查登录及组织配置。",
       "switchLaunchFailed": "账号已写入，但 Qoder IDE 启动失败。{{detail}}",
-      "refreshCount": "成功刷新 {{count}} / {{total}} 个账号。"
+      "refreshCount": "成功刷新 {{count}} / {{total}} 个账号。",
+      "oauthUrlEmpty": "Qoder OAuth 授权链接为空",
+      "qoderCnPathMissing": "未找到 Qoder CN 桌面端。请在设置中填写启动路径，或安装后重试。",
+      "platformMismatch": "该账号属于其他区域版本，无法写入当前客户端。",
+      "cnRelaunchFailed": "账号已切换，但 Qoder CN 客户端启动失败。{{detail}}",
+      "cnDesktopUnsupported": "当前系统不支持 Qoder CN 桌面端切号，请选择 CLI。",
+      "clientInvalid": "客户端类型无效，请重新选择切换目标。",
+      "nativeTokenMissing": "该账号缺少可写入的登录凭据，请重新授权或重新导入。",
+      "nativeWriteVerifyFailed": "凭据写入后校验失败，已尝试回滚到原状态。请关闭客户端后重试。",
+      "nativeKeyUnreadable": "无法读取本机凭据密钥。请确认 Cockpit 与 Qoder 使用同一系统账号。",
+      "nativeImportInvalid": "导入的凭据缺少账号信息，无法识别是哪个账号。",
+      "nativeImportFailed": "导入本地 Qoder 登录信息失败。请先在客户端登录后重试。",
+      "nativeProcessProbeFailed": "无法检测 Qoder 进程状态，请稍后重试。",
+      "regionUnsupported": "无法识别该账号所属的区域版本，请重新授权。",
+      "clientRunning": "请先退出 {{client}} 再切换账号。"
     },
     "title": "Qoder 账号管理",
     "flowNotice": {
@@ -8089,6 +8142,38 @@
     },
     "empty": {
       "desc": "点击“添加账号”，可使用授权登录、本机导入或 JSON 导入。"
+    },
+    "region": {
+      "cn": "Qoder CN · 国内版",
+      "global": "Qoder · 国际版"
+    },
+    "clientTarget": {
+      "importSource": "导入来源",
+      "initializeHint": "请先打开此客户端，完成首次启动设置后再重试。",
+      "label": "切换／本机导入目标",
+      "ariaLabel": "Qoder 客户端",
+      "desktop": "Qoder 桌面端",
+      "desktopCn": "Qoder CN 桌面端",
+      "cli": "Qoder CLI",
+      "cliCn": "Qoder CN CLI",
+      "ide": "Qoder IDE",
+      "switchSuccess": "账号已切换，请重新打开对应客户端。",
+      "desktopSwitchSuccess": "账号已切换，{{client}}已重新启动。",
+      "relaunchFailed": "账号已切换，但 {{client}}自动启动失败，请手动打开。",
+      "windowsOnly": "（仅 Windows）"
+    },
+    "cn": {
+      "nativeOnly": "国内账号请选择桌面端或 CLI。",
+      "ideUnavailable": "国内账号请选择桌面端或 CLI；此处 IDE 适配器只用于国际版。",
+      "instancesUnsupported": "国内版桌面端与 CLI 支持默认客户端账号切换，当前暂不支持应用多开。",
+      "flowNoticeDesc": "支持官方授权、桌面端或 CLI 本机导入、JSON 导入与配额查询。切号时选择客户端，可仅更新登录或切号后启动该客户端。",
+      "flowNoticePermission": "本机导入读取桌面端或 CLI 的登录状态。切号只更新所选 Qoder CN 客户端的本机登录数据。",
+      "flowNoticeNetwork": "网络范围：官方授权登录需联网请求 Qoder CN 官方服务完成回调；配额查询通过 Qoder CN API 获取用量数据。不上传本地密钥或凭证。",
+      "flowNoticeTitle": "Qoder CN 账号接入说明（点击展开/收起）",
+      "oauthHint": "点击下方按钮，在浏览器中完成 Qoder CN 账号 OAuth 授权。",
+      "importJsonHint": "导入由本工具导出的 Qoder CN JSON 文件。",
+      "importLocalDesc": "从本机 Qoder CN 客户端读取当前登录状态（包含用户信息、套餐与 Credits 使用情况）。",
+      "importLocalSuccess": "已从本机 Qoder CN 导入账号。"
     }
   },
   "zcode": {
@@ -8160,7 +8245,6 @@
       "codexCatalogPending": "第三方 Key 待同步模型目录：{{count}} 个"
     },
     "commonSettings": {
-      "title": "常用设置",
       "language": "T3 Code 语言"
     },
     "platformOrder": {
@@ -8839,7 +8923,38 @@
       "logHits": "日志命中 {{count}} 次"
     },
     "exposeToCodex": {
-      "title": "仅在 Native Rust 网关中接入，不会复制 WorkBuddy Token"
+      "title": "仅在 Native Rust 网关中接入，不会复制 WorkBuddy Token",
+      "textOnlyTitle": "旧式 Native ACP 仅支持纯文本；需要读写文件和运行命令，请使用「Codex 工具桥」",
+      "textOnlyAction": "接入 Codex（纯文本）"
+    },
+    "nativeCodex": {
+      "managedKeyRotation": "此 Key 由 WorkBuddy 原生工具桥管理；如需更换，请撤销该配置后重新创建。",
+      "nativeRequired": "请先在 API 服务页面创建并启用 Native Rust 服务；不会自动切换模式。",
+      "enterpriseUnsupported": "首版尚不能严格绑定企业租户，仅支持个人 WorkBuddy 来源。",
+      "revokedFilesPreserved": "专属 Key 已撤销。配置文件已被修改或无法安全清理，所有修改文件与会话数据均已保留；可检查文件后重试恢复。",
+      "notOwned": "配置所有权凭证与专属 Key 不匹配，未修改任何 Key。请检查配置目录的归属标记。",
+      "profileChanged": "该独立配置已被修改，程序不会覆盖你的修改。",
+      "selectionChanged": "模型或推理强度已不可用，请重新读取目录并选择。",
+      "sourceUnavailable": "该 WorkBuddy 来源不可用，请检查登录状态。不会尝试其他账号。",
+      "operationFailed": "操作失败，请检查 WorkBuddy CLI 是否已安装、账号是否有效，并重新读取目录。",
+      "title": "WorkBuddy → Codex 原生工具桥",
+      "scope": "创建固定来源的专属本地 Key 和独立 CODEX_HOME。Codex 自己执行工具；WorkBuddy Token 不会写入 Codex 配置，也不会修改默认登录或 API 服务主 Key。",
+      "account": "WorkBuddy 来源",
+      "noSourceSelected": "暂无可用来源；仍可管理已创建的配置",
+      "model": "CLI 实时模型",
+      "readCatalog": "请读取实时目录",
+      "effort": "推理强度",
+      "metadataOnly": "读取目录只初始化 CLI，不发送模型提示词。创建前会再次校验模型和强度；来源失效时直接报错，不回退其他账号。仅支持 HTTP Responses；独立配置已禁用联网搜索（web_search），不支持图片、其他托管工具、compact 或 WebSocket。",
+      "refreshCatalog": "重新读取目录",
+      "managedProfile": "已创建的独立配置",
+      "profileSource": "来源：",
+      "profileSourceMissing": "来源已删除；仍可撤销该专属 Key 并恢复独立配置。",
+      "profileSourceUnavailable": "来源当前不可用；撤销和恢复不依赖来源登录状态。",
+      "launchHelp": "在终端进入你的项目目录，再运行下面的命令。仅该次 Codex 启动使用此配置。",
+      "retryRestore": "重试恢复（Key 已撤销）",
+      "restore": "撤销专属 Key 并恢复此配置",
+      "create": "创建专属 Key 与独立配置",
+      "open": "Codex 工具桥"
     }
   },
   "minimaxCode": {
@@ -9218,7 +9333,6 @@
     "quota": {
       "cliUnavailable": "CLI 用量暂不可得",
       "weekly": "每周用量",
-      "sharedPool": "共享额度",
       "monthly": "每月用量",
       "onDemand": "按量用量",
       "balance": "余额与积分",
@@ -9851,6 +9965,15 @@
     "saved": "已保存，后续请求使用新设置。"
   },
   "antigravityTokenUsage": {
+    "context": {
+      "requestContext": "请求上下文",
+      "coverage": "{{reported}} 轮有记录 · {{estimated}} 轮估算 · {{missing}} 轮缺失",
+      "largestGrowth": "第 #{{step}} 步增幅最大 {{total}}",
+      "growthParts": "输入 {{input}} · 缓存读取 {{read}} · 缓存写入 {{write}}",
+      "method": "请求上下文由输入和缓存 Token 相加。变化量比较相邻两轮有实测数据的请求。日志未提供消息、工具输出和附件各自的占用。",
+      "unplacedCompactions": "有 {{count}} 次压缩缺少步骤编号",
+      "compactionStep": "上下文压缩"
+    },
     "tab": "会话用量",
     "subtitle": "Antigravity 本地会话 Token 用量统计",
     "title": "Antigravity 会话 Token 用量",
@@ -9996,6 +10119,14 @@
       "fileOps": "文件读 / 写",
       "commands": "命令执行",
       "subagents": "子代理调用"
+    }
+  },
+  "antigravity": {
+    "proxy": {
+      "followHint": "使用设置中的全局代理；未启用时使用默认网络。",
+      "independentHint": "只更改这个账号，优先于全局代理。",
+      "invalidUrl": "代理地址不支持，仅支持 http、https、socks5、socks5h 协议。",
+      "restartHint": "首次绑定、更换或清除代理后，重新启动 Antigravity（桌面端或新开 CLI 会话）后生效。代理连接失败时不会回退直连。"
     }
   }
 }

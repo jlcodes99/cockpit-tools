@@ -34,6 +34,7 @@ test('CodeBuddy CLI retries the pending copy in the preview after the path is sa
         return 'resolved-launch-command';
       },
     },
+    '../ClientInitializationStatus': { ClientInitializationStatus: () => null },
     '../CliLaunchFields': { CliLaunchFields: fields },
     '../PlatformLaunchPathField': { PlatformLaunchPathField: pathField },
     '../icons/CodebuddyIcon': { CodebuddyIcon: () => null },

@@ -175,22 +175,6 @@ pub async fn github_copilot_update_instance(
         });
     }
 
-    let wants_bind = bind_account_id
-        .as_ref()
-        .and_then(|next| next.as_ref())
-        .is_some();
-    if wants_bind {
-        let store = modules::github_copilot_instance::load_instance_store()?;
-        if let Some(target) = store.instances.iter().find(|item| item.id == instance_id) {
-            if !is_profile_initialized(&target.user_data_dir) {
-                return Err(
-                    "INSTANCE_NOT_INITIALIZED:请先启动一次实例创建数据后，再进行账号绑定"
-                        .to_string(),
-                );
-            }
-        }
-    }
-
     let instance = modules::github_copilot_instance::update_instance(
         modules::github_copilot_instance::UpdateInstanceParams {
             working_dir: None,
@@ -234,6 +218,24 @@ pub async fn github_copilot_start_instance(
         let default_dir = modules::github_copilot_instance::get_default_vscode_user_data_dir()?;
         let default_dir_str = default_dir.to_string_lossy().to_string();
         let default_settings = modules::github_copilot_instance::load_default_settings()?;
+        let extra_args = modules::process::parse_extra_args(&default_settings.extra_args);
+        let _initialization = if default_settings.bind_account_id.is_some() {
+            let directory = default_dir.clone();
+            let root = directory.clone();
+            let last_pid = default_settings.last_pid;
+            let args = extra_args.clone();
+            modules::client_initialization::prepare_profile(
+                "github_copilot", instance_id.clone(),
+                move || modules::vscode_inject::client_secret_storage_ready("github_copilot", &root),
+                move || {
+                    if modules::process::resolve_vscode_pid(last_pid, None).is_none() {
+                        modules::process::start_vscode_default_with_args(&args)?;
+                    }
+                    Ok(())
+                },
+            ).await?
+        } else { None };
+
         modules::process::close_vscode(std::slice::from_ref(&default_dir_str), 20)?;
         if default_settings.last_pid.is_some() {
             let _ = modules::github_copilot_instance::update_default_pid(None)?;
@@ -242,7 +244,6 @@ pub async fn github_copilot_start_instance(
             &default_dir_str,
             default_settings.bind_account_id.as_deref(),
         )?;
-        let extra_args = modules::process::parse_extra_args(&default_settings.extra_args);
         let pid = modules::process::start_vscode_default_with_args(&extra_args)?;
         modules::logger::log_info(&format!("GitHub Copilot 默认实例已启动: pid={}", pid));
         let _ = modules::github_copilot_instance::update_default_pid(Some(pid))?;
@@ -270,6 +271,25 @@ pub async fn github_copilot_start_instance(
         .into_iter()
         .find(|item| item.id == instance_id)
         .ok_or("实例不存在")?;
+    let extra_args = modules::process::parse_extra_args(&instance.extra_args);
+    let _initialization = if instance.bind_account_id.is_some() {
+        let directory = std::path::PathBuf::from(&instance.user_data_dir);
+        let root = directory.clone();
+        let dir = directory.to_string_lossy().into_owned();
+        let last_pid = instance.last_pid;
+        let args = extra_args.clone();
+        modules::client_initialization::prepare_profile(
+            "github_copilot", instance_id.clone(),
+            move || modules::vscode_inject::client_secret_storage_ready("github_copilot", &root),
+            move || {
+                if modules::process::resolve_vscode_pid(last_pid, directory.to_str()).is_none() {
+                    modules::process::start_vscode_with_args(&dir, &args)?;
+                }
+                Ok(())
+            },
+        ).await?
+    } else { None };
+
 
     modules::process::close_vscode(std::slice::from_ref(&instance.user_data_dir), 20)?;
     if instance.last_pid.is_some() {
@@ -280,7 +300,6 @@ pub async fn github_copilot_start_instance(
         &instance.user_data_dir,
         instance.bind_account_id.as_deref(),
     )?;
-    let extra_args = modules::process::parse_extra_args(&instance.extra_args);
     let pid = modules::process::start_vscode_with_args(&instance.user_data_dir, &extra_args)?;
     modules::logger::log_info(&format!(
         "GitHub Copilot 实例已启动: instance_id={}, pid={}",

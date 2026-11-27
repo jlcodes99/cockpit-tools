@@ -331,8 +331,8 @@
   });
   window.addEventListener('resize', scheduleRender);
   window.addEventListener('scroll', scheduleRender, true);
+  const watched = footerSelector + ', ' + viewSelector;
   new MutationObserver(records => {
-    const watched = footerSelector + ', ' + viewSelector;
     if (records.some(record => {
       if (record.type === 'attributes') return record.target.matches?.(watched + ', ' + pickerSelector);
       if (record.target.closest?.(footerSelector)) return true;

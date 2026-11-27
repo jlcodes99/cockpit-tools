@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { requestTimeoutDiagnostic } from './codexRequestDiagnostics';
+import { LARGE_REQUEST_TIMEOUT_BYTES, requestTimeoutDiagnostic } from './codexRequestDiagnostics';
 
 test('stream-open diagnostic reads actual Go duration, including ms and compound units', () => {
   for (const [duration, seconds] of [['60s', 60], ['1500ms', 1.5], ['1m30s', 90], ['10m0s', 600]] as const) {
@@ -36,4 +36,24 @@ test('idle, image open, cancellation and unrelated 504 remain distinct', () => {
   }
   assert.equal(requestTimeoutDiagnostic({ success: true, errorCategory: 'upstream_first_byte_timeout' }), null);
   assert.equal(requestTimeoutDiagnostic({ httpStatus: 500 }), null);
+});
+
+test('large request timeout size is attached for pre-header and gateway timeouts only', () => {
+  const large = 110 * 1024 * 1024;
+  assert.deepEqual(
+    requestTimeoutDiagnostic({ httpStatus: 504, errorCategory: 'upstream_connect_timeout', requestKind: 'text' }, large),
+    { kind: 'open', seconds: undefined, field: 'sidecarStreamOpenTimeoutMs', largeRequestSize: '110.0 MB' },
+  );
+  assert.deepEqual(
+    requestTimeoutDiagnostic({ httpStatus: 504, errorCategory: 'network_recovery_exhausted' }, large),
+    { kind: 'gateway', largeRequestSize: '110.0 MB' },
+  );
+  assert.deepEqual(
+    requestTimeoutDiagnostic({ httpStatus: 504, errorCategory: 'upstream_connect_timeout', requestKind: 'text' }, LARGE_REQUEST_TIMEOUT_BYTES - 1),
+    { kind: 'open', seconds: undefined, field: 'sidecarStreamOpenTimeoutMs' },
+  );
+  assert.deepEqual(
+    requestTimeoutDiagnostic({ httpStatus: 499, errorCategory: 'upstream_connect_timeout' }, large),
+    { kind: 'canceled' },
+  );
 });

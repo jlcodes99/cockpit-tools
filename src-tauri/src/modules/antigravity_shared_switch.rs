@@ -31,16 +31,15 @@ pub(crate) fn switch(
     let ide = ide_is_shared
         .then(instance::load_default_settings)
         .transpose()?;
-    let desktop_running = launch
+    let (open_desktop, open_ide) = clients_to_open(target, launch);
+    let desktop_running = open_desktop
         && desktop.as_ref().is_some_and(|settings| {
             process::resolve_antigravity_legacy_pid(settings.last_pid, None).is_some()
         });
-    let ide_running = launch
+    let ide_running = open_ide
         && ide.as_ref().is_some_and(|settings| {
             process::resolve_antigravity_pid(settings.last_pid, None).is_some()
         });
-    let (open_desktop, open_ide) = clients_to_open(target, launch, desktop_running, ide_running);
-
     if open_desktop {
         process::ensure_antigravity_legacy_launch_path_configured()?;
     }
@@ -49,7 +48,11 @@ pub(crate) fn switch(
     }
 
     #[cfg(target_os = "macos")]
-    let hubs = if launch { hub::snapshot() } else { Vec::new() };
+    let hubs = if open_desktop || open_ide {
+        hub::snapshot(target)
+    } else {
+        Vec::new()
+    };
 
     let mut desktop_closed = false;
     let mut ide_closed = false;
@@ -103,7 +106,11 @@ pub(crate) fn switch(
             .as_ref()
             .map(|settings| process::parse_extra_args(&settings.extra_args))
             .unwrap_or_default();
-        process::start_antigravity_legacy_with_args("", &args)
+        process::start_antigravity_legacy_with_args_proxy(
+            "",
+            &args,
+            account.egress_proxy_url.as_deref(),
+        )
             .and_then(|pid| antigravity_legacy_instance::update_default_pid(Some(pid)).map(|_| ()))
             .err()
     } else {
@@ -114,7 +121,11 @@ pub(crate) fn switch(
             .as_ref()
             .map(|settings| process::parse_extra_args(&settings.extra_args))
             .unwrap_or_default();
-        process::start_antigravity_with_args("", &args)
+        process::start_antigravity_with_args_proxy(
+            "",
+            &args,
+            account.egress_proxy_url.as_deref(),
+        )
             .and_then(|pid| instance::update_default_pid(Some(pid)).map(|_| ()))
             .err()
     } else {
@@ -158,15 +169,10 @@ fn commit_shared_switch(
     result.map_err(|error| format!("ANTIGRAVITY_SWITCH_STATE_SAVE_FAILED: {error}"))
 }
 
-fn clients_to_open(
-    target: SwitchTarget,
-    launch: bool,
-    desktop_running: bool,
-    ide_running: bool,
-) -> (bool, bool) {
+fn clients_to_open(target: SwitchTarget, launch: bool) -> (bool, bool) {
     (
-        launch && (target == SwitchTarget::Desktop || desktop_running),
-        launch && (target == SwitchTarget::Ide || ide_running),
+        launch && target == SwitchTarget::Desktop,
+        launch && target == SwitchTarget::Ide,
     )
 }
 
@@ -175,30 +181,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn shared_switch_opens_selected_client_and_reopens_running_peer() {
+    fn shared_switch_opens_only_the_selected_client() {
+        assert_eq!(clients_to_open(SwitchTarget::Ide, true), (false, true));
+        assert_eq!(clients_to_open(SwitchTarget::Desktop, true), (true, false));
+        assert_eq!(clients_to_open(SwitchTarget::Ide, false), (false, false));
         assert_eq!(
-            clients_to_open(SwitchTarget::Ide, true, false, false),
-            (false, true)
-        );
-        assert_eq!(
-            clients_to_open(SwitchTarget::Ide, true, true, true),
-            (true, true)
-        );
-        assert_eq!(
-            clients_to_open(SwitchTarget::Desktop, true, false, true),
-            (true, true)
-        );
-        assert_eq!(
-            clients_to_open(SwitchTarget::Desktop, true, false, false),
-            (true, false)
-        );
-        assert_eq!(
-            clients_to_open(SwitchTarget::Ide, false, true, true),
+            clients_to_open(SwitchTarget::Desktop, false),
             (false, false)
         );
-        assert_eq!(
-            clients_to_open(SwitchTarget::Cli, false, true, true),
-            (false, false)
-        );
+        assert_eq!(clients_to_open(SwitchTarget::Cli, true), (false, false));
     }
 }

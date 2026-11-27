@@ -13,6 +13,8 @@ import { dismissBootSplash } from '../utils/bootSplash';
 import { useCodexQuotaSync } from '../hooks/useCodexQuotaSync';
 import { isCodexLaunchCancelled } from '../utils/codexLaunchCancellation';
 import { formatAntigravitySwitchError } from '../utils/antigravitySwitchError';
+import { formatQoderError } from '../utils/qoderErrors';
+import { ClientInitializationStatus } from '../components/ClientInitializationStatus';
 import {
   buildAntigravityAccountPresentation,
   buildClaudeAccountPresentation,
@@ -61,6 +63,7 @@ import { usePlatformLayoutStore } from '../stores/usePlatformLayoutStore';
 import { useRemoteConfigStore } from '../stores/useRemoteConfigStore';
 import { applyReducedMotion } from '../utils/reducedMotion';
 import { useQoderAccountStore } from '../stores/useQoderAccountStore';
+import { useQoderCnAccountStore } from '../stores/useQoderCnAccountStore';
 import { useZcodeAccountStore } from '../stores/useZcodeAccountStore';
 import { useT3codeAccountStore } from '../stores/useT3codeAccountStore';
 import { useTraeAccountStore } from '../stores/useTraeAccountStore';
@@ -169,7 +172,7 @@ type FloatingCardAccount =
 
 type FloatingCardInstanceStoreApi = Pick<
   InstanceStoreState,
-  'refreshInstances' | 'updateInstance' | 'startInstance'
+  'refreshInstances' | 'updateInstance' | 'startInstance' | 'openInstanceWindow'
 >;
 
 function isTraeSuitePlatform(platformId: PlatformId): platformId is TraePlatformId {
@@ -225,6 +228,9 @@ function resolveInstanceStoreApi(platformId: PlatformId): FloatingCardInstanceSt
       return useCodebuddyCnInstanceStore.getState();
     case 'qoder':
       return useQoderInstanceStore.getState();
+    // Multi-instance launch is not supported for the CN clients.
+    case 'qoder_cn':
+      return null;
     case 'trae':
       return useTraeInstanceStore.getState();
     case 'trae_solo':
@@ -302,6 +308,10 @@ export function FloatingCardWindow() {
     accounts: qoderAccounts,
     currentAccountId: qoderCurrentId,
   } = useQoderAccountStore();
+  const {
+    accounts: qoderCnAccounts,
+    currentAccountId: qoderCnCurrentId,
+  } = useQoderCnAccountStore();
   const {
     accounts: zcodeAccounts,
     currentAccountId: zcodeCurrentId,
@@ -529,6 +539,9 @@ export function FloatingCardWindow() {
           break;
         case 'qoder':
           await useQoderAccountStore.getState().fetchAccounts();
+          break;
+        case 'qoder_cn':
+          await useQoderCnAccountStore.getState().fetchAccounts();
           break;
         case 'zcode':
           await useZcodeAccountStore.getState().fetchAccounts();
@@ -831,6 +844,10 @@ export function FloatingCardWindow() {
     () => resolveCurrentAccountById(qoderAccounts, qoderCurrentId),
     [qoderAccounts, qoderCurrentId],
   );
+  const qoderCnCurrent = useMemo(
+    () => resolveCurrentAccountById(qoderCnAccounts, qoderCnCurrentId),
+    [qoderCnAccounts, qoderCnCurrentId],
+  );
   const zcodeCurrent = useMemo(
     () => resolveCurrentAccountById(zcodeAccounts, zcodeCurrentId),
     [zcodeAccounts, zcodeCurrentId],
@@ -918,6 +935,11 @@ export function FloatingCardWindow() {
         return {
           accounts: qoderAccounts,
           actualCurrentAccount: qoderCurrent,
+        };
+      case 'qoder_cn':
+        return {
+          accounts: qoderCnAccounts,
+          actualCurrentAccount: qoderCnCurrent,
         };
       case 'trae':
       case 'trae_solo':
@@ -1042,6 +1064,8 @@ export function FloatingCardWindow() {
         return getRecommendedCodebuddyCnAccount(codebuddyCnAccounts, effectiveCurrentId);
       case 'qoder':
         return getRecommendedQoderAccount(qoderAccounts, effectiveCurrentId);
+      case 'qoder_cn':
+        return getRecommendedQoderAccount(qoderCnAccounts, effectiveCurrentId);
       case 'zcode':
         return getRecommendedZcodeAccount(zcodeAccounts, effectiveCurrentId);
       case 't3code':
@@ -1150,6 +1174,8 @@ export function FloatingCardWindow() {
         return buildCodebuddyAccountPresentation(viewedAccount as typeof codebuddyCnAccounts[number], t, true);
       case 'qoder':
         return buildQoderAccountPresentation(viewedAccount as typeof qoderAccounts[number], t);
+      case 'qoder_cn':
+        return buildQoderAccountPresentation(viewedAccount as typeof qoderCnAccounts[number], t);
       case 'trae':
       case 'trae_solo':
       case 'trae_cn':
@@ -1272,6 +1298,9 @@ export function FloatingCardWindow() {
             break;
           case 'qoder':
             await useQoderAccountStore.getState().refreshToken(viewedAccount.id);
+            break;
+          case 'qoder_cn':
+            await useQoderCnAccountStore.getState().refreshToken(viewedAccount.id);
             break;
           case 'zcode':
             await useZcodeAccountStore.getState().refreshToken(viewedAccount.id);
@@ -1412,6 +1441,9 @@ export function FloatingCardWindow() {
           case 'qoder':
             await useQoderAccountStore.getState().switchAccount(viewedAccount.id);
             break;
+          case 'qoder_cn':
+            await useQoderCnAccountStore.getState().switchAccount(viewedAccount.id);
+            break;
           case 'zcode':
             await useZcodeAccountStore.getState().switchAccount(viewedAccount.id);
             break;
@@ -1467,7 +1499,9 @@ export function FloatingCardWindow() {
             })
           : selectedPlatform === 'antigravity' || selectedPlatform === 'antigravity_ide'
             ? formatAntigravitySwitchError(t, rawError)
-            : rawError;
+            : selectedPlatform === 'qoder' || selectedPlatform === 'qoder_cn'
+              ? formatQoderError(rawError, selectedPlatform === 'qoder_cn' ? 'cn' : 'global')
+              : rawError;
       setErrorText(
         t('floatingCard.errors.switchFailed', {
           error: displayError,
@@ -1831,7 +1865,9 @@ export function FloatingCardWindow() {
             </div>
           )}
 
-          {errorText ? <div className="floating-card-error">{errorText}</div> : null}
+          <ClientInitializationStatus platform={selectedPlatform === 'github-copilot' ? 'github_copilot' : selectedPlatform}
+            targetId={instanceContext?.instanceId} />
+          {errorText ? <div className="floating-card-error" role="alert">{errorText}</div> : null}
           {appearance.error ? <div className="floating-card-error" role="alert">{t(appearance.error, { defaultValue: appearance.error })}</div> : null}
         </div>
 

@@ -59,6 +59,7 @@ import { useCodebuddyAccountStore } from './stores/useCodebuddyAccountStore';
 import { useCodebuddyCnAccountStore } from './stores/useCodebuddyCnAccountStore';
 import { formatQoderError } from './utils/qoderErrors';
 import { useQoderAccountStore } from './stores/useQoderAccountStore';
+import { useQoderCnAccountStore } from './stores/useQoderCnAccountStore';
 import { useTraeAccountStore } from './stores/useTraeAccountStore';
 import { useWorkbuddyAccountStore } from './stores/useWorkbuddyAccountStore';
 import { useMinimaxCodeAccountStore } from './stores/useMinimaxCodeAccountStore';
@@ -179,6 +180,9 @@ const CodebuddyCnAccountsPage = lazy(() =>
 const QoderAccountsPage = lazy(() =>
   import('./pages/QoderAccountsPage').then((module) => ({ default: module.QoderAccountsPage })),
 );
+const QoderCnAccountsPage = lazy(() =>
+  import('./pages/QoderCnAccountsPage').then((module) => ({ default: module.QoderCnAccountsPage })),
+);
 const ZcodeAccountsPage = lazy(() =>
   import('./pages/ZcodeAccountsPage').then((module) => ({ default: module.ZcodeAccountsPage })),
 );
@@ -260,6 +264,7 @@ const RENDERABLE_PAGE_VALUES: readonly Page[] = [
   'codebuddy',
   'codebuddy-cn',
   'qoder',
+  'qoder-cn',
   'zcode',
   't3code',
   'trae',
@@ -300,6 +305,7 @@ const TOP_PROMO_PAGE_PLATFORM_TARGETS: Partial<Record<Page, readonly string[]>> 
   codebuddy: ['codebuddy'],
   'codebuddy-cn': ['codebuddy-cn'],
   qoder: ['qoder'],
+  'qoder-cn': ['qoder-cn'],
   zcode: ['zcode'],
   t3code: ['t3code'],
   trae: ['trae', 'trae-suite'],
@@ -424,6 +430,7 @@ interface GeneralConfig extends GeneralConfigTheme, GeneralConfigLanguage {
   codebuddy_app_path: string;
   codebuddy_cn_app_path: string;
   qoder_app_path: string;
+  qoder_cn_app_path: string;
   trae_app_path: string;
   trae_solo_app_path: string;
   trae_cn_app_path: string;
@@ -542,6 +549,7 @@ type QuotaAlertPlatform =
   | 'codebuddy'
   | 'codebuddy_cn'
   | 'qoder'
+  | 'qoder_cn'
   | 'trae'
   | 'workbuddy'
   | 'minimaxcode'
@@ -616,6 +624,8 @@ function normalizeQuotaAlertPlatform(platform: string | undefined): QuotaAlertPl
       return 'codebuddy_cn';
     case 'qoder':
       return 'qoder';
+    case 'qoder_cn':
+      return 'qoder_cn';
     case 'trae':
     case 'trae-solo':
     case 'trae_solo':
@@ -658,6 +668,8 @@ function getQuotaAlertPlatformLabel(
       return t('nav.codebuddyCn', 'CodeBuddy CN');
     case 'qoder':
       return t('nav.qoder', 'Qoder');
+    case 'qoder_cn':
+      return t('nav.qoderCn', 'Qoder CN');
     case 'trae':
       return t('nav.trae', 'Trae');
     case 'minimaxcode':
@@ -691,6 +703,8 @@ function getQuotaAlertTargetPage(platform: QuotaAlertPlatform): Page {
       return 'codebuddy-cn';
     case 'qoder':
       return 'qoder';
+    case 'qoder_cn':
+      return 'qoder-cn';
     case 'trae':
       return 'trae';
     case 'workbuddy':
@@ -704,7 +718,9 @@ function getQuotaAlertTargetPage(platform: QuotaAlertPlatform): Page {
   }
 }
 
-function getQuotaAlertQuickSettingsType(platform: QuotaAlertPlatform): QuickSettingsType {
+function getQuotaAlertQuickSettingsType(
+  platform: QuotaAlertPlatform,
+): QuickSettingsType {
   switch (platform) {
     case 'codex':
       return 'codex';
@@ -726,6 +742,8 @@ function getQuotaAlertQuickSettingsType(platform: QuotaAlertPlatform): QuickSett
       return 'codebuddy_cn';
     case 'qoder':
       return 'qoder';
+    case 'qoder_cn':
+      return 'qoder_cn';
     case 'trae':
       return 'trae';
     case 'workbuddy':
@@ -2798,6 +2816,9 @@ function MainApp() {
                     } else if (platform === 'qoder') {
                       await useQoderAccountStore.getState().switchAccount(targetAccountId);
                       setPage('qoder');
+                    } else if (platform === 'qoder_cn') {
+                      await useQoderCnAccountStore.getState().switchAccount(targetAccountId);
+                      setPage('qoder-cn');
                     } else if (platform === 'trae') {
                       await useTraeAccountStore.getState().switchAccount(targetAccountId);
                       setPage('trae');
@@ -3010,6 +3031,10 @@ function MainApp() {
       {
         command: 'refresh_all_qoder_tokens',
         errorMessage: 'Failed to refresh Qoder:',
+      },
+      {
+        command: 'refresh_all_qoder_cn_tokens',
+        errorMessage: 'Failed to refresh Qoder CN:',
       },
       {
         command: 'refresh_all_zcode_accounts',
@@ -3258,7 +3283,9 @@ function MainApp() {
       console.error('设置应用路径失败:', error);
       setAppPathActionError((readMissingLaunchPathApp(error) || /^CLI_PATH_NOT_FOUND:/.test(String(error).replace(/^Error: /, '')))
         ? t('appPath.missing.invalidPath', { app: appPathMissingAppName })
-        : appPathMissing.app === 'qoder' ? formatQoderError(error) : String(error));
+        : appPathMissing.app === 'qoder' || appPathMissing.app === 'qoder_cn'
+          ? formatQoderError(error, appPathMissing.app === 'qoder_cn' ? 'cn' : 'global')
+          : String(error));
       setAppPathSetting(false);
     } finally {
       setAppPathSetting(false);
@@ -3459,6 +3486,7 @@ function MainApp() {
       className={`app-container${isWindowsPlatform() ? ' app-container-windows' : ''}${isLinux ? ' app-container-linux' : ''}${sideNavLayoutMode === 'classic' ? ' app-container-side-nav-classic' : ''}${sideNavLayoutMode === 'classic' && sideNavClassicCollapsed ? ' app-container-side-nav-classic-collapsed' : ''}`}
     >
       <AppBackground />
+      <ClientInitializationStatus />
       {/* 更新通知：活跃状态时保持挂载，关闭后继续保留当前更新状态 */}
       {shouldRenderUpdateNotification && (
         <div style={showUpdateNotification ? undefined : { display: 'none' }}>
@@ -3624,6 +3652,8 @@ function MainApp() {
                                       ? t('settings.general.codebuddyPathReset', '重置默认')
                                     : appPathMissing.app === 'qoder'
                                       ? t('settings.general.qoderPathReset', '重置默认')
+                                    : appPathMissing.app === 'qoder_cn'
+                                      ? t('settings.general.qoderCnPathReset', '重置默认')
                                     : isTraePlatformApp(appPathMissing.app)
                                       ? t('settings.general.traePathReset', '重置默认')
                                     : t('settings.general.codexPathReset', '重置默认')
@@ -3833,6 +3863,9 @@ function MainApp() {
           <VisibleBootPage when={page === 'qoder'}>
             <QoderAccountsPage />
           </VisibleBootPage>
+          <VisibleBootPage when={page === 'qoder-cn'}>
+            <QoderCnAccountsPage />
+          </VisibleBootPage>
           <VisibleBootPage when={page === 'zcode'}>
             <ZcodeAccountsPage />
           </VisibleBootPage>
@@ -3901,3 +3934,4 @@ function App() {
 }
 
 export default App;
+import { ClientInitializationStatus } from './components/ClientInitializationStatus';

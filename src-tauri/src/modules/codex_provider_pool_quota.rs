@@ -25,6 +25,53 @@ enum ProviderPoolQuotaStatus {
     Unavailable,
 }
 
+impl ProviderPoolQuota {
+    pub(crate) fn summary_value_text(&self) -> Option<String> {
+        if matches!(
+            self.status,
+            ProviderPoolQuotaStatus::Failed | ProviderPoolQuotaStatus::Unavailable
+        ) {
+            return None;
+        }
+        let format_number = |value: f64| -> String {
+            let normalized = if value.is_finite() {
+                value.max(0.0)
+            } else {
+                0.0
+            };
+            if normalized.fract().abs() < 1e-6 {
+                format!("{normalized:.0}")
+            } else {
+                let raw = format!("{normalized:.6}");
+                raw.trim_end_matches('0').trim_end_matches('.').to_string()
+            }
+        };
+        let Some(remaining) = self.remaining else {
+            return self.unlimited.then(|| "∞".to_string());
+        };
+        let unit = self
+            .unit
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty());
+        let suffix = match unit {
+            Some("%") => "%".to_string(),
+            Some(other) => format!(" {other}"),
+            None => String::new(),
+        };
+        let remaining_text = format!("{}{}", format_number(remaining), suffix);
+        if let Some(total) = self.total.filter(|_| !self.unlimited) {
+            Some(format!(
+                "{remaining_text} / {}{}",
+                format_number(total),
+                suffix
+            ))
+        } else {
+            Some(remaining_text)
+        }
+    }
+}
+
 fn finite(value: &Value) -> Option<f64> {
     value
         .as_f64()

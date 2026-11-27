@@ -310,6 +310,7 @@ async fn switch(app: AppHandle, platform: Platform, id: String) -> Result<Switch
             .await
         }
         Qoder => Box::pin(commands::qoder::inject_qoder_account(app, id)).await,
+        QoderCn => Box::pin(commands::qoder_cn::inject_qoder_cn_account(app, id)).await,
         Zcode => {
             return switch_effect(
                 platform,

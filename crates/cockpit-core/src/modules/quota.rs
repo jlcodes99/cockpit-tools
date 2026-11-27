@@ -529,8 +529,30 @@ struct AllowedTier {
 #[derive(Debug, Deserialize)]
 struct Tier {
     id: Option<String>,
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
+    description: Option<String>,
+    #[serde(rename = "clientExperienceTag", default)]
+    client_experience_tag: Option<String>,
     #[serde(rename = "availableCredits", default)]
     available_credits: Option<Vec<AvailableCreditRaw>>,
+}
+
+impl Tier {
+    fn resolved_identifier(&self) -> Option<String> {
+        [
+            self.id.as_deref(),
+            self.client_experience_tag.as_deref(),
+            self.name.as_deref(),
+            self.description.as_deref(),
+        ]
+        .into_iter()
+        .flatten()
+        .map(str::trim)
+        .find(|value| !value.is_empty())
+        .map(str::to_string)
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -793,9 +815,9 @@ pub async fn fetch_project_id_with_context(
                             match serde_json::from_str::<LoadProjectResponse>(&text) {
                                 Ok(data) => {
                                     let paid_tier_id =
-                                        data.paid_tier.as_ref().and_then(|tier| tier.id.clone());
+                                        data.paid_tier.as_ref().and_then(Tier::resolved_identifier);
                                     let current_tier_id =
-                                        data.current_tier.as_ref().and_then(|tier| tier.id.clone());
+                                        data.current_tier.as_ref().and_then(Tier::resolved_identifier);
                                     subscription_tier =
                                         paid_tier_id.clone().or(current_tier_id.clone());
 

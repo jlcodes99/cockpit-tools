@@ -471,6 +471,46 @@ pub(super) fn write_t3_settings_json(state_dir: &Path, value: &Value) -> Result<
         .map_err(|error| format!("写入 T3 Code settings.json 失败: {}", error))
 }
 
+pub(super) fn qoder_profile_roots(state_dir: &Path) -> [PathBuf; 2] {
+    [extensions::PLATFORM_QODER, extensions::PLATFORM_QODER_CN]
+        .map(|platform| extensions::cockpit_provider_dir(state_dir, platform, ""))
+}
+
+pub(super) fn remove_copied_qoder_bindings(source: &Path, destination: &Path) -> Result<(), String> {
+    let mut settings = read_t3_settings_json(destination)?;
+    let Some(instances) = settings.get_mut("providerInstances").and_then(Value::as_object_mut) else {
+        return Ok(());
+    };
+    let mut removed = HashSet::new();
+    instances.retain(|id, entry| {
+        let owned = entry["environment"].as_array().is_some_and(|items| items.iter().any(|item| {
+            let Some((name, path)) = item["name"].as_str().zip(item["value"].as_str()) else {
+                return false;
+            };
+            let platform = match name {
+                "QODER_CONFIG_DIR" => extensions::PLATFORM_QODER,
+                "QODERCN_CONFIG_DIR" => extensions::PLATFORM_QODER_CN,
+                _ => return false,
+            };
+            let profiles = extensions::cockpit_provider_dir(source, platform, id).join("profiles");
+            Path::new(path).parent() == Some(profiles.as_path())
+        }));
+        if owned {
+            removed.insert(id.clone());
+        }
+        !owned
+    });
+    if removed.is_empty() {
+        return Ok(());
+    }
+    let mut bindings = load_persisted_bindings(destination);
+    if removed.iter().filter_map(|id| bindings.remove(id)).count() > 0 {
+        save_persisted_bindings(destination, &bindings)?;
+    }
+    management::remove_copied_qoder_default_selections(destination)?;
+    write_t3_settings_json(destination, &settings)
+}
+
 pub fn antigravity_instance_hash(instance_id: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(instance_id.as_bytes());
@@ -1208,6 +1248,7 @@ pub fn get_provider_workspace(
                 &state_dir,
                 &instance_id,
                 &driver,
+                entry,
                 &persisted,
                 candidates,
             )
@@ -1762,6 +1803,14 @@ async fn prepare_provider_binding_entry(
         return Err(live::message("switchTargetChanged"));
     }
     let (routing, binding) = if extensions::is_extended_platform(driver) {
+        if let Some(qoder) = extensions::QoderProvider::from_platform(driver) {
+            if extensions::infer_platform_from_t3_entry(
+                instance_id, raw_driver, Some(entry), &PersistedBindingsMap::new(),
+            ).is_some_and(|configured| configured != driver) {
+                return Err(live::message("switchTargetChanged"));
+            }
+            qoder.prepare(account_id).await?;
+        }
         let (dir, instance, platform, account) =
             (state_dir.to_path_buf(), instance_id.to_owned(), driver.to_owned(), account_id.to_owned());
         let outcome = tokio::task::spawn_blocking(move || {
@@ -2819,6 +2868,18 @@ pub async fn upsert_provider_instance(
         .cloned()
         .unwrap_or_else(|| json!({ "driver": raw_t3_driver, "config": {} }));
     let object = entry.as_object_mut().ok_or_else(|| live::message("switchTargetChanged"))?;
+    if let Some(existing_driver) = object.get("driver").and_then(Value::as_str)
+        .and_then(|raw| extensions::infer_platform_from_t3_entry(
+            instance_id, raw, Some(object), &PersistedBindingsMap::new(),
+        ))
+    {
+        if existing_driver != driver && (
+            extensions::QoderProvider::from_platform(driver).is_some()
+                || extensions::QoderProvider::from_platform(&existing_driver).is_some()
+        ) {
+            return Err(live::message("switchTargetChanged"));
+        }
+    }
     object.insert("driver".into(), json!(raw_t3_driver));
     set_provider_entry_enabled(object, enabled);
     if let Some(name) = display_name.map(str::trim).filter(|s| !s.is_empty()) {
@@ -2880,9 +2941,326 @@ pub async fn refresh_provider_account_quota(
         .map_err(|e| e.to_string())?
 }
 
+#[derive(Debug, Clone)]
+pub(crate) struct T3CodeTrayProviderSummary {
+    pub instance_id: String,
+    pub driver: String,
+    pub display_name: String,
+    pub bound_account_id: Option<String>,
+    pub bound_account_email: Option<String>,
+    pub bound_account_plan: Option<String>,
+    pub bound_is_api_service: bool,
+    pub bound_updated_at: Option<i64>,
+    pub windows: Vec<T3CodeQuotaWindowView>,
+    pub quota_summary_groups: Option<Vec<crate::models::quota::QuotaSummaryGroup>>,
+    pub provider_quota: Option<crate::modules::codex_provider_pool_quota::ProviderPoolQuota>,
+}
+
+fn build_t3_api_service_fallback_windows() -> Vec<T3CodeQuotaWindowView> {
+    crate::modules::codex_local_access::menu_bar_api_service_quota()
+        .windows
+        .into_iter()
+        .map(|window| T3CodeQuotaWindowView {
+            id: window.key,
+            label: window.label,
+            remaining: T3CodeQuotaRemaining::Percent {
+                remaining_percent: window.percentage,
+            },
+            reset_time: None,
+        })
+        .collect()
+}
+
+pub(crate) fn list_default_tray_provider_summaries() -> Vec<T3CodeTrayProviderSummary> {
+    let Ok(state_dir) = t3code_account::default_state_dir() else {
+        return Vec::new();
+    };
+    let settings = read_t3_settings_json(&state_dir).unwrap_or_else(|_| json!({}));
+    let persisted = load_persisted_bindings(&state_dir);
+    let pending_bindings = live::bindings_during_switch(&state_dir);
+
+    let raw_instances = settings
+        .get("providerInstances")
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+
+    let mut ordered_ids: Vec<(String, String, bool)> = vec![
+        (DRIVER_CODEX.to_string(), DRIVER_CODEX.to_string(), true),
+        (
+            DRIVER_ANTIGRAVITY.to_string(),
+            DRIVER_ANTIGRAVITY.to_string(),
+            true,
+        ),
+        (DRIVER_CLAUDE.to_string(), DRIVER_CLAUDE.to_string(), true),
+    ];
+
+    for (inst_id, inst_val) in &raw_instances {
+        let Some(raw_driver) = inst_val.get("driver").and_then(Value::as_str) else {
+            continue;
+        };
+        let Some(logical_platform) = extensions::infer_platform_from_t3_entry(
+            inst_id,
+            raw_driver,
+            inst_val.as_object(),
+            &persisted,
+        ) else {
+            continue;
+        };
+        if !ordered_ids.iter().any(|(id, _, _)| id == inst_id) {
+            let is_builtin = inst_id == extensions::PLATFORM_GROK
+                && logical_platform == extensions::PLATFORM_GROK;
+            ordered_ids.push((inst_id.clone(), logical_platform, is_builtin));
+        }
+    }
+
+    let mut codex_accounts: Option<Vec<T3CodeBindableAccountView>> = None;
+    let mut antigravity_accounts: Option<Vec<T3CodeBindableAccountView>> = None;
+    let mut claude_accounts: Option<Vec<T3CodeBindableAccountView>> = None;
+    let mut extra_accounts: Option<HashMap<String, Vec<T3CodeBindableAccountView>>> = None;
+
+    let mut summaries = Vec::new();
+    for (instance_id, driver, is_builtin_default) in ordered_ids {
+        if let Some(previous) = pending_bindings.iter().find(|row| row.instance_id == instance_id) {
+            if !previous.enabled {
+                continue;
+            }
+            if previous.bound_account_id.is_some() || previous.bound_account_email.is_some() {
+                let mut windows = previous.windows.clone();
+                if previous.bound_is_api_service && windows.is_empty() {
+                    windows = build_t3_api_service_fallback_windows();
+                }
+                summaries.push(T3CodeTrayProviderSummary {
+                    instance_id: previous.instance_id.clone(),
+                    driver: previous.driver.clone(),
+                    display_name: previous.display_name.clone(),
+                    bound_account_id: previous.bound_account_id.clone(),
+                    bound_account_email: previous.bound_account_email.clone(),
+                    bound_account_plan: previous.bound_account_plan.clone(),
+                    bound_is_api_service: previous.bound_is_api_service,
+                    bound_updated_at: previous.bound_updated_at,
+                    windows,
+                    quota_summary_groups: previous.quota_summary_groups.clone(),
+                    provider_quota: previous.provider_quota.clone(),
+                });
+            }
+            continue;
+        }
+
+        let entry = raw_instances.get(&instance_id).and_then(Value::as_object);
+        let config_obj = entry
+            .and_then(|e| e.get("config"))
+            .and_then(Value::as_object);
+        let enabled = entry
+            .and_then(|e| e.get("enabled"))
+            .and_then(Value::as_bool)
+            .or_else(|| {
+                config_obj
+                    .and_then(|c| c.get("enabled"))
+                    .and_then(Value::as_bool)
+            })
+            .unwrap_or(true);
+        if !enabled {
+            continue;
+        }
+        if is_builtin_default && persisted.get(&instance_id).is_some_and(|item| item.unlinked) {
+            continue;
+        }
+
+        let default_display = extensions::default_display_name(&driver);
+        let display_name = entry
+            .and_then(|e| e.get("displayName"))
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .unwrap_or(if is_builtin_default {
+                default_display
+            } else {
+                &instance_id
+            })
+            .to_string();
+
+        let (bound, observed_email) = if extensions::is_extended_platform(&driver) {
+            let map = extra_accounts.get_or_insert_with(extensions::build_all_extra_bindable_accounts);
+            let candidates = map.get(&driver).map(Vec::as_slice).unwrap_or(&[]);
+            extensions::detect_extended_bound_account(
+                &state_dir,
+                &instance_id,
+                &driver,
+                entry,
+                &persisted,
+                candidates,
+            )
+        } else {
+            let auth_method = config_obj
+                .and_then(|c| c.get("authMethod"))
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|s| !s.is_empty());
+            let antigravity_email = (driver == DRIVER_ANTIGRAVITY
+                && auth_method.is_none_or(|mode| mode == "oauth-personal"))
+            .then(|| read_antigravity_binding_email(&state_dir, &instance_id))
+            .flatten();
+            let candidates: &[T3CodeBindableAccountView] = match driver.as_str() {
+                DRIVER_CODEX => codex_accounts
+                    .get_or_insert_with(|| {
+                        build_codex_bindable_accounts(codex_account::list_accounts()).0
+                    })
+                    .as_slice(),
+                DRIVER_ANTIGRAVITY => antigravity_accounts
+                    .get_or_insert_with(build_antigravity_bindable_accounts)
+                    .as_slice(),
+                DRIVER_CLAUDE => claude_accounts
+                    .get_or_insert_with(build_claude_bindable_accounts)
+                    .as_slice(),
+                _ => &[],
+            };
+            detect_bound_account_from_disk(
+                &instance_id,
+                &driver,
+                antigravity_email.as_deref(),
+                config_obj,
+                &persisted,
+                candidates,
+            )
+        };
+
+        let bound_email_final = observed_email.or_else(|| bound.as_ref().map(|b| b.email.clone()));
+        if bound.is_none() && bound_email_final.is_none() {
+            continue;
+        }
+
+        let bound_updated_at = persisted
+            .get(&instance_id)
+            .filter(|item| {
+                item.driver == driver
+                    && bound
+                        .as_ref()
+                        .is_some_and(|account| account.id == item.account_id)
+            })
+            .map(|item| item.updated_at);
+        let bound_is_api_service = bound.as_ref().is_some_and(|b| b.is_api_service);
+        let mut windows = bound
+            .as_ref()
+            .map(|b| b.windows.clone())
+            .unwrap_or_default();
+        if bound_is_api_service && windows.is_empty() {
+            windows = build_t3_api_service_fallback_windows();
+        }
+
+        summaries.push(T3CodeTrayProviderSummary {
+            instance_id,
+            driver,
+            display_name,
+            bound_account_id: bound.as_ref().map(|b| b.id.clone()),
+            bound_account_email: bound_email_final,
+            bound_account_plan: bound.as_ref().map(|b| b.plan_badge.clone()),
+            bound_is_api_service,
+            bound_updated_at,
+            windows,
+            quota_summary_groups: bound.as_ref().and_then(|b| b.quota_summary_groups.clone()),
+            provider_quota: bound.as_ref().and_then(|b| b.provider_quota.clone()),
+        });
+    }
+
+    summaries
+}
+
+pub(crate) fn resolve_t3code_summary_windows(
+    driver: &str,
+    windows: &[T3CodeQuotaWindowView],
+    quota_summary_groups: Option<&[crate::models::quota::QuotaSummaryGroup]>,
+    max_items: usize,
+) -> Vec<T3CodeQuotaWindowView> {
+    let mut resolved = if driver == DRIVER_ANTIGRAVITY {
+        if let Some(groups) = quota_summary_groups.filter(|items| !items.is_empty()) {
+            let reset_times: HashMap<&str, Option<&str>> = windows
+                .iter()
+                .map(|window| (window.id.as_str(), window.reset_time.as_deref()))
+                .collect();
+            let mut grouped = Vec::new();
+            for group in groups {
+                for window in &group.windows {
+                    let period = window.period.trim();
+                    let label = if period.is_empty() {
+                        group.name.clone()
+                    } else {
+                        let period_label = if period == "weekly" { "7d" } else { period };
+                        format!("{} {}", group.name, period_label)
+                    };
+                    grouped.push(T3CodeQuotaWindowView {
+                        id: format!("{}:{}", group.id, window.id),
+                        label,
+                        remaining: T3CodeQuotaRemaining::Percent {
+                            remaining_percent: window.percentage,
+                        },
+                        reset_time: reset_times
+                            .get(window.id.as_str())
+                            .copied()
+                            .flatten()
+                            .map(str::to_owned),
+                    });
+                }
+            }
+            grouped
+        } else {
+            windows.to_vec()
+        }
+    } else {
+        windows.to_vec()
+    };
+    if resolved.len() > max_items {
+        resolved.truncate(max_items);
+    }
+    resolved
+}
+
+pub(crate) fn parse_t3code_reset_ts(reset_time: Option<&str>) -> Option<i64> {
+    let trimmed = reset_time?.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if trimmed.chars().all(|ch| ch.is_ascii_digit()) {
+        let num = trimmed.parse::<i64>().ok()?;
+        if num <= 0 {
+            return None;
+        }
+        return Some(if num > 1_000_000_000_000 {
+            num / 1000
+        } else {
+            num
+        });
+    }
+    chrono::DateTime::parse_from_rfc3339(trimmed)
+        .ok()
+        .map(|dt| dt.timestamp())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn qoder_clone_has_no_connection_to_the_source_instances_profiles() {
+        let source = tempfile::tempdir().unwrap();
+        let destination = tempfile::tempdir().unwrap();
+        let global = extensions::cockpit_provider_dir(source.path(), "qoder", "global").join("profiles/account");
+        let cn = extensions::cockpit_provider_dir(source.path(), "qoder_cn", "cn").join("profiles/account");
+        let settings = json!({"providerInstances": {
+            "global": {"driver": "acpRegistry", "environment": [{"name": "QODER_CONFIG_DIR", "value": global}]},
+            "cn": {"driver": "acpRegistry", "environment": [{"name": "QODERCN_CONFIG_DIR", "value": cn}]},
+            "custom": {"driver": "acpRegistry", "environment": [{"name": "QODER_CONFIG_DIR", "value": "/custom/qoder"}]},
+            "codex": {"driver": "codex"}
+        }});
+        write_t3_settings_json(source.path(), &settings).unwrap();
+        write_t3_settings_json(destination.path(), &settings).unwrap();
+        remove_copied_qoder_bindings(source.path(), destination.path()).unwrap();
+        let copied = read_t3_settings_json(destination.path()).unwrap();
+        let entries = copied["providerInstances"].as_object().unwrap();
+        assert_eq!(entries.len(), 2);
+        assert!(entries.contains_key("custom") && entries.contains_key("codex"));
+        assert_eq!(read_t3_settings_json(source.path()).unwrap(), settings);
+    }
 
     #[test]
     fn parallel_codex_inherits_only_the_default_executable_when_unset() {

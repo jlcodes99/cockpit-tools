@@ -1,3 +1,4 @@
+import { readAntigravityDesktopSettings, type AntigravityDesktopSettings } from '../components/antigravity/AntigravityDesktopSettings';
 import {
   hasActiveWakeupQuotaReset,
   loadAntigravityWakeupState,
@@ -141,7 +142,7 @@ interface GrokCliStatus {
 }
 
 /** 通用配置类型 */
-interface GeneralConfig {
+interface GeneralConfig extends AntigravityDesktopSettings {
   language: string;
   default_terminal: string;
   theme: string;
@@ -227,6 +228,7 @@ interface GeneralConfig {
   workbuddy_auto_refresh_minutes: number;
   minimax_code_auto_refresh_minutes: number;
   qoder_auto_refresh_minutes: number;
+  qoder_cn_auto_refresh_minutes: number;
   zcode_auto_refresh_minutes: number;
   t3code_auto_refresh_minutes: number;
   trae_auto_refresh_minutes: number;
@@ -240,6 +242,8 @@ interface GeneralConfig {
   codebuddy_cn_quota_alert_threshold: number;
   qoder_quota_alert_enabled: boolean;
   qoder_quota_alert_threshold: number;
+  qoder_cn_quota_alert_enabled: boolean;
+  qoder_cn_quota_alert_threshold: number;
   trae_quota_alert_enabled: boolean;
   trae_quota_alert_threshold: number;
   trae_solo_quota_alert_enabled: boolean;
@@ -316,6 +320,7 @@ type AppPathTarget =
   | 'codebuddy'
   | 'codebuddy_cn'
   | 'qoder'
+  | 'qoder_cn'
   | 'zcode'
   | 't3code'
   | 'trae'
@@ -361,6 +366,8 @@ const FALLBACK_PLATFORM_SETTINGS_ORDER: Record<PlatformId, number> = {
   codebuddy: 10,
   codebuddy_cn: 11,
   qoder: 12,
+  // Fractional so the CN section sits right after Qoder without renumbering.
+  qoder_cn: 12.5,
   zcode: 13,
   t3code: 23,
   trae: 14,
@@ -636,7 +643,6 @@ export function useSettingsPageController() {
   const [codebuddyShareSessionsOnSwitch, setCodebuddyShareSessionsOnSwitch] = useState(false);
   const [codebuddyCnAppPath, setCodebuddyCnAppPath] = useState('');
   const [codebuddyCnShareSessionsOnSwitch, setCodebuddyCnShareSessionsOnSwitch] = useState(false);
-  const [qoderAppPath, setQoderAppPath] = useState('');
   const [zcodeAppPath, setZcodeAppPath] = useState('');
   const [t3codeAppPath, setT3codeAppPath] = useState('');
   const [t3codeAppUiInjectionEnabled, setT3codeAppUiInjectionEnabled] = useState(true);
@@ -653,6 +659,7 @@ export function useSettingsPageController() {
   const [workbuddyAutoRefresh, setWorkbuddyAutoRefresh] = useState('10');
   const [minimaxCodeAutoRefresh, setMinimaxCodeAutoRefresh] = useState('10');
   const [qoderAutoRefresh, setQoderAutoRefresh] = useState('10');
+  const [qoderCnAutoRefresh, setQoderCnAutoRefresh] = useState('10');
   const [zcodeAutoRefresh, setZcodeAutoRefresh] = useState('10');
   const [t3codeAutoRefresh, setT3codeAutoRefresh] = useState('10');
   const [traeAutoRefresh, setTraeAutoRefresh] = useState('10');
@@ -679,7 +686,9 @@ export function useSettingsPageController() {
   const [codebuddyCnQuotaAlertEnabled, setCodebuddyCnQuotaAlertEnabled] = useState(false);
   const [codebuddyCnQuotaAlertThreshold, setCodebuddyCnQuotaAlertThreshold] = useState('20');
   const [qoderQuotaAlertEnabled, setQoderQuotaAlertEnabled] = useState(false);
+  const [qoderCnQuotaAlertEnabled, setQoderCnQuotaAlertEnabled] = useState(false);
   const [qoderQuotaAlertThreshold, setQoderQuotaAlertThreshold] = useState('20');
+  const [qoderCnQuotaAlertThreshold, setQoderCnQuotaAlertThreshold] = useState('20');
   const [traeQuotaAlertEnabled, setTraeQuotaAlertEnabled] = useState(false);
   const [traeQuotaAlertThreshold, setTraeQuotaAlertThreshold] = useState('20');
   const [traeSoloQuotaAlertEnabled, setTraeSoloQuotaAlertEnabled] = useState(false);
@@ -700,9 +709,11 @@ export function useSettingsPageController() {
   const [minimaxCodeAutoRefreshCustomMode, setMinimaxCodeAutoRefreshCustomMode] = useState(false);
   const [codebuddyQuotaAlertThresholdCustomMode, setCodebuddyQuotaAlertThresholdCustomMode] = useState(false);
   const [qoderAutoRefreshCustomMode, setQoderAutoRefreshCustomMode] = useState(false);
+  const [qoderCnAutoRefreshCustomMode, setQoderCnAutoRefreshCustomMode] = useState(false);
   const [zcodeAutoRefreshCustomMode, setZcodeAutoRefreshCustomMode] = useState(false);
   const [t3codeAutoRefreshCustomMode, setT3codeAutoRefreshCustomMode] = useState(false);
   const [qoderQuotaAlertThresholdCustomMode, setQoderQuotaAlertThresholdCustomMode] = useState(false);
+  const [qoderCnQuotaAlertThresholdCustomMode, setQoderCnQuotaAlertThresholdCustomMode] = useState(false);
   const [traeAutoRefreshCustomMode, setTraeAutoRefreshCustomMode] = useState(false);
   const [traeQuotaAlertThresholdCustomMode, setTraeQuotaAlertThresholdCustomMode] = useState(false);
   const [traeSoloAutoRefreshCustomMode, setTraeSoloAutoRefreshCustomMode] = useState(false);
@@ -733,6 +744,7 @@ export function useSettingsPageController() {
   const [codexAutomaticSessionRepair, setCodexAutomaticSessionRepair] = useState<CodexAutomaticSessionRepair>('quick');
   const [codexAutoRestoreTakeoverOnLaunch, setCodexAutoRestoreTakeoverOnLaunch] = useState(true);
   const [antigravityLaunchOnSwitch, setAntigravityLaunchOnSwitch] = useState(true);
+  const [antigravityDesktopSettings, setAntigravityDesktopSettings] = useState(readAntigravityDesktopSettings);
   const [codexRestartSpecifiedAppOnSwitch, setCodexRestartSpecifiedAppOnSwitch] = useState(false);
   const [codexLocalAccessEntryVisible, setCodexLocalAccessEntryVisible] = useState(true);
   const [codexHideRelayQuota, setCodexHideRelayQuota] = useState(false);
@@ -849,7 +861,7 @@ export function useSettingsPageController() {
         return {
           id: account.id,
           label: account.email,
-          badge: <span className={`tier-badge ${badge.className}`}>{badge.label}</span>,
+          badge: <span className={`tier-badge ${badge.className}`} title={badge.rawTier || badge.label}>{badge.label}</span>,
           searchableText: account.email,
           tags: account.tags || [],
           type,
@@ -1085,6 +1097,7 @@ export function useSettingsPageController() {
       !workbuddyAutoRefresh.trim() ||
       !minimaxCodeAutoRefresh.trim() ||
       !qoderAutoRefresh.trim() ||
+      !qoderCnAutoRefresh.trim() ||
       !zcodeAutoRefresh.trim() ||
       !t3codeAutoRefresh.trim() ||
       !traeAutoRefresh.trim() ||
@@ -1109,6 +1122,7 @@ export function useSettingsPageController() {
     const workbuddyAutoRefreshNum = parseInt(workbuddyAutoRefresh, 10) || -1;
     const minimaxCodeAutoRefreshNum = parseInt(minimaxCodeAutoRefresh, 10) || -1;
     const qoderAutoRefreshNum = parseInt(qoderAutoRefresh, 10) || -1;
+    const qoderCnAutoRefreshNum = parseInt(qoderCnAutoRefresh, 10) || -1;
     const zcodeAutoRefreshNum = parseInt(zcodeAutoRefresh, 10) || -1;
     const t3codeAutoRefreshNum = parseInt(t3codeAutoRefresh, 10) || -1;
     const traeAutoRefreshNum = parseInt(traeAutoRefresh, 10) || -1;
@@ -1134,6 +1148,7 @@ export function useSettingsPageController() {
     const parsedWorkbuddyQuotaAlertThreshold = Number.parseInt(workbuddyQuotaAlertThreshold, 10);
     const parsedMinimaxCodeQuotaAlertThreshold = Number.parseInt(minimaxCodeQuotaAlertThreshold, 10);
     const parsedQoderQuotaAlertThreshold = Number.parseInt(qoderQuotaAlertThreshold, 10);
+    const parsedQoderCnQuotaAlertThreshold = Number.parseInt(qoderCnQuotaAlertThreshold, 10);
     const parsedTraeQuotaAlertThreshold = Number.parseInt(traeQuotaAlertThreshold, 10);
     const parsedTraeSoloQuotaAlertThreshold = Number.parseInt(traeSoloQuotaAlertThreshold, 10);
     const parsedTraeCnQuotaAlertThreshold = Number.parseInt(traeCnQuotaAlertThreshold, 10);
@@ -1165,6 +1180,7 @@ export function useSettingsPageController() {
       workbuddy_auto_refresh_minutes: workbuddyAutoRefreshNum,
       minimax_code_auto_refresh_minutes: minimaxCodeAutoRefreshNum,
       qoder_auto_refresh_minutes: qoderAutoRefreshNum,
+      qoder_cn_auto_refresh_minutes: qoderCnAutoRefreshNum,
       zcode_auto_refresh_minutes: zcodeAutoRefreshNum,
       t3code_auto_refresh_minutes: t3codeAutoRefreshNum,
       t3code_app_ui_injection_enabled: t3codeAppUiInjectionEnabled,
@@ -1214,7 +1230,6 @@ export function useSettingsPageController() {
       codebuddy_share_sessions_on_switch: codebuddyShareSessionsOnSwitch,
       codebuddy_cn_app_path: codebuddyCnAppPath,
       codebuddy_cn_share_sessions_on_switch: codebuddyCnShareSessionsOnSwitch,
-      qoder_app_path: qoderAppPath,
       zcode_app_path: zcodeAppPath,
       t3code_app_path: t3codeAppPath,
       trae_app_path: traeAppPath,
@@ -1243,6 +1258,7 @@ export function useSettingsPageController() {
       codex_automatic_session_repair: codexAutomaticSessionRepair,
       codex_auto_restore_takeover_on_launch: codexAutoRestoreTakeoverOnLaunch,
       antigravity_launch_on_switch: antigravityLaunchOnSwitch,
+      ...antigravityDesktopSettings,
       codex_restart_specified_app_on_switch: codexRestartSpecifiedAppOnSwitch,
       codex_local_access_entry_visible: codexLocalAccessEntryVisible,
       codex_hide_relay_quota: codexHideRelayQuota,
@@ -1307,9 +1323,13 @@ export function useSettingsPageController() {
         ? 20
         : parsedMinimaxCodeQuotaAlertThreshold,
       qoder_quota_alert_enabled: qoderQuotaAlertEnabled,
+      qoder_cn_quota_alert_enabled: qoderCnQuotaAlertEnabled,
       qoder_quota_alert_threshold: Number.isNaN(parsedQoderQuotaAlertThreshold)
         ? 20
         : parsedQoderQuotaAlertThreshold,
+      qoder_cn_quota_alert_threshold: Number.isNaN(parsedQoderCnQuotaAlertThreshold)
+        ? 20
+        : parsedQoderCnQuotaAlertThreshold,
       trae_quota_alert_enabled: traeQuotaAlertEnabled,
       trae_quota_alert_threshold: Number.isNaN(parsedTraeQuotaAlertThreshold)
         ? 20
@@ -1419,6 +1439,7 @@ export function useSettingsPageController() {
     workbuddyAutoRefresh,
     minimaxCodeAutoRefresh,
     qoderAutoRefresh,
+    qoderCnAutoRefresh,
     zcodeAutoRefresh,
     t3codeAutoRefresh,
     t3codeAppUiInjectionEnabled,
@@ -1473,7 +1494,6 @@ export function useSettingsPageController() {
     codebuddyShareSessionsOnSwitch,
     codebuddyCnAppPath,
     codebuddyCnShareSessionsOnSwitch,
-    qoderAppPath,
     zcodeAppPath,
     t3codeAppPath,
     traeAppPath,
@@ -1497,6 +1517,7 @@ export function useSettingsPageController() {
     codexAutomaticSessionRepair,
     codexAutoRestoreTakeoverOnLaunch,
     antigravityLaunchOnSwitch,
+    antigravityDesktopSettings,
     codexRestartSpecifiedAppOnSwitch,
     codexLocalAccessEntryVisible,
     codexHideRelayQuota,
@@ -1539,6 +1560,8 @@ export function useSettingsPageController() {
     minimaxCodeQuotaAlertThreshold,
     qoderQuotaAlertEnabled,
     qoderQuotaAlertThreshold,
+    qoderCnQuotaAlertEnabled,
+    qoderCnQuotaAlertThreshold,
     traeQuotaAlertEnabled,
     traeQuotaAlertThreshold,
     traeSoloQuotaAlertEnabled,
@@ -1799,7 +1822,6 @@ export function useSettingsPageController() {
       setCodebuddyShareSessionsOnSwitch(config.codebuddy_share_sessions_on_switch ?? false);
       setCodebuddyCnAppPath(config.codebuddy_cn_app_path || '');
       setCodebuddyCnShareSessionsOnSwitch(config.codebuddy_cn_share_sessions_on_switch ?? false);
-      setQoderAppPath(config.qoder_app_path || '');
       setZcodeAppPath(config.zcode_app_path || '');
       setT3codeAppPath(config.t3code_app_path || '');
       setT3codeAppUiInjectionEnabled(Boolean(config.t3code_app_ui_injection_enabled ?? true));
@@ -1822,6 +1844,7 @@ export function useSettingsPageController() {
       setWorkbuddyAutoRefresh(String(config.workbuddy_auto_refresh_minutes ?? 10));
       setMinimaxCodeAutoRefresh(String(config.minimax_code_auto_refresh_minutes ?? 10));
       setQoderAutoRefresh(String(config.qoder_auto_refresh_minutes ?? 10));
+      setQoderCnAutoRefresh(String(config.qoder_cn_auto_refresh_minutes ?? 10));
       setZcodeAutoRefresh(String(config.zcode_auto_refresh_minutes ?? 10));
       setT3codeAutoRefresh(String(config.t3code_auto_refresh_minutes ?? 10));
       setTraeAutoRefresh(String(config.trae_auto_refresh_minutes ?? 10));
@@ -1841,7 +1864,9 @@ export function useSettingsPageController() {
       setMinimaxCodeQuotaAlertEnabled(config.minimax_code_quota_alert_enabled ?? false);
       setMinimaxCodeQuotaAlertThreshold(String(config.minimax_code_quota_alert_threshold ?? 20));
       setQoderQuotaAlertEnabled(config.qoder_quota_alert_enabled ?? false);
+      setQoderCnQuotaAlertEnabled(config.qoder_cn_quota_alert_enabled ?? false);
       setQoderQuotaAlertThreshold(String(config.qoder_quota_alert_threshold ?? 20));
+      setQoderCnQuotaAlertThreshold(String(config.qoder_cn_quota_alert_threshold ?? 20));
       setTraeQuotaAlertEnabled(config.trae_quota_alert_enabled ?? false);
       setTraeQuotaAlertThreshold(String(config.trae_quota_alert_threshold ?? 20));
       setTraeSoloQuotaAlertEnabled(config.trae_solo_quota_alert_enabled ?? false);
@@ -1861,6 +1886,7 @@ export function useSettingsPageController() {
       setCodexAutomaticSessionRepair(config.codex_automatic_session_repair ?? 'quick');
       setCodexAutoRestoreTakeoverOnLaunch(config.codex_auto_restore_takeover_on_launch ?? true);
       setAntigravityLaunchOnSwitch(config.antigravity_launch_on_switch ?? true);
+      setAntigravityDesktopSettings(readAntigravityDesktopSettings(config));
       setCodexRestartSpecifiedAppOnSwitch(
         config.codex_restart_specified_app_on_switch ?? false,
       );
@@ -1919,6 +1945,7 @@ export function useSettingsPageController() {
       setCodebuddyCnAutoRefreshCustomMode(false);
       setWorkbuddyAutoRefreshCustomMode(false);
       setQoderAutoRefreshCustomMode(false);
+      setQoderCnAutoRefreshCustomMode(false);
       setZcodeAutoRefreshCustomMode(false);
       setT3codeAutoRefreshCustomMode(false);
       setTraeAutoRefreshCustomMode(false);
@@ -1937,6 +1964,7 @@ export function useSettingsPageController() {
       setCodebuddyCnQuotaAlertThresholdCustomMode(false);
       setWorkbuddyQuotaAlertThresholdCustomMode(false);
       setQoderQuotaAlertThresholdCustomMode(false);
+      setQoderCnQuotaAlertThresholdCustomMode(false);
       setTraeQuotaAlertThresholdCustomMode(false);
       setTraeSoloQuotaAlertThresholdCustomMode(false);
       setTraeCnQuotaAlertThresholdCustomMode(false);
@@ -2179,8 +2207,6 @@ export function useSettingsPageController() {
       setCodebuddyAppPath(path);
     } else if (target === 'codebuddy_cn') {
       setCodebuddyCnAppPath(path);
-    } else if (target === 'qoder') {
-      setQoderAppPath(path);
     } else if (target === 'zcode') {
       setZcodeAppPath(path);
     } else if (target === 't3code') {
@@ -2268,6 +2294,9 @@ export function useSettingsPageController() {
     }
     if (target === 'qoder') {
       return t('settings.general.qoderPathReset', '重置默认');
+    }
+    if (target === 'qoder_cn') {
+      return t('settings.general.qoderCnPathReset', '重置默认');
     }
     if (target === 'zcode') {
       return t('settings.general.codexPathReset', '重置默认');
@@ -2526,6 +2555,8 @@ export function useSettingsPageController() {
         return parseRefresh(minimaxCodeAutoRefresh) > 0;
       case 'qoder':
         return parseRefresh(qoderAutoRefresh) > 0;
+      case 'qoder_cn':
+        return parseRefresh(qoderCnAutoRefresh) > 0;
       case 'zcode':
         return parseRefresh(zcodeAutoRefresh) > 0;
       case 't3code':
@@ -3140,6 +3171,7 @@ export function useSettingsPageController() {
   const workbuddyAutoRefreshIsPreset = REFRESH_PRESET_VALUES.includes(workbuddyAutoRefresh);
   const minimaxCodeAutoRefreshIsPreset = REFRESH_PRESET_VALUES.includes(minimaxCodeAutoRefresh);
   const qoderAutoRefreshIsPreset = REFRESH_PRESET_VALUES.includes(qoderAutoRefresh);
+  const qoderCnAutoRefreshIsPreset = REFRESH_PRESET_VALUES.includes(qoderCnAutoRefresh);
   const zcodeAutoRefreshIsPreset = REFRESH_PRESET_VALUES.includes(zcodeAutoRefresh);
   const t3codeAutoRefreshIsPreset = REFRESH_PRESET_VALUES.includes(t3codeAutoRefresh);
   const traeAutoRefreshIsPreset = REFRESH_PRESET_VALUES.includes(traeAutoRefresh);
@@ -3161,6 +3193,7 @@ export function useSettingsPageController() {
   const workbuddyQuotaAlertThresholdIsPreset = THRESHOLD_PRESET_VALUES.includes(workbuddyQuotaAlertThreshold);
   const minimaxCodeQuotaAlertThresholdIsPreset = THRESHOLD_PRESET_VALUES.includes(minimaxCodeQuotaAlertThreshold);
   const qoderQuotaAlertThresholdIsPreset = THRESHOLD_PRESET_VALUES.includes(qoderQuotaAlertThreshold);
+  const qoderCnQuotaAlertThresholdIsPreset = THRESHOLD_PRESET_VALUES.includes(qoderCnQuotaAlertThreshold);
   const traeQuotaAlertThresholdIsPreset = THRESHOLD_PRESET_VALUES.includes(traeQuotaAlertThreshold);
   const traeSoloQuotaAlertThresholdIsPreset = THRESHOLD_PRESET_VALUES.includes(traeSoloQuotaAlertThreshold);
   const traeCnQuotaAlertThresholdIsPreset = THRESHOLD_PRESET_VALUES.includes(traeCnQuotaAlertThreshold);
@@ -3313,6 +3346,7 @@ export function useSettingsPageController() {
     antigravityLegacyAppPath,
     antigravityDualSwitchNoRestartEnabled,
     antigravityLaunchOnSwitch,
+    antigravityDesktopSettings,
     antigravityScopeAccounts,
     antigravityScopeTypeOptions,
     antigravitySeamlessSwitchUnlocked,
@@ -3502,7 +3536,6 @@ export function useSettingsPageController() {
     openLink,
     openMenuBarQuotaModal,
     platformSettingsOrder,
-    qoderAppPath,
     qoderAutoRefresh,
     qoderAutoRefreshCustomMode,
     qoderAutoRefreshIsPreset,
@@ -3510,6 +3543,13 @@ export function useSettingsPageController() {
     qoderQuotaAlertThreshold,
     qoderQuotaAlertThresholdCustomMode,
     qoderQuotaAlertThresholdIsPreset,
+    qoderCnAutoRefresh,
+    qoderCnAutoRefreshCustomMode,
+    qoderCnAutoRefreshIsPreset,
+    qoderCnQuotaAlertEnabled,
+    qoderCnQuotaAlertThreshold,
+    qoderCnQuotaAlertThresholdCustomMode,
+    qoderCnQuotaAlertThresholdIsPreset,
     quotaAlertEnabled,
     quotaAlertThreshold,
     quotaAlertThresholdCustomMode,
@@ -3543,6 +3583,7 @@ export function useSettingsPageController() {
     setAntigravityLegacyAppPath,
     setAntigravityDualSwitchNoRestartEnabled,
     setAntigravityLaunchOnSwitch,
+    setAntigravityDesktopSettings,
     setAppAutoLaunchEnabled,
     setAutoImportFromLocalEnabled,
     setAutoImportScanBusy,
@@ -3656,12 +3697,16 @@ export function useSettingsPageController() {
     setOpencodeAppPath,
     setOpencodeAuthOverwriteOnSwitch,
     setOpencodeSyncOnSwitch,
-    setQoderAppPath,
     setQoderAutoRefresh,
     setQoderAutoRefreshCustomMode,
     setQoderQuotaAlertEnabled,
     setQoderQuotaAlertThreshold,
     setQoderQuotaAlertThresholdCustomMode,
+    setQoderCnAutoRefresh,
+    setQoderCnAutoRefreshCustomMode,
+    setQoderCnQuotaAlertEnabled,
+    setQoderCnQuotaAlertThreshold,
+    setQoderCnQuotaAlertThresholdCustomMode,
     setQuotaAlertEnabled,
     setQuotaAlertThreshold,
     setQuotaAlertThresholdCustomMode,

@@ -280,17 +280,21 @@ pub async fn inject_cursor_account(app: AppHandle, account_id: String) -> Result
         .ok_or_else(|| format!("Cursor account not found: {}", account_id))?;
 
 
-    cursor_account::inject_to_cursor(&account_id)?;
-    crate::modules::provider_current_state::set_current_account_id(
-        "cursor",
-        Some(account_id.as_str()),
-    )?;
+    let db_path = cursor_account::get_default_cursor_state_db_path()?;
+    let written_before_start = db_path.is_file();
+    if written_before_start {
+        cursor_account::inject_to_cursor(&account_id)?;
+        crate::modules::provider_current_state::set_current_account_id("cursor", Some(&account_id))?;
+    }
 
     if let Err(err) = crate::modules::cursor_instance::update_default_settings(
         Some(Some(account_id.clone())),
         None,
         Some(false),
     ) {
+        if !written_before_start {
+            return Err(err);
+        }
         logger::log_warn(&format!("更新 Cursor 默认实例绑定账号失败: {}", err));
     }
 
@@ -298,9 +302,14 @@ pub async fn inject_cursor_account(app: AppHandle, account_id: String) -> Result
         match crate::commands::cursor_instance::cursor_start_instance("__default__".to_string())
             .await
         {
-            Ok(_) => None,
+            Ok(_) => {
+                if !written_before_start {
+                    crate::modules::provider_current_state::set_current_account_id("cursor", Some(&account_id))?;
+                }
+                None
+            },
             Err(err) => {
-                if err.starts_with("APP_PATH_NOT_FOUND:") || err.contains("启动 Cursor 失败") {
+                if written_before_start && (err.starts_with("APP_PATH_NOT_FOUND:") || err.contains("启动 Cursor 失败")) {
                     logger::log_warn(&format!("Cursor 默认实例启动失败: {}", err));
                     if err.starts_with("APP_PATH_NOT_FOUND:") || err.contains("APP_PATH_NOT_FOUND:")
                     {

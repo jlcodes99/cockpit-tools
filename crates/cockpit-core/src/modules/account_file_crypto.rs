@@ -120,8 +120,7 @@ pub(crate) fn read_or_create_key_at(path: &Path) -> Result<[u8; 32], String> {
         return read_key(path);
     }
 
-    let mut key = [0u8; 32];
-    rand::thread_rng().fill_bytes(&mut key);
+    let key: [u8; 32] = rand::random();
     let encoded = general_purpose::STANDARD.encode(key);
     crate::modules::atomic_write::write_secret_string_atomic(path, &encoded)
         .map_err(|e| format!("写入账号详情加密密钥失败: {}", e))?;

@@ -9,28 +9,59 @@ const { quotaWindows, sessionMetrics } = runInThisContext(readFileSync(
 ));
 const formatContextUsage = runInThisContext(readFileSync(join(__dirname, 'composer_context_usage.js'), 'utf8'));
 
-function mountComposer(metadata = null) {
+function mountComposer(metadata = null, reportedSummary = null) {
   const focused = [];
+  let deliver;
   const createNode = (left = 0, right = 100) => {
     const bounds = { left, right, top: 700, height: 30 };
     const attributes = new Map();
-    return {
-      children: [], style: {}, listeners: new Map(),
+    const node = {
+      children: [], style: {}, listeners: new Map(), nodeType: 1,
       getAttribute: name => attributes.get(name) ?? null,
       setAttribute: (name, value) => attributes.set(name, value),
       removeAttribute: name => attributes.delete(name),
       getBoundingClientRect: () => bounds,
       getClientRects: () => [bounds],
-      closest: () => null,
-      querySelectorAll: () => [],
-      append(...children) { this.children.push(...children); },
-      replaceChildren(...children) { this.children = children; },
+      matches(selectors) {
+        return selectors.split(/,\s*/).some(selector => {
+          if (selector === '.agy-overlay-item') return attributes.get('class') === 'agy-overlay-item';
+          const parts = /^\[([^=\]]+)(?:="([^"]+)")?\]$/.exec(selector);
+          return parts && attributes.has(parts[1]) && (parts[2] === undefined || attributes.get(parts[1]) === parts[2]);
+        });
+      },
+      closest(selector) { return this.matches(selector) ? this : this.parentElement?.closest?.(selector) ?? null; },
+      querySelectorAll(selector) {
+        return this.children.flatMap(child => [
+          ...(child.matches(selector) ? [child] : []), ...child.querySelectorAll(selector),
+        ]);
+      },
+      querySelector(selector) { return this.querySelectorAll(selector)[0] ?? null; },
+      append(...children) {
+        for (const child of children) {
+          child.remove();
+          this.children.push(child);
+          child.parentElement = this;
+        }
+      },
+      remove() {
+        if (this.parentElement?.children) {
+          const siblings = this.parentElement.children;
+          siblings.splice(siblings.indexOf(this), 1);
+          this.parentElement = null;
+        }
+      },
+      replaceChildren(...children) {
+        for (const child of [...this.children]) child.remove();
+        this.append(...children);
+      },
       addEventListener(name, callback) { this.listeners.set(name, callback); },
       focus() { focused.push(this); },
     };
+    return node;
   };
   const picker = createNode(30, 175);
   picker.innerText = 'Gemini 4 Hydrogen\nHigh';
+  picker.setAttribute('data-testid', 'model-selector-trigger');
   const conversation = createNode();
   conversation.setAttribute('data-cascade-id', 'test-conversation');
   const footer = createNode(20, 800);
@@ -46,38 +77,50 @@ function mountComposer(metadata = null) {
   const script = runInNewContext(readFileSync(join(__dirname, 'antigravity_composer_status.js'), 'utf8'), {
     window, location: { protocol: 'https:', hostname: '127.0.0.1' },
     document: {
-      body, head: createNode(), querySelector: () => footer, querySelectorAll: () => [footer],
+      body, head: createNode(), querySelector: () => footer,
+      querySelectorAll: selector => selector.includes('data-agent-composer-root') ? [footer] : body.querySelectorAll(selector),
       createElement: () => createNode(),
+      getElementById: id => body.querySelector(`[id="${id}"]`),
     },
-    localStorage: { getItem: () => metadata ? 'fixture-token' : null },
+    localStorage: { getItem: () => metadata || reportedSummary ? 'fixture-token' : null },
     fetch: async url => {
       const method = url.split('/').at(-1);
       const body = {
+        RetrieveUserQuotaSummary: reportedSummary,
         GetCascadeTrajectory: { numTotalGeneratorMetadata: metadata?.length },
         GetCascadeTrajectoryGeneratorMetadata: { generatorMetadata: metadata },
       }[method] ?? {};
       return { ok: true, json: async () => body };
     },
     AbortSignal,
+    Node: { ELEMENT_NODE: 1, TEXT_NODE: 3 },
     getComputedStyle: () => ({ visibility: 'visible' }),
     ResizeObserver: class { disconnect() {} observe() {} },
-    MutationObserver: class { observe() {} },
+    MutationObserver: class {
+      constructor(callback) { deliver = callback; }
+      observe() {}
+    },
     requestAnimationFrame: callback => callback(), innerWidth: 800, innerHeight: 750,
   });
-  const summary = { groups: [
+  const summary = reportedSummary ?? { groups: [
     { modelIds: ['Gemini 4 Hydrogen'], buckets: [{ bucketId: 'gemini-5h', remainingFraction: 0.99 }] },
     { modelIds: ['Gemini 4 Neon'], buckets: [{ bucketId: 'gemini-5h', remainingFraction: 0.42 }] },
   ] };
   const settings = {
-    missing: '—', fiveHour: '5h', noData: 'No data', token: 'Token',
+    missing: '—', fiveHour: '5h', weekly: 'Weekly', noData: 'No data', token: 'Token',
+    resetsAt: 'Resets', unknown: 'Unknown',
     responseSpeed: 'Response speed', overallSpeed: 'Speed incl. thinking', streamingSpeed: 'Streaming speed',
   };
-  const data = { quotaWindows: (_summary, status, model) => quotaWindows(summary, status, model), sessionMetrics };
+  const data = {
+    quotaWindows: (response, status, model) => quotaWindows(reportedSummary ? response : summary, status, model),
+    sessionMetrics,
+  };
 
   assert.equal(script(settings, data, [], formatContextUsage), true);
   const [capsule, details] = body.children;
   return {
-    picker, capsule, details, listeners, focused,
+    picker, capsule, details, listeners, focused, body, createNode,
+    changed: (...records) => deliver(records),
     refresh: () => window.__cockpitAntigravityComposer.refresh(settings),
   };
 }
@@ -101,6 +144,95 @@ test('the Antigravity footer uses the visible model label and stays visible whil
   assert.deepEqual(metricKeys(), ['context', 'speed']);
   capsule.listeners.get('click')();
   assert.equal(details.hidden, false);
+});
+
+test('the footer follows the planner selected inside Orchestrator', () => {
+  const { picker, capsule, changed } = mountComposer();
+  const quotaValue = () => capsule.children.find(metric =>
+    metric.getAttribute('data-cockpit-metric-key') === 'quota')?.children.at(-1).textContent;
+  for (const [label, value] of [
+    ['Orchestrator Gemini 4 Neon Medium', '42%'],
+    ['Orchestrator Gemini 4 Hydrogen High · Extended', '99%'],
+    ['Orchestrator Default (Gemini Pro)', undefined],
+  ]) {
+    picker.setAttribute('data-model-label', label);
+    changed({ type: 'attributes', target: picker, attributeName: 'data-model-label' });
+    assert.equal(quotaValue(), value, label);
+  }
+});
+
+test('selecting an Orchestrator planner updates only the composer quota', async () => {
+  const summary = { groups: [
+    { modelIds: ['Gemini 4 Neon', 'Gemini 4 Argon'], buckets: [
+      { bucketId: 'gemini-5h', remainingFraction: 0.42 },
+      { bucketId: 'gemini-weekly', remainingFraction: 0.88 },
+    ] },
+    { buckets: [{ bucketId: 'gemini-carbon-wtu-weekly', remainingFraction: 0 }] },
+  ] };
+  const { picker, capsule, body, createNode, changed } = mountComposer(null, summary);
+  const nativeMenu = createNode();
+  nativeMenu.setAttribute('data-testid', 'model-selector-panel');
+  const modelPopup = createNode();
+  modelPopup.setAttribute('id', 'model-popup');
+  modelPopup.append(nativeMenu);
+  const setUpRow = (testId, label) => {
+    const row = createNode();
+    row.setAttribute('class', 'agy-overlay-item');
+    row.setAttribute('data-testid', testId);
+    row.setAttribute('data-model-label', label);
+    const name = createNode();
+    name.textContent = label;
+    row.append(name);
+    return { row, name };
+  };
+  const neon = setUpRow('model-selector-item', 'Gemini 4 Neon');
+  const orchestrator = setUpRow('model-selector-orchestrator', 'Orchestrator');
+  nativeMenu.append(neon.row, orchestrator.row);
+  const plannerMenu = createNode();
+  plannerMenu.setAttribute('id', 'planner-popup');
+  const carbon = setUpRow('orchestrator-picker-row', 'Gemini 4 Carbon');
+  plannerMenu.append(carbon.row);
+  orchestrator.row.setAttribute('aria-controls', 'planner-popup');
+  body.append(modelPopup, plannerMenu);
+  picker.setAttribute('aria-controls', 'model-popup');
+  picker.setAttribute('aria-expanded', 'true');
+  changed({ type: 'childList', target: body, addedNodes: [modelPopup, plannerMenu], removedNodes: [] });
+  await new Promise(resolve => setImmediate(resolve));
+
+  const showPlanner = (label, quotas) => {
+    picker.setAttribute('data-model-label', label);
+    changed({ type: 'attributes', target: picker, attributeName: 'data-model-label' });
+    assert.deepEqual(capsule.children.filter(metric => metric.getAttribute('data-cockpit-metric-key') === 'quota')
+      .map(metric => metric.children.at(-1).textContent), quotas);
+    for (const { row, name } of [neon, orchestrator, carbon]) assert.deepEqual(row.children, [name]);
+  };
+  showPlanner('Orchestrator Gemini 4 Neon Medium', ['42%', '88%']);
+  showPlanner('Orchestrator Gemini 4 Carbon High', ['0%']);
+  showPlanner('Orchestrator (Neon)', ['42%', '88%']);
+  showPlanner('Orchestrator (Carbon)', ['0%']);
+  showPlanner('Orchestrator (Argon)', ['42%', '88%']);
+});
+
+test('standalone Orchestrator uses its reported quota before its planner pool', () => {
+  const summary = { groups: [
+    { modelIds: ['Gemini 4 Neon'], buckets: [{ bucketId: 'gemini-5h', remainingFraction: 0.92 }] },
+    { modelIds: ['gemini-pro-orchestrator-neon'], buckets: [
+      { bucketId: 'orchestrator-weekly', remainingFraction: 0.27, resetTime: '2026-12-02T08:00:00Z' },
+    ] },
+    { buckets: [{ bucketId: 'gemini-carbon-wtu-weekly', remainingFraction: 0.68 }] },
+  ] };
+  const status = { cascadeModelConfigData: { clientModelConfigs: [
+    { label: 'Orchestrator (Neon)', modelId: 'gemini-pro-orchestrator-neon' },
+    { label: 'Orchestrator (Carbon)', modelId: 'gemini-pro-orchestrator-carbon',
+      quotaInfo: { remainingFraction: 0 } },
+  ] } };
+
+  assert.deepEqual(quotaWindows(summary, status, 'Orchestrator (Neon)'), [
+    { period: 'weekly', percent: 27, reset: '2026-12-02T08:00:00Z' },
+  ]);
+  assert.deepEqual(quotaWindows(summary, null, 'Orchestrator (Neon) · Extended').map(window => window.percent), [27]);
+  assert.deepEqual(quotaWindows(summary, status, 'Orchestrator (Carbon)').map(window => window.percent), [0]);
+  assert.deepEqual(quotaWindows(summary, null, 'Orchestrator (Carbon)').map(window => window.percent), [68]);
 });
 
 test('outside pointer presses close the Antigravity quota popover without moving focus', () => {

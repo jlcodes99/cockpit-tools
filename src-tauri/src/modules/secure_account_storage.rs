@@ -44,6 +44,12 @@ pub(crate) fn read_account_file_readonly<T: DeserializeOwned>(
     serde_json::from_str(&content).map_err(|e| format!("解析账号详情失败: {}", e))
 }
 
+/// Reads a detail file whose key belongs to `root`. Shared account stores that
+/// accept their own data directory read through this entry point.
+pub(super) fn read_at<T: DeserializeOwned>(root: &Path, path: &Path) -> Result<T, String> {
+    read_account_file_readonly(path, &local_vault_key_path(root))
+}
+
 pub fn serialize_account_file<T: Serialize>(kind: &str, account: &T) -> Result<String, String> {
     let plaintext =
         serde_json::to_vec(account).map_err(|e| format!("序列化账号详情失败: {}", e))?;
@@ -119,8 +125,8 @@ pub(crate) fn write_account_preserving_switch_time<T: Serialize>(
                 envelope
             };
             if previous.get("id") == next.get("id") {
-                let timestamp = previous.get("last_switched_at").and_then(serde_json::Value::as_i64)
-                    .max(next.get("last_switched_at").and_then(serde_json::Value::as_i64));
+                let timestamp = previous.get("last_switched_at").and_then(serde_json::Value::as_i64).map(super::epoch_time::epoch_seconds)
+                    .max(next.get("last_switched_at").and_then(serde_json::Value::as_i64).map(super::epoch_time::epoch_seconds));
                 if let Some(timestamp) = timestamp {
                     next["last_switched_at"] = timestamp.into();
                 }
@@ -128,6 +134,46 @@ pub(crate) fn write_account_preserving_switch_time<T: Serialize>(
         }
         serialize_account_file(kind, &next)
     })
+}
+
+/// Writes a detail file under `root`, preserving the switch time already stored
+/// for the same account. The vault key is taken from `root` so a store that owns
+/// its data directory never borrows the desktop profile's key.
+pub(super) fn write_at<T: Serialize>(
+    root: &Path,
+    path: &Path,
+    kind: &str,
+    account: &T,
+    _desktop_fields: &[(&str, &[&str])],
+) -> Result<(), String> {
+    let _account_lock = lock_account_file_for_write(path)?;
+    let mut next = serde_json::to_value(account).map_err(|error| error.to_string())?;
+    let previous = match fs::read_to_string(path) {
+        Ok(_) => Some(read_account_file_readonly::<serde_json::Value>(
+            path,
+            &local_vault_key_path(root),
+        )?),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => return Err(format!("读取待更新账号详情失败: {error}")),
+    };
+    if let Some(previous) = &previous {
+        if previous["id"] != next["id"] {
+            return Err("账号 ID 与原详情不一致".into());
+        }
+        if let Some(timestamp) = previous["last_switched_at"]
+            .as_i64()
+            .map(super::epoch_time::epoch_seconds)
+            .max(next["last_switched_at"].as_i64().map(super::epoch_time::epoch_seconds))
+        {
+            next["last_switched_at"] = timestamp.into();
+        }
+    }
+    let plaintext = serde_json::to_vec(&next).map_err(|error| error.to_string())?;
+    let key = read_or_create_key_at(&local_vault_key_path(root))?;
+    let cipher = Aes256Gcm::new_from_slice(&key)
+        .map_err(|error| format!("初始化账号详情加密失败: {error}"))?;
+    let sealed = serialize_with_cipher(kind, &plaintext, cipher)?;
+    crate::modules::atomic_write::write_secret_string_atomic(path, &sealed)
 }
 
 /// Decode an immutable encrypted snapshot without restoring backups, rotating

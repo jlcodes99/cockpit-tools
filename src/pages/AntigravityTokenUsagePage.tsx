@@ -58,6 +58,7 @@ import type {
   TimeGranularity,
 } from '../types/antigravityTokenUsage';
 import type { Page } from '../types/navigation';
+import { buildAntigravityConversationContext } from '../utils/antigravityConversationContext';
 import {
   formatSessionUsageCount,
   formatSessionUsageTokensShort,
@@ -67,15 +68,16 @@ function TokenAmount({
   value,
   lang,
   compactDecimals = 1,
+  title,
 }: {
   value: number;
   lang: string;
   compactDecimals?: 1 | 2;
+  title?: string;
 }) {
-  const exact = formatSessionUsageCount(value);
   const compact = formatSessionUsageTokensShort(value, lang, compactDecimals);
   return (
-    <strong className="ag-token-amount" title={exact}>
+    <strong className="ag-token-amount" title={title ?? formatSessionUsageCount(value)}>
       {compact}
     </strong>
   );
@@ -164,6 +166,19 @@ export function AntigravityTokenUsagePage({
   const [convDetail, setConvDetail] = useState<ConversationDetail | null>(null);
   const [convDetailLoading, setConvDetailLoading] = useState<boolean>(false);
   const [convDetailError, setConvDetailError] = useState<string>('');
+  const contextAnalysis = useMemo(
+    () => convDetail && buildAntigravityConversationContext(
+      convDetail.turns,
+      convDetail.audit?.compactionSteps,
+      convDetail.audit?.compactionCount,
+    ),
+    [convDetail],
+  );
+  const largestContextGrowth = contextAnalysis?.largestGrowth;
+  const signedTokens = useMemo(
+    () => new Intl.NumberFormat(lang, { signDisplay: 'exceptZero' }),
+    [lang],
+  );
   const [selectedHeatmapDate, setSelectedHeatmapDate] = useState<string | null>(
     null,
   );
@@ -1757,7 +1772,7 @@ export function AntigravityTokenUsagePage({
                     <div className="ag-token-usage__error" role="alert">
                       {convDetailError}
                     </div>
-                  ) : convDetail ? (
+                  ) : convDetail && contextAnalysis ? (
                     <>
                       <div className="ag-conv-modal__kpis">
                         <div className="ag-conv-modal__kpi">
@@ -2126,6 +2141,34 @@ export function AntigravityTokenUsagePage({
                           )}{' '}
                           ({convDetail.turns.length})
                         </h4>
+                        <div className="ag-conv-context-summary">
+                          {largestContextGrowth && (
+                            <div className="ag-conv-context-growth">
+                              <strong>
+                                {t('antigravityTokenUsage.context.largestGrowth', {
+                                  step: largestContextGrowth.stepIndex,
+                                  total: signedTokens.format(largestContextGrowth.change.total),
+                                })}
+                              </strong>
+                              <span>
+                                {t('antigravityTokenUsage.context.growthParts', {
+                                  input: signedTokens.format(largestContextGrowth.change.input),
+                                  read: signedTokens.format(largestContextGrowth.change.cacheRead),
+                                  write: signedTokens.format(largestContextGrowth.change.cacheWrite),
+                                })}
+                              </span>
+                            </div>
+                          )}
+                          {convDetail.turns.length > 0 && (
+                            <p>{t('antigravityTokenUsage.context.coverage', contextAnalysis.coverage)}</p>
+                          )}
+                          <p>{t('antigravityTokenUsage.context.method')}</p>
+                          {contextAnalysis.unplacedCompactions > 0 && (
+                            <p>{t('antigravityTokenUsage.context.unplacedCompactions', {
+                              count: contextAnalysis.unplacedCompactions,
+                            })}</p>
+                          )}
+                        </div>
                         <div className="ag-token-table-wrap">
                           <table className="ag-token-table">
                             <thead>
@@ -2143,10 +2186,11 @@ export function AntigravityTokenUsagePage({
                                     'Model',
                                   )}
                                 </th>
-                                <th className="is-num">Input</th>
-                                <th className="is-num">Thinking</th>
-                                <th className="is-num">Output</th>
-                                <th className="is-num">Cache</th>
+                                <th className="is-num">{t('antigravityTokenUsage.context.requestContext')}</th>
+                                <th className="is-num">{t('antigravityTokenUsage.summary.input')}</th>
+                                <th className="is-num">{t('antigravityTokenUsage.summary.thinking')}</th>
+                                <th className="is-num">{t('antigravityTokenUsage.summary.output')}</th>
+                                <th className="is-num">{t('antigravityTokenUsage.summary.cache')}</th>
                                 <th className="is-num">
                                   {t(
                                     'antigravityTokenUsage.tables.total',
@@ -2156,71 +2200,112 @@ export function AntigravityTokenUsagePage({
                               </tr>
                             </thead>
                             <tbody>
-                              {convDetail.turns.map((turn, idx) => (
-                                <tr key={`${turn.stepIndex}-${idx}`}>
-                                  <td>#{turn.stepIndex}</td>
-                                  <td>
-                                    {formatDateTimeShort(turn.timestamp, lang)}
-                                  </td>
-                                  <td>
-                                    {turn.modelDisplayName}
-                                    {!turn.isExact ? ' (~)' : ''}
-                                  </td>
-                                  <td className="is-num">
-                                    <TokenAmount
-                                      value={
-                                        turn.isExact
-                                          ? turn.exact.inputTokens
-                                          : turn.estimated.inputTokens
-                                      }
-                                      lang={lang}
-                                    />
-                                  </td>
-                                  <td className="is-num">
-                                    {turn.isExact ? (
-                                      <TokenAmount
-                                        value={turn.exact.thinkingTokens}
-                                        lang={lang}
-                                      />
-                                    ) : (
-                                      '—'
-                                    )}
-                                  </td>
-                                  <td className="is-num">
-                                    <TokenAmount
-                                      value={
-                                        turn.isExact
-                                          ? turn.exact.outputTokens
-                                          : turn.estimated.outputTokens
-                                      }
-                                      lang={lang}
-                                    />
-                                  </td>
-                                  <td className="is-num">
-                                    {turn.isExact ? (
+                              {contextAnalysis.entries.map((entry, idx) => {
+                                if (entry.kind === 'compaction') {
+                                  return (
+                                    <tr className="ag-conv-context-compaction" key={`compaction-${entry.stepIndex}`}>
+                                      <td>#{entry.stepIndex}</td>
+                                      <td colSpan={8}>{t('antigravityTokenUsage.context.compactionStep')}</td>
+                                    </tr>
+                                  );
+                                }
+                                const { turn, context, change } = entry;
+                                return (
+                                  <tr
+                                    key={`turn-${turn.stepIndex}-${idx}`}
+                                    className={turn.stepIndex === largestContextGrowth?.stepIndex ? 'ag-conv-context-peak' : undefined}
+                                  >
+                                    <td>#{turn.stepIndex}</td>
+                                    <td>
+                                      {formatDateTimeShort(turn.timestamp, lang)}
+                                    </td>
+                                    <td className="ag-conv-context-model" title={turn.modelDisplayName}>
+                                      {turn.modelDisplayName}
+                                      {!turn.isExact ? ' (~)' : ''}
+                                    </td>
+                                    <td className="is-num">
+                                      {context.kind === 'reported' ? (
+                                        <>
+                                          <TokenAmount
+                                            value={context.amount.total}
+                                            lang={lang}
+                                            title={`${formatSessionUsageCount(context.amount.total)} · ${t('antigravityTokenUsage.context.growthParts', {
+                                              input: formatSessionUsageCount(context.amount.input),
+                                              read: formatSessionUsageCount(context.amount.cacheRead),
+                                              write: formatSessionUsageCount(context.amount.cacheWrite),
+                                            })}`}
+                                          />
+                                          {change && change.total !== 0 && (
+                                            <span className="ag-conv-context-change">
+                                              {signedTokens.format(change.total)}
+                                            </span>
+                                          )}
+                                        </>
+                                      ) : context.kind === 'estimated' ? (
+                                        <>≈ <TokenAmount value={context.total} lang={lang} /></>
+                                      ) : (
+                                        <span aria-label={t('common.noData')}>—</span>
+                                      )}
+                                    </td>
+                                    <td className="is-num">
                                       <TokenAmount
                                         value={
-                                          turn.exact.cacheReadTokens +
-                                          turn.exact.cacheWriteTokens
+                                          turn.isExact
+                                            ? turn.exact.inputTokens
+                                            : turn.estimated.inputTokens
                                         }
                                         lang={lang}
                                       />
-                                    ) : (
-                                      '—'
-                                    )}
-                                  </td>
-                                  <td className="is-num">
-                                    <TokenAmount
-                                      value={
-                                        turn.isExact
-                                          ? turn.exact.totalTokens
-                                          : turn.estimated.totalTokens
-                                      }
-                                      lang={lang}
-                                    />
-                                  </td>
-                                </tr>
-                              ))}
+                                    </td>
+                                    <td className="is-num">
+                                      {turn.isExact ? (
+                                        <TokenAmount
+                                          value={turn.exact.thinkingTokens}
+                                          lang={lang}
+                                        />
+                                      ) : (
+                                        '—'
+                                      )}
+                                    </td>
+                                    <td className="is-num">
+                                      <TokenAmount
+                                        value={
+                                          turn.isExact
+                                            ? turn.exact.outputTokens
+                                            : turn.estimated.outputTokens
+                                        }
+                                        lang={lang}
+                                      />
+                                    </td>
+                                    <td className="is-num">
+                                      {turn.isExact ? (
+                                        <TokenAmount
+                                          value={
+                                            turn.exact.cacheReadTokens +
+                                            turn.exact.cacheWriteTokens
+                                          }
+                                          lang={lang}
+                                        />
+                                      ) : (
+                                        '—'
+                                      )}
+                                    </td>
+                                    <td className="is-num">
+                                      <TokenAmount
+                                        value={
+                                          turn.isExact
+                                            ? turn.exact.totalTokens
+                                            : turn.estimated.totalTokens
+                                        }
+                                        lang={lang}
+                                      />
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                              {contextAnalysis.entries.length === 0 && (
+                                <tr><td colSpan={9}>{t('antigravityTokenUsage.empty.noRows')}</td></tr>
+                              )}
                             </tbody>
                           </table>
                         </div>

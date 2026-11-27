@@ -8,6 +8,8 @@ export const CLI_PATH_LABELS = {
   codebuddy_cli: 'CodeBuddy CLI',
   codex_cli: 'Codex CLI',
   grok_cli: 'Grok CLI',
+  qoder_cn_cli: 'Qoder CN CLI',
+  qoder_cli: 'Qoder CLI',
 } as const;
 
 export type CliPathApp = keyof typeof CLI_PATH_LABELS;

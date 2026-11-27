@@ -239,6 +239,25 @@ pub(super) async fn start_qoder_instance(
     .map_err(|error| format!("QODER_START_WORKER_FAILED: {}", error))?
 }
 
+pub(super) async fn switch_qoder_ide_only(account_id: String) -> Result<(), String> {
+    let operation = QODER_LIFECYCLE.try_lock().map_err(|_| "QODER_INSTANCE_BUSY")?;
+    modules::qoder_oauth::prepare_account_for_switch(&account_id).await?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let _operation = operation;
+        let target = QoderStartTarget::load(DEFAULT_INSTANCE_ID, Some(account_id))?;
+        let root = Path::new(&target.user_data_dir);
+        if !is_profile_initialized(&target.user_data_dir) || !modules::vscode_inject::qoder_storage_ready(root)? {
+            return Err(format!("QODER_PROFILE_UNINITIALIZED: {}", root.display()));
+        }
+        if resolve_running_pid(target.last_pid, None).is_some() {
+            return Err("QODER_CLIENT_RUNNING: ide".into());
+        }
+        target.write_bound_account()
+    })
+    .await
+    .map_err(|error| format!("QODER_START_WORKER_FAILED: {error}"))?
+}
+
 struct QoderStartTarget {
     profile: Option<crate::models::InstanceProfile>,
     user_data_dir: String,
@@ -246,6 +265,19 @@ struct QoderStartTarget {
     bind_account_id: Option<String>,
     last_pid: Option<u32>,
     change_default_binding: bool,
+}
+
+pub(crate) fn initialize_qoder_ide(instance_id: Option<&str>) -> Result<(), String> {
+    let _operation = QODER_LIFECYCLE.try_lock().map_err(|_| "QODER_INSTANCE_BUSY")?;
+    let target = QoderStartTarget::load(instance_id.unwrap_or(DEFAULT_INSTANCE_ID), None)?;
+    let match_dir = target.profile.as_ref().map(|_| target.user_data_dir.as_str());
+    if let Some(pid) = resolve_running_pid(target.last_pid, match_dir) {
+        return modules::process::focus_process_pid(pid)
+            .map(|_| ())
+            .map_err(|error| error.to_string());
+    }
+    target.launch(&modules::process::parse_extra_args(&target.extra_args))?;
+    Ok(())
 }
 
 impl QoderStartTarget {
@@ -309,38 +341,23 @@ impl QoderStartTarget {
         let root = Path::new(&self.user_data_dir);
         let match_dir = self.profile.as_ref().map(|_| self.user_data_dir.as_str());
 
-        if self.bind_account_id.is_some() && !modules::vscode_inject::qoder_storage_ready(root)? {
-            if resolve_running_pid(self.last_pid, match_dir).is_none() {
-                self.launch(&args)?;
-            }
-            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(12);
-            while !is_profile_initialized(&self.user_data_dir)
-                || !modules::vscode_inject::qoder_storage_ready(root)?
-            {
-                if std::time::Instant::now() >= deadline {
-                    return Err(format!("QODER_PROFILE_UNINITIALIZED: {}", root.display()));
-                }
-                std::thread::sleep(std::time::Duration::from_millis(250));
-            }
-        }
+        let _initialization = if self.bind_account_id.is_some() {
+            let id = self.profile.as_ref().map_or("ide", |profile| profile.id.as_str());
+            modules::client_initialization::prepare(
+                "qoder", id,
+                || Ok(modules::client_initialization::state_db_ready(root)?
+                    && modules::vscode_inject::client_secret_storage_ready("qoder", root)?),
+                || {
+                    if resolve_running_pid(self.last_pid, match_dir).is_none() {
+                        self.launch(&args)?;
+                    }
+                    Ok(())
+                },
+            )?
+        } else { None };
 
         modules::process::close_qoder_instances(std::slice::from_ref(&self.user_data_dir), 20)?;
-        if let Some(account_id) = self.bind_account_id.as_deref() {
-            modules::qoder_account::inject_to_qoder_for_user_data_dir(
-                &self.user_data_dir,
-                account_id,
-            )?;
-            if self.profile.is_none() {
-                if self.change_default_binding {
-                    modules::qoder_instance::update_default_settings(
-                        Some(Some(account_id.to_string())),
-                        None,
-                        Some(false),
-                    )?;
-                }
-                modules::provider_current_state::set_current_account_id("qoder", Some(account_id))?;
-            }
-        }
+        self.write_bound_account()?;
 
         let running_pid = self
             .launch(&args)
@@ -390,6 +407,23 @@ impl QoderStartTarget {
             is_default: true,
             follow_local_account: false,
         })
+    }
+
+    fn write_bound_account(&self) -> Result<(), String> {
+        if let Some(account_id) = self.bind_account_id.as_deref() {
+            modules::qoder_account::inject_to_qoder_for_user_data_dir(&self.user_data_dir, account_id)?;
+            if self.profile.is_none() {
+                if self.change_default_binding {
+                    modules::qoder_instance::update_default_settings(
+                        Some(Some(account_id.to_string())),
+                        None,
+                        Some(false),
+                    )?;
+                }
+                modules::provider_current_state::set_current_account_id("qoder", Some(account_id))?;
+            }
+        }
+        Ok(())
     }
 }
 

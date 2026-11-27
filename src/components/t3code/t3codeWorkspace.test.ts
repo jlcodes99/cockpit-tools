@@ -43,6 +43,7 @@ function loadOverview(readOrder = () => null as string | null) {
   return loadHookModule(new URL('./T3codeOverviewSection.tsx', import.meta.url), {
     'react-i18next': { useTranslation: () => ({ t: mockT }) },
     '../QuickSettingsPopover': { QuickSettingsPopover: empty },
+    '../SingleSelectDropdown': { SingleSelectDropdown: empty },
     './T3codeCommonSettings': { T3codeCommonSettings: empty },
     '../../hooks/useDurableUiSetting': { useDurableUiSetting: readOrder },
     '../../utils/codexProviderPoolQuota': providerQuota,
@@ -74,7 +75,7 @@ function loadAccountPicker() {
   return loadHookModule(new URL('./T3codeModals.tsx', import.meta.url), {
     'react-dom': { createPortal: (view: ReactNode) => view },
     'react-i18next': { useTranslation: () => ({ t: mockT }) },
-    '../ModalErrorMessage': { ModalErrorMessage: () => null, useModalErrorState: () => ({}) },
+    '../ModalErrorMessage': { ModalErrorMessage: () => null, useModalErrorState: () => ({ clear() {} }) },
     '../PlatformLaunchPathField': { PlatformLaunchPathField: () => null },
     './T3codeRuntimeSetup': { T3codeRuntimeSetup: () => null },
     '../../hooks/useEscClose': { useEscCloseTopmost: () => {} },
@@ -162,11 +163,13 @@ test('Codex API Service is offered once and shows its cumulative quota in both a
 
 type Control = {
   'aria-label'?: string;
+  'aria-pressed'?: boolean;
   type?: string;
   disabled?: boolean;
   children?: ReactNode;
   onClick?: () => void;
   onChange?: (event: { target: { value: string } }) => void;
+  onSubmit?: (event: { preventDefault: () => void }) => void;
   items?: string[];
   onReorder?: (active: string, target: string) => void;
   message?: string | null;
@@ -331,7 +334,7 @@ test('platform order dialog keeps changes in draft until saved and restores the 
 
   const canceled = openDialog();
   const expected = ['codebuddy', 'antigravity', 'codex', 'claudeAgent', 'workbuddy',
-    'workbuddy_ai', 'codebuddy_cn', 'grok', 'minimaxcode'];
+    'workbuddy_ai', 'codebuddy_cn', 'grok', 'minimaxcode', 'qoder', 'qoder_cn'];
   assert.deepEqual(Array.from(canceled.list().items!), expected);
   canceled.list().onReorder!('minimaxcode', 'codebuddy');
   assert.equal(canceled.list().items?.[0], 'minimaxcode');
@@ -350,11 +353,11 @@ test('platform order dialog keeps changes in draft until saved and restores the 
   failSave = false;
   await editor.button('common.save').onClick!();
   assert.equal(closes, 2);
-  assert.equal(savedOrder, JSON.stringify(['minimaxcode', ...expected.slice(0, -1)]));
+  assert.equal(savedOrder, JSON.stringify(['minimaxcode', ...expected.filter((driver) => driver !== 'minimaxcode')]));
   assert.equal(openDialog().list().items?.[0], 'minimaxcode');
 });
 
-test('account overview registry keeps the nine directly bindable platforms', () => {
+test('account overview registry includes both Qoder account platforms', () => {
   const { T3CODE_PLATFORM_SPECS } = registryMod.exports;
   assert.deepEqual(Array.from(T3CODE_PLATFORM_SPECS, (spec: { driver: string }) => spec.driver), [
     'antigravity',
@@ -366,7 +369,43 @@ test('account overview registry keeps the nine directly bindable platforms', () 
     'codebuddy_cn',
     'grok',
     'minimaxcode',
+    'qoder',
+    'qoder_cn',
   ]);
+});
+
+test('Qoder CN switches only the selected provider to an unbound CN account', () => {
+  const picker = loadAccountPicker();
+  const selected = { id: 'target-cn', email: 'new-cn@example.test', windows: [
+    { id: 'credits', label: 'Credits', remainingAmount: 42 },
+  ] };
+  const instance = { driver: 'qoder_cn', instanceId: 'qoder-cn-work', boundAccountId: 'current-cn' };
+  const calls: unknown[] = [];
+  const view = picker.render(() => picker.exports.T3codeModals({
+    modal: { kind: 'switch', instance },
+    workspace: {
+      providerInstances: [instance],
+      extraAccounts: {
+        qoder: [{ id: 'global', email: 'global@example.test' }],
+        qoder_cn: [{ id: 'current-cn', email: 'current-cn@example.test' }, selected],
+      },
+    },
+    gatewayName: '',
+    maskAccountText: (value: string) => value,
+    renderPlanBadge: () => null,
+    onClose: () => {},
+    onSwitch: async (target: unknown, accountId: string) => calls.push([target, accountId]),
+  }));
+  const html = renderToStaticMarkup(view);
+  assert.match(html, /new-cn@example\.test.*>42</);
+  assert.doesNotMatch(html, /current-cn@example\.test|global@example\.test/);
+  const option = findControl(view, (control) => control['aria-pressed'] === false);
+  assert.ok(option?.onClick);
+  option.onClick();
+  const form = findControl(picker.flush(), (control) => Boolean(control.onSubmit));
+  assert.ok(form?.onSubmit);
+  form.onSubmit({ preventDefault() {} });
+  assert.deepEqual(calls, [[instance, selected.id]]);
 });
 
 test('provider runtime resolution preserves staged state until live runtime catches up', () => {

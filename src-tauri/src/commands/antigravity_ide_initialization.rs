@@ -9,6 +9,7 @@ struct IdeProfile {
     extra_args: String,
     last_pid: Option<u32>,
     bind_account: bool,
+    bind_account_id: Option<String>,
 }
 
 fn load_profile(instance_id: &str) -> Result<IdeProfile, String> {
@@ -19,6 +20,7 @@ fn load_profile(instance_id: &str) -> Result<IdeProfile, String> {
             extra_args: settings.extra_args,
             last_pid: settings.last_pid,
             bind_account: settings.bind_account_id.is_some(),
+            bind_account_id: settings.bind_account_id,
         });
     }
     let profile = instance::load_instance_store()?
@@ -31,6 +33,7 @@ fn load_profile(instance_id: &str) -> Result<IdeProfile, String> {
         extra_args: profile.extra_args,
         last_pid: profile.last_pid,
         bind_account: profile.bind_account_id.is_some(),
+        bind_account_id: profile.bind_account_id,
     })
 }
 
@@ -79,8 +82,17 @@ pub(crate) async fn initialize_antigravity_ide(instance_id: String) -> Result<()
             let _ = process::focus_antigravity_instance(Some(pid), target_dir);
             return Ok(());
         }
+        let egress_proxy_url = profile
+            .bind_account_id
+            .as_deref()
+            .and_then(|id| account::load_account(id).ok())
+            .and_then(|entry| entry.egress_proxy_url);
         let args = process::parse_extra_args(&profile.extra_args);
-        let pid = process::start_antigravity_with_args(target_dir.unwrap_or(""), &args)?;
+        let pid = process::start_antigravity_with_args_proxy(
+            target_dir.unwrap_or(""),
+            &args,
+            egress_proxy_url.as_deref(),
+        )?;
         if default {
             instance::update_default_pid(Some(pid))?;
         } else {

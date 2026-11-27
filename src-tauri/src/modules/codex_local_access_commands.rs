@@ -7,6 +7,7 @@ fn new_local_access_collection() -> Result<CodexLocalAccessCollection, String> {
         port: allocate_initial_local_port(CODEX_LOCAL_ACCESS_LOCALHOST_BIND_HOST)?,
         api_key: generate_local_api_key(),
         api_keys: Vec::new(),
+        workbuddy_delegate_revoked_key_ids: Vec::new(),
         account_pools: Vec::new(),
         account_pool_revision: 0,
         access_scope: CodexLocalAccessScope::Localhost,
@@ -36,6 +37,7 @@ fn new_local_access_collection() -> Result<CodexLocalAccessCollection, String> {
         custom_routing_rules: Vec::new(),
         account_model_rules: Vec::new(),
         account_quota_floors: HashMap::new(),
+        account_concurrency_limits: HashMap::new(),
         model_aliases: Vec::new(),
         suppress_oauth_model_alias: false,
         model_pricing_version: DEFAULT_MODEL_PRICING_VERSION,
@@ -531,6 +533,36 @@ pub async fn update_local_access_account_quota_floor(
         }
         if let Some(account) = account {
             sync_runtime_quota_cooldowns(&mut runtime, &[account], now_ms());
+        }
+    }
+    emit_local_access_state_updated();
+    snapshot_state_without_gateway_reload().await
+}
+
+pub async fn update_local_access_account_concurrency_limit(
+    account_id: String,
+    max_concurrency: Option<u16>,
+) -> Result<CodexLocalAccessState, String> {
+    if max_concurrency.is_some_and(|limit| limit > MAX_ACCOUNT_CONCURRENCY_LIMIT) {
+        return Err("CODEX_LOCAL_ACCESS_INVALID_CONCURRENCY_LIMIT".into());
+    }
+    ensure_runtime_loaded_without_start().await?;
+    let _update = image_configuration_update_lock().lock().await;
+    {
+        let mut runtime = gateway_runtime().lock().await;
+        let collection = runtime.collection.as_ref().ok_or("本地接入集合尚未创建")?;
+        if !collection.account_ids.contains(&account_id) {
+            return Err("CODEX_LOCAL_ACCESS_CONCURRENCY_LIMIT_ACCOUNT_UNAVAILABLE".into());
+        }
+        let published = persist_account_concurrency_limit(
+            &local_access_file_path()?,
+            &account_id,
+            max_concurrency,
+        )?;
+        if let Some(collection) = &mut runtime.collection {
+            collection.account_concurrency_limits = published.account_concurrency_limits;
+            prune_account_concurrency_limits(collection);
+            collection.updated_at = collection.updated_at.max(published.updated_at);
         }
     }
     emit_local_access_state_updated();
@@ -1227,6 +1259,17 @@ async fn remove_local_access_accounts_inner(
     Ok((snapshot_state().await?, removed_account_ids))
 }
 
+// Managed profiles pin the original local key in their ownership marker.
+// Generic rotation must not strand the profile before its key can be revoked.
+fn ensure_local_access_api_key_rotation_allowed(
+    api_key: &CodexLocalAccessApiKey,
+) -> Result<(), String> {
+    if api_key.workbuddy_delegate.is_some() {
+        return Err("WORKBUDDY_DELEGATE_KEY_ROTATION_UNSUPPORTED".into());
+    }
+    Ok(())
+}
+
 pub async fn rotate_local_access_api_key() -> Result<CodexLocalAccessState, String> {
     ensure_runtime_loaded_without_start().await?;
 
@@ -1253,6 +1296,7 @@ pub async fn rotate_local_access_api_key() -> Result<CodexLocalAccessState, Stri
             .iter_mut()
             .find(|item| item.id == primary_id)
         {
+            ensure_local_access_api_key_rotation_allowed(api_key)?;
             api_key.key = generate_local_api_key();
             api_key.updated_at = now;
             api_key.last_used_at = None;
@@ -1495,6 +1539,7 @@ pub async fn rotate_local_access_named_api_key(
     else {
         return Err("API Key 不存在".to_string());
     };
+    ensure_local_access_api_key_rotation_allowed(api_key)?;
     api_key.key = generate_local_api_key();
     api_key.updated_at = now_ms();
     api_key.last_used_at = None;

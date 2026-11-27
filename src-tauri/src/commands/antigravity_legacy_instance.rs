@@ -200,22 +200,6 @@ pub async fn antigravity_legacy_update_instance(
         });
     }
 
-    let wants_bind = bind_account_id
-        .as_ref()
-        .and_then(|next| next.as_ref())
-        .is_some();
-    if wants_bind {
-        let store = modules::antigravity_legacy_instance::load_instance_store()?;
-        if let Some(target) = store.instances.iter().find(|item| item.id == instance_id) {
-            if !is_profile_initialized(&target.user_data_dir) {
-                return Err(
-                    "INSTANCE_NOT_INITIALIZED:请先启动一次实例创建数据后，再进行账号绑定"
-                        .to_string(),
-                );
-            }
-        }
-    }
-
     let instance = modules::antigravity_legacy_instance::update_instance(
         modules::antigravity_legacy_instance::UpdateInstanceParams {
             working_dir: None,
@@ -277,8 +261,16 @@ pub async fn antigravity_legacy_start_instance(
                 account_id,
             )?;
         }
+        let egress_proxy_url = default_bind_account_id
+            .as_deref()
+            .and_then(|id| modules::account::load_account(id).ok())
+            .and_then(|account| account.egress_proxy_url);
         let extra_args = modules::process::parse_extra_args(&default_settings.extra_args);
-        let pid = modules::process::start_antigravity_legacy_with_args("", &extra_args)?;
+        let pid = modules::process::start_antigravity_legacy_with_args_proxy(
+            "",
+            &extra_args,
+            egress_proxy_url.as_deref(),
+        )?;
         let _ = modules::antigravity_legacy_instance::update_default_pid(Some(pid))?;
         let running = modules::process::is_pid_running(pid);
         return Ok(InstanceProfileView {
@@ -328,13 +320,24 @@ pub async fn antigravity_legacy_start_instance(
         modules::antigravity_legacy_instance::inject_account_to_profile(&profile_dir, account_id)?;
     }
 
+    let egress_proxy_url = instance
+        .bind_account_id
+        .as_deref()
+        .and_then(|id| modules::account::load_account(id).ok())
+        .and_then(|account| account.egress_proxy_url);
     let extra_args = modules::process::parse_extra_args(&instance.extra_args);
     #[cfg(target_os = "macos")]
-    let pid =
-        modules::process::start_managed_antigravity_on_macos(&instance.user_data_dir, &extra_args)?;
+    let pid = modules::process::start_managed_antigravity_on_macos_for_account(
+        &instance.user_data_dir,
+        &extra_args,
+        egress_proxy_url.as_deref(),
+    )?;
     #[cfg(not(target_os = "macos"))]
-    let pid =
-        modules::process::start_antigravity_legacy_with_args(&instance.user_data_dir, &extra_args)?;
+    let pid = modules::process::start_antigravity_legacy_with_args_proxy(
+        &instance.user_data_dir,
+        &extra_args,
+        egress_proxy_url.as_deref(),
+    )?;
     let updated =
         modules::antigravity_legacy_instance::update_instance_after_start(&instance.id, pid)?;
     let running = modules::process::is_pid_running(pid);

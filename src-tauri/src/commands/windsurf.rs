@@ -366,10 +366,6 @@ pub(crate) async fn switch_windsurf(
         }
         logger::log_warn(&format!("更新 Windsurf 默认实例绑定账号失败: {}", e));
     }
-    crate::modules::provider_current_state::set_current_account_id(
-        "windsurf",
-        Some(account_id.as_str()),
-    )?;
 
     let launch_warning = match crate::commands::windsurf_instance::windsurf_start_instance(
         "__default__".to_string(),
@@ -393,6 +389,11 @@ pub(crate) async fn switch_windsurf(
         }
     };
 
+
+    crate::modules::provider_current_state::set_current_account_id(
+        "windsurf",
+        Some(account_id.as_str()),
+    )?;
 
     if let Some(err) = launch_warning {
         let _ = crate::modules::tray::update_tray_menu(&app);

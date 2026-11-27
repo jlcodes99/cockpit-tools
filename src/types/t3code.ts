@@ -15,7 +15,9 @@ export type T3CodeDriverKind =
   | 'codebuddy'
   | 'codebuddy_cn'
   | 'grok'
-  | 'minimaxcode';
+  | 'minimaxcode'
+  | 'qoder'
+  | 'qoder_cn';
 
 export interface T3CodeAccount extends CodebuddySuiteAccountBase {
   user_id?: string;

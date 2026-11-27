@@ -1,5 +1,17 @@
 {
   "antigravityLaunch": {
+    "desktopLanguage": "デスクトップの表示言語",
+    "desktopLanguageEnglish": "英語",
+    "desktopLayout": "画面レイアウト",
+    "desktopLayoutEngineering": "ソフトウェア開発",
+    "desktopLayoutKnowledge": "知識労働",
+    "desktopPermission": "ローカルの既定権限",
+    "desktopPermissionReview": "レビューを要求",
+    "desktopPermissionDefault": "既定",
+    "desktopPermissionAuto": "自動",
+    "desktopPermissionTurbo": "完全自動",
+    "desktopSettingsHint": "Cockpit Tools から Antigravity を起動すると、レイアウトとローカルの既定権限が適用されます。",
+    "desktopLanguageChinese": "簡体字中国語",
     "initializeTitle": "Antigravity IDE は未初期化です",
     "initializeThenSwitch": "IDE を一度起動すると、アカウントを切り替えられます。",
     "initializeThenBind": "インスタンスを一度起動すると、アカウントを関連付けられます。",
@@ -20,7 +32,6 @@
     "sharedInstanceStarted": "共有ログインを更新し、起動を要求しました。",
     "sharedInstanceLaunchFailed": "共有ログインを更新しましたが、起動できませんでした：{{error}}",
     "sharedCopySource": "選択したインスタンスの設定フォルダーをコピーします。",
-    "quickSwitchSetting": "Antigravity IDE のクイック切り替えに適用します。アカウントのダイアログでは毎回、起動するか選べます。",
     "title": "クライアントを選択",
     "switchOnly": "切り替えのみ",
     "switchAndLaunch": "切り替えて起動",
@@ -33,7 +44,8 @@
     "cliAuth": "agy は自身の認証設定に従います。API キーや Google Cloud の認証情報を設定している場合は、そちらが優先されます。",
     "cliMissing": "agy が見つかりません。公式の Antigravity CLI をインストールして再試行してください。",
     "terminalFailed": "ターミナルを準備できませんでした。{{error}}",
-    "switchedTerminalFailed": "アカウントは切り替わりましたが、ターミナルを開けませんでした。{{error}}"
+    "switchedTerminalFailed": "アカウントは切り替わりましたが、ターミナルを開けませんでした。{{error}}",
+    "quickSwitchSetting": "Antigravity IDE のクイック切り替えに適用します。アカウントのダイアログでは毎回、起動するか選べます。"
   },
   "pelican": {
     "caseKinds": {
@@ -194,6 +206,7 @@
     "providerClear": "選択を解除"
   },
   "common": {
+    "commonSettings": "よく使う設定",
     "automation": {
       "invalidPlatform": "不明なアカウントプラットフォームです。cockpit-cli account platforms で対応する ID を確認してください。",
       "hostUnavailable": "このデータディレクトリを使う Cockpit Tools のデスクトップアプリを起動してから再試行してください。",
@@ -233,6 +246,7 @@
     "dataQueryBusy": "データを処理中です。しばらくしてから再試行してください。",
     "historyRestoring": "履歴を復元中…",
     "apiBudget": {
+      "sharedPool": "共有枠",
       "keyScope": "この Key",
       "upgradeRequired": "統計とリクエスト履歴を表示するには、ゲートウェイ側の Cockpit Tools を更新してください。",
       "gatewayName": "Cockpit ゲートウェイ",
@@ -279,7 +293,10 @@
       "proxyAuth": "プロキシ「{{proxy}}」の認証に失敗しました。プロキシのユーザー名またはパスワードを確認してください。",
       "localProxyUnavailable": "ローカルプロキシ「{{proxy}}」に接続できません。プロキシサービスが起動しているか確認してください。",
       "directConnection": "{{target}} に接続できません。ネットワークを確認して再試行してください。",
-      "directTimeout": "{{target}} への接続がタイムアウトしました。ネットワークを確認して再試行してください。"
+      "directTimeout": "{{target}} への接続がタイムアウトしました。ネットワークを確認して再試行してください。",
+      "recoveryExhaustedLargeRequest": "このリクエストはサイズが大きいため（{{size}}）、アップストリームへの接続で繰り返し失敗またはタイムアウトが発生し、自動再試行を停止しました。会話履歴や画像データが大きすぎてアップロードや応答ヘッダー待機がタイムアウトした可能性があります。会話を圧縮するか新しい会話を開いて再試行してください。このエラーはアカウントのクォータ切れではありません。",
+      "proxyLargeRequestTimeout": "プロキシ「{{proxy}}」経由で {{target}} へ大きなリクエスト（{{size}}）を送信中に応答待ちでタイムアウトしました。会話履歴や画像サイズが大きすぎる可能性があります。会話を圧縮するか新しい会話を開くか、プロキシを確認してください。",
+      "directLargeRequestTimeout": "{{target}} へ大きなリクエスト（{{size}}）を送信中に応答待ちでタイムアウトしました。会話履歴や画像サイズが大きすぎる可能性があります。会話を圧縮するか新しい会話を開いて再試行してください。"
     },
     "codexUsage": {
       "responseSpeed": "本文の生成速度",
@@ -836,7 +853,8 @@
     "apiRelay": "リレー",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "qoderCn": "Qoder CN"
   },
   "sponsors": {
     "pageTitle": "スポンサー",
@@ -948,6 +966,7 @@
       "syncThreads": "すべてのインスタンスに不足するセッションを追加します。対象インスタンスが停止しており、履歴が一致する場合のみ新しい内容を追記し、既存のバイトは保持します。履歴が分岐している場合や対象が実行中の場合、既存セッションの更新は拒否されます。書き込み前に対象ファイルをバックアップします。続行しますか？"
     },
     "status": {
+      "firstLaunchInitializing": "初回起動を準備しています…",
       "running": "実行中",
       "stopped": "停止",
       "restarting": "再起動中",
@@ -1117,6 +1136,7 @@
       "empty": "キャッシュされたクォータなし"
     },
     "messages": {
+      "firstLaunchTimedOut": "初回設定が完了していません。アプリでログインやアクセス許可を求められた場合は、その操作を完了してから再試行してください。",
       "created": "インスタンスを作成しました",
       "emptyCreated": "空のインスタンスを作成しました。アカウントを紐付ける前に一度起動してください。",
       "existingDirCreated": "選択したディレクトリでインスタンスを作成しました。",
@@ -1555,8 +1575,6 @@
       "claudeShareCodeSessionsOnSwitchDesc": "macOS で Claude Desktop の既定プロファイルを切り替えると、ローカルアカウント間で Code のセッション一覧が共有されます。",
       "claudeAppPath": "Claude Desktop 起動ターゲット",
       "claudeAppPathDesc": "既定プロファイルは Microsoft Store ターゲットを使用できます。複数インスタンスには実際の Claude.exe が必要です。",
-      "antigravityLaunchOnSwitch": "切り替え時に Antigravity IDE を起動",
-      "antigravityLaunchOnSwitchDesc": "オフにすると、切り替え時は Antigravity IDE の既定アカウントデータのみを書き込み、アプリの終了、起動、再起動は行いません。",
       "tokenKeeper": "認証の維持",
       "tokenKeeperDesc": "認証の期限が近い場合だけアカウント Token を小分けに更新し、多数アカウント時のバックグラウンド要求を減らします。",
       "platformAutoRefresh": "{{platform}} クォータ自動更新",
@@ -1643,7 +1661,14 @@
       "t3codeAutoRefresh": "T3 Code クォータ自動更新",
       "t3codeAutoRefreshDesc": "バックグラウンドでのクォータ更新間隔",
       "t3codeAppUiInjection": "T3 Code チャットの使用枠カプセル",
-      "t3codeAppUiInjectionDesc": "Cockpit から T3 Code を起動すると、入力欄の下に選択中のモデル系列と残りの使用枠が表示されます。クリックするとアカウントと利用状況の詳細を確認できます。"
+      "t3codeAppUiInjectionDesc": "Cockpit から T3 Code を起動すると、入力欄の下に選択中のモデル系列と残りの使用枠が表示されます。クリックするとアカウントと利用状況の詳細を確認できます。",
+      "qoderCnAppPath": "Qoder CN 起動パス",
+      "qoderCnAppPathDesc": "空欄の場合は自動検出します。アカウント切り替え時にデスクトップクライアントを終了して再起動します",
+      "qoderCnAppPathPlaceholder": "デフォルトパス",
+      "qoderCnPathReset": "デフォルトに戻す",
+      "antigravityLaunchOnSwitch": "切り替え時に Antigravity IDE を起動",
+      "antigravityLaunchOnSwitchDesc": "オフにすると、切り替え時は Antigravity IDE の既定アカウントデータのみを書き込み、アプリの終了、起動、再起動は行いません。",
+      "qoderCnAutoRefresh": "Qoder CN 自動配額更新"
     },
     "network": {
       "apiTitle": "反重力コックピット API",
@@ -5295,7 +5320,12 @@
         "maxConcurrentImageRequests": "アカウントごとの画像リクエスト",
         "maxAccountConcurrency": "アカウント同時実行数",
         "accountConcurrencyWait": "待機時間（秒）",
-        "optionsSaved": "ルーティング設定を保存しました"
+        "optionsSaved": "ルーティング設定を保存しました",
+        "accountConcurrencyLimit": "同時実行上限",
+        "accountConcurrencyUnlimited": "無制限",
+        "accountConcurrencyHint": "このアカウントの同時実行上限を上書きします（0 は無制限、1〜64 で指定）。空欄にすると全体設定を継承します。",
+        "accountConcurrencyInvalid": "0〜64 の整数を入力してください。",
+        "accountConcurrencySaveFailed": "アカウントの同時実行上限を保存できませんでした。"
       },
       "validation": {
         "numberRange": "{{min}} から {{max}} の数字を入力してください"
@@ -6575,7 +6605,8 @@
         "canceled": "クライアントがリクエストをキャンセルしました。ストリーム開始タイムアウトではありません。",
         "gateway": "HTTP 504 はゲートウェイのタイムアウトです。この記録だけでは原因を特定できません。上流エラーとリクエスト段階を確認してください。",
         "threshold": "このリクエストの適用値：{{seconds}} 秒。",
-        "settings": "タイムアウト設定"
+        "settings": "タイムアウト設定",
+        "largeRequest": "記録されたリクエストサイズ: {{size}}。履歴やインライン画像が非常に大きいと、アップロードまたは初回応答の待機中にタイムアウトしやすくなります。会話を圧縮するか新しい会話を開くことを推奨します。"
       },
       "identity": {
         "title": "セッションとアカウント識別情報",
@@ -7101,6 +7132,14 @@
     "t3code": {
       "title": "T3 Code 設定",
       "appPath": "T3 Code 起動パス"
+    },
+    "validation": {
+      "refreshIntervalInvalid": "更新間隔は 1〜999 の整数で入力するか、-1 で自動更新を無効にしてください。",
+      "quotaAlertThresholdInvalid": "警告しきい値は 0〜100 の整数で入力してください。"
+    },
+    "disableRefreshHint": "-1 で無効化",
+    "qoderCn": {
+      "title": "Qoder CN 設定"
     }
   },
   "quotaAlert": {
@@ -7802,7 +7841,21 @@
       "switchLaunchFailed": "アカウントは書き込まれましたが、Qoder IDE を起動できませんでした。{{detail}}",
       "refreshCount": "{{total}} 件中 {{count}} 件を更新しました。",
       "launchUnconfirmed": "Qoder IDE の起動を確認できませんでした。",
-      "workerFailed": "Qoder のバックグラウンド処理に失敗しました。{{detail}}"
+      "workerFailed": "Qoder のバックグラウンド処理に失敗しました。{{detail}}",
+      "oauthUrlEmpty": "Qoder OAuth 認証 URL が空です。",
+      "qoderCnPathMissing": "Qoder CN デスクトップが見つかりません。設定で起動パスを指定するか、インストールしてから再試行してください。",
+      "platformMismatch": "このアカウントは別リージョンのビルドに属しているため、現在のクライアントには書き込めません。",
+      "cnRelaunchFailed": "アカウントは切り替わりましたが、Qoder CN クライアントを起動できませんでした。{{detail}}",
+      "cnDesktopUnsupported": "このシステムで Qoder CN のアカウントを切り替えるには CLI を使用してください。",
+      "clientInvalid": "クライアント種別が無効です。切り替え先を選び直してください。",
+      "nativeTokenMissing": "このアカウントには書き込み可能なログイン資格情報がありません。再認証するか、再インポートしてください。",
+      "nativeWriteVerifyFailed": "資格情報の書き込み後に検証が失敗したため、元の状態への復元を試みました。クライアントを終了して再試行してください。",
+      "nativeKeyUnreadable": "ローカルの資格情報キーを読み取れません。Cockpit と Qoder が同じシステムアカウントで実行されていることを確認してください。",
+      "nativeImportInvalid": "インポートした資格情報にアカウント情報がないため、どのアカウントか特定できません。",
+      "nativeImportFailed": "ローカル Qoder のログイン情報をインポートできませんでした。先にクライアントでログインしてから再試行してください。",
+      "nativeProcessProbeFailed": "Qoder のプロセス状態を検出できません。しばらくしてから再試行してください。",
+      "regionUnsupported": "このアカウントのリージョンビルドを特定できません。再認証してください。",
+      "clientRunning": "アカウントを切り替える前に {{client}} を終了してください。"
     },
     "title": "Qoderアカウント管理",
     "comingSoon": {
@@ -7844,6 +7897,38 @@
     },
     "empty": {
       "desc": "「アカウントを追加」をクリックすると、認証ログイン、ローカルインポート、または JSON インポートを利用できます。"
+    },
+    "region": {
+      "cn": "Qoder CN · 中国版",
+      "global": "Qoder · 国際版"
+    },
+    "clientTarget": {
+      "importSource": "ローカルの読み込み元",
+      "initializeHint": "選択したクライアントを開いて初期設定を完了し、再試行してください。",
+      "label": "切り替え／ローカルインポート先",
+      "ariaLabel": "Qoder クライアント",
+      "desktop": "Qoder デスクトップ",
+      "desktopCn": "Qoder CN デスクトップ",
+      "cli": "Qoder CLI",
+      "cliCn": "Qoder CN CLI",
+      "ide": "Qoder IDE",
+      "switchSuccess": "アカウントを切り替えました。対象のクライアントを再起動してください。",
+      "windowsOnly": "（Windows のみ）",
+      "desktopSwitchSuccess": "アカウントを切り替え、{{client}}を再起動しました。",
+      "relaunchFailed": "アカウントは切り替えましたが、{{client}}を自動起動できませんでした。手動で起動してください。"
+    },
+    "cn": {
+      "nativeOnly": "Qoder CN アカウントではデスクトップまたは CLI を選択してください。",
+      "ideUnavailable": "Qoder CN アカウントではデスクトップまたは CLI を選択してください。ここでの IDE アダプターは国際版専用です。",
+      "instancesUnsupported": "Qoder CN のデスクトップと CLI は既定クライアントのアカウント切り替えに対応しています。アプリのマルチインスタンスはまだ未対応です。",
+      "flowNoticeDesc": "公式認証、デスクトップ版または CLI からの読み込み、JSON の読み込み、利用枠の確認に対応しています。切り替え時は、選択したクライアントのログインの更新のみ、または更新後の起動を選べます。",
+      "flowNoticePermission": "ローカルの読み込みではデスクトップ版または CLI のログイン情報を読み取ります。切り替え時は選択した Qoder CN クライアントのローカルのログイン情報のみを更新します。",
+      "flowNoticeNetwork": "ネットワーク範囲：公式認証ログインは Qoder CN の公式サービスに接続してコールバックを完了します。クォータ照会は Qoder CN API から使用量を取得します。ローカルキーや資格情報はアップロードされません。",
+      "flowNoticeTitle": "Qoder CN アカウントガイド（クリックで展開/折りたたみ）",
+      "oauthHint": "下のボタンをクリックして、ブラウザで Qoder CN アカウントの OAuth 認証を完了してください。",
+      "importJsonHint": "本ツールでエクスポートした Qoder CN JSON ファイルをインポートします。",
+      "importLocalDesc": "ローカルの Qoder CN クライアントから現在のログイン状態を読み込みます。ユーザー情報、プラン、クレジットの利用状況を含みます。",
+      "importLocalSuccess": "ローカルの Qoder CN からアカウントをインポートしました。"
     }
   },
   "trae": {
@@ -8231,7 +8316,38 @@
       "logHits": "ログ一致 {{count}} 回"
     },
     "exposeToCodex": {
-      "title": "WorkBuddy トークンをコピーせずに Native Rust ゲートウェイ経由で接続します"
+      "title": "WorkBuddy トークンをコピーせずに Native Rust ゲートウェイ経由で接続します",
+      "textOnlyTitle": "従来の Native ACP はテキストのみ対応しています。ファイルの読み書きやコマンドの実行には「Codex ツールブリッジ」を使用してください。",
+      "textOnlyAction": "Codex に接続（テキストのみ）"
+    },
+    "nativeCodex": {
+      "managedKeyRotation": "この Key は WorkBuddy ネイティブツールブリッジによって管理されています。変更するには、この設定を取り消して、新しい設定を作成してください。",
+      "nativeRequired": "先に API サービスページで Native Rust サービスを作成し、有効にしてください。モードは自動で切り替わりません。",
+      "enterpriseUnsupported": "初期バージョンでは企業テナントを厳密に固定できないため、個人用の WorkBuddy ソースのみ対応しています。",
+      "revokedFilesPreserved": "専用 Key は失効済みです。設定ファイルが変更されているか、安全に削除できないため、変更されたファイルとセッションデータはすべて保持されています。ファイルを確認してから復元を再試行できます。",
+      "notOwned": "設定の所有権情報が専用 Key と一致しません。どの Key も変更していません。設定ディレクトリの所有権マーカーを確認してください。",
+      "profileChanged": "この独立設定は変更されています。プログラムが変更内容を上書きすることはありません。",
+      "selectionChanged": "モデルまたは推論強度が利用できなくなりました。一覧を再取得して選択し直してください。",
+      "sourceUnavailable": "この WorkBuddy ソースは利用できません。ログイン状態を確認してください。他のアカウントは試行しません。",
+      "operationFailed": "操作に失敗しました。WorkBuddy CLI がインストールされ、アカウントが有効であることを確認してから、一覧を再取得してください。",
+      "title": "WorkBuddy → Codex ネイティブツールブリッジ",
+      "scope": "ソースを固定した専用ローカル Key と独立した CODEX_HOME を作成します。ツールは Codex 自身が実行します。WorkBuddy トークンは Codex の設定に書き込まれず、既定のログインや API サービスのメイン Key も変更しません。",
+      "account": "WorkBuddy ソース",
+      "noSourceSelected": "利用できるソースがありません。作成済みの設定は引き続き管理できます",
+      "model": "CLI の現在利用可能なモデル",
+      "readCatalog": "最新の一覧を取得してください",
+      "effort": "推論強度",
+      "metadataOnly": "一覧の取得では CLI の初期化のみを行い、モデルへのプロンプトは送信しません。作成前にモデルと推論強度を再検証し、ソースが無効な場合は他のアカウントへ切り替えず、直ちにエラーを表示します。HTTP Responses のみ対応しています。独立設定ではウェブ検索（web_search）が無効になっており、画像、その他のホスト型ツール、compact、WebSocket は利用できません。",
+      "refreshCatalog": "一覧を再取得",
+      "managedProfile": "作成済みの独立設定",
+      "profileSource": "ソース：",
+      "profileSourceMissing": "ソースは削除されています。専用 Key の失効と独立設定の復元は引き続き実行できます。",
+      "profileSourceUnavailable": "ソースは現在利用できません。失効と復元は、ソースのログイン状態に関係なく実行できます。",
+      "launchHelp": "ターミナルでプロジェクトのディレクトリに移動し、次のコマンドを実行してください。この設定は今回の Codex 起動にのみ使用されます。",
+      "retryRestore": "復元を再試行（Key は失効済み）",
+      "restore": "専用 Key を失効させ、この設定を復元",
+      "create": "専用 Key と独立設定を作成",
+      "open": "Codex ツールブリッジ"
     }
   },
   "minimaxCode": {
@@ -8989,7 +9105,6 @@
     "quota": {
       "cliUnavailable": "CLI の使用量を取得できません",
       "weekly": "週間使用量",
-      "sharedPool": "共有枠",
       "monthly": "月間使用量",
       "onDemand": "従量使用量",
       "balance": "残高とクレジット",
@@ -9622,6 +9737,15 @@
     "saved": "保存しました。次のリクエストから適用されます。"
   },
   "antigravityTokenUsage": {
+    "context": {
+      "requestContext": "リクエストのコンテキスト",
+      "coverage": "実測 {{reported}} 件 · 推定 {{estimated}} 件 · データなし {{missing}} 件",
+      "largestGrowth": "最大増加 {{total}}（ステップ #{{step}}）",
+      "growthParts": "入力 {{input}} · キャッシュ読み取り {{read}} · キャッシュ書き込み {{write}}",
+      "method": "リクエストのコンテキストは入力とキャッシュのトークンの合計です。差分は連続する実測リクエスト間で算出します。メッセージ、ツール、添付ファイルごとの内訳は取得できません。",
+      "unplacedCompactions": "ステップ番号のない圧縮 {{count}} 件",
+      "compactionStep": "コンテキストの圧縮"
+    },
     "tab": "セッション使用量",
     "subtitle": "Antigravity ローカルセッションのトークン使用量",
     "title": "Antigravity セッショントークン使用量",
@@ -9776,7 +9900,6 @@
       "codexCatalogPending": "モデル同期を待つ外部キー：{{count}} 件"
     },
     "commonSettings": {
-      "title": "よく使う設定",
       "language": "T3 Code の言語"
     },
     "platformOrder": {
@@ -9996,6 +10119,14 @@
       "searchAccountsPlaceholder": "{{platform}} アカウントを検索...",
       "goAddSourceAccount": "{{platform}} で追加",
       "emptyPoolDesc": "先に {{platform}} ページでアカウントを追加すると、T3 Code へ切り替えられます。"
+    }
+  },
+  "antigravity": {
+    "proxy": {
+      "followHint": "設定のグローバルプロキシを使用します。無効な場合は既定のネットワークを使用します。",
+      "independentHint": "このアカウントのみに適用され、グローバルプロキシより優先されます。",
+      "invalidUrl": "サポートされていないプロキシURLです。http・https・socks5・socks5h のみ対応しています。",
+      "restartHint": "バインド・変更・解除の後、Antigravity（デスクトップまたは新しいCLIセッション）を再起動すると適用されます。プロキシに失敗してもダイレクト接続にはフォールバックしません。"
     }
   }
 }

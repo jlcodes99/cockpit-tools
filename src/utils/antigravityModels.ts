@@ -231,3 +231,41 @@ export const getAntigravityDisplayModelsFromQuota = (quota?: QuotaData): ModelQu
   }
   return sortAntigravityQuotaModels(quota.models);
 };
+
+export const isRetiredArgonSummaryGroup = (groupId: string): boolean => {
+  const normalized = groupId.trim().toLowerCase();
+  return normalized === 'argon' || normalized === 'gemini-argon' || normalized === 'gemini-argon-wtu';
+};
+
+export const isRetiredArgonSummaryWindow = (windowId: string): boolean => {
+  const normalized = windowId.trim().toLowerCase();
+  return (
+    normalized === 'argon:weekly'
+    || normalized === 'argon:5h'
+    || normalized === 'gemini-argon-5h'
+    || /^gemini-argon-.*-(weekly|5h)$/.test(normalized)
+  );
+};
+
+export const resolveSummaryWindowPeriod = (rawId: string, period?: string | null): string => {
+  const explicit = (period || '').trim().toLowerCase();
+  if (explicit) return explicit;
+  const lower = rawId.trim().toLowerCase();
+  if (lower.endsWith('weekly')) return 'weekly';
+  if (lower.endsWith('5h')) return '5h';
+  return '';
+};
+
+export const canonicalSummaryWindowKey = (rawId: string, period: string): string => {
+  const stripped = period && rawId.toLowerCase().endsWith(period)
+    ? rawId.slice(0, rawId.length - period.length).replace(/[:-]+$/, '')
+    : '';
+  const base = stripped || rawId;
+  const mapped =
+    base === '3p'
+      ? 'claude'
+      : base === 'gemini-carbon-wtu' || base === 'gemini-carbon'
+        ? 'carbon'
+        : base;
+  return period ? `${mapped}:${period}` : rawId;
+};

@@ -12,6 +12,15 @@ use super::{app_cdp, app_lifecycle, config, i18n, logger};
 
 const POLL_INTERVAL: Duration = Duration::from_secs(2);
 const CONNECTION_GRACE: Duration = Duration::from_secs(45);
+const LOCALIZATION_SCRIPT: &str = concat!(
+    "(",
+    include_str!("antigravity_desktop_localization.js"),
+    ")(",
+    include_str!("antigravity_desktop_zh_cn.json"),
+    ",",
+    include_str!("antigravity_desktop_zh_cn_templates.json"),
+    ")"
+);
 
 type Task = tauri::async_runtime::JoinHandle<()>;
 
@@ -90,6 +99,9 @@ async fn attach(port: u16) {
     };
     let mut last_connection = Instant::now();
     let mut mounted = false;
+    let mut preferences_pending = true;
+    let preferences_deadline = Instant::now() + CONNECTION_GRACE;
+    let mut preferences_target: Option<app_cdp::CdpTarget> = None;
     let mut tick = tokio::time::interval(POLL_INTERVAL);
     tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     loop {
@@ -110,16 +122,71 @@ async fn attach(port: u16) {
         if targets.is_empty() {
             continue;
         }
-        let settings = script_settings(&config::get_user_config().language);
-        let refresh =
-            format!("window.__cockpitAntigravityComposer?.refresh?.({settings}) ?? false");
+        let user_config = config::get_user_config();
+        if preferences_pending && Instant::now() >= preferences_deadline {
+            logger::log_warn("[Antigravity Preferences] 启动后未能确认客户端偏好设置");
+            preferences_pending = false;
+        }
+        if preferences_pending {
+            let preferences = json!({
+                "layout": user_config.antigravity_desktop_layout,
+                "permission": user_config.antigravity_desktop_permission,
+            });
+            let script = include_str!("antigravity_launch_preferences.js");
+            let expression = format!("({script})({preferences})");
+            let candidates = preferences_target
+                .as_ref()
+                .map(std::slice::from_ref)
+                .unwrap_or(&targets);
+            for target in candidates {
+                match app_cdp::evaluate_target::<String>(target, &expression, false)
+                    .await
+                    .as_deref()
+                {
+                    Some("applying") => {
+                        preferences_target = Some(target.clone());
+                        break;
+                    }
+                    Some("applied") => {
+                        preferences_pending = false;
+                        break;
+                    }
+                    Some(
+                        status @ ("restricted"
+                        | "layout_restricted"
+                        | "permission_restricted"
+                        | "unsupported"
+                        | "failed"),
+                    ) => {
+                        logger::log_warn(&format!(
+                            "[Antigravity Preferences] 客户端偏好设置结果: {status}"
+                        ));
+                        preferences_pending = false;
+                        break;
+                    }
+                    _ => {}
+                }
+            }
+        }
+        let settings = script_settings(&user_config.language);
+        let chinese_enabled = user_config.antigravity_desktop_chinese_enabled;
+        let refresh = format!(
+            "[window.__cockpitAntigravityComposer?.refresh?.({settings}) ?? false, \
+             window.__cockpitAntigravityLocalization?.setEnabled({chinese_enabled}) ?? {}]",
+            !chinese_enabled
+        );
         let install = build_script(&settings);
         let results = futures_util::future::join_all(targets.iter().map(|target| async {
-            if app_cdp::evaluate_target::<bool>(target, &refresh, false).await == Some(true) {
-                true
-            } else {
-                app_cdp::evaluate_target::<bool>(target, &install, false).await == Some(true)
+            let (status_ready, language_ready) =
+                app_cdp::evaluate_target::<(bool, bool)>(target, &refresh, false)
+                    .await
+                    .unwrap_or_default();
+            let status_ready = status_ready
+                || app_cdp::evaluate_target::<bool>(target, &install, false).await == Some(true);
+            if !language_ready && chinese_enabled {
+                app_cdp::evaluate_target::<bool>(target, LOCALIZATION_SCRIPT, false).await;
             }
+            status_ready
         }))
         .await;
         mounted |= results.into_iter().any(|ready| ready);

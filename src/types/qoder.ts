@@ -1,3 +1,11 @@
+/** Outcome of writing one account into a native Qoder client. `relaunched`
+ *  reports whether a client that had to be closed was started again, so no
+ *  message ever claims a relaunch that did not happen. */
+export interface QoderSwitchOutcome {
+  accountId: string;
+  relaunched: boolean;
+}
+
 export interface QoderAccount {
   id: string;
   email: string;

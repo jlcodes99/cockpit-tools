@@ -5,7 +5,7 @@ pub(crate) const WORKBUDDY_ACP_PROVIDER_KIND: &str = "workbuddy_acp";
 pub(crate) const WORKBUDDY_NATIVE_PROVIDER: &str = "workbuddy_acp";
 pub(crate) const WORKBUDDY_ACP_BASE_URL: &str = "workbuddy-acp://native";
 pub(crate) const WORKBUDDY_PROVIDER_MODEL_CATALOG: &[&str] = &["workbuddy-default"];
-pub(crate) const WORKBUDDY_CLIENT_UNSUPPORTED: &str = "WorkBuddy ACP supports stateless text-only requests through the Native API service. Direct Codex client/CLI login and tool calling are not supported; use the API service with a text-only client.";
+pub(crate) const WORKBUDDY_CLIENT_UNSUPPORTED: &str = "Direct WorkBuddy account injection into Codex is not supported. For Codex coding tools, create the dedicated Native DelegateTool profile from the WorkBuddy page. The legacy WorkBuddy ACP route remains stateless text-only.";
 
 pub(crate) fn reject_workbuddy_client_injection(account: &CodexAccount) -> Result<(), String> {
     if is_workbuddy_upstream_provider(account) {

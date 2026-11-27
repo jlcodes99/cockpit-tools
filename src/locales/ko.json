@@ -1,5 +1,17 @@
 {
   "antigravityLaunch": {
+    "desktopLanguage": "데스크톱 표시 언어",
+    "desktopLanguageEnglish": "영어",
+    "desktopLayout": "화면 레이아웃",
+    "desktopLayoutEngineering": "소프트웨어 엔지니어링",
+    "desktopLayoutKnowledge": "지식 업무",
+    "desktopPermission": "기본 로컬 권한",
+    "desktopPermissionReview": "검토 요청",
+    "desktopPermissionDefault": "기본값",
+    "desktopPermissionAuto": "자동",
+    "desktopPermissionTurbo": "완전 자동",
+    "desktopSettingsHint": "Cockpit Tools에서 Antigravity를 실행할 때 레이아웃과 기본 로컬 권한이 적용됩니다.",
+    "desktopLanguageChinese": "중국어 간체",
     "initializeTitle": "Antigravity IDE가 아직 초기화되지 않았습니다",
     "initializeThenSwitch": "IDE를 한 번 열면 계정을 전환할 수 있습니다.",
     "initializeThenBind": "인스턴스를 한 번 실행하면 계정을 연결할 수 있습니다.",
@@ -20,7 +32,6 @@
     "sharedInstanceStarted": "공유 로그인을 업데이트하고 시작을 요청했습니다.",
     "sharedInstanceLaunchFailed": "공유 로그인은 업데이트했지만 시작에 실패했습니다. {{error}}",
     "sharedCopySource": "선택한 인스턴스의 설정 폴더를 복사합니다.",
-    "quickSwitchSetting": "Antigravity IDE 빠른 전환에 적용됩니다. 계정 대화 상자에서는 실행 여부를 매번 선택할 수 있습니다.",
     "title": "클라이언트 선택",
     "switchOnly": "전환만",
     "switchAndLaunch": "전환 후 실행",
@@ -33,7 +44,8 @@
     "cliAuth": "agy는 자체 인증 설정을 따릅니다. API 키나 Google Cloud 사용자 인증 정보가 설정되어 있으면 우선 사용됩니다.",
     "cliMissing": "agy를 찾을 수 없습니다. 공식 Antigravity CLI를 설치한 후 다시 시도하세요.",
     "terminalFailed": "터미널을 준비하지 못했습니다. {{error}}",
-    "switchedTerminalFailed": "계정은 전환되었지만 터미널을 열지 못했습니다. {{error}}"
+    "switchedTerminalFailed": "계정은 전환되었지만 터미널을 열지 못했습니다. {{error}}",
+    "quickSwitchSetting": "Antigravity IDE 빠른 전환에 적용됩니다. 계정 대화 상자에서는 실행 여부를 매번 선택할 수 있습니다."
   },
   "pelican": {
     "caseKinds": {
@@ -194,6 +206,7 @@
     "providerClear": "선택 해제"
   },
   "common": {
+    "commonSettings": "자주 쓰는 설정",
     "automation": {
       "invalidPlatform": "알 수 없는 계정 플랫폼입니다. cockpit-cli account platforms 명령으로 지원되는 ID를 확인하세요.",
       "hostUnavailable": "이 데이터 디렉터리를 사용하는 Cockpit Tools 데스크톱 앱을 시작한 후 다시 시도하세요.",
@@ -233,6 +246,7 @@
     "dataQueryBusy": "데이터를 처리 중입니다. 잠시 후 다시 시도하세요。",
     "historyRestoring": "기록 복원 중…",
     "apiBudget": {
+      "sharedPool": "공유 한도",
       "keyScope": "현재 Key",
       "upgradeRequired": "통계와 요청 기록을 보려면 게이트웨이 컴퓨터의 Cockpit Tools를 업데이트하세요.",
       "gatewayName": "Cockpit 게이트웨이",
@@ -279,7 +293,10 @@
       "proxyAuth": "프록시 ‘{{proxy}}’ 인증에 실패했습니다. 프록시 사용자 이름 또는 비밀번호를 확인하세요.",
       "localProxyUnavailable": "로컬 프록시 ‘{{proxy}}’에 연결할 수 없습니다. 프록시 서비스가 실행 중인지 확인하세요.",
       "directConnection": "{{target}} 연결에 실패했습니다. 네트워크를 확인하고 다시 시도하세요.",
-      "directTimeout": "{{target}} 연결 시간이 초과되었습니다. 네트워크를 확인하고 다시 시도하세요."
+      "directTimeout": "{{target}} 연결 시간이 초과되었습니다. 네트워크를 확인하고 다시 시도하세요.",
+      "recoveryExhaustedLargeRequest": "요청 크기({{size}})가 커서 업스트림 연결이 반복적으로 실패하거나 시간 초과되어 자동 재시도를 중단했습니다. 대화 기록이나 이미지 데이터가 너무 커서 업로드 또는 응답 대기 시간을 초과했을 수 있습니다. 대화를 압축하거나 새 대화를 시작해 다시 시도하세요. 이 오류는 계정 할당량 소진을 의미하지 않습니다.",
+      "proxyLargeRequestTimeout": "프록시 \"{{proxy}}\"를 통해 {{target}}로 큰 요청({{size}})을 보내는 중 응답 전에 시간 초과되었습니다. 대화 기록이나 이미지 용량이 너무 클 수 있으니 대화를 압축하거나 새 대화를 시작하거나 프록시를 확인하세요.",
+      "directLargeRequestTimeout": "{{target}}로 큰 요청({{size}})을 보내는 중 응답 전에 시간 초과되었습니다. 대화 기록이나 이미지 용량이 너무 클 수 있으니 대화를 압축하거나 새 대화를 시작한 뒤 다시 시도하세요."
     },
     "codexUsage": {
       "responseSpeed": "본문 생성 속도",
@@ -836,7 +853,8 @@
     "apiRelay": "중계소",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "qoderCn": "Qoder CN"
   },
   "sponsors": {
     "pageTitle": "스폰서",
@@ -948,6 +966,7 @@
       "syncThreads": "모든 인스턴스에 없는 세션을 추가하며, 대상 인스턴스가 종료되고 기록이 일치할 때만 새 내용을 덧붙입니다. 기존 바이트는 보존됩니다. 기록이 분기되거나 대상이 실행 중이면 기존 세션 업데이트를 거부합니다. 쓰기 전에 대상 파일을 백업합니다. 계속할까요?"
     },
     "status": {
+      "firstLaunchInitializing": "첫 실행 준비 중…",
       "running": "실행 중",
       "stopped": "정지됨",
       "restarting": "재시작 중",
@@ -1117,6 +1136,7 @@
       "empty": "캐시된 쿼터 없음"
     },
     "messages": {
+      "firstLaunchTimedOut": "초기 설정이 아직 완료되지 않았습니다. 앱에서 로그인이나 접근 허용을 요청하면 완료한 후 다시 시도하세요.",
       "created": "인스턴스가 생성되었습니다",
       "emptyCreated": "빈 인스턴스가 생성되었습니다. 계정 바인딩 전에 먼저 한 번 실행하세요.",
       "existingDirCreated": "선택한 디렉터리로 인스턴스를 생성했습니다.",
@@ -1555,8 +1575,6 @@
       "claudeShareCodeSessionsOnSwitchDesc": "macOS에서 기본 Claude Desktop 프로필을 전환할 때 로컬 계정 간에 Code 세션 목록을 공유합니다.",
       "claudeAppPath": "Claude Desktop 시작 대상",
       "claudeAppPathDesc": "기본 프로필은 Microsoft Store 대상을 사용할 수 있지만, 다중 인스턴스에는 실제 Claude.exe가 필요합니다.",
-      "antigravityLaunchOnSwitch": "전환 시 Antigravity IDE 실행",
-      "antigravityLaunchOnSwitchDesc": "끄면 전환 시 Antigravity IDE 기본 계정 데이터만 쓰고 앱을 닫거나 실행하거나 다시 시작하지 않습니다.",
       "tokenKeeper": "인증 유지",
       "tokenKeeperDesc": "인증 만료가 가까운 경우에만 계정 Token을 작은 묶음으로 갱신해 많은 계정에서 백그라운드 요청 부담을 줄입니다.",
       "platformAutoRefresh": "{{platform}} 자동 할당량 새로고침",
@@ -1643,7 +1661,14 @@
       "t3codeAutoRefresh": "T3 Code 할당량 자동 새로 고침",
       "t3codeAutoRefreshDesc": "백그라운드 할당량 갱신 간격",
       "t3codeAppUiInjection": "T3 Code 채팅 할당량 캡슐",
-      "t3codeAppUiInjectionDesc": "Cockpit에서 T3 Code를 시작하면 입력창 하단에 선택한 모델 계열과 남은 할당량이 표시됩니다. 클릭하면 계정 및 사용량 세부 정보를 볼 수 있습니다."
+      "t3codeAppUiInjectionDesc": "Cockpit에서 T3 Code를 시작하면 입력창 하단에 선택한 모델 계열과 남은 할당량이 표시됩니다. 클릭하면 계정 및 사용량 세부 정보를 볼 수 있습니다.",
+      "qoderCnAppPath": "Qoder CN 실행 경로",
+      "qoderCnAppPathDesc": "비워 두면 자동으로 감지합니다. 계정을 전환하면 데스크톱 클라이언트를 닫고 다시 시작합니다",
+      "qoderCnAppPathPlaceholder": "기본 경로",
+      "qoderCnPathReset": "기본값으로 재설정",
+      "antigravityLaunchOnSwitch": "전환 시 Antigravity IDE 실행",
+      "antigravityLaunchOnSwitchDesc": "끄면 전환 시 Antigravity IDE 기본 계정 데이터만 쓰고 앱을 닫거나 실행하거나 다시 시작하지 않습니다.",
+      "qoderCnAutoRefresh": "Qoder CN 자동 할당량 갱신"
     },
     "network": {
       "apiTitle": "반중력 조종석 API",
@@ -5295,7 +5320,12 @@
         "maxConcurrentImageRequests": "계정당 이미지 요청",
         "maxAccountConcurrency": "계정 동시 실행 수",
         "accountConcurrencyWait": "대기 시간(초)",
-        "optionsSaved": "라우팅 옵션 저장됨"
+        "optionsSaved": "라우팅 옵션 저장됨",
+        "accountConcurrencyLimit": "동시 실행 한도",
+        "accountConcurrencyUnlimited": "제한 없음",
+        "accountConcurrencyHint": "이 계정의 동시 실행 한도를 재정의합니다(0은 제한 없음, 최대 64). 비워 두면 전역 설정을 따릅니다.",
+        "accountConcurrencyInvalid": "0에서 64 사이의 정수를 입력하세요.",
+        "accountConcurrencySaveFailed": "계정 동시 실행 한도를 저장하지 못했습니다."
       },
       "validation": {
         "numberRange": "{{min}}에서 {{max}} 사이 숫자를 입력하세요"
@@ -6575,7 +6605,8 @@
         "canceled": "클라이언트가 요청을 취소했습니다. 스트림 시작 시간 초과가 아닙니다.",
         "gateway": "HTTP 504는 게이트웨이 시간 초과를 뜻합니다. 이 기록만으로 원인을 확인할 수 없으므로 상위 서버 오류와 요청 단계를 확인하세요.",
         "threshold": "이 요청에 적용된 제한: {{seconds}}초.",
-        "settings": "시간 제한 설정"
+        "settings": "시간 제한 설정",
+        "largeRequest": "기록된 요청 본문 크기: {{size}}. 대화 기록이나 인라인 이미지가 너무 크면 업로드 또는 첫 응답 대기 중 시간 초과될 수 있으므로 대화를 압축하거나 새 대화를 시작하는 것이 좋습니다."
       },
       "identity": {
         "title": "세션 및 계정 식별 정보",
@@ -7101,6 +7132,14 @@
     "t3code": {
       "title": "T3 Code 설정",
       "appPath": "T3 Code 실행 경로"
+    },
+    "validation": {
+      "refreshIntervalInvalid": "새로고침 간격은 1~999 사이의 정수를 입력하거나 -1을 입력해 자동 새로고침을 끄세요.",
+      "quotaAlertThresholdInvalid": "경고 임계값은 0~100 사이의 정수를 입력하세요."
+    },
+    "disableRefreshHint": "-1은 비활성화를 의미합니다.",
+    "qoderCn": {
+      "title": "Qoder CN 설정"
     }
   },
   "quotaAlert": {
@@ -7802,7 +7841,21 @@
       "switchLaunchFailed": "계정을 기록했지만 Qoder IDE를 시작하지 못했습니다. {{detail}}",
       "refreshCount": "계정 {{total}}개 중 {{count}}개를 갱신했습니다.",
       "launchUnconfirmed": "Qoder IDE 실행을 확인하지 못했습니다.",
-      "workerFailed": "Qoder 백그라운드 작업에 실패했습니다. {{detail}}"
+      "workerFailed": "Qoder 백그라운드 작업에 실패했습니다. {{detail}}",
+      "oauthUrlEmpty": "Qoder OAuth 인증 URL이 비어 있습니다.",
+      "qoderCnPathMissing": "Qoder CN 데스크톱을 찾을 수 없습니다. 설정에서 실행 경로를 지정하거나 설치한 후 다시 시도하세요.",
+      "platformMismatch": "이 계정은 다른 지역 빌드에 속해 있어 현재 클라이언트에 기록할 수 없습니다.",
+      "cnRelaunchFailed": "계정은 전환되었지만 Qoder CN 클라이언트를 시작하지 못했습니다. {{detail}}",
+      "cnDesktopUnsupported": "이 시스템에서 Qoder CN 계정을 전환하려면 CLI를 사용하세요.",
+      "clientInvalid": "클라이언트 유형이 올바르지 않습니다. 전환 대상을 다시 선택하세요.",
+      "nativeTokenMissing": "이 계정에는 기록할 수 있는 로그인 자격 증명이 없습니다. 다시 인증하거나 다시 가져오세요.",
+      "nativeWriteVerifyFailed": "자격 증명을 기록한 뒤 검증에 실패하여 원래 상태로 복원을 시도했습니다. 클라이언트를 종료한 후 다시 시도하세요.",
+      "nativeKeyUnreadable": "로컬 자격 증명 키를 읽을 수 없습니다. Cockpit과 Qoder가 동일한 시스템 계정으로 실행되는지 확인하세요.",
+      "nativeImportInvalid": "가져온 자격 증명에 계정 정보가 없어 어떤 계정인지 식별할 수 없습니다.",
+      "nativeImportFailed": "로컬 Qoder 로그인 정보를 가져오지 못했습니다. 먼저 클라이언트에서 로그인한 후 다시 시도하세요.",
+      "nativeProcessProbeFailed": "Qoder 프로세스 상태를 감지할 수 없습니다. 나중에 다시 시도하세요.",
+      "regionUnsupported": "이 계정이 속한 지역 빌드를 식별할 수 없습니다. 다시 인증하세요.",
+      "clientRunning": "계정을 전환하기 전에 {{client}}을(를) 종료하세요."
     },
     "title": "Qoder 계정 관리",
     "comingSoon": {
@@ -7844,6 +7897,38 @@
     },
     "empty": {
       "desc": "\"계정 추가\"를 클릭하여 인증 로그인, 로컬 가져오기 또는 JSON 가져오기를 사용하세요."
+    },
+    "region": {
+      "cn": "Qoder CN · 중국판",
+      "global": "Qoder · 글로벌판"
+    },
+    "clientTarget": {
+      "importSource": "로컬 가져오기 대상",
+      "initializeHint": "선택한 클라이언트를 열고 초기 설정을 마친 다음 다시 시도하세요.",
+      "label": "전환／로컬 가져오기 대상",
+      "ariaLabel": "Qoder 클라이언트",
+      "desktop": "Qoder 데스크톱",
+      "desktopCn": "Qoder CN 데스크톱",
+      "cli": "Qoder CLI",
+      "cliCn": "Qoder CN CLI",
+      "ide": "Qoder IDE",
+      "switchSuccess": "계정이 전환되었습니다. 대상 클라이언트를 다시 여세요.",
+      "windowsOnly": " (Windows 전용)",
+      "desktopSwitchSuccess": "계정이 전환되었습니다. {{client}}이 다시 시작되었습니다.",
+      "relaunchFailed": "계정은 전환되었지만 {{client}}을 자동으로 시작하지 못했습니다. 직접 실행하세요."
+    },
+    "cn": {
+      "nativeOnly": "Qoder CN 계정은 데스크톱 또는 CLI를 선택하세요.",
+      "ideUnavailable": "Qoder CN 계정은 데스크톱 또는 CLI를 선택하세요. 여기의 IDE 어댑터는 국제판 전용입니다.",
+      "instancesUnsupported": "Qoder CN 데스크톱과 CLI는 기본 클라이언트 계정 전환을 지원합니다. 앱 다중 실행은 아직 지원되지 않습니다.",
+      "flowNoticeDesc": "공식 로그인, 데스크톱 또는 CLI에서 가져오기, JSON 가져오기 및 할당량 조회를 지원합니다. 계정을 전환할 때 선택한 클라이언트의 로그인만 갱신하거나 실행까지 할 수 있습니다.",
+      "flowNoticePermission": "로컬 가져오기는 데스크톱 또는 CLI 로그인 상태를 읽습니다. 전환 시 선택한 Qoder CN 클라이언트의 로컬 로그인만 갱신합니다.",
+      "flowNoticeNetwork": "네트워크 범위: 공식 인증 로그인은 Qoder CN 공식 서비스에 연결하여 콜백을 완료합니다. 할당량 조회는 Qoder CN API에서 사용량을 가져옵니다. 로컬 키와 자격 증명은 업로드되지 않습니다.",
+      "flowNoticeTitle": "Qoder CN 계정 안내 (클릭하여 펼치기/접기)",
+      "oauthHint": "아래 버튼을 클릭하여 브라우저에서 Qoder CN 계정 OAuth 인증을 완료하세요.",
+      "importJsonHint": "이 도구에서 내보낸 Qoder CN JSON 파일을 가져옵니다.",
+      "importLocalDesc": "로컬 Qoder CN 클라이언트에서 현재 로그인 상태를 읽어옵니다. 사용자 정보, 플랜, 크레딧 사용량이 포함됩니다.",
+      "importLocalSuccess": "로컬 Qoder CN에서 계정을 가져왔습니다."
     }
   },
   "trae": {
@@ -8231,7 +8316,38 @@
       "logHits": "로그 {{count}}회 감지"
     },
     "exposeToCodex": {
-      "title": "WorkBuddy 토큰을 복사하지 않고 Native Rust 게이트웨이를 통해 연결합니다"
+      "title": "WorkBuddy 토큰을 복사하지 않고 Native Rust 게이트웨이를 통해 연결합니다",
+      "textOnlyTitle": "기존 Native ACP는 일반 텍스트만 지원합니다. 파일을 읽고 쓰거나 명령을 실행하려면 ‘Codex 도구 브리지’를 사용하세요.",
+      "textOnlyAction": "Codex 연결(일반 텍스트)"
+    },
+    "nativeCodex": {
+      "managedKeyRotation": "이 Key는 WorkBuddy 네이티브 도구 브리지에서 관리합니다. 변경하려면 이 설정을 폐기한 후 새로 만드세요.",
+      "nativeRequired": "먼저 API 서비스 페이지에서 Native Rust 서비스를 만들고 활성화하세요. 모드는 자동으로 전환되지 않습니다.",
+      "enterpriseUnsupported": "첫 버전에서는 기업 테넌트를 확실하게 고정할 수 없어 개인 WorkBuddy 계정만 지원합니다.",
+      "revokedFilesPreserved": "전용 Key가 폐기되었습니다. 설정 파일이 수정되었거나 안전하게 정리할 수 없어 수정된 파일과 세션 데이터를 모두 보존했습니다. 파일을 확인한 후 복원을 다시 시도할 수 있습니다.",
+      "notOwned": "설정의 소유권 증명이 전용 Key와 일치하지 않아 어떤 Key도 변경하지 않았습니다. 설정 디렉터리의 소유권 표시를 확인하세요.",
+      "profileChanged": "이 독립 설정이 수정되었습니다. 프로그램은 수정 사항을 덮어쓰지 않습니다.",
+      "selectionChanged": "모델 또는 추론 강도를 더 이상 사용할 수 없습니다. 목록을 다시 불러와 선택하세요.",
+      "sourceUnavailable": "이 WorkBuddy 계정을 사용할 수 없습니다. 로그인 상태를 확인하세요. 다른 계정으로 재시도하지 않습니다.",
+      "operationFailed": "작업에 실패했습니다. WorkBuddy CLI 설치 여부와 계정의 유효성을 확인한 후 목록을 다시 불러오세요.",
+      "title": "WorkBuddy → Codex 네이티브 도구 브리지",
+      "scope": "고정된 계정에 연결되는 전용 로컬 Key와 독립 CODEX_HOME을 만듭니다. 도구는 Codex가 직접 실행합니다. WorkBuddy 토큰은 Codex 설정에 저장되지 않으며 기본 로그인이나 API 서비스의 기본 Key도 변경하지 않습니다.",
+      "account": "WorkBuddy 연결 계정",
+      "noSourceSelected": "사용 가능한 계정이 없습니다. 이미 만든 설정은 계속 관리할 수 있습니다.",
+      "model": "CLI 실시간 모델",
+      "readCatalog": "실시간 목록을 불러오세요",
+      "effort": "추론 강도",
+      "metadataOnly": "목록을 불러올 때는 CLI만 초기화하며 모델에 프롬프트를 보내지 않습니다. 생성 전에 모델과 추론 강도를 다시 검증합니다. 연결 계정이 무효해지면 즉시 오류를 반환하며 다른 계정으로 전환하지 않습니다. HTTP Responses만 지원합니다. 독립 설정에서는 웹 검색(web_search)이 비활성화되며 이미지, 다른 호스팅 도구, compact 및 WebSocket은 지원하지 않습니다.",
+      "refreshCatalog": "목록 다시 불러오기",
+      "managedProfile": "생성된 독립 설정",
+      "profileSource": "연결 계정: ",
+      "profileSourceMissing": "연결 계정이 삭제되었습니다. 전용 Key를 폐기하고 독립 설정을 복원하는 작업은 계속할 수 있습니다.",
+      "profileSourceUnavailable": "현재 연결 계정을 사용할 수 없습니다. Key 폐기 및 설정 복원에는 해당 계정의 로그인이 필요하지 않습니다.",
+      "launchHelp": "터미널에서 프로젝트 디렉터리로 이동한 후 아래 명령을 실행하세요. 이 설정은 해당 Codex 실행에만 적용됩니다.",
+      "retryRestore": "복원 다시 시도(Key 폐기됨)",
+      "restore": "전용 Key 폐기 및 이 설정 복원",
+      "create": "전용 Key와 독립 설정 만들기",
+      "open": "Codex 도구 브리지"
     }
   },
   "minimaxCode": {
@@ -8989,7 +9105,6 @@
     "quota": {
       "cliUnavailable": "CLI 사용량을 확인할 수 없음",
       "weekly": "주간 사용량",
-      "sharedPool": "공유 한도",
       "monthly": "월간 사용량",
       "onDemand": "종량제 사용량",
       "balance": "잔액 및 크레딧",
@@ -9622,6 +9737,15 @@
     "saved": "저장되었습니다. 다음 요청부터 적용됩니다."
   },
   "antigravityTokenUsage": {
+    "context": {
+      "requestContext": "요청 컨텍스트",
+      "coverage": "기록 {{reported}}건 · 추정 {{estimated}}건 · 데이터 없음 {{missing}}건",
+      "largestGrowth": "최대 증가량 {{total}} · 단계 #{{step}}",
+      "growthParts": "입력 {{input}} · 캐시 읽기 {{read}} · 캐시 쓰기 {{write}}",
+      "method": "요청 컨텍스트는 입력 토큰과 캐시 토큰의 합계입니다. 변화량은 연속된 실측 요청을 비교한 값입니다. 메시지, 도구, 첨부 파일별 사용량은 확인할 수 없습니다.",
+      "unplacedCompactions": "단계 번호가 없는 압축 {{count}}건",
+      "compactionStep": "컨텍스트 압축"
+    },
     "tab": "세션 사용량",
     "subtitle": "Antigravity 로컬 세션 토큰 사용량",
     "title": "Antigravity 세션 토큰 사용량",
@@ -9776,7 +9900,6 @@
       "codexCatalogPending": "모델 동기화를 기다리는 외부 키: {{count}}개"
     },
     "commonSettings": {
-      "title": "자주 쓰는 설정",
       "language": "T3 Code 언어"
     },
     "platformOrder": {
@@ -9996,6 +10119,14 @@
       "searchAccountsPlaceholder": "{{platform}} 계정 검색...",
       "goAddSourceAccount": "{{platform}}에서 추가",
       "emptyPoolDesc": "먼저 {{platform}} 페이지에서 계정을 추가한 뒤 T3 Code로 전환하세요."
+    }
+  },
+  "antigravity": {
+    "proxy": {
+      "followHint": "설정의 전역 프록시를 사용합니다. 비활성화된 경우 기본 네트워크를 사용합니다.",
+      "independentHint": "이 계정에만 적용되며 전역 프록시보다 우선합니다.",
+      "invalidUrl": "지원되지 않는 프록시 URL입니다. http, https, socks5, socks5h만 지원합니다.",
+      "restartHint": "바인딩, 변경 또는 해제 후 Antigravity(데스크톱 또는 새 CLI 세션)를 다시 시작하면 적용됩니다. 프록시 실패 시 직접 연결로 대체되지 않습니다."
     }
   }
 }

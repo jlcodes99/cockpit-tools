@@ -1,10 +1,12 @@
 use std::ffi::OsString;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 use sysinfo::{
     Pid, Process, ProcessRefreshKind, ProcessStatus, ProcessesToUpdate, Signal, System, UpdateKind,
 };
+
+use super::SwitchTarget;
 
 pub(super) struct Hub {
     pid: Pid,
@@ -47,7 +49,20 @@ fn verified_hub(process: &Process, executable: &std::path::Path) -> bool {
         && is_app_data_hub(process.cmd())
 }
 
-pub(super) fn snapshot() -> Vec<Hub> {
+fn app_bundle_owner(executable: &Path) -> Option<SwitchTarget> {
+    executable.components().find_map(|part| {
+        let name = part.as_os_str().to_str()?;
+        if name.eq_ignore_ascii_case("Antigravity IDE.app") {
+            Some(SwitchTarget::Ide)
+        } else if name.eq_ignore_ascii_case("Antigravity.app") {
+            Some(SwitchTarget::Desktop)
+        } else {
+            None
+        }
+    })
+}
+
+pub(super) fn snapshot(target: SwitchTarget) -> Vec<Hub> {
     let Some(executable) =
         dirs::home_dir().and_then(|home| home.join(".gemini/bin/agy").canonicalize().ok())
     else {
@@ -69,28 +84,35 @@ pub(super) fn snapshot() -> Vec<Hub> {
                 return None;
             }
             let mut parent = process.parent();
-            let mut ide_owned = false;
+            let mut owner = None;
             for _ in 0..16 {
                 let Some(ancestor) = parent.and_then(|pid| system.process(pid)) else {
                     break;
                 };
-                if ancestor
-                    .name()
-                    .to_string_lossy()
-                    .to_ascii_lowercase()
-                    .contains("antigravity ide")
+                owner = ancestor.exe().and_then(app_bundle_owner);
+                if owner.is_none()
+                    && ancestor
+                        .name()
+                        .to_string_lossy()
+                        .to_ascii_lowercase()
+                        .contains("antigravity ide")
                 {
-                    ide_owned = true;
+                    owner = Some(SwitchTarget::Ide);
+                }
+                if owner.is_some() {
                     break;
                 }
                 parent = ancestor.parent();
+            }
+            if owner.is_some_and(|client| client != target) {
+                return None;
             }
             Some(Hub {
                 pid,
                 started_at: process.start_time(),
                 executable: executable.clone(),
                 args: process.cmd().iter().skip(1).cloned().collect(),
-                ide_owned,
+                ide_owned: owner == Some(SwitchTarget::Ide),
             })
         })
         .collect()
@@ -183,6 +205,21 @@ fn wait_for_listener(child: &mut std::process::Child) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn classifies_helpers_from_their_app_bundle() {
+        assert!(matches!(
+            app_bundle_owner(Path::new(
+                "/Applications/Antigravity IDE.app/Contents/MacOS/Electron"
+            )),
+            Some(SwitchTarget::Ide)
+        ));
+        assert!(matches!(
+            app_bundle_owner(Path::new("/Applications/Antigravity.app/Contents/Frameworks/Antigravity Helper.app/Contents/MacOS/Antigravity Helper")),
+            Some(SwitchTarget::Desktop)
+        ));
+        assert!(app_bundle_owner(Path::new("/Users/test/.gemini/bin/agy")).is_none());
+    }
 
     #[test]
     fn only_shared_app_data_hub_arguments_match() {

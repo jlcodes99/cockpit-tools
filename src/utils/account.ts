@@ -30,35 +30,138 @@ export function matchModelName(modelName: string, target: string): boolean {
   return left === right || left.startsWith(`${right}-`) || right.startsWith(`${left}-`);
 }
 
+export type AntigravitySubscriptionTier = 'ULTRA' | 'PRO' | 'FREE' | 'UNKNOWN';
+
+export interface AntigravityTierBadge {
+  tier: AntigravitySubscriptionTier;
+  label: string;
+  className: string;
+  rawTier?: string;
+}
+
+const ANTIGRAVITY_TIER_DEFINITIONS: Record<string, Omit<AntigravityTierBadge, 'rawTier'>> = {
+  'g1-ultra-lite-tier': { tier: 'ULTRA', label: 'ULTRA LITE', className: 'ultra' },
+  'g1-ultra-lite': { tier: 'ULTRA', label: 'ULTRA LITE', className: 'ultra' },
+  'ultra-lite': { tier: 'ULTRA', label: 'ULTRA LITE', className: 'ultra' },
+  'g1-ultra-tier': { tier: 'ULTRA', label: 'ULTRA', className: 'ultra' },
+  'g1-ultra': { tier: 'ULTRA', label: 'ULTRA', className: 'ultra' },
+  'gcp-ge-ultra-tier': { tier: 'ULTRA', label: 'ULTRA', className: 'ultra' },
+  'ws-ai-ultra-business-tier': { tier: 'ULTRA', label: 'ULTRA', className: 'ultra' },
+  'ultra-tier': { tier: 'ULTRA', label: 'ULTRA', className: 'ultra' },
+  ultra: { tier: 'ULTRA', label: 'ULTRA', className: 'ultra' },
+  'gcp-ge-edu-pro-tier': { tier: 'PRO', label: 'EDU PRO', className: 'pro' },
+  'gcp-ge-edu-pro-emerging-tier': { tier: 'PRO', label: 'EDU PRO', className: 'pro' },
+  'edu-pro': { tier: 'PRO', label: 'EDU PRO', className: 'pro' },
+  'gdp-premium-tier': { tier: 'PRO', label: 'PREMIUM', className: 'pro' },
+  'gdp-premium': { tier: 'PRO', label: 'PREMIUM', className: 'pro' },
+  premium: { tier: 'PRO', label: 'PREMIUM', className: 'pro' },
+  'g1-pro-tier': { tier: 'PRO', label: 'PRO', className: 'pro' },
+  'g1-pro': { tier: 'PRO', label: 'PRO', className: 'pro' },
+  'pro-tier': { tier: 'PRO', label: 'PRO', className: 'pro' },
+  pro: { tier: 'PRO', label: 'PRO', className: 'pro' },
+  'g1-plus-tier': { tier: 'PRO', label: 'PLUS', className: 'plus' },
+  'g1-plus': { tier: 'PRO', label: 'PLUS', className: 'plus' },
+  'gcp-ge-plus-tier': { tier: 'PRO', label: 'PLUS', className: 'plus' },
+  'plus-tier': { tier: 'PRO', label: 'PLUS', className: 'plus' },
+  plus: { tier: 'PRO', label: 'PLUS', className: 'plus' },
+  'free-tier': { tier: 'FREE', label: 'FREE', className: 'free' },
+  free: { tier: 'FREE', label: 'FREE', className: 'free' },
+  'standard-tier': { tier: 'FREE', label: 'FREE', className: 'free' },
+  standard: { tier: 'FREE', label: 'FREE', className: 'free' },
+  'cs-standard-tier': { tier: 'FREE', label: 'FREE', className: 'free' },
+  'gcp-standard-tier': { tier: 'FREE', label: 'FREE', className: 'free' },
+  'gcp-ge-standard-tier': { tier: 'FREE', label: 'FREE', className: 'free' },
+  'gcp-ge-standard-emerging-tier': { tier: 'FREE', label: 'FREE', className: 'free' },
+  'legacy-tier': { tier: 'FREE', label: 'FREE', className: 'free' },
+  legacy: { tier: 'FREE', label: 'FREE', className: 'free' },
+  'unlicensed-tier': { tier: 'FREE', label: 'FREE', className: 'free' },
+  unlicensed: { tier: 'FREE', label: 'FREE', className: 'free' },
+  'gcp-enterprise-tier': { tier: 'PRO', label: 'ENTERPRISE', className: 'enterprise' },
+  'enterprise-agent-tier': { tier: 'PRO', label: 'ENTERPRISE', className: 'enterprise' },
+  'enterprise-tier': { tier: 'PRO', label: 'ENTERPRISE', className: 'enterprise' },
+  enterprise: { tier: 'PRO', label: 'ENTERPRISE', className: 'enterprise' },
+  'ge-business-tier': { tier: 'PRO', label: 'BUSINESS', className: 'business' },
+  'business-tier': { tier: 'PRO', label: 'BUSINESS', className: 'business' },
+  business: { tier: 'PRO', label: 'BUSINESS', className: 'business' },
+  'ge-business-trial-tier': { tier: 'PRO', label: 'TRIAL', className: 'trial' },
+  'trial-tier': { tier: 'PRO', label: 'TRIAL', className: 'trial' },
+  trial: { tier: 'PRO', label: 'TRIAL', className: 'trial' },
+  'agy-business-paygo-tier': { tier: 'PRO', label: 'PAYGO', className: 'business' },
+  'gcp-ge-paygo-tier': { tier: 'PRO', label: 'PAYGO', className: 'business' },
+  'paygo-tier': { tier: 'PRO', label: 'PAYGO', className: 'business' },
+  paygo: { tier: 'PRO', label: 'PAYGO', className: 'business' },
+  'gcp-ge-edu-tier': { tier: 'PRO', label: 'EDU', className: 'individual' },
+  'gcp-ge-edu-emerging-tier': { tier: 'PRO', label: 'EDU', className: 'individual' },
+  'edu-tier': { tier: 'PRO', label: 'EDU', className: 'individual' },
+  edu: { tier: 'PRO', label: 'EDU', className: 'individual' },
+  'gcp-ge-frontline-worker-tier': { tier: 'PRO', label: 'FRONTLINE', className: 'business' },
+  'gcp-ge-frontline-starter-tier': { tier: 'PRO', label: 'FRONTLINE', className: 'business' },
+  'googler-tier': { tier: 'PRO', label: 'GOOGLER', className: 'pro' },
+  'googler-dogfood-tier': { tier: 'PRO', label: 'GOOGLER', className: 'pro' },
+  'aida-tier': { tier: 'FREE', label: 'AIDA', className: 'free' },
+};
+
+const ANTIGRAVITY_TIER_FALLBACK_PATTERNS: Array<[RegExp, Omit<AntigravityTierBadge, 'rawTier'>]> = [
+  [/^ultra-lite$|(?:^|-)ultra-lite(?:-|$)/, { tier: 'ULTRA', label: 'ULTRA LITE', className: 'ultra' }],
+  [/(?:^|-)ultra(?:-|$)/, { tier: 'ULTRA', label: 'ULTRA', className: 'ultra' }],
+  [/(?:^|-)pro(?:-|$)/, { tier: 'PRO', label: 'PRO', className: 'pro' }],
+  [/(?:^|-)plus(?:-|$)/, { tier: 'PRO', label: 'PLUS', className: 'plus' }],
+  [/(?:^|-)(?:free|standard|legacy|unlicensed)(?:-|$)/, { tier: 'FREE', label: 'FREE', className: 'free' }],
+];
+
 function getKnownSubscriptionTier(quota?: Pick<QuotaData, 'subscription_tier'>): string | undefined {
   const rawTier = quota?.subscription_tier?.trim();
   return rawTier && rawTier.toLowerCase() !== 'unknown' ? rawTier : undefined;
 }
 
-export function getSubscriptionTier(quota?: Pick<QuotaData, 'subscription_tier'>): string {
-  const tier = getKnownSubscriptionTier(quota)?.toLowerCase();
-  if (!tier) return 'UNKNOWN';
-  // 映射等级名称
-  if (tier.includes('ultra')) return 'ULTRA';
-  if (tier.includes('pro')) return 'PRO';
-  return 'FREE';
+export function resolveAntigravityTierBadge(
+  quota?: Pick<QuotaData, 'subscription_tier'>,
+): AntigravityTierBadge {
+  const rawTier = getKnownSubscriptionTier(quota);
+  if (!rawTier) {
+    return { tier: 'UNKNOWN', label: '—', className: 'unknown' };
+  }
+
+  const slug = rawTier
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  const stripped = slug
+    .replace(/^(?:antigravity|google-one-ai|google-one|google-ai|g1)-/, '')
+    .replace(/-tier$/, '');
+
+  const exactMatch =
+    ANTIGRAVITY_TIER_DEFINITIONS[slug] ??
+    ANTIGRAVITY_TIER_DEFINITIONS[stripped];
+  if (exactMatch) {
+    return { ...exactMatch, rawTier };
+  }
+
+  const patternMatch = ANTIGRAVITY_TIER_FALLBACK_PATTERNS.find(([pattern]) =>
+    pattern.test(slug) || pattern.test(stripped),
+  );
+  if (patternMatch) {
+    return { ...patternMatch[1], rawTier };
+  }
+
+  return {
+    tier: 'UNKNOWN',
+    label: rawTier,
+    className: 'unknown',
+    rawTier,
+  };
+}
+
+export function getSubscriptionTier(quota?: Pick<QuotaData, 'subscription_tier'>): AntigravitySubscriptionTier {
+  return resolveAntigravityTierBadge(quota).tier;
 }
 
 export function getSubscriptionTierDisplay(quota?: Pick<QuotaData, 'subscription_tier'>): string {
-  return getKnownSubscriptionTier(quota) ?? '—';
+  return resolveAntigravityTierBadge(quota).label;
 }
 
-export function getAntigravityTierBadge(quota?: Pick<QuotaData, 'subscription_tier'>): {
-  tier: string;
-  label: string;
-  className: string;
-} {
-  const tier = getSubscriptionTier(quota);
-  return {
-    tier,
-    label: getSubscriptionTierDisplay(quota),
-    className: tier.toLowerCase(),
-  };
+export function getAntigravityTierBadge(quota?: Pick<QuotaData, 'subscription_tier'>): AntigravityTierBadge {
+  return resolveAntigravityTierBadge(quota);
 }
 
 /**

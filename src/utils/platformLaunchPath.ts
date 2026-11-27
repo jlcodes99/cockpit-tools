@@ -9,6 +9,12 @@ export const PLATFORM_LAUNCH_PATHS = {
   codebuddy_cn: { label: 'CodeBuddy CN', guide: 'https://www.codebuddy.cn/downloads/' },
   codebuddy_cli: { label: 'CodeBuddy CLI', guide: 'https://www.codebuddy.cn/docs/cli/installation' },
   claude_cli: { label: 'Claude Code', guide: 'https://code.claude.com/docs/en/setup' },
+  qoder_desktop: { label: 'Qoder Desktop', guide: 'https://qoder.com/download?product=qoder' },
+  qoder: { label: 'Qoder IDE', guide: 'https://qoder.com/download?product=ide' },
+  qoder_cli: { label: 'Qoder CLI', guide: 'https://qoder.com/cli' },
+  qoder_cn: { label: 'Qoder CN', guide: 'https://qoder.com.cn/download?product=qoderapp' },
+  qoder_cn_ide: { label: 'Qoder CN IDE', guide: 'https://qoder.com.cn/download?product=ide' },
+  qoder_cn_cli: { label: 'Qoder CN CLI', guide: 'https://qoder.com.cn/cli' },
 } as const;
 
 export type PlatformLaunchPathTarget = keyof typeof PLATFORM_LAUNCH_PATHS;

@@ -1,0 +1,70 @@
+.modal-content.workbuddy-codex-native-modal {
+  width: min(640px, calc(100vw - 32px));
+  max-width: 640px;
+  max-height: calc(100dvh - 32px);
+}
+
+.modal-content.workbuddy-codex-native-modal .modal-body {
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.modal-content.workbuddy-codex-native-modal .modal-body > p {
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin: 0 0 16px;
+}
+
+.modal-content.workbuddy-codex-native-modal .workbuddy-codex-native-field-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.modal-content.workbuddy-codex-native-modal .workbuddy-codex-native-select {
+  width: 100%;
+}
+
+.modal-content.workbuddy-codex-native-modal .workbuddy-codex-native-select .single-select-dropdown-trigger {
+  min-height: 38px;
+  border-radius: var(--radius-md);
+}
+
+.modal-content.workbuddy-codex-native-modal .workbuddy-codex-native-profile-source {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.modal-content.workbuddy-codex-native-modal .workbuddy-codex-native-source-email {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.modal-content.workbuddy-codex-native-modal .help-text {
+  font-size: 12px;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.modal-content.workbuddy-codex-native-modal section {
+  border-top: 1px solid var(--border-light);
+  padding-top: 16px;
+}
+
+.modal-content.workbuddy-codex-native-modal section p {
+  margin: 8px 0;
+  line-height: 1.5;
+}
+
+.modal-content.workbuddy-codex-native-modal pre {
+  padding: 12px;
+  border-radius: var(--radius-md);
+  background: var(--bg-tertiary);
+  font-size: 12px;
+}

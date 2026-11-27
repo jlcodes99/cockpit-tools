@@ -410,7 +410,7 @@
     #[test]
     fn menu_bar_quota_keeps_claude_cli_separate_from_desktop() {
         let mut config = UserConfig::default();
-        for platform in ["claude_cli", "claude_manager"] {
+        for platform in ["claude_cli", "claude_manager", "t3code"] {
             let patch = serde_json::json!({ "menu_bar_quota_platform": platform });
             apply_general_config_updates(&mut config, patch.as_object().unwrap()).unwrap();
             let saved = serde_json::to_value(&config).unwrap();

@@ -3,9 +3,8 @@ import { createPortal } from 'react-dom';
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
-import { Check, Copy, Info, Play, RefreshCw, Terminal, X } from 'lucide-react';
+import { Check, Copy, Play, RefreshCw, Terminal, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { useAntigravityIdeInitialization } from '../hooks/useAntigravityIdeInitialization';
 import { useEscCloseTopmost } from '../hooks/useEscClose';
 import { useLaunchTerminalOptions } from '../hooks/useLaunchTerminalOptions';
 import { useModalFocusTrap } from '../hooks/useModalFocusTrap';
@@ -17,6 +16,7 @@ import { useDurableUiSetting } from '../hooks/useDurableUiSetting';
 import { antigravityAppPathTarget, ANTIGRAVITY_CLIENT_LABELS, ANTIGRAVITY_DESKTOP_CLIENTS, getMissingAntigravityPathTarget, type AntigravityLaunchClient } from '../utils/antigravityRuntimeTarget';
 import { ModalErrorMessage, useModalErrorState } from './ModalErrorMessage';
 import { AntigravityClientIcon } from './AntigravityClientIcon';
+import { ClientInitializationStatus } from './ClientInitializationStatus';
 import { CliLaunchFields } from './CliLaunchFields';
 import { PlatformLaunchPathField } from './PlatformLaunchPathField';
 import './ClientLaunchDialog.css';
@@ -24,7 +24,7 @@ import './AntigravityLaunchDialog.css';
 
 const LAST_DIRECTORY_KEY = 'agtools.antigravity.cli_working_dir.v1';
 const CLIENTS = [...ANTIGRAVITY_DESKTOP_CLIENTS, 'cli'] as const;
-type Action = 'launch' | 'switch' | 'copy' | 'initialize';
+type Action = 'launch' | 'switch' | 'copy';
 
 interface Props {
   initialClient: AntigravityLaunchClient;
@@ -51,14 +51,6 @@ export function AntigravityLaunchDialog({
   const client = selectedClient ?? CLIENTS.find((target) => target === rememberedClient) ?? initialClient;
   const isCli = client === 'cli';
   const initializationId = client === 'antigravity_ide' ? (ideInstanceId ?? (account ? '__default__' : undefined)) : undefined;
-  const initialization = useAntigravityIdeInitialization(initializationId);
-  const awaitingInitialization = initialization.phase === 'waiting';
-  const needsInitialization = awaitingInitialization || initialization.phase === 'required' || initialization.phase === 'retry';
-  const initializationDetail = awaitingInitialization ? 'antigravityLaunch.initializeWaiting'
-    : initialization.phase === 'retry' ? 'antigravityLaunch.initializeRetry'
-    : account ? 'antigravityLaunch.initializeThenSwitch'
-    : ideInstanceHasBoundAccount ? 'antigravityLaunch.initializeThenUseAccount'
-    : 'antigravityLaunch.initializeThenBind';
   const rememberedDirectory = useDurableUiSetting(LAST_DIRECTORY_KEY);
   const [directoryDraft, setDirectoryDraft] = useState<string>();
   const workingDir = directoryDraft ?? rememberedDirectory ?? '';
@@ -102,17 +94,10 @@ export function AntigravityLaunchDialog({
     run = () => onLaunch(client, options),
   ) => {
     if (pending.current || canSubmit?.(client) === false) return;
-    if (action !== 'initialize' && needsInitialization) return;
     pending.current = true;
     resetFeedback();
     setBusy(action);
     try {
-      if (action === 'initialize') {
-        await run();
-        setPathRecovery(undefined);
-        initialization.waitForInitialization();
-        return;
-      }
       if (action === 'copy') {
         const command = await getAntigravityCliLaunchCommand(options);
         await onPrepareCopy?.();
@@ -139,12 +124,9 @@ export function AntigravityLaunchDialog({
       if (code === 'ANTIGRAVITY_CLI_INVALID_DIRECTORY') {
         setDirectoryInvalid(true);
         requestAnimationFrame(() => directory.current?.focus());
-      } else if (code === 'ANTIGRAVITY_IDE_INITIALIZATION_REQUIRED' && initializationId) {
-        setPathRecovery(undefined);
-        initialization.requireInitialization();
       } else if (isCli && code === 'ANTIGRAVITY_CLI_NOT_FOUND') {
         setPathRecovery({ missingClient: 'cli', action, run });
-      } else if ((action === 'launch' || action === 'initialize') && missingClient) {
+      } else if (action === 'launch' && missingClient) {
         const switched = code.replace(/^Error: /, '').startsWith('APP_PATH_MISSING_AFTER_SWITCH:');
         setPathRecovery({
           missingClient, action, switched,
@@ -218,15 +200,7 @@ export function AntigravityLaunchDialog({
             onSaving={setPathSaving}
             onSaved={() => { if (pathRecovery) void submit(pathRecovery.action, pathRecovery.run); }}
           />
-          {needsInitialization && (
-            <div className="antigravity-launch-initialization" role="status">
-              <Info size={16} aria-hidden="true" />
-              <div>
-                <strong>{t('antigravityLaunch.initializeTitle')}</strong>
-                <p className="client-launch-hint">{t(initializationDetail)}</p>
-              </div>
-            </div>
-          )}
+          {initializationId && <ClientInitializationStatus platform="antigravity_ide" targetId={initializationId} />}
           {pathRecovery?.switched && <p className="client-launch-hint">{t('appPath.missing.accountAlreadySwitched')}</p>}
           {isCli && <div className="antigravity-launch-cli">
             <CliLaunchFields
@@ -255,13 +229,6 @@ export function AntigravityLaunchDialog({
             {busy === 'copy' ? <RefreshCw size={16} className="loading-spinner" /> : copied ? <Check size={16} /> : <Copy size={16} />}
             {t(copied ? 'common.copied' : onPrepareCopy ? 'antigravityLaunch.switchAndCopy' : 'common.copy')}
           </button>}
-          {needsInitialization ? (
-            <button type="button" className="btn btn-primary" disabled={blocked || awaitingInitialization}
-              onClick={() => void submit('initialize', () => invoke('initialize_antigravity_ide', { instanceId: initializationId }))}>
-              {busy === 'initialize' || awaitingInitialization ? <RefreshCw size={16} className="loading-spinner" /> : <Play size={16} />}
-              {t('antigravityLaunch.initializeAction')}
-            </button>
-          ) : <>
             {onSwitchOnly && <button type="button" className="btn btn-secondary" disabled={blocked} onClick={() => void submit('switch')}>
               {busy === 'switch' && <RefreshCw size={16} className="loading-spinner" />}
               {t('antigravityLaunch.switchOnly')}
@@ -271,7 +238,6 @@ export function AntigravityLaunchDialog({
               {busy === 'launch' ? <RefreshCw size={16} className="loading-spinner" /> : isCli ? <Terminal size={16} /> : <Play size={16} />}
               {primaryLabel?.(client) ?? t(isCli ? 'instances.launchDialog.runInTerminal' : 'instances.actions.start')}
             </button>
-          </>}
         </div>
       </div>
     </div>,

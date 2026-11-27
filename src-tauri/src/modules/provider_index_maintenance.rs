@@ -78,6 +78,7 @@ fn schedule_root(root: &Path) {
         batch::<codebuddy::CodebuddyAccountIndex>(root, "codebuddy_accounts.json"),
         batch::<github_copilot::GitHubCopilotAccountIndex>(root, "github_copilot_accounts.json"),
         batch::<qoder::QoderAccountIndex>(root, "qoder_accounts.json"),
+        batch::<qoder::QoderCnAccountIndex>(root, "qoder_cn_accounts.json"),
         batch::<workbuddy::WorkbuddyAccountIndex>(root, "workbuddy_accounts.json"),
         batch::<zed::ZedAccountIndex>(root, "zed_accounts.json"),
         batch::<minimax_code::MinimaxCodeAccountIndex>(root, "minimax_code_accounts.json"),

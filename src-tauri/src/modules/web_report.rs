@@ -135,6 +135,10 @@ fn build_service_refresh_policies(cfg: &super::config::UserConfig) -> Vec<Servic
             interval_minutes: cfg.qoder_auto_refresh_minutes,
         },
         ServiceRefreshPolicy {
+            key: "qoder_cn",
+            interval_minutes: cfg.qoder_cn_auto_refresh_minutes,
+        },
+        ServiceRefreshPolicy {
             key: "trae",
             interval_minutes: cfg.trae_auto_refresh_minutes,
         },
@@ -200,6 +204,9 @@ async fn run_refresh_for_service(policy: ServiceRefreshPolicy) -> Result<(), Str
             .await
             .map(|_| ()),
         "qoder" => super::qoder_oauth::refresh_all_accounts_from_openapi()
+            .await
+            .map(|_| ()),
+        "qoder_cn" => super::qoder_oauth::refresh_all_cn_accounts_from_openapi()
             .await
             .map(|_| ()),
         "trae" => super::trae_account::refresh_tokens_for_platform(
@@ -697,7 +704,8 @@ fn build_report_rows() -> Vec<ReportRow> {
         "CodeBuddy CN",
         super::codebuddy_cn_account::list_accounts(),
     );
-    append_qoder_rows(&mut rows);
+    append_qoder_rows(&mut rows, "Qoder", super::qoder_account::list_accounts());
+    append_qoder_rows(&mut rows, "Qoder CN", super::qoder_native::list_accounts());
     append_trae_rows(&mut rows);
     append_workbuddy_rows(&mut rows);
     append_zed_rows(&mut rows);
@@ -1316,10 +1324,22 @@ fn append_kiro_rows(rows: &mut Vec<ReportRow>) {
     }
 }
 
-fn append_qoder_rows(rows: &mut Vec<ReportRow>) {
-    let accounts = super::qoder_account::list_accounts();
+fn append_qoder_rows(
+    rows: &mut Vec<ReportRow>,
+    service: &str,
+    accounts: Vec<crate::models::qoder::QoderAccount>,
+) {
     for account in accounts {
-        let account_name = account.email.clone();
+        let account_name = [
+            Some(account.email.as_str()),
+            account.display_name.as_deref(),
+            account.user_id.as_deref(),
+        ]
+        .into_iter()
+        .flatten()
+        .find(|value| !value.trim().is_empty())
+        .unwrap_or(account.id.as_str())
+        .to_string();
         let mut roots: Vec<&Value> = Vec::new();
         if let Some(raw) = account.auth_credit_usage_raw.as_ref() {
             roots.push(raw);
@@ -1335,6 +1355,7 @@ fn append_qoder_rows(rows: &mut Vec<ReportRow>) {
         let mut pushed = 0usize;
         pushed += push_qoder_bucket_row(
             rows,
+            service,
             &account_name,
             &roots,
             &[&["userQuota"], &["user_quota"]],
@@ -1344,6 +1365,7 @@ fn append_qoder_rows(rows: &mut Vec<ReportRow>) {
         );
         pushed += push_qoder_bucket_row(
             rows,
+            service,
             &account_name,
             &roots,
             &[&["addOnQuota"], &["addonQuota"], &["add_on_quota"]],
@@ -1360,7 +1382,7 @@ fn append_qoder_rows(rows: &mut Vec<ReportRow>) {
                         .credits_usage_percent
                         .unwrap_or((used / total) * 100.0);
                     rows.push(make_row(
-                        "Qoder",
+                        service,
                         &account_name,
                         "Credits",
                         &format!(
@@ -1379,7 +1401,7 @@ fn append_qoder_rows(rows: &mut Vec<ReportRow>) {
             }
 
             rows.push(make_row(
-                "Qoder",
+                service,
                 &account_name,
                 "Usage",
                 "-",
@@ -1397,6 +1419,7 @@ fn append_qoder_rows(rows: &mut Vec<ReportRow>) {
 
 fn push_qoder_bucket_row(
     rows: &mut Vec<ReportRow>,
+    service: &str,
     account_name: &str,
     roots: &[&Value],
     bucket_paths: &[&[&str]],
@@ -1473,7 +1496,7 @@ fn push_qoder_bucket_row(
     }
 
     rows.push(make_row(
-        "Qoder",
+        service,
         account_name,
         metric,
         &used_text,

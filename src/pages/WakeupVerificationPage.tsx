@@ -1431,7 +1431,7 @@ export function WakeupVerificationPage({ onNavigate }: WakeupVerificationPagePro
                           {maskedEmail}
                         </span>
                         {planBadge && (
-                          <span className={`tier-badge ${planBadge.className}`}>
+                          <span className={`tier-badge ${planBadge.className}`} title={planBadge.rawTier || planBadge.label}>
                             {planBadge.label}
                           </span>
                         )}
@@ -1525,7 +1525,7 @@ export function WakeupVerificationPage({ onNavigate }: WakeupVerificationPagePro
                         <div className="verification-progress-main">
                           <span className="verification-account-email">{maskAccountText(item.accountEmail)}</span>
                           {planBadge ? (
-                            <span className={`tier-badge ${planBadge.className}`}>
+                            <span className={`tier-badge ${planBadge.className}`} title={planBadge.rawTier || planBadge.label}>
                               {planBadge.label}
                             </span>
                           ) : null}

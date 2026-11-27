@@ -236,11 +236,7 @@ fn create_instance_with_profile_copy(
         user_data_dir,
         working_dir: params.working_dir,
         extra_args: params.extra_args.trim().to_string(),
-        bind_account_id: if create_empty {
-            None
-        } else {
-            params.bind_account_id
-        },
+        bind_account_id: params.bind_account_id,
         model_routing: if create_empty {
             None
         } else {

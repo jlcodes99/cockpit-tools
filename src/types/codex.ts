@@ -1,5 +1,28 @@
 import { isOpenAIOfficialUsageAccount } from "../utils/openaiOfficialUsage";
 
+export interface CodexWorkbuddyDelegateModel {
+  id: string;
+  name: string;
+}
+
+export interface CodexWorkbuddyDelegateCatalog {
+  models: CodexWorkbuddyDelegateModel[];
+  currentModelId: string;
+  reasoningEfforts: string[];
+  currentReasoningEffort?: string | null;
+}
+
+export interface CodexWorkbuddyDelegateProfile {
+  id: string;
+  apiKeyId: string;
+  workbuddyAccountId: string;
+  profileDir: string;
+  publicModel: string;
+  modelId: string;
+  reasoningEffort: string;
+  launchCommand: string;
+}
+
 export type CodexApiProviderMode = "openai_builtin" | "custom";
 export type CodexProviderWireApi = "responses" | "chat_completions" | "anthropic";
 

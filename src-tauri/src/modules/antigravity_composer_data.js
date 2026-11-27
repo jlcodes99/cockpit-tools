@@ -27,7 +27,7 @@
     const key = modelKey(value);
     if (/^(3p|claude|gpt)( |$)/.test(key)) return '3p';
     // Argon retired into the shared Gemini pool; Carbon keeps its own pool.
-    if (/^(?:\d+ )?carbon( |$)/.test(key)) return 'carbon';
+    if (/^(?:gemini )?(?:\d+ )?carbon( |$)/.test(key)) return 'carbon';
     if (/^gemini( |$)|^\d+(?: \d+)* (?:neon|argon|hydrogen|flash|pro|ultra)( |$)/.test(key)) return 'gemini';
     return null;
   }
@@ -48,10 +48,31 @@
     return buckets.length > 0 && buckets.every(bucket => retiredArgonBucket(bucket.bucketId));
   }
 
+  function quotaModelLabel(label) {
+    if (typeof label !== 'string') return label;
+    const base = label.trim().split(' · ')[0];
+    const planner = /^Orchestrator\s+(.+)$/i.exec(base)?.[1];
+    if (!planner) return label;
+    if (planner.startsWith('(')) return base;
+    return /^(?:Default \(Gemini Pro\)|The Orchestrator's own planner)$/i.test(planner)
+      ? 'Orchestrator' : planner;
+  }
+
+  function individualQuotaWindows(status, selected) {
+    const candidates = modelConfigs(status).filter(config => configNames(config).some(key => selected.has(key)));
+    const own = candidates[0]?.quotaInfo;
+    return Number.isFinite(own?.remainingFraction) && own.remainingFraction >= 0 && own.remainingFraction <= 1 &&
+      candidates.every(({ quotaInfo }) => quotaInfo?.remainingFraction === own.remainingFraction &&
+        quotaInfo?.resetTime === own.resetTime)
+      ? [{ percent: Math.round(100 * own.remainingFraction), reset: own.resetTime }] : [];
+  }
+
   function quotaWindows(summary, status, label) {
     const groups = summary?.response?.groups ?? summary?.groups ?? [];
-    const selected = aliases(label, status);
-    const groupFamily = [...selected].map(family).find(Boolean);
+    const model = quotaModelLabel(label);
+    const standalone = /^orchestrator (neon|carbon|argon)$/.exec(modelKey(model))?.[1];
+    let selected = aliases(model, status);
+    if (standalone) selected.add(modelKey(`gemini-pro-orchestrator-${standalone}`));
     const identities = group => [
       ...(group.modelIds ?? []),
       ...(group.description?.match(/^\s*Models within this group:\s*(.+)$/i)?.[1].split(',') ?? []),
@@ -59,7 +80,16 @@
     // Retired Argon groups are filtered before matching so they neither supply
     // their stale buckets nor double up with the shared Gemini group.
     const activeGroups = groups.filter(group => !retiredArgonGroup(group));
-    const explicit = activeGroups.filter(group => identities(group).some(id => selected.has(id)));
+    const groupsFor = names => activeGroups.filter(group => identities(group).some(id => names.has(id)));
+    let explicit = groupsFor(selected);
+    if (standalone && !explicit.length) {
+      const reported = individualQuotaWindows(status, selected);
+      if (reported.length) return reported;
+      // The three named variants can also use their corresponding planner quota pool.
+      selected = aliases(`Gemini 4 ${standalone}`, status);
+      explicit = groupsFor(selected);
+    }
+    const groupFamily = [...selected].map(family).find(Boolean);
     const inferred = activeGroups.filter(group => groupFamily && !identities(group).length &&
       group.buckets?.some(bucket => family(bucket.bucketId) === groupFamily));
     let group = explicit.length === 1 ? explicit[0] :
@@ -86,11 +116,7 @@
         return order(left.period) - order(right.period);
       });
     }
-    if (explicit.length || inferred.length) return [];
-    const candidates = modelConfigs(status).filter(config => configNames(config).some(key => selected.has(key)));
-    const own = candidates.length === 1 ? candidates[0].quotaInfo : null;
-    return Number.isFinite(own?.remainingFraction) && own.remainingFraction >= 0 && own.remainingFraction <= 1
-      ? [{ percent: Math.round(100 * own.remainingFraction), reset: own.resetTime }] : [];
+    return explicit.length || inferred.length ? [] : individualQuotaWindows(status, selected);
   }
 
   function seconds(duration) {

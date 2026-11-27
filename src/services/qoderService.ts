@@ -1,5 +1,15 @@
 import { invoke } from '@tauri-apps/api/core';
 import { QoderAccount } from '../types/qoder';
+import type { QoderSwitchOutcome } from '../types/qoder';
+import type { QoderRegion, QoderClient } from '../utils/qoderRegion';
+
+export function openQoderClient(
+  region: QoderRegion,
+  client: QoderClient,
+  options?: { workingDir?: string; terminal?: string; instanceId?: string },
+): Promise<void> {
+  return invoke('qoder_open_client', { region, client, ...options });
+}
 
 export interface QoderOAuthStartResponse {
   loginId: string;
@@ -9,7 +19,7 @@ export interface QoderOAuthStartResponse {
   callbackUrl?: string | null;
 }
 
-type QoderOAuthStartResponseRaw = Partial<QoderOAuthStartResponse> & {
+export type QoderOAuthStartResponseRaw = Partial<QoderOAuthStartResponse> & {
   login_id?: string;
   verification_uri?: string;
   expires_in?: number;
@@ -17,7 +27,7 @@ type QoderOAuthStartResponseRaw = Partial<QoderOAuthStartResponse> & {
   callback_url?: string | null;
 };
 
-function normalizeQoderOAuthStartResponse(raw: QoderOAuthStartResponseRaw): QoderOAuthStartResponse {
+export function normalizeQoderOAuthStartResponse(raw: QoderOAuthStartResponseRaw): QoderOAuthStartResponse {
   const loginId = raw.loginId ?? raw.login_id ?? '';
   const verificationUri = raw.verificationUri ?? raw.verification_uri ?? '';
   const expiresIn = Number(raw.expiresIn ?? raw.expires_in ?? 0);
@@ -49,7 +59,12 @@ export async function deleteQoderAccounts(accountIds: string[]): Promise<void> {
   return await invoke('delete_qoder_accounts', { accountIds });
 }
 
-export async function importQoderFromJson(jsonContent: string): Promise<QoderAccount[]> {
+export async function importQoderFromJson(
+  jsonContent: string,
+  // Accepted so the shared page can pass its region uniformly; the global
+  // command always resolves to the global store.
+  _region?: QoderRegion,
+): Promise<QoderAccount[]> {
   return await invoke('import_qoder_from_json', { jsonContent });
 }
 
@@ -57,7 +72,30 @@ export async function importQoderFromLocal(): Promise<QoderAccount[]> {
   return await invoke('import_qoder_from_local');
 }
 
-export async function qoderOauthLoginStart(): Promise<QoderOAuthStartResponse> {
+/**
+ * Reads the credentials the installed global client holds. The desktop and CLI
+ * clients keep their own files, separate from the IDE database the `ide` target
+ * uses, so a client has to be named explicitly.
+ */
+export async function importQoderNative(
+  region: QoderRegion,
+  client: QoderClient,
+): Promise<QoderAccount[]> {
+  return await invoke('import_qoder_native', { region, client });
+}
+
+/**
+ * Writes one account into the installed global client.
+ */
+export async function injectQoderNative(
+  accountId: string,
+  client: QoderClient,
+  options: { launch?: boolean; workingDir?: string; terminal?: string } = {},
+): Promise<QoderSwitchOutcome> {
+  return await invoke('inject_qoder_native', { accountId, client, ...options });
+}
+
+export async function qoderOauthLoginStart(_region?: QoderRegion): Promise<QoderOAuthStartResponse> {
   const raw = await invoke<QoderOAuthStartResponseRaw>('qoder_oauth_login_start');
   return normalizeQoderOAuthStartResponse(raw);
 }

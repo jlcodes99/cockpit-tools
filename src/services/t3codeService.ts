@@ -96,8 +96,8 @@ export function syncT3codeProviderLaunchPaths(t3InstanceId: string): Promise<voi
   return invoke('t3code_sync_provider_launch_paths', { t3InstanceId });
 }
 
-export function installT3codeAntigravityRuntime(instanceId: string): Promise<void> {
-  return invoke('t3code_install_antigravity_runtime', { instanceId });
+export function installT3codeAntigravityRuntime(instanceId: string, t3InstanceId?: string): Promise<void> {
+  return invoke('t3code_install_antigravity_runtime', { instanceId, t3InstanceId });
 }
 
 export function bindT3codeProviderInstanceAccount(params: {

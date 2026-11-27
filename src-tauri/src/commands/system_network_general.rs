@@ -176,10 +176,15 @@ pub async fn get_available_terminals() -> Result<Vec<String>, String> {
 
     #[cfg(target_os = "windows")]
     {
-        // Windows 下检查可执行文件是否在 PATH 中
+        // Windows 下检查可执行文件是否在 PATH 中；pwsh 同时接受商店版执行别名。
         let terminals = ["cmd", "PowerShell", "pwsh", "wt"];
         for name in terminals {
-            if is_command_available(name) {
+            let detected = if name == "pwsh" {
+                super::codex_instance::terminal::windows_pwsh_available()
+            } else {
+                is_command_available(name)
+            };
+            if detected {
                 available.push(name.to_string());
             }
         }
@@ -314,6 +319,7 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         workbuddy_auto_refresh_minutes: user_config.workbuddy_auto_refresh_minutes,
         minimax_code_auto_refresh_minutes: user_config.minimax_code_auto_refresh_minutes,
         qoder_auto_refresh_minutes: user_config.qoder_auto_refresh_minutes,
+        qoder_cn_auto_refresh_minutes: user_config.qoder_cn_auto_refresh_minutes,
         zcode_auto_refresh_minutes: user_config.zcode_auto_refresh_minutes,
         t3code_auto_refresh_minutes: user_config.t3code_auto_refresh_minutes,
         t3code_app_ui_injection_enabled: user_config.t3code_app_ui_injection_enabled,
@@ -397,6 +403,9 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         qoder_app_path: modules::process::normalize_windows_user_facing_path(
             &user_config.qoder_app_path,
         ),
+        qoder_cn_app_path: modules::process::normalize_windows_user_facing_path(
+            &user_config.qoder_cn_app_path,
+        ),
         zcode_app_path: modules::process::normalize_windows_user_facing_path(
             &user_config.zcode_app_path,
         ),
@@ -446,6 +455,9 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         codex_cli_auto_refresh_on_switch: user_config.codex_cli_auto_refresh_on_switch,
         codex_auto_restore_takeover_on_launch: user_config.codex_auto_restore_takeover_on_launch,
         antigravity_launch_on_switch: user_config.antigravity_launch_on_switch,
+        antigravity_desktop_chinese_enabled: user_config.antigravity_desktop_chinese_enabled,
+        antigravity_desktop_layout: user_config.antigravity_desktop_layout,
+        antigravity_desktop_permission: user_config.antigravity_desktop_permission,
         codex_restart_specified_app_on_switch: user_config.codex_restart_specified_app_on_switch,
         codex_local_access_entry_visible: user_config.codex_local_access_entry_visible,
         codex_hide_relay_quota: user_config.codex_hide_relay_quota,
@@ -495,6 +507,8 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         codebuddy_cn_quota_alert_threshold: user_config.codebuddy_cn_quota_alert_threshold,
         qoder_quota_alert_enabled: user_config.qoder_quota_alert_enabled,
         qoder_quota_alert_threshold: user_config.qoder_quota_alert_threshold,
+        qoder_cn_quota_alert_enabled: user_config.qoder_cn_quota_alert_enabled,
+        qoder_cn_quota_alert_threshold: user_config.qoder_cn_quota_alert_threshold,
         trae_quota_alert_enabled: user_config.trae_quota_alert_enabled,
         trae_quota_alert_threshold: user_config.trae_quota_alert_threshold,
         trae_solo_quota_alert_enabled: user_config.trae_solo_quota_alert_enabled,
@@ -510,7 +524,7 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
     };
 
     modules::logger::log_info(&format!(
-        "[StartupPerf][SystemCommand] get_general_config completed in {}ms: auto_refresh={}, codex={}, zed={}, ghcp={}, windsurf={}, kiro={}, cursor={}, codebuddy={}, codebuddy_cn={}, workbuddy={}, minimax_code={}, qoder={}, zcode={}, trae={}, auto_switch={}",
+        "[StartupPerf][SystemCommand] get_general_config completed in {}ms: auto_refresh={}, codex={}, zed={}, ghcp={}, windsurf={}, kiro={}, cursor={}, codebuddy={}, codebuddy_cn={}, workbuddy={}, minimax_code={}, qoder={}, qoder_cn={}, zcode={}, trae={}, auto_switch={}",
         started.elapsed().as_millis(),
         result.auto_refresh_minutes,
         result.codex_auto_refresh_minutes,
@@ -524,6 +538,7 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         result.workbuddy_auto_refresh_minutes,
         result.minimax_code_auto_refresh_minutes,
         result.qoder_auto_refresh_minutes,
+        result.qoder_cn_auto_refresh_minutes,
         result.zcode_auto_refresh_minutes,
         result.trae_auto_refresh_minutes,
         result.auto_switch_enabled

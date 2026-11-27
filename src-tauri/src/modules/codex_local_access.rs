@@ -39,6 +39,11 @@ include!("codex_local_access_native_transport.rs");
 include!("codex_local_access_direct_identity.rs");
 include!("codex_local_access_official_background.rs");
 include!("codex_local_access_native_routes.rs");
+include!("codex_local_access_workbuddy_delegate.rs");
+include!("codex_local_access_workbuddy_delegate_revocation.rs");
+#[cfg(test)]
+#[path = "codex_local_access_workbuddy_delegate_live_tests.rs"]
+mod workbuddy_delegate_live_tests;
 include!("codex_local_access_native_capability.rs");
 include!("codex_local_access_native_images.rs");
 include!("codex_local_access_native_diagnostics.rs");
@@ -143,6 +148,7 @@ mod tests {
 
     include!("codex_local_access_tests_automatic_routing.rs");
     include!("codex_local_access_tests_sidecar_gateway.rs");
+    include!("codex_local_access_tests_provider_gateway.rs");
     include!("codex_local_access_tests_shared_api_identity.rs");
     include!("codex_local_access_tests_pool_failure_dismissal.rs");
     include!("codex_local_access_tests_proxy.rs");
@@ -164,6 +170,7 @@ mod tests {
     include!("codex_local_access_tests_key_recovery.rs");
     include!("codex_local_access_tests_service_transitions.rs");
     include!("codex_local_access_tests_project_switch.rs");
+    include!("codex_local_access_tests_workbuddy_rotation.rs");
     include!("codex_local_access_tests_timeout_config.rs");
     include!("codex_local_access_tests_provider_activation.rs");
     include!("codex_local_access_tests_account_references.rs");

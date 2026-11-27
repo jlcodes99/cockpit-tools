@@ -10,6 +10,56 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.5.3] - 2026-11-27
+
+### Added
+
+- **Antigravity per-account egress proxy** supports binding an independent `http`, `https`, `socks5`, or `socks5h` proxy URL per Antigravity account across Desktop, IDE, CLI, and managed instances, falling back to the global proxy when left unbound. [#3335](https://github.com/jlcodes99/cockpit-tools/pull/3335)
+- **Antigravity session details** show per-request context, the largest reported increase split by input and cache, and recorded context compaction steps.
+- **Antigravity desktop** can display settings, projects, shortcuts, sign-in, plugins, browser, automations, previews, and status messages in Simplified Chinese when launched from Cockpit Tools. The model picker keeps the official Orchestrator label and model names.
+- **Antigravity** shows the selected Orchestrator model’s quota next to the chat composer, including the standalone Neon, Carbon, and Argon options.
+- **Antigravity common settings** let you choose the desktop language, layout, and default local permissions. Cockpit launches the desktop with Software Engineering and Auto by default.
+- **Qoder CN** adds full support for the `qoder.com.cn` channel with isolated encrypted credential storage, device OAuth sign-in, native desktop/CLI switching, quota alerts, daily check-in, and dashboard/tray integration. [#3323](https://github.com/jlcodes99/cockpit-tools/pull/3323)
+- **Qoder CN client picker** lets you switch accounts and launch the selected client. On macOS, it supports Qoder CN Desktop, IDE, and CLI.
+- **Qoder Desktop on macOS** lets you import an account from the local client, or switch accounts and launch the international desktop app.
+- **T3 Code** can bind and switch Qoder and Qoder CN accounts, display remaining credits, and keep login configurations separate for every provider instance.
+- **WorkBuddy → Codex** adds an opt-in native DelegateTool bridge with a fixed-source scoped key, live model and reasoning effort selection, an isolated `CODEX_HOME` profile, and safe key revocation and restore. [#3312](https://github.com/jlcodes99/cockpit-tools/pull/3312)
+- **Codex API Service** supports setting a per-account concurrency limit override (`0` for unlimited, `1–64`, or blank to inherit the global limit) for each pool member. [#3268](https://github.com/jlcodes99/cockpit-tools/issues/3268)
+- **Codex / Claude** model providers add the **onomeo** preset. [#3311](https://github.com/jlcodes99/cockpit-tools/pull/3311)
+
+### Changed
+
+- **Account switching and instances** can prepare a new client automatically, apply the chosen account, and restart the selected client when needed. Blank instances can save an account binding before the first launch.
+
+- **Qoder and Qoder CN** use the Antigravity-style client picker with separate launch paths, an action to switch accounts and launch the selected client, and distinct desktop and IDE icons. Platform icons for Cursor, Kiro, MiniMax Code, Trae, and GitHub Copilot now match their current app or product icons.
+
+- **Qoder and Qoder CN** move the import source into the Add Account dialog and put client selection for switching on each account. Setup prompts for clients and instances offer an Open action.
+- **T3 Code** simplifies the account overview by removing the settings bar heading and icon.
+
+### Fixed
+
+- **T3 Code** honors the "Show in menu bar" setting. Its quotas appear in the macOS menu bar and can be refreshed from the tray menu. [#3332](https://github.com/jlcodes99/cockpit-tools/issues/3332)
+- **Claude and other supported platforms** save changes to the default instance's Desktop or CLI launch mode. [#3339](https://github.com/jlcodes99/cockpit-tools/issues/3339)
+- **Codex and platform account groups** wrap when space is tight, keeping the group tabs and manage button visible. [#3333](https://github.com/jlcodes99/cockpit-tools/issues/3333)
+- **Antigravity 2.x desktop version detection** prefers `app.asar/package.json` metadata across all platforms so stale unpacked `product.json` files left behind by in-place upgrades over 1.x no longer override the detected desktop version. [#3334](https://github.com/jlcodes99/cockpit-tools/pull/3334)
+- **Antigravity** shows current quota pools in the tray and macOS menu bar, removes duplicate rows, and hides Available AI Credits when the amount is unavailable. [#3336](https://github.com/jlcodes99/cockpit-tools/issues/3336) · [#3337](https://github.com/jlcodes99/cockpit-tools/pull/3337)
+- **Antigravity plan badges** map tier IDs such as `g1-ultra-tier`, `g1-pro-tier`, `g1-plus-tier`, `free-tier`, and `standard-tier` to standard plan labels (`ULTRA`, `PRO`, `PLUS`, `FREE`) consistently across account views, dialogs, and the native menu, with the raw tier ID shown on hover.
+- **Antigravity account switching** starts or restarts only the client selected in the account dialog. The dialog's two actions replace the launch-on-switch toggle in Settings.
+
+- **Codex API Service** distinguishes compatible-account cooling and local quota reserve from missing model compatibility in route selection errors, aligns the network-recovery budget with larger configured stream-open timeouts, and explains oversized request payloads on pre-response timeouts in gateway errors and request diagnostics.
+- **Codex API Service** grants bounded upload-progress extensions to `open_timeout` for large (`>= 8 MiB`) native requests and eliminates the redundant full plaintext buffer copy during zstd request compression while keeping safety and total deadline bounds intact. [#3342](https://github.com/jlcodes99/cockpit-tools/pull/3342)
+- **Codex auto-switch** treats terminal `systemError` desktop threads as idle so quota exhaustion no longer permanently blocks automatic switching, and logs the deferral reason when waiting for an active session to become idle. [#3321](https://github.com/jlcodes99/cockpit-tools/issues/3321)
+- **Codex API Service** rebinds session affinity to an available account when switching models across providers with complete inline input instead of returning `409 account_binding_unavailable`. [#3319](https://github.com/jlcodes99/cockpit-tools/issues/3319) · [#3331](https://github.com/jlcodes99/cockpit-tools/pull/3331)
+- **Codex API Service** omits Codex-only `client_metadata` during Responses-to-Chat conversion and retries strict Chat upstreams once without explicitly rejected optional hint fields. [#3329](https://github.com/jlcodes99/cockpit-tools/issues/3329) · [#3330](https://github.com/jlcodes99/cockpit-tools/pull/3330)
+- **Codex API Service** counts accounts in quota-window cooldown as cooling in `GET /v1/cockpit/quota` summaries to match routing and health snapshots. [#3322](https://github.com/jlcodes99/cockpit-tools/pull/3322)
+- **Claude Desktop** persists cookies refreshed by the hidden Electron probe back into the managed profile snapshot so subsequent silent quota refreshes succeed without hitting the probe cooldown. [#3318](https://github.com/jlcodes99/cockpit-tools/issues/3318) · [#3327](https://github.com/jlcodes99/cockpit-tools/pull/3327)
+- **Claude CLI** quota refreshes sync local credentials only from bound CLI instances, preserving independent sign-ins in the default terminal. [#3338](https://github.com/jlcodes99/cockpit-tools/issues/3338)
+- **Antigravity Wakeup** honors the Windows manual system proxy and bypass list for the official Language Server when no explicit proxy environment variable is set. [#3326](https://github.com/jlcodes99/cockpit-tools/pull/3326)
+- **T3 Code** detects `T3 Code (Beta).exe` and `T3 Code (Nightly).exe` installed under the `t3code` folder on Windows. [#3324](https://github.com/jlcodes99/cockpit-tools/issues/3324) · [#3328](https://github.com/jlcodes99/cockpit-tools/pull/3328)
+- **CodeBuddy CLI** opens Windows console handles with both read and write access so Node-based CLIs enter interactive mode reliably. [#3316](https://github.com/jlcodes99/cockpit-tools/pull/3316)
+- **Trae** omits `--reuse-window` and `--new-window` flags on Windows cold starts so Trae's `window.startupWindowType` preference applies. [#3315](https://github.com/jlcodes99/cockpit-tools/pull/3315)
+- **Windows Terminals** resolves Microsoft Store and `Program Files` installations of PowerShell 7 (`pwsh.exe`) when not on `PATH` and opens them in an interactive console window. [#3314](https://github.com/jlcodes99/cockpit-tools/pull/3314)
+
 ## [1.5.2] - 2026-11-26
 
 ### Added

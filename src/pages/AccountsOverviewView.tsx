@@ -12,6 +12,7 @@ import { ModalErrorMessage } from '../components/ModalErrorMessage';
 import { MfaQuickCodeSelect } from '../components/MfaQuickCodeSelect';
 import { ANTIGRAVITY_RESET_SORT_PREFIX } from '../utils/antigravityAccountSort';
 import { OverviewTabsHeader } from '../components/OverviewTabsHeader';
+import { AntigravityCommonSettings } from '../components/antigravity/AntigravityDesktopSettings';
 import { AntigravityTokenUsageSummary } from '../components/antigravity/AntigravityTokenUsageSummary';
 import { FileCorruptedModal } from '../components/FileCorruptedModal';
 import { AccountSelectionToolbar } from '../components/AccountSelectionToolbar';
@@ -452,6 +453,8 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
             />
           </div>
         </div>
+
+        <AntigravityCommonSettings />
 
         {(accounts.length > 0 || grouping.groups.length > 0) && (
           <AccountSelectionToolbar
@@ -1027,6 +1030,7 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
                             )}
                             <span
                               className={`tier-badge ${tierBadge.className}`}
+                              title={tierBadge.rawTier || tierBadge.label}
                             >
                               {tierBadge.label}
                             </span>
@@ -1430,7 +1434,7 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
                 <div className="modal-header">
                   <h2>{t('modals.quota.title')}</h2>
                   <div className="badges">
-                    <span className={`pill ${tierClass}`}>{tierBadge.label}</span>
+                    <span className={`pill ${tierClass}`} title={tierBadge.rawTier || tierBadge.label}>{tierBadge.label}</span>
                   </div>
                   <button
                     className="modal-close"

@@ -100,3 +100,15 @@ test('effect reinitialization reuses the consumed target and cleans up listeners
   await settlePromises();
   assert.deepEqual(h.defaults, []);
 });
+
+test('tray:navigate routes t3code to the T3 Code page', async () => {
+  const h = fixture();
+  h.mount();
+  h.tray('t3code');
+  h.pending.resolve(null);
+  h.config.resolve({ startup_page: 'overview' });
+  await settlePromises();
+  assert.deepEqual(h.targets, ['t3code']);
+  assert.deepEqual(h.defaults, []);
+  h.hook.unmount();
+});

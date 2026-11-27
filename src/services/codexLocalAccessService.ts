@@ -287,6 +287,13 @@ export function updateCodexLocalAccessAccountQuotaFloor(
   return invoke("codex_local_access_update_account_quota_floor", { accountId, minimumRemainingPercent });
 }
 
+export function updateCodexLocalAccessAccountConcurrencyLimit(
+  accountId: string,
+  maxConcurrency: number | null,
+): Promise<CodexLocalAccessState> {
+  return invoke("codex_local_access_update_account_concurrency_limit", { accountId, maxConcurrency });
+}
+
 export async function updateCodexLocalAccessModelRules(
   modelAliases: CodexLocalAccessModelAlias[],
   excludedModels: string[],

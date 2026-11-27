@@ -1,0 +1,61 @@
+.antigravity-common-settings {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  margin-block-end: 12px;
+  padding: 11px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-card);
+  box-shadow: var(--shadow-sm);
+}
+
+.antigravity-common-settings-controls,
+.antigravity-common-setting {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.antigravity-common-settings-controls {
+  flex-wrap: wrap;
+  gap: 10px 14px;
+}
+
+.antigravity-common-setting {
+  max-width: 100%;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.antigravity-common-setting-label {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.antigravity-common-settings .antigravity-common-select {
+  width: min(9rem, 42vw);
+}
+
+.antigravity-common-settings .antigravity-common-select .single-select-dropdown-trigger {
+  min-height: 36px;
+  border-radius: var(--radius-md);
+}
+
+.antigravity-common-settings-error,
+.antigravity-common-settings-hint {
+  flex-basis: 100%;
+  font-size: 12px;
+}
+
+.antigravity-common-settings-error {
+  color: var(--danger);
+}
+
+.antigravity-common-settings-hint {
+  color: var(--text-secondary);
+}

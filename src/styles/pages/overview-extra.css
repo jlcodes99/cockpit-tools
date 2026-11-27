@@ -103,6 +103,48 @@
   border: none;
 }
 
+.tier-badge.plus {
+  background: var(--plan-plus-bg);
+  color: var(--plan-plus-color);
+  border-color: var(--plan-plus-border);
+}
+
+.tier-badge.free {
+  background: var(--plan-free-bg);
+  color: var(--plan-free-color);
+  border-color: var(--plan-free-border);
+}
+
+.tier-badge.enterprise {
+  background: var(--plan-enterprise-bg);
+  color: var(--plan-enterprise-color);
+  border-color: var(--plan-enterprise-border);
+}
+
+.tier-badge.business {
+  background: var(--plan-business-bg);
+  color: var(--plan-business-color);
+  border-color: var(--plan-business-border);
+}
+
+.tier-badge.individual {
+  background: var(--plan-individual-bg);
+  color: var(--plan-individual-color);
+  border-color: var(--plan-individual-border);
+}
+
+.tier-badge.trial {
+  background: var(--plan-trial-bg);
+  color: var(--plan-trial-color);
+  border-color: var(--plan-trial-border);
+}
+
+.tier-badge.unknown {
+  background: var(--plan-unknown-bg);
+  color: var(--plan-unknown-color);
+  border-color: var(--plan-unknown-border);
+}
+
 .action-btn {
   width: 28px;
   height: 28px;

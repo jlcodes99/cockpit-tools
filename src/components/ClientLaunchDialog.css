@@ -109,8 +109,19 @@
 }
 
 .client-launch-options > button > svg,
+.client-launch-option-icon,
 .client-launch-dialog .btn > svg {
   flex-shrink: 0;
+}
+
+.client-launch-options-equal > button {
+  flex: 1 1 0;
+}
+
+.client-launch-option-icon {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
 }
 
 .client-launch-options > button:hover:not(:disabled) {

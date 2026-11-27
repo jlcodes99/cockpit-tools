@@ -1,7 +1,5 @@
 import { CSSProperties } from 'react';
-import traeIcon from '../../assets/icons/trae.png';
 import traeWorkIcon from '../../assets/icons/trae-work.png';
-import traeCnIcon from '../../assets/icons/trae-cn.png';
 
 type TraeIconProps = {
   className?: string;
@@ -26,7 +24,7 @@ function TraeImageIcon({ src, className = 'nav-item-icon', style }: TraeImageIco
 }
 
 export function TraeIcon(props: TraeIconProps) {
-  return <TraeImageIcon {...props} src={traeIcon} />;
+  return <TraeImageIcon {...props} src={traeWorkIcon} />;
 }
 
 export function TraeSoloIcon(props: TraeIconProps) {
@@ -34,7 +32,7 @@ export function TraeSoloIcon(props: TraeIconProps) {
 }
 
 export function TraeCnIcon(props: TraeIconProps) {
-  return <TraeImageIcon {...props} src={traeCnIcon} />;
+  return <TraeImageIcon {...props} src={traeWorkIcon} />;
 }
 
 export function TraeSoloCnIcon(props: TraeIconProps) {

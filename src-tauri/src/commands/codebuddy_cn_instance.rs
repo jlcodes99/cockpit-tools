@@ -410,6 +410,24 @@ async fn codebuddy_cn_start_instance_internal(
         let default_dir = modules::codebuddy_cn_instance::get_default_codebuddy_cn_user_data_dir()?;
         let default_dir_str = default_dir.to_string_lossy().to_string();
         let default_settings = modules::codebuddy_cn_instance::load_default_settings()?;
+        let extra_args = modules::process::parse_extra_args(&default_settings.extra_args);
+        let _initialization = if default_settings.bind_account_id.is_some() && launch_path_error.is_none() {
+            let directory = default_dir.clone();
+            let root = directory.clone();
+            let last_pid = default_settings.last_pid;
+            let args = extra_args.clone();
+            modules::client_initialization::prepare_profile(
+                "codebuddy_cn", instance_id.clone(),
+                move || modules::vscode_inject::client_secret_storage_ready("codebuddy_cn", &root),
+                move || {
+                    if resolve_running_pid(last_pid, None).is_none() {
+                        modules::process::start_codebuddy_cn_default_with_args_with_new_window(&args, true)?;
+                    }
+                    Ok(())
+                },
+            ).await?
+        } else { None };
+
 
         if let Some(pid) = resolve_running_pid(default_settings.last_pid, None) {
             modules::process::close_pid(pid, 20)?;
@@ -427,7 +445,6 @@ async fn codebuddy_cn_start_instance_internal(
             return Err(error.clone());
         }
 
-        let extra_args = modules::process::parse_extra_args(&default_settings.extra_args);
         let pid = modules::process::start_codebuddy_cn_default_with_args_with_new_window(
             &extra_args,
             true,
@@ -458,6 +475,25 @@ async fn codebuddy_cn_start_instance_internal(
         .into_iter()
         .find(|item| item.id == instance_id)
         .ok_or("实例不存在")?;
+    let extra_args = modules::process::parse_extra_args(&instance.extra_args);
+    let _initialization = if instance.bind_account_id.is_some() && launch_path_error.is_none() {
+        let directory = std::path::PathBuf::from(&instance.user_data_dir);
+        let root = directory.clone();
+        let dir = directory.to_string_lossy().into_owned();
+        let last_pid = instance.last_pid;
+        let args = extra_args.clone();
+        modules::client_initialization::prepare_profile(
+            "codebuddy_cn", instance_id.clone(),
+            move || modules::vscode_inject::client_secret_storage_ready("codebuddy_cn", &root),
+            move || {
+                if resolve_running_pid(last_pid, directory.to_str()).is_none() {
+                    modules::process::start_codebuddy_cn_with_args_with_new_window(&dir, &args, true)?;
+                }
+                Ok(())
+            },
+        ).await?
+    } else { None };
+
 
     if let Some(pid) = resolve_running_pid(instance.last_pid, Some(&instance.user_data_dir)) {
         modules::process::close_pid(pid, 20)?;
@@ -472,7 +508,6 @@ async fn codebuddy_cn_start_instance_internal(
     )
     .await?;
 
-    let extra_args = modules::process::parse_extra_args(&instance.extra_args);
     let pid = modules::process::start_codebuddy_cn_with_args_with_new_window(
         &instance.user_data_dir,
         &extra_args,

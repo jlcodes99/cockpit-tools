@@ -490,9 +490,17 @@ pub(crate) fn run_from_terminal(encoded: &str) -> Result<i32, String> {
     #[cfg(target_os = "windows")]
     {
         use std::process::Stdio;
-        let input = fs::File::open("CONIN$").map_err(|_| "launchFailed")?;
+        // Write access is required for Node to switch the console input to raw mode.
+        let input = fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open("CONIN$")
+            .map_err(|_| "launchFailed")?;
+        // Read access is required: Node-based CLIs detect the console through `GetConsoleMode`,
+        // which fails on a write-only handle and makes them exit in non-interactive print mode.
         let output = || {
             fs::OpenOptions::new()
+                .read(true)
                 .write(true)
                 .open("CONOUT$")
                 .map_err(|_| "launchFailed")
