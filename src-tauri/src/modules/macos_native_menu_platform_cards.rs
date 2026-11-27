@@ -718,8 +718,7 @@
                 let remaining_percent = if metric.is_empty() {
                     min_quota_progress(&quota_rows, true)
                 } else {
-                    quota.and_then(|quota| selected_antigravity_menu_quota(quota, metric))
-                        .map(|model| model.percentage.clamp(0, 100))
+                    quota.and_then(|quota| selected_antigravity_menu_percentage(quota, metric))
                 };
                 AccountCard {
                     id: account.id,

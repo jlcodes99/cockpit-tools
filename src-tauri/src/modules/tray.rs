@@ -984,15 +984,40 @@ fn get_account_display_info(platform: PlatformId, lang: &str) -> AccountDisplayI
 }
 
 #[cfg(not(target_os = "macos"))]
+fn build_antigravity_summary_window_lines(
+    lang: &str,
+    quota: &crate::models::quota::QuotaData,
+) -> Vec<String> {
+    crate::modules::quota::resolve_antigravity_summary_windows(lang, quota)
+        .into_iter()
+        .map(|window| {
+            let reset_ts = parse_model_reset_ts(&window.reset_time);
+            let reset_text = reset_ts.map(|ts| format_reset_time_from_ts(lang, Some(ts)));
+            format_quota_line(
+                lang,
+                &window.label,
+                &format_percent_text(window.percentage),
+                reset_text.as_deref(),
+            )
+        })
+        .collect()
+}
+
+#[cfg(not(target_os = "macos"))]
 fn build_antigravity_display_info(lang: &str) -> AccountDisplayInfo {
     match crate::modules::account::get_current_account() {
         Ok(Some(account)) => {
             let quota_lines = if let Some(quota) = &account.quota {
-                let grouped_lines = build_antigravity_group_quota_lines(lang, &quota.models);
-                if grouped_lines.is_empty() {
-                    build_model_quota_lines(lang, &quota.models)
+                let window_lines = build_antigravity_summary_window_lines(lang, quota);
+                if !window_lines.is_empty() {
+                    window_lines
                 } else {
-                    grouped_lines
+                    let grouped_lines = build_antigravity_group_quota_lines(lang, &quota.models);
+                    if grouped_lines.is_empty() {
+                        build_model_quota_lines(lang, &quota.models)
+                    } else {
+                        grouped_lines
+                    }
                 }
             } else {
                 vec![get_text("loading", lang)]
@@ -1092,7 +1117,7 @@ fn build_antigravity_group_quota_lines(
     models: &[crate::models::quota::ModelQuota],
 ) -> Vec<String> {
     let settings = crate::modules::group_settings::load_group_settings();
-    let ordered_groups = settings.get_ordered_groups(Some(3));
+    let ordered_groups = settings.get_ordered_groups(None);
     if ordered_groups.is_empty() {
         return Vec::new();
     }
@@ -1138,6 +1163,9 @@ fn build_antigravity_group_quota_lines(
             &format_percent_text(avg_percentage),
             reset_text.as_deref(),
         ));
+        if lines.len() >= 3 {
+            break;
+        }
     }
 
     lines

@@ -41,11 +41,27 @@ export interface TokenData {
     session_id?: string;
 }
 
+export interface QuotaSummaryWindow {
+    id: string;
+    period: string;
+    percentage: number;
+    reset_time?: string;
+    summary_exhausted?: boolean;
+}
+
+export interface QuotaSummaryGroup {
+    id: string;
+    name: string;
+    models?: string[];
+    windows: QuotaSummaryWindow[];
+}
+
 export interface QuotaData {
     models: ModelQuota[];
     last_updated: number;
     quota_summary_stale?: boolean;
     quota_summary_updated_at?: number;
+    quota_summary_groups?: QuotaSummaryGroup[];
     is_forbidden?: boolean;
     subscription_tier?: string;
     credits?: CreditInfo[];

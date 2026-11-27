@@ -1623,7 +1623,7 @@
         quota: &crate::models::quota::QuotaData,
     ) -> Vec<QuotaRow> {
         let settings = crate::modules::group_settings::load_group_settings();
-        let ordered_groups = settings.get_ordered_groups(Some(3));
+        let ordered_groups = settings.get_ordered_groups(None);
         if ordered_groups.is_empty() {
             return Vec::new();
         }
@@ -1670,6 +1670,9 @@
                 format_reset_subtext(lang, earliest_reset_ts),
                 antigravity_remaining_tone(percentage),
             ));
+            if rows.len() >= 3 {
+                break;
+            }
         }
 
         rows
@@ -1700,37 +1703,17 @@
             .collect()
     }
 
-    #[derive(serde::Deserialize)]
-    struct AntigravityQuotaWindow {
-        id: String,
-        model: String,
-        weekly: bool,
-        aliases: Vec<String>,
-    }
-
-    fn antigravity_quota_windows() -> &'static [AntigravityQuotaWindow] {
-        static WINDOWS: std::sync::OnceLock<Vec<AntigravityQuotaWindow>> = std::sync::OnceLock::new();
-        WINDOWS.get_or_init(|| {
-            serde_json::from_str(include_str!("../../../src/utils/antigravityQuotaWindows.json"))
-                .expect("valid Antigravity quota windows")
-        })
-    }
-
-    impl AntigravityQuotaWindow {
-        fn find<'a>(&self, quota: &'a crate::models::quota::QuotaData) -> Option<&'a crate::models::quota::ModelQuota> {
-            self.aliases.iter().find_map(|alias| {
-                quota.models.iter().find(|model| model.name.eq_ignore_ascii_case(alias))
-            })
-        }
-
-        fn label(&self, lang: &str) -> String {
-            let period = if self.weekly {
-                translate_or(lang, "common.quota.weeklyWindow", "Weekly", &[])
-            } else {
-                "5h".to_string()
-            };
-            format!("{} ({period})", self.model)
-        }
+    fn resolved_window_to_quota_row(
+        lang: &str,
+        window: &modules::quota::ResolvedAntigravityWindow,
+    ) -> QuotaRow {
+        make_progress_row(
+            window.label.clone(),
+            format!("{}%", window.percentage),
+            window.percentage,
+            format_reset_subtext(lang, parse_rfc3339_ts(&window.reset_time)),
+            antigravity_remaining_tone(window.percentage),
+        )
     }
 
     fn selected_antigravity_menu_quota<'a>(
@@ -1740,10 +1723,77 @@
         if metric.is_empty() {
             return None;
         }
-        if let Some(window) = antigravity_quota_windows().iter().find(|window| window.id == metric) {
+        if let Some(window) = modules::quota::antigravity_quota_windows()
+            .iter()
+            .find(|window| window.matches_metric(metric))
+        {
             return window.find(quota);
         }
         quota.models.iter().find(|model| model.name.eq_ignore_ascii_case(metric))
+    }
+
+    fn selected_antigravity_menu_percentage(
+        quota: &crate::models::quota::QuotaData,
+        metric: &str,
+    ) -> Option<i32> {
+        if metric.is_empty() {
+            return None;
+        }
+        if let Some(window) = modules::quota::resolve_antigravity_summary_windows("en", quota)
+            .into_iter()
+            .find(|window| window.matches_metric(metric))
+        {
+            return Some(window.percentage);
+        }
+        selected_antigravity_menu_quota(quota, metric).map(|model| model.percentage.clamp(0, 100))
+    }
+
+    fn model_to_quota_row(lang: &str, model: &crate::models::quota::ModelQuota) -> QuotaRow {
+        let percent = model.percentage.clamp(0, 100);
+        let label = model
+            .display_name
+            .as_deref()
+            .map(str::trim)
+            .filter(|name| !name.is_empty())
+            .map(str::to_string)
+            .unwrap_or_else(|| model.name.clone());
+        make_progress_row(
+            label,
+            format!("{percent}%"),
+            percent,
+            format_reset_subtext(lang, parse_rfc3339_ts(&model.reset_time)),
+            antigravity_remaining_tone(percent),
+        )
+    }
+
+    fn collect_antigravity_window_rows(
+        lang: &str,
+        quota: &crate::models::quota::QuotaData,
+        metric: &str,
+    ) -> (Vec<QuotaRow>, bool) {
+        let summary_windows = modules::quota::resolve_antigravity_summary_windows(lang, quota);
+        let has_summary_windows = !summary_windows.is_empty();
+        let selected_window_index = if metric.is_empty() {
+            None
+        } else {
+            summary_windows.iter().position(|window| window.matches_metric(metric))
+        };
+
+        let mut rows = Vec::new();
+        if let Some(idx) = selected_window_index {
+            rows.push(resolved_window_to_quota_row(lang, &summary_windows[idx]));
+        } else if !metric.is_empty() {
+            if let Some(model) = quota.models.iter().find(|model| model.name.eq_ignore_ascii_case(metric)) {
+                rows.push(model_to_quota_row(lang, model));
+            }
+        }
+
+        for (idx, window) in summary_windows.iter().enumerate() {
+            if Some(idx) != selected_window_index {
+                rows.push(resolved_window_to_quota_row(lang, window));
+            }
+        }
+        (rows, has_summary_windows)
     }
 
     fn build_antigravity_window_rows(
@@ -1751,32 +1801,7 @@
         quota: &crate::models::quota::QuotaData,
         metric: &str,
     ) -> Vec<QuotaRow> {
-        let windows = antigravity_quota_windows();
-        let mut rows = Vec::new();
-        let mut add_row = |label, model: &crate::models::quota::ModelQuota| {
-            let percent = model.percentage.clamp(0, 100);
-            rows.push(make_progress_row(
-                label,
-                format!("{percent}%"),
-                percent,
-                format_reset_subtext(lang, parse_rfc3339_ts(&model.reset_time)),
-                antigravity_remaining_tone(percent),
-            ));
-        };
-        if let Some(model) = selected_antigravity_menu_quota(quota, metric) {
-            let label = windows.iter().find(|window| window.id == metric)
-                .map(|window| window.label(lang))
-                .or_else(|| model.display_name.as_deref().map(str::trim)
-                    .filter(|name| !name.is_empty()).map(str::to_string))
-                .unwrap_or_else(|| model.name.clone());
-            add_row(label, model);
-        }
-        for window in windows.iter().filter(|window| window.id != metric) {
-            if let Some(model) = window.find(quota) {
-                add_row(window.label(lang), model);
-            }
-        }
-        rows
+        collect_antigravity_window_rows(lang, quota, metric).0
     }
 
     fn build_antigravity_quota_rows(
@@ -1787,12 +1812,14 @@
         let Some(quota) = quota else {
             return Vec::new();
         };
-        let mut rows = build_antigravity_window_rows(lang, quota, metric);
-        if rows.is_empty() {
-            rows = build_antigravity_group_quota_rows(lang, quota);
-        }
-        if rows.is_empty() {
-            rows = build_antigravity_fallback_quota_rows(lang, quota);
+        let (mut rows, has_summary_windows) = collect_antigravity_window_rows(lang, quota, metric);
+        if !has_summary_windows {
+            let group_rows = build_antigravity_group_quota_rows(lang, quota);
+            if !group_rows.is_empty() {
+                rows.extend(group_rows);
+            } else if rows.is_empty() {
+                rows = build_antigravity_fallback_quota_rows(lang, quota);
+            }
         }
 
         rows.push(QuotaRow {
@@ -1820,47 +1847,75 @@
         assert_eq!(rows[0].progress, Some(83));
         assert_eq!(rows[1].label, "Claude (5h)");
         assert_eq!(rows[1].progress, Some(0));
+
+        // Alias metric must not emit a duplicate window row.
+        let alias_rows = build_antigravity_window_rows("en", &quota, "gemini-weekly");
+        assert_eq!(
+            alias_rows.iter().filter(|row| row.label == "Gemini (Weekly)").count(),
+            1
+        );
     }
 
     #[cfg(test)]
     #[test]
-    fn antigravity_menu_skips_local_group_rows_when_summary_windows_exist() {
-        let mut shared_pool = crate::models::quota::QuotaData::new();
-        shared_pool.add_model("3p-5h".into(), None, 100, String::new());
-        shared_pool.add_model("3p-weekly".into(), None, 100, String::new());
-        shared_pool.add_model("gemini-5h".into(), None, 54, String::new());
-        shared_pool.add_model("gemini-weekly".into(), None, 72, String::new());
-        shared_pool.add_model("gemini-4-carbon-high".into(), None, 54, String::new());
-        shared_pool.add_model("claude-sonnet-5-5-high".into(), None, 100, String::new());
+    fn antigravity_menu_prefers_dynamic_summary_groups_and_preserves_legacy_fallback() {
+        // 1. Dynamic summary groups render known windows cleanly and include new dynamic pools.
+        let mut dynamic_quota = crate::models::quota::QuotaData::new();
+        dynamic_quota.quota_summary_groups = Some(vec![
+            crate::models::quota::QuotaSummaryGroup {
+                id: "neon".into(),
+                name: "Neon Preview".into(),
+                models: vec!["Gemini 4 Neon".into()],
+                windows: vec![crate::models::quota::QuotaSummaryWindow {
+                    id: "neon-weekly".into(),
+                    period: "weekly".into(),
+                    percentage: 42,
+                    reset_time: "2099-01-02T00:00:00Z".into(),
+                    summary_exhausted: Some(false),
+                }],
+            },
+            crate::models::quota::QuotaSummaryGroup {
+                id: "gemini".into(),
+                name: "Gemini Models".into(),
+                models: vec!["Gemini 4 Carbon".into(), "Gemini 4 Hydrogen".into()],
+                windows: vec![
+                    crate::models::quota::QuotaSummaryWindow {
+                        id: "gemini-5h".into(),
+                        period: "5h".into(),
+                        percentage: 54,
+                        reset_time: String::new(),
+                        summary_exhausted: Some(false),
+                    },
+                    crate::models::quota::QuotaSummaryWindow {
+                        id: "gemini-weekly".into(),
+                        period: "weekly".into(),
+                        percentage: 72,
+                        reset_time: String::new(),
+                        summary_exhausted: Some(false),
+                    },
+                ],
+            },
+        ]);
+        dynamic_quota.add_model("gemini-4-carbon-high".into(), None, 54, String::new());
 
-        let rows = build_antigravity_quota_rows("en", Some(&shared_pool), "");
+        let rows = build_antigravity_quota_rows("en", Some(&dynamic_quota), "neon:weekly");
         let labels: Vec<&str> = rows.iter().map(|row| row.label.as_str()).collect();
         assert_eq!(
-            &labels[..4],
-            &[
-                "Claude (5h)",
-                "Claude (Weekly)",
-                "Gemini (5h)",
-                "Gemini (Weekly)",
-            ]
+            &labels[..3],
+            &["Neon Preview (Weekly)", "Gemini (5h)", "Gemini (Weekly)"]
         );
         assert!(!labels.contains(&"Gemini 4 Carbon"));
-        assert!(!labels.contains(&"Claude 4.5"));
-        assert_eq!(rows.len(), 5);
+        assert_eq!(selected_antigravity_menu_percentage(&dynamic_quota, "neon:weekly"), Some(42));
 
-        let mut with_carbon_bucket = shared_pool.clone();
-        with_carbon_bucket.add_model("gemini-carbon-wtu-weekly".into(), None, 21, String::new());
-        let carbon_labels: Vec<String> = build_antigravity_quota_rows("en", Some(&with_carbon_bucket), "")
-            .into_iter()
-            .map(|row| row.label)
-            .collect();
-        assert!(carbon_labels.iter().any(|label| label == "Gemini 4 Carbon (Weekly)"));
-        assert!(!carbon_labels.iter().any(|label| label == "Gemini 4 Carbon"));
-
+        // 2. Legacy models with a pinned model metric still keep local group fallback rows.
         let mut legacy = crate::models::quota::QuotaData::new();
+        legacy.add_model("gemini-3.8-flash".into(), Some("Gemini Flash".into()), 45, String::new());
         legacy.add_model("gemini-3.1-pro-high".into(), None, 60, String::new());
-        let legacy_rows = build_antigravity_quota_rows("en", Some(&legacy), "");
+        legacy.add_model("claude-sonnet-4-6".into(), None, 80, String::new());
+        let legacy_rows = build_antigravity_quota_rows("en", Some(&legacy), "gemini-3.8-flash");
+        assert_eq!(legacy_rows[0].label, "Gemini Flash");
         assert!(legacy_rows.iter().any(|row| row.progress == Some(60)));
+        assert!(legacy_rows.iter().any(|row| row.progress == Some(80)));
     }
 
     fn format_codex_quota_metric_label(window_minutes: Option<i64>, fallback: &str) -> String {

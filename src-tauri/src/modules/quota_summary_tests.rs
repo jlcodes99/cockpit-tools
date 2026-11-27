@@ -249,4 +249,37 @@ fn successful_summary_preserves_actual_percentage_and_reset() {
     assert_eq!(quota.models[0].percentage, 25);
     assert_eq!(quota.models[0].reset_time, "2099-01-01T00:00:00Z");
     assert!(!quota.quota_summary_stale);
+    let group = &quota.quota_summary_groups.as_ref().unwrap()[0];
+    assert_eq!(group.windows[0].reset_time, "2099-01-01T00:00:00Z");
+    assert_eq!(group.windows[0].summary_exhausted, Some(false));
+    assert_eq!(group.windows[0].canonical_id(), "gemini:5h");
+}
+
+#[test]
+fn failed_summary_preserves_dynamic_summary_groups_while_staying_stale() {
+    let mut prev = build_quota_data_from_response(
+        QuotaResponse { models: Default::default() },
+        Some("PRO".into()),
+        vec![],
+        Some(json!({"groups":[{"displayName":"Neon Preview","buckets":[{
+            "bucketId":"neon-weekly", "window":"weekly", "remainingFraction":0.42, "resetTime":"2099-01-02T00:00:00Z"
+        }]}]})),
+        None,
+        None,
+    );
+    prev.quota_summary_updated_at = Some(777);
+
+    let mut next = QuotaData::new();
+    next.subscription_tier = Some("PRO".into());
+    next.quota_summary_stale = true;
+    next.add_model("gemini-4-neon-high".into(), None, 10, String::new());
+    preserve_failed_quota_summary(&mut next, Some(&prev));
+
+    assert!(next.quota_summary_stale);
+    assert_eq!(next.quota_summary_updated_at, Some(777));
+    assert!(next.models.iter().any(|m| m.name == "neon-weekly" && m.percentage == 42));
+    let groups = next.quota_summary_groups.as_ref().unwrap();
+    assert_eq!(groups.len(), 1);
+    assert_eq!(groups[0].name, "Neon Preview");
+    assert_eq!(groups[0].windows[0].reset_time, "2099-01-02T00:00:00Z");
 }

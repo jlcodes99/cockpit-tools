@@ -353,3 +353,37 @@ test('Antigravity card time picker can show the quota refresh time without selec
   assert.equal(stopped, 1);
   h.unmount();
 });
+
+test('dynamic summary groups render unknown pools and keep their bucket IDs out of model rows', () => {
+  const fixture = account([
+    model('gemini-5h', 54),
+    model('gemini-weekly', 72),
+    model('neon-weekly', 42),
+    { ...model('gemini-4-neon-high', 54), display_name: 'Gemini 4 Neon (High)' },
+  ]);
+  fixture.quota!.quota_summary_groups = [
+    {
+      id: 'gemini',
+      name: 'Gemini Models',
+      windows: [
+        { id: 'gemini-5h', period: '5h', percentage: 54 },
+        { id: 'gemini-weekly', period: 'weekly', percentage: 72 },
+      ],
+    },
+    {
+      id: 'neon',
+      name: 'Neon Preview',
+      windows: [
+        { id: 'neon-weekly', period: 'weekly', percentage: 42, reset_time: futureReset },
+      ],
+    },
+  ];
+  const items = getAntigravityQuotaDisplayItems(fixture, []);
+  assert.deepEqual(items.map(({ key, label, percentage }) => [key, label, percentage]), [
+    ['gemini:5h', 'Gemini (5h)', 54],
+    ['gemini:weekly', 'Gemini (Weekly)', 72],
+    ['neon:weekly', 'Neon Preview (Weekly)', 42],
+  ]);
+  const modelItems = getAntigravityModelQuotaDisplayItems(fixture);
+  assert.deepEqual(modelItems.map(({ key }) => key), ['gemini-4-neon-high']);
+});
