@@ -16,10 +16,11 @@ struct ParentScanState {
     compressed: bool,
 }
 
-fn prepare_parent_index(
+fn prepare_parent_index_with_budget(
     conn: &Connection,
     path: &Path,
     cache: &mut UsageReaderCache,
+    budget: ParseBatchBudget,
 ) -> Result<Option<ParentScanState>, String> {
     let logical_path = logical_rollout_path(path);
     let path_text = logical_path.to_string_lossy();
@@ -64,9 +65,9 @@ fn prepare_parent_index(
     let (offset, complete) = loop {
         let position = reader.offset;
         if position > initial
-            && (position - initial >= crate::modules::background_maintenance::BATCH_BYTES
-                || events.len() >= INSERT_BATCH_SIZE
-                || started.elapsed() >= crate::modules::background_maintenance::BATCH_TIME)
+            && (position - initial >= budget.max_bytes
+                || events.len() >= budget.max_events
+                || started.elapsed() >= budget.max_time)
         {
             break (position, reader.at_eof()?);
         }
@@ -112,14 +113,26 @@ fn prepare_parent_index(
     state.modified = modified;
     state.anchor = checkpoint_anchor(path, state.offset)?;
     let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
-    for (line, timestamp, signature) in events {
-        tx.execute("INSERT OR REPLACE INTO session_parent_signatures(file_path,generation,line,timestamp,signature) VALUES(?1,?2,?3,?4,?5)",
-            params![path_text.as_ref(),state.generation,line,timestamp,signature]).map_err(|e|e.to_string())?;
+    {
+        let mut insert_sig = tx
+            .prepare_cached("INSERT OR REPLACE INTO session_parent_signatures(file_path,generation,line,timestamp,signature) VALUES(?1,?2,?3,?4,?5)")
+            .map_err(|e| e.to_string())?;
+        for (line, timestamp, signature) in events {
+            insert_sig
+                .execute(params![
+                    path_text.as_ref(),
+                    state.generation,
+                    line,
+                    timestamp,
+                    signature
+                ])
+                .map_err(|e| e.to_string())?;
+        }
     }
     tx.execute("INSERT INTO session_parent_sync(file_path,state) VALUES(?1,?2) ON CONFLICT(file_path) DO UPDATE SET state=excluded.state",
         params![path_text.as_ref(),serde_json::to_string(&state).map_err(|e|e.to_string())?]).map_err(|e|e.to_string())?;
     // Rewritten generations are reclaimed gradually, never by one huge DELETE.
-    tx.execute("DELETE FROM session_parent_signatures WHERE rowid IN (SELECT rowid FROM session_parent_signatures WHERE file_path=?1 AND generation!=?2 LIMIT 32)",params![path_text.as_ref(),state.generation]).map_err(|e|e.to_string())?;
+    tx.execute("DELETE FROM session_parent_signatures WHERE rowid IN (SELECT rowid FROM session_parent_signatures WHERE file_path=?1 AND generation!=?2 LIMIT ?3)",params![path_text.as_ref(),state.generation,budget.max_events as i64]).map_err(|e|e.to_string())?;
     tx.commit().map_err(|e| e.to_string())?;
     if !state.complete && state.offset == initial {
         return Err("父 rollout 尾部尚未写完".into());
@@ -131,6 +144,8 @@ enum ParentReplay {
     Pending,
     Matched(usize),
 }
+
+#[cfg(test)]
 fn resolve_parent_replay(
     conn: &Connection,
     parent_id: &str,
@@ -140,13 +155,49 @@ fn resolve_parent_replay(
     checkpoint: &mut ParserCheckpoint,
     cache: &mut UsageReaderCache,
 ) -> Result<ParentReplay, String> {
+    resolve_parent_replay_with_mode(conn, parent_id, cutoff, index, child, checkpoint, cache, false)
+}
+
+fn resolve_parent_replay_complete(
+    conn: &Connection,
+    parent_id: &str,
+    cutoff: DateTime<Utc>,
+    index: &RolloutIndex,
+    child: &[ParsedTokenEvent],
+    checkpoint: &mut ParserCheckpoint,
+    cache: &mut UsageReaderCache,
+) -> Result<ParentReplay, String> {
+    resolve_parent_replay_with_mode(conn, parent_id, cutoff, index, child, checkpoint, cache, true)
+}
+
+fn resolve_parent_replay_with_mode(
+    conn: &Connection,
+    parent_id: &str,
+    cutoff: DateTime<Utc>,
+    index: &RolloutIndex,
+    child: &[ParsedTokenEvent],
+    checkpoint: &mut ParserCheckpoint,
+    cache: &mut UsageReaderCache,
+    complete_parent: bool,
+) -> Result<ParentReplay, String> {
     let paths = index
         .get(parent_id)
         .ok_or_else(|| format!("找不到父 rollout: {parent_id}"))?;
+    let budget = if complete_parent {
+        ParseBatchBudget::foreground()
+    } else {
+        ParseBatchBudget::background()
+    };
     let mut snapshots = Vec::new();
     for path in paths {
-        let Some(state) = prepare_parent_index(conn, path, cache)? else {
-            return Ok(ParentReplay::Pending);
+        let state = loop {
+            if let Some(state) = prepare_parent_index_with_budget(conn, path, cache, budget)? {
+                break state;
+            }
+            if !complete_parent || crate::modules::app_lifecycle::is_shutdown_started() {
+                return Ok(ParentReplay::Pending);
+            }
+            std::thread::yield_now();
         };
         if state.missing_timestamp {
             return Err("父 rollout 的 token_count 缺少有效 timestamp".into());
@@ -202,15 +253,31 @@ fn resolve_parent_replay(
             }
             compared += 1;
             if compared % 500 == 0 {
-                std::thread::sleep(std::time::Duration::from_millis(10));
+                std::thread::yield_now();
             }
         }
     }
     let mut matched = 0;
+    let first_path = first.to_string_lossy();
+    let cutoff_ms = cutoff.timestamp_millis();
+    let mut lookup_stmt = conn
+        .prepare_cached("SELECT line FROM session_parent_signatures WHERE file_path=?1 AND generation=?2 AND signature=?3 AND line>?4 AND timestamp<=?5 ORDER BY line LIMIT 1")
+        .map_err(|e| e.to_string())?;
     for event in child {
         let signature = serde_json::to_string(&event.signature).map_err(|e| e.to_string())?;
-        let line:Option<i64>=conn.query_row("SELECT line FROM session_parent_signatures WHERE file_path=?1 AND generation=?2 AND signature=?3 AND line>?4 AND timestamp<=?5 ORDER BY line LIMIT 1",
-            params![first.to_string_lossy().as_ref(),first_state.generation,signature,checkpoint.replay_matched as i64,cutoff.timestamp_millis()],|r|r.get(0)).optional().map_err(|e|e.to_string())?;
+        let line: Option<i64> = lookup_stmt
+            .query_row(
+                params![
+                    first_path.as_ref(),
+                    first_state.generation,
+                    signature,
+                    checkpoint.replay_matched as i64,
+                    cutoff_ms
+                ],
+                |r| r.get(0),
+            )
+            .optional()
+            .map_err(|e| e.to_string())?;
         let Some(line) = line else { break };
         checkpoint.replay_matched = line as usize;
         matched += 1;

@@ -1661,12 +1661,17 @@ export function CodexSessionManager() {
     }
   };
 
+  const sessionNames = useMemo(
+    () => new Map(sessions.map((session) => [session.sessionId, session.title])),
+    [sessions],
+  );
+
   return (
     <section className="codex-session-manager">
       {sessionView === 'usage' ? (
         <CodexSessionUsagePanel
           onBack={() => setSessionView('list')}
-          sessionNames={new Map(sessions.map((session) => [session.sessionId, session.title]))}
+          sessionNames={sessionNames}
         />
       ) : null}
       {sessionView === 'list' ? (

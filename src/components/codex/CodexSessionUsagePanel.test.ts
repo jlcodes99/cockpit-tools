@@ -328,3 +328,37 @@ test('request pages keep the cursor and show unknown prices without a zero charg
   assert.deepEqual(reads, [null, next, null]);
   panel.unmount();
 });
+
+test('request pages wait while skipped and avoid duplicate fetches when revision is unchanged', async () => {
+  let fetches = 0;
+  let skipped = true;
+  let revision: string | null = null;
+  const panel = loadHookModule(new URL('./CodexSessionUsageRequests.tsx', import.meta.url), {
+    'react-i18next': { useTranslation: () => ({ t: (key: string) => key }) },
+    '../../utils/codexSessionUsageFormat': usageFormat,
+    '../../services/codexInstanceService': {
+      querySessionUsageRequests: async () => {
+        fetches += 1;
+        return { rows: [], nextCursor: null };
+      },
+    },
+  });
+  const query = { projectKey: '/work/project' };
+  panel.render(() => panel.exports.CodexSessionUsageRequests({
+    query, revision, skip: skipped, lang: 'en', onSelectSession() {},
+  }));
+  await settlePromises();
+  assert.equal(fetches, 0);
+
+  skipped = false;
+  revision = '10:10:100';
+  panel.flush();
+  await settlePromises();
+  assert.equal(fetches, 1);
+
+  // Re-render with identical revision string should not re-fetch.
+  panel.flush();
+  await settlePromises();
+  assert.equal(fetches, 1);
+  panel.unmount();
+});

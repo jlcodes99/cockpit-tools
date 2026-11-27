@@ -380,45 +380,6 @@ fn known_usage_cost(model: &str, row: &CodexSessionUsageBreakdownRow) -> Option<
     )
 }
 
-fn price_usage_groups(
-    conn: &Connection,
-    where_sql: &str,
-    params: &[rusqlite::types::Value],
-    column: &str,
-    mut groups: Vec<CodexSessionUsageBreakdownRow>,
-) -> Result<Vec<CodexSessionUsageBreakdownRow>, String> {
-    let sql = format!(
-        "SELECT {column},model,SUM(input_tokens),SUM(cached_input_tokens),SUM(output_tokens)
-         FROM session_usage_report {where_sql} GROUP BY {column},model"
-    );
-    let mut stmt = conn.prepare(&sql).map_err(|error| error.to_string())?;
-    let mut costs: HashMap<String, Option<f64>> = HashMap::new();
-    let mut rows = stmt
-        .query(rusqlite::params_from_iter(params.iter()))
-        .map_err(|error| error.to_string())?;
-    while let Some(row) = rows.next().map_err(|error| error.to_string())? {
-        let read_count = |index| row.get::<_, i64>(index).map(|value| value.max(0) as u64);
-        let (key, cost) = (|| -> rusqlite::Result<_> {
-            let key: String = row.get(0)?;
-            let model: String = row.get(1)?;
-            let cost = crate::modules::codex_local_access::estimate_known_model_token_cost_usd(
-                &model,
-                read_count(2)?,
-                read_count(3)?,
-                read_count(4)?,
-            );
-            Ok((key, cost))
-        })()
-        .map_err(|error| error.to_string())?;
-        let total = costs.entry(key).or_insert(Some(0.0));
-        *total = total.zip(cost).map(|(left, right)| left + right);
-    }
-    for group in &mut groups {
-        group.estimated_cost_usd = costs.remove(&group.key).flatten();
-    }
-    Ok(groups)
-}
-
 fn usage_options(rows: &[CodexSessionUsageBreakdownRow]) -> Vec<CodexSessionUsageInstanceOption> {
     rows.iter()
         .map(|row| CodexSessionUsageInstanceOption {

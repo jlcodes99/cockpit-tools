@@ -38,13 +38,21 @@ export function usageProjectLabel(path: string): string {
 
 interface Props {
   query: CodexSessionUsageQuery;
-  revision: object | null;
+  revision: string | object | null;
+  skip?: boolean;
   lang: string;
   sessionNames?: ReadonlyMap<string, string>;
   onSelectSession: (id: string, name: string) => void;
 }
 
-export function CodexSessionUsageRequests({ query, revision, lang, sessionNames, onSelectSession }: Props) {
+export function CodexSessionUsageRequests({
+  query,
+  revision,
+  skip = false,
+  lang,
+  sessionNames,
+  onSelectSession,
+}: Props) {
   const { t } = useTranslation();
   const [cursors, setCursors] = useState<(CodexSessionUsageCursor | null)[]>([null]);
   const [page, setPage] = useState<CodexSessionUsagePage | null>(null);
@@ -55,6 +63,10 @@ export function CodexSessionUsageRequests({ query, revision, lang, sessionNames,
 
   const cursor = cursors[cursors.length - 1];
   useEffect(() => {
+    if (skip) {
+      setLoading(true);
+      return;
+    }
     let current = true;
     setLoading(true);
     setError('');
@@ -66,7 +78,7 @@ export function CodexSessionUsageRequests({ query, revision, lang, sessionNames,
       if (current) setLoading(false);
     });
     return () => { current = false; };
-  }, [query, cursor, revision, retry]);
+  }, [query, cursor, revision, retry, skip]);
 
   const time = useMemo(
     () => new Intl.DateTimeFormat(lang, { dateStyle: 'short', timeStyle: 'medium' }),

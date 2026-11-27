@@ -511,11 +511,16 @@ export function CodexSessionUsagePanel({
 
   const report = snapshot?.scope === query ? snapshot.report : null;
   const knownReport = snapshot?.report;
-  const detailQuery = useMemo<CodexSessionUsageQuery>(() => report ? {
+  const detailFromTimestamp = report?.fromTimestamp ?? query.fromTimestamp;
+  const detailToTimestamp = report?.toTimestamp ?? query.toTimestamp;
+  const detailQuery = useMemo<CodexSessionUsageQuery>(() => ({
     ...query,
-    fromTimestamp: report.fromTimestamp ?? query.fromTimestamp,
-    toTimestamp: report.toTimestamp ?? query.toTimestamp,
-  } : query, [query, report]);
+    fromTimestamp: detailFromTimestamp,
+    toTimestamp: detailToTimestamp,
+  }), [query, detailFromTimestamp, detailToTimestamp]);
+  const requestsRevision = report
+    ? `${report.eventCount}:${report.totals.requestCount}:${report.totals.totalTokens}`
+    : null;
 
   const rangeOptions = useMemo<SingleSelectOption[]>(
     () => [
@@ -641,7 +646,7 @@ export function CodexSessionUsagePanel({
           inputTokens: row.inputTokens,
           outputTokens: row.outputTokens,
           requestCount: row.requestCount,
-          estimatedCostUsd: 0,
+          estimatedCostUsd: row.estimatedCostUsd ?? 0,
         },
       }))
       .filter((point) => Number.isFinite(point.bucketStart))
@@ -845,7 +850,8 @@ export function CodexSessionUsagePanel({
           <p className="codex-session-usage__index-status" role="status">{t(`${ANALYSIS}.indexingProjects`)}</p>
         )}
         {tab === 'requests' ? (
-          <CodexSessionUsageRequests key={JSON.stringify(query)} query={detailQuery} revision={report}
+          <CodexSessionUsageRequests key={JSON.stringify(query)} query={detailQuery} revision={requestsRevision}
+            skip={loading && !report}
             lang={lang} sessionNames={sessionNames}
             onSelectSession={(id, name) => setSession({ id, name })} />
         ) : (

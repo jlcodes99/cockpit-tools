@@ -27,9 +27,15 @@ const DEFAULT_INSTANCE_NAME: &str = "默认实例";
 const DB_FILE_NAME: &str = "codex_session_usage.sqlite";
 const REQUEST_ID_PREFIX: &str = "codex_session:thread-v1";
 const INSERT_BATCH_SIZE: usize = 32;
+const FOREGROUND_INSERT_BATCH_SIZE: usize = 2048;
+const FOREGROUND_BATCH_BYTES: u64 = 32 * 1024 * 1024;
+const FOREGROUND_BATCH_TIME: std::time::Duration = std::time::Duration::from_millis(500);
+const FOREGROUND_REWRITE_BATCH_ROWS: usize = 2048;
 
 static SYNC_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 static REPLAY_CACHE: OnceLock<Mutex<ReplayCaches>> = OnceLock::new();
+#[cfg(not(test))]
+static INITIALIZED_DB_PATHS: OnceLock<Mutex<HashSet<PathBuf>>> = OnceLock::new();
 
 fn sync_lock() -> &'static Mutex<()> {
     SYNC_LOCK.get_or_init(|| Mutex::new(()))
@@ -37,6 +43,70 @@ fn sync_lock() -> &'static Mutex<()> {
 
 fn replay_caches() -> &'static Mutex<ReplayCaches> {
     REPLAY_CACHE.get_or_init(|| Mutex::new(ReplayCaches::default()))
+}
+
+#[cfg(not(test))]
+fn initialized_db_paths() -> &'static Mutex<HashSet<PathBuf>> {
+    INITIALIZED_DB_PATHS.get_or_init(|| Mutex::new(HashSet::new()))
+}
+
+#[derive(Debug, Clone, Copy)]
+struct ParseBatchBudget {
+    max_bytes: u64,
+    max_events: usize,
+    max_time: std::time::Duration,
+}
+
+impl ParseBatchBudget {
+    fn background() -> Self {
+        Self {
+            max_bytes: crate::modules::background_maintenance::BATCH_BYTES,
+            max_events: INSERT_BATCH_SIZE,
+            max_time: crate::modules::background_maintenance::BATCH_TIME,
+        }
+    }
+
+    fn foreground() -> Self {
+        Self {
+            max_bytes: FOREGROUND_BATCH_BYTES,
+            max_events: FOREGROUND_INSERT_BATCH_SIZE,
+            max_time: FOREGROUND_BATCH_TIME,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct SyncCursorState {
+    last_modified: i64,
+    last_size: i64,
+    last_offset: i64,
+    checkpoint_exists: bool,
+    checkpoint_complete: bool,
+    checkpoint_compressed: bool,
+    checkpoint_version_valid: bool,
+    checkpoint_byte_offset: u64,
+}
+
+impl SyncCursorState {
+    fn from_checkpoint(
+        last_modified: i64,
+        last_size: i64,
+        last_offset: i64,
+        checkpoint: &ParserCheckpoint,
+    ) -> Self {
+        let checkpoint_version_valid = checkpoint.version == PARSER_VERSION
+            || (checkpoint.version == 1 && checkpoint.parent != ParentResolution::Parent);
+        Self {
+            last_modified,
+            last_size,
+            last_offset,
+            checkpoint_exists: true,
+            checkpoint_complete: checkpoint.complete,
+            checkpoint_compressed: checkpoint.compressed,
+            checkpoint_version_valid,
+            checkpoint_byte_offset: checkpoint.byte_offset,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -250,6 +320,92 @@ pub fn sync_session_usage(
     Ok(result)
 }
 
+/// Fast read-only lookup of per-rollout cumulative token totals from persisted parser checkpoints.
+/// Only returns entries whose `(modified_nanos, size, compressed, complete)` match disk metadata.
+pub fn lookup_cached_rollout_token_stats(
+    rollout_paths: &[PathBuf],
+) -> HashMap<PathBuf, (u64, u64, u64)> {
+    let mut stats = HashMap::new();
+    if rollout_paths.is_empty() {
+        return stats;
+    }
+    let Ok(db_path) = usage_db_path() else {
+        return stats;
+    };
+    if !db_path.is_file() {
+        return stats;
+    }
+    let Ok(conn) = Connection::open_with_flags(
+        &db_path,
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    ) else {
+        return stats;
+    };
+    let _ = conn.busy_timeout(std::time::Duration::from_millis(50));
+    lookup_cached_rollout_token_stats_from_conn(&conn, rollout_paths, &mut stats);
+    stats
+}
+
+fn lookup_cached_rollout_token_stats_from_conn(
+    conn: &Connection,
+    rollout_paths: &[PathBuf],
+    stats: &mut HashMap<PathBuf, (u64, u64, u64)>,
+) {
+    let Ok(mut stmt) = conn.prepare_cached(
+        "SELECT
+            s.last_modified,
+            s.last_size,
+            CASE WHEN json_valid(c.state) THEN COALESCE(CAST(json_extract(c.state, '$.complete') AS INTEGER), 0) ELSE 0 END,
+            CASE WHEN json_valid(c.state) THEN COALESCE(CAST(json_extract(c.state, '$.compressed') AS INTEGER), 0) ELSE 0 END,
+            CASE WHEN json_valid(c.state) THEN json_extract(c.state, '$.total_high_water.input') ELSE NULL END,
+            CASE WHEN json_valid(c.state) THEN json_extract(c.state, '$.total_high_water.output') ELSE NULL END
+         FROM session_log_sync s
+         JOIN session_parser_checkpoints c USING (file_path)
+         WHERE s.file_path = ?1",
+    ) else {
+        return;
+    };
+
+    for path in rollout_paths {
+        let Ok(metadata) = fs::metadata(path) else {
+            continue;
+        };
+        let file_modified = metadata_modified_nanos(&metadata);
+        let file_size = metadata.len();
+        let compressed = is_compressed_rollout(path);
+        let logical_path = logical_rollout_path(path);
+        let logical_key = logical_path.to_string_lossy();
+        let row = stmt
+            .query_row([logical_key.as_ref()], |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, i64>(1)?,
+                    row.get::<_, i64>(2)? != 0,
+                    row.get::<_, i64>(3)? != 0,
+                    row.get::<_, Option<i64>>(4)?,
+                    row.get::<_, Option<i64>>(5)?,
+                ))
+            })
+            .optional();
+        let Ok(Some((last_modified, last_size, complete, ckpt_compressed, input, output))) = row
+        else {
+            continue;
+        };
+        if last_modified > 0
+            && file_modified == last_modified
+            && file_size == last_size.max(0) as u64
+            && complete
+            && ckpt_compressed == compressed
+        {
+            if let (Some(input), Some(output)) = (input, output) {
+                let input = input.max(0) as u64;
+                let output = output.max(0) as u64;
+                stats.insert(path.clone(), (input, output, input.saturating_add(output)));
+            }
+        }
+    }
+}
+
 struct SessionUsageStore {
     db_path: PathBuf,
 }
@@ -270,8 +426,26 @@ impl SessionUsageStore {
         if let Some(parent) = self.db_path.parent() {
             fs::create_dir_all(parent).map_err(|error| format!("创建会话用量目录失败: {error}"))?;
         }
+        #[cfg(not(test))]
+        let already_initialized = self.db_path.is_file()
+            && initialized_db_paths()
+                .lock()
+                .is_ok_and(|paths| paths.contains(&self.db_path));
+        #[cfg(test)]
+        let already_initialized = false;
+
         let conn = Connection::open(&self.db_path)
             .map_err(|error| format!("打开会话用量库失败: {error}"))?;
+        conn.busy_timeout(std::time::Duration::from_millis(5000))
+            .map_err(|error| format!("设置会话用量库超时失败: {error}"))?;
+        if already_initialized {
+            conn.execute_batch(
+                "PRAGMA synchronous = NORMAL;
+                 PRAGMA foreign_keys = ON;",
+            )
+            .map_err(|error| format!("配置会话用量库连接失败: {error}"))?;
+            return Ok(conn);
+        }
         conn.execute_batch(
             "
             PRAGMA journal_mode = WAL;
@@ -330,6 +504,10 @@ impl SessionUsageStore {
         }
         #[cfg(not(test))]
         schedule_session_rollup_backfill(self.db_path.clone());
+        #[cfg(not(test))]
+        if let Ok(mut paths) = initialized_db_paths().lock() {
+            paths.insert(self.db_path.clone());
+        }
         Ok(conn)
     }
 
@@ -379,7 +557,7 @@ impl SessionUsageStore {
                     }
                     let Some(resource) = crate::modules::background_maintenance::try_resource()
                     else {
-                        std::thread::sleep(std::time::Duration::from_millis(150));
+                        std::thread::sleep(std::time::Duration::from_millis(10));
                         continue;
                     };
                     let file_result = sync_single_file(
@@ -406,7 +584,7 @@ impl SessionUsageStore {
                                 result.deferred_files = result.deferred_files.saturating_add(1);
                             }
                             if file_result.more {
-                                std::thread::sleep(std::time::Duration::from_millis(150));
+                                std::thread::yield_now();
                                 continue;
                             }
                         }
@@ -464,26 +642,17 @@ impl SessionUsageStore {
         let projects_complete = usage_projects_complete(&conn);
         let (where_sql, params) = usage_filters(query, projects_complete);
         let instance_names = current_instance_names();
-        let totals = query_totals(&conn, &where_sql, &params)?;
-        let mut by_model =
-            query_breakdown(&conn, &where_sql, &params, "model", None, &instance_names)?;
-        for row in &mut by_model {
-            row.estimated_cost_usd = known_usage_cost(&row.key, row);
-        }
-        let by_instance = query_breakdown(
-            &conn, &where_sql, &params, "instance_id", Some("instance_name"), &instance_names,
+        let include_hour = query
+            .from_timestamp
+            .is_some_and(|from_ts| to.saturating_sub(from_ts) <= 48 * 3600);
+        let aggregates = query_report_aggregates(
+            &conn,
+            &where_sql,
+            &params,
+            query.include_projects,
+            include_hour,
+            &instance_names,
         )?;
-        let (by_instance, by_project) = if query.include_projects {
-            let by_project = query_breakdown(
-                &conn, &where_sql, &params, USAGE_PROJECT_GROUP, Some("project_path"), &instance_names,
-            )?;
-            (
-                price_usage_groups(&conn, &where_sql, &params, "instance_id", by_instance)?,
-                price_usage_groups(&conn, &where_sql, &params, USAGE_PROJECT_GROUP, by_project)?,
-            )
-        } else {
-            (by_instance, Vec::new())
-        };
         // Keep every model/project choice available within the selected time and instance.
         let has_dimension_filter =
             query.model.is_some() || query.project_key.is_some() || query.session_id.is_some();
@@ -496,23 +665,17 @@ impl SessionUsageStore {
             };
             usage_filter_options(&conn, &scope, &rollup_source)?
         } else {
-            (usage_options(&by_model), usage_options(&by_project))
+            (
+                usage_options(&aggregates.by_model),
+                usage_options(&aggregates.by_project),
+            )
         };
-        let mut by_day = query_day_breakdown(&conn, &where_sql, &params)?;
-        by_day.sort_by(|left, right| right.key.cmp(&left.key));
-        let by_hour = if query
-            .from_timestamp
-            .is_some_and(|from_ts| to.saturating_sub(from_ts) <= 48 * 3600)
-        {
-            query_hour_breakdown(&conn, &where_sql, &params)?
-        } else {
-            Vec::new()
-        };
-        let estimated_cost_usd = by_model.iter().filter_map(|row| row.estimated_cost_usd).sum();
-        let totals = CodexSessionUsageTotals {
-            estimated_cost_usd,
-            ..totals
-        };
+        let totals = aggregates.totals;
+        let by_model = aggregates.by_model;
+        let by_instance = aggregates.by_instance;
+        let by_project = aggregates.by_project;
+        let by_day = aggregates.by_day;
+        let by_hour = aggregates.by_hour;
 
         let files_tracked = conn
             .query_row("SELECT COUNT(*) FROM session_log_sync", [], |row| {
@@ -721,21 +884,42 @@ fn build_rollout_index(files: &[PathBuf]) -> RolloutIndex {
     index
 }
 
-fn load_cursors(conn: &Connection) -> Result<HashMap<String, (i64, i64, i64)>, String> {
+fn load_cursors(conn: &Connection) -> Result<HashMap<String, SyncCursorState>, String> {
     let mut statement = conn
         .prepare(
-            "SELECT file_path, last_modified, last_size, last_line_offset FROM session_log_sync",
+            "SELECT
+                s.file_path,
+                s.last_modified,
+                s.last_size,
+                s.last_line_offset,
+                CASE WHEN c.file_path IS NOT NULL THEN 1 ELSE 0 END,
+                CASE WHEN c.state IS NOT NULL AND json_valid(c.state) THEN COALESCE(CAST(json_extract(c.state, '$.complete') AS INTEGER), 0) ELSE 0 END,
+                CASE WHEN c.state IS NOT NULL AND json_valid(c.state) THEN COALESCE(CAST(json_extract(c.state, '$.compressed') AS INTEGER), 0) ELSE 0 END,
+                CASE WHEN c.state IS NOT NULL AND json_valid(c.state) THEN COALESCE(CAST(json_extract(c.state, '$.version') AS INTEGER), 0) ELSE 0 END,
+                CASE WHEN c.state IS NOT NULL AND json_valid(c.state) THEN COALESCE(CAST(json_extract(c.state, '$.parent') AS TEXT), '') ELSE '' END,
+                CASE WHEN c.state IS NOT NULL AND json_valid(c.state) THEN COALESCE(CAST(json_extract(c.state, '$.byte_offset') AS INTEGER), 0) ELSE 0 END
+             FROM session_log_sync s
+             LEFT JOIN session_parser_checkpoints c USING (file_path)",
         )
         .map_err(|error| format!("读取会话用量游标失败: {error}"))?;
     let rows = statement
         .query_map([], |row| {
+            let version = row.get::<_, i64>(7)?;
+            let parent = row.get::<_, String>(8)?;
+            let checkpoint_version_valid = version == i64::from(PARSER_VERSION)
+                || (version == 1 && parent != "Parent");
             Ok((
                 row.get::<_, String>(0)?,
-                (
-                    row.get::<_, i64>(1)?,
-                    row.get::<_, i64>(2)?,
-                    row.get::<_, i64>(3)?,
-                ),
+                SyncCursorState {
+                    last_modified: row.get::<_, i64>(1)?,
+                    last_size: row.get::<_, i64>(2)?,
+                    last_offset: row.get::<_, i64>(3)?,
+                    checkpoint_exists: row.get::<_, i64>(4)? != 0,
+                    checkpoint_complete: row.get::<_, i64>(5)? != 0,
+                    checkpoint_compressed: row.get::<_, i64>(6)? != 0,
+                    checkpoint_version_valid,
+                    checkpoint_byte_offset: row.get::<_, i64>(9)?.max(0) as u64,
+                },
             ))
         })
         .map_err(|error| format!("查询会话用量游标失败: {error}"))?;
@@ -750,7 +934,7 @@ fn load_cursors(conn: &Connection) -> Result<HashMap<String, (i64, i64, i64)>, S
 fn inherit_archived_cursor(
     conn: &Connection,
     file_path: &Path,
-    cursors: &HashMap<String, (i64, i64, i64)>,
+    cursors: &HashMap<String, SyncCursorState>,
 ) -> Result<Option<(i64, i64, i64)>, String> {
     if file_path
         .parent()
@@ -771,7 +955,7 @@ fn inherit_archived_cursor(
             path.as_str() != file_path.to_string_lossy().as_ref()
                 && (path.ends_with(&slash_suffix) || path.ends_with(&backslash_suffix))
         })
-        .max_by_key(|(_, (modified, size, offset))| (*offset, *modified, *size))
+        .max_by_key(|(_, state)| (state.last_offset, state.last_modified, state.last_size))
     else {
         return Ok(None);
     };
@@ -786,7 +970,11 @@ fn inherit_archived_cursor(
     let compressed = prior_checkpoint
         .and_then(|state| serde_json::from_str::<ParserCheckpoint>(&state).ok())
         .is_some_and(|checkpoint| checkpoint.compressed);
-    Ok((!compressed).then_some(prior_cursor))
+    Ok((!compressed).then_some((
+        prior_cursor.last_modified,
+        prior_cursor.last_size,
+        prior_cursor.last_offset,
+    )))
 }
 
 fn sync_single_file(
@@ -794,7 +982,7 @@ fn sync_single_file(
     instance: &UsageInstance,
     file_path: &Path,
     rollout_index: &RolloutIndex,
-    cursors: &mut HashMap<String, (i64, i64, i64)>,
+    cursors: &mut HashMap<String, SyncCursorState>,
     reader: &mut UsageReaderCache,
     parent_reader: &mut UsageReaderCache,
 ) -> Result<FileSyncResult, String> {
@@ -806,8 +994,27 @@ fn sync_single_file(
     let file_modified = metadata_modified_nanos(&metadata);
     let file_size = metadata.len();
 
+    // Fast path: skip unchanged completed files without per-file SQLite queries or SHA-256 disk reads.
+    if let Some(cursor) = cursors.get(&file_path_str) {
+        let unchanged_completed = cursor.last_modified > 0
+            && file_modified == cursor.last_modified
+            && file_size == cursor.last_size.max(0) as u64
+            && cursor.last_offset > 0
+            && if cursor.checkpoint_exists {
+                cursor.checkpoint_complete
+                    && cursor.checkpoint_compressed == compressed
+                    && cursor.checkpoint_version_valid
+                    && (compressed || cursor.checkpoint_byte_offset <= file_size)
+            } else {
+                !compressed
+            };
+        if unchanged_completed {
+            return Ok(FileSyncResult::default());
+        }
+    }
+
     let (last_modified, last_size, last_offset) = match cursors.get(&file_path_str) {
-        Some(cursor) => *cursor,
+        Some(cursor) => (cursor.last_modified, cursor.last_size, cursor.last_offset),
         // A compressed rollout moved to the archive must replay from zero
         // and deduplicate by ID because the cursor uses different offsets.
         None if compressed => (0, 0, 0),
@@ -870,17 +1077,18 @@ fn sync_single_file(
     } else {
         last_offset
     };
-    if rewrite && !prepare_rewrite_batch(conn, &file_path_str)? {
+    if rewrite && !prepare_rewrite_batch_limit(conn, &file_path_str, FOREGROUND_REWRITE_BATCH_ROWS)? {
         return Ok(FileSyncResult {
             more: true,
             ..Default::default()
         });
     }
-    let mut parsed = parse_codex_file_batch(
+    let mut parsed = parse_codex_file_with_budget(
         file_path,
         thread_id_from_filename(file_path),
         checkpoint,
         reader,
+        ParseBatchBudget::foreground(),
     )?;
     let more = !parsed.checkpoint.complete && parsed.checkpoint.byte_offset > prior_offset;
     let cursor_modified = if parsed.checkpoint.complete {
@@ -920,7 +1128,12 @@ fn sync_single_file(
         tx.commit().map_err(|e| e.to_string())?;
         cursors.insert(
             file_path_str,
-            (cursor_modified, file_size as i64, parsed.line_offset),
+            SyncCursorState::from_checkpoint(
+                cursor_modified,
+                file_size as i64,
+                parsed.line_offset,
+                &parsed.checkpoint,
+            ),
         );
         return Ok(FileSyncResult {
             more,
@@ -981,7 +1194,7 @@ fn sync_single_file(
                         ),
                     ));
                 };
-                match resolve_parent_replay(
+                match resolve_parent_replay_complete(
                     conn,
                     parent_id,
                     cutoff,
@@ -1018,7 +1231,7 @@ fn sync_single_file(
                 // every event rather than dropping the file.
                 match (parsed.parent_id.as_deref(), parsed.root_timestamp) {
                     (Some(parent_id), Some(cutoff)) => {
-                        match resolve_parent_replay(
+                        match resolve_parent_replay_complete(
                             conn,
                             parent_id,
                             cutoff,
@@ -1083,28 +1296,26 @@ fn sync_single_file(
                     ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
                 )
                 .map_err(|error| format!("准备会话用量写入失败: {error}"))?;
-            for chunk in to_insert.chunks(INSERT_BATCH_SIZE) {
-                for (event, event_index) in chunk {
-                    let request_id = format!("{REQUEST_ID_PREFIX}:{root_thread_id}:{event_index}");
-                    let changed = statement
-                        .execute(params![
-                            request_id,
-                            instance.id,
-                            instance.name,
-                            root_thread_id,
-                            event.model,
-                            event.timestamp.unwrap_or(0),
-                            event.delta.input as i64,
-                            event.delta.cached_input as i64,
-                            event.delta.output as i64,
-                            file_path_str,
-                        ])
-                        .map_err(|error| format!("写入会话用量失败: {error}"))?;
-                    if changed > 0 {
-                        result.imported = result.imported.saturating_add(1);
-                    } else {
-                        result.skipped = result.skipped.saturating_add(1);
-                    }
+            for (event, event_index) in &to_insert {
+                let request_id = format!("{REQUEST_ID_PREFIX}:{root_thread_id}:{event_index}");
+                let changed = statement
+                    .execute(params![
+                        request_id,
+                        instance.id,
+                        instance.name,
+                        root_thread_id,
+                        event.model,
+                        event.timestamp.unwrap_or(0),
+                        event.delta.input as i64,
+                        event.delta.cached_input as i64,
+                        event.delta.output as i64,
+                        file_path_str,
+                    ])
+                    .map_err(|error| format!("写入会话用量失败: {error}"))?;
+                if changed > 0 {
+                    result.imported = result.imported.saturating_add(1);
+                } else {
+                    result.skipped = result.skipped.saturating_add(1);
                 }
             }
         }
@@ -1123,7 +1334,12 @@ fn sync_single_file(
             .map_err(|error| format!("提交会话用量写入失败: {error}"))?;
         cursors.insert(
             file_path_str,
-            (cursor_modified, file_size as i64, parsed.line_offset),
+            SyncCursorState::from_checkpoint(
+                cursor_modified,
+                file_size as i64,
+                parsed.line_offset,
+                &parsed.checkpoint,
+            ),
         );
     }
 
@@ -1148,20 +1364,6 @@ fn mark_deferred(
         deferred: true,
         ..FileSyncResult::default()
     }
-}
-
-fn upsert_cursor(
-    conn: &Connection,
-    cursors: &mut HashMap<String, (i64, i64, i64)>,
-    file_path: &str,
-    instance_id: &str,
-    modified: i64,
-    size: u64,
-    line_offset: i64,
-) -> Result<(), String> {
-    upsert_cursor_on_conn(conn, file_path, instance_id, modified, size, line_offset)?;
-    cursors.insert(file_path.to_string(), (modified, size as i64, line_offset));
-    Ok(())
 }
 
 fn upsert_cursor_on_conn(
@@ -1212,11 +1414,28 @@ fn parse_codex_file(
     Ok(parsed)
 }
 
+#[cfg(test)]
 fn parse_codex_file_batch(
     file_path: &Path,
     root_thread_id: Option<String>,
     checkpoint: Option<ParserCheckpoint>,
     cache: &mut UsageReaderCache,
+) -> Result<ParsedCodexFile, String> {
+    parse_codex_file_with_budget(
+        file_path,
+        root_thread_id,
+        checkpoint,
+        cache,
+        ParseBatchBudget::background(),
+    )
+}
+
+fn parse_codex_file_with_budget(
+    file_path: &Path,
+    root_thread_id: Option<String>,
+    checkpoint: Option<ParserCheckpoint>,
+    cache: &mut UsageReaderCache,
+    budget: ParseBatchBudget,
 ) -> Result<ParsedCodexFile, String> {
     let previous = checkpoint.unwrap_or_default();
     let compressed = is_compressed_rollout(file_path);
@@ -1240,10 +1459,9 @@ fn parse_codex_file_batch(
     let (byte_offset, complete) = loop {
         let position = reader.offset;
         if line_offset > previous.line_offset
-            && (position.saturating_sub(previous.byte_offset)
-                >= crate::modules::background_maintenance::BATCH_BYTES
-                || token_events.len() >= INSERT_BATCH_SIZE
-                || started.elapsed() >= crate::modules::background_maintenance::BATCH_TIME)
+            && (position.saturating_sub(previous.byte_offset) >= budget.max_bytes
+                || token_events.len() >= budget.max_events
+                || started.elapsed() >= budget.max_time)
         {
             break (position, reader.at_eof()?);
         }
@@ -1673,93 +1891,286 @@ fn get_meta_i64(conn: &Connection, key: &str) -> Option<i64> {
     .and_then(|value| value.parse().ok())
 }
 
-fn query_totals(
-    conn: &Connection,
-    where_sql: &str,
-    params: &[rusqlite::types::Value],
-) -> Result<CodexSessionUsageTotals, String> {
-    let sql = format!(
-        "SELECT
-            COALESCE(SUM(input_tokens), 0),
-            COALESCE(SUM(cached_input_tokens), 0),
-            COALESCE(SUM(output_tokens), 0),
-            COALESCE(SUM(request_count), 0)
-         FROM session_usage_report {where_sql}"
-    );
-    conn.query_row(&sql, rusqlite::params_from_iter(params.iter()), |row| {
-        let input = row.get::<_, i64>(0)?.max(0) as u64;
-        let cached = row.get::<_, i64>(1)?.max(0) as u64;
-        let output = row.get::<_, i64>(2)?.max(0) as u64;
-        let requests = row.get::<_, i64>(3)?.max(0) as u64;
-        Ok(CodexSessionUsageTotals {
-            input_tokens: input,
-            cached_input_tokens: cached,
-            output_tokens: output,
-            total_tokens: input.saturating_add(output),
-            request_count: requests,
-            estimated_cost_usd: 0.0,
-        })
-    })
-    .map_err(|error| format!("汇总会话用量失败: {error}"))
+struct ReportAggregates {
+    totals: CodexSessionUsageTotals,
+    by_model: Vec<CodexSessionUsageBreakdownRow>,
+    by_instance: Vec<CodexSessionUsageBreakdownRow>,
+    by_project: Vec<CodexSessionUsageBreakdownRow>,
+    by_day: Vec<CodexSessionUsageBreakdownRow>,
+    by_hour: Vec<CodexSessionUsageBreakdownRow>,
 }
 
-fn query_breakdown(
+#[derive(Default)]
+struct BreakdownAccumulator {
+    label: String,
+    input_tokens: u64,
+    cached_input_tokens: u64,
+    output_tokens: u64,
+    request_count: u64,
+    by_model: HashMap<String, (u64, u64, u64)>,
+}
+
+impl BreakdownAccumulator {
+    fn add(
+        &mut self,
+        label: &str,
+        model: Option<&str>,
+        input: u64,
+        cached: u64,
+        output: u64,
+        requests: u64,
+    ) {
+        if label > self.label.as_str() {
+            self.label.clear();
+            self.label.push_str(label);
+        }
+        self.input_tokens = self.input_tokens.saturating_add(input);
+        self.cached_input_tokens = self.cached_input_tokens.saturating_add(cached);
+        self.output_tokens = self.output_tokens.saturating_add(output);
+        self.request_count = self.request_count.saturating_add(requests);
+        if let Some(model) = model {
+            let entry = self.by_model.entry(model.to_owned()).or_default();
+            entry.0 = entry.0.saturating_add(input);
+            entry.1 = entry.1.saturating_add(cached);
+            entry.2 = entry.2.saturating_add(output);
+        }
+    }
+
+    fn into_row(
+        self,
+        key: String,
+        label: String,
+        price_models: bool,
+    ) -> CodexSessionUsageBreakdownRow {
+        let estimated_cost_usd = if price_models {
+            self.by_model.into_iter().try_fold(0.0_f64, |cost, (model, (input, cached, output))| {
+                crate::modules::codex_local_access::estimate_known_model_token_cost_usd(
+                    &model, input, cached, output,
+                )
+                .map(|model_cost| cost + model_cost)
+            })
+        } else {
+            None
+        };
+        CodexSessionUsageBreakdownRow {
+            estimated_cost_usd,
+            key,
+            label,
+            input_tokens: self.input_tokens,
+            cached_input_tokens: self.cached_input_tokens,
+            output_tokens: self.output_tokens,
+            total_tokens: self.input_tokens.saturating_add(self.output_tokens),
+            request_count: self.request_count,
+        }
+    }
+}
+
+fn query_report_aggregates(
     conn: &Connection,
     where_sql: &str,
     params: &[rusqlite::types::Value],
-    key_column: &str,
-    label_column: Option<&str>,
+    include_projects: bool,
+    include_hour: bool,
     instance_names: &HashMap<String, String>,
-) -> Result<Vec<CodexSessionUsageBreakdownRow>, String> {
-    let label_sql = label_column.unwrap_or(key_column);
+) -> Result<ReportAggregates, String> {
+    let (project_select, project_group) = if include_projects {
+        (
+            "COALESCE(project_key,''), COALESCE(MAX(project_path),'')",
+            ", COALESCE(project_key,'')",
+        )
+    } else {
+        ("'', ''", "")
+    };
+    let (hour_select, hour_group) = if include_hour {
+        (
+            "CASE WHEN timestamp<=0 THEN 0 ELSE (timestamp / 3600) * 3600 END",
+            ", hour_bucket",
+        )
+    } else {
+        ("0", "")
+    };
     let sql = format!(
         "SELECT
-            {key_column},
-            MAX({label_sql}),
+            CASE WHEN timestamp<=0 THEN '' ELSE COALESCE(date(timestamp,'unixepoch','localtime'),'') END AS day,
+            {hour_select} AS hour_bucket,
+            instance_id,
+            COALESCE(MAX(instance_name), ''),
+            model,
+            {project_select},
             COALESCE(SUM(input_tokens), 0),
             COALESCE(SUM(cached_input_tokens), 0),
             COALESCE(SUM(output_tokens), 0),
             COALESCE(SUM(request_count), 0)
          FROM session_usage_report {where_sql}
-         GROUP BY {key_column}
-         ORDER BY SUM(input_tokens + output_tokens) DESC, {key_column} ASC"
+         GROUP BY day{hour_group}, instance_id, model{project_group}"
     );
     let mut statement = conn
         .prepare(&sql)
+        .map_err(|error| format!("汇总会话用量失败: {error}"))?;
+    let mut rows = statement
+        .query(rusqlite::params_from_iter(params.iter()))
         .map_err(|error| format!("查询会话用量分组失败: {error}"))?;
-    let rows = statement
-        .query_map(rusqlite::params_from_iter(params.iter()), |row| {
-            let key = row.get::<_, String>(0)?;
-            let stored_label = row.get::<_, String>(1)?;
-            let input = row.get::<_, i64>(2)?.max(0) as u64;
-            let cached = row.get::<_, i64>(3)?.max(0) as u64;
-            let output = row.get::<_, i64>(4)?.max(0) as u64;
-            let requests = row.get::<_, i64>(5)?.max(0) as u64;
-            let label = if key_column == "instance_id" {
-                instance_names
-                    .get(&key)
-                    .cloned()
-                    .filter(|value| !value.trim().is_empty())
-                    .unwrap_or(stored_label)
-            } else {
-                stored_label
-            };
-            Ok(CodexSessionUsageBreakdownRow {
-                estimated_cost_usd: None,
-                key,
-                label,
-                input_tokens: input,
-                cached_input_tokens: cached,
-                output_tokens: output,
-                total_tokens: input.saturating_add(output),
-                request_count: requests,
-            })
+
+    let mut totals = CodexSessionUsageTotals::default();
+    let mut models: HashMap<String, BreakdownAccumulator> = HashMap::new();
+    let mut instances: HashMap<String, BreakdownAccumulator> = HashMap::new();
+    let mut projects: HashMap<String, BreakdownAccumulator> = HashMap::new();
+    let mut days: HashMap<String, BreakdownAccumulator> = HashMap::new();
+    let mut hours: HashMap<i64, BreakdownAccumulator> = HashMap::new();
+
+    while let Some(row) = rows
+        .next()
+        .map_err(|error| format!("遍历会话用量分组失败: {error}"))?
+    {
+        let (day, hour_bucket, instance_id, instance_name, model, project_key, project_path, input, cached, output, requests) =
+            (|| -> rusqlite::Result<_> {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, i64>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, String>(4)?,
+                    row.get::<_, String>(5)?,
+                    row.get::<_, String>(6)?,
+                    row.get::<_, i64>(7)?.max(0) as u64,
+                    row.get::<_, i64>(8)?.max(0) as u64,
+                    row.get::<_, i64>(9)?.max(0) as u64,
+                    row.get::<_, i64>(10)?.max(0) as u64,
+                ))
+            })()
+            .map_err(|error| format!("解析会话用量分组失败: {error}"))?;
+
+        totals.input_tokens = totals.input_tokens.saturating_add(input);
+        totals.cached_input_tokens = totals.cached_input_tokens.saturating_add(cached);
+        totals.output_tokens = totals.output_tokens.saturating_add(output);
+        totals.total_tokens = totals
+            .total_tokens
+            .saturating_add(input.saturating_add(output));
+        totals.request_count = totals.request_count.saturating_add(requests);
+
+        models
+            .entry(model.clone())
+            .or_default()
+            .add(&model, None, input, cached, output, requests);
+        instances.entry(instance_id).or_default().add(
+            &instance_name,
+            include_projects.then_some(model.as_str()),
+            input,
+            cached,
+            output,
+            requests,
+        );
+        if include_projects {
+            projects.entry(project_key).or_default().add(
+                &project_path,
+                Some(model.as_str()),
+                input,
+                cached,
+                output,
+                requests,
+            );
+        }
+        days.entry(day)
+            .or_default()
+            .add("", Some(model.as_str()), input, cached, output, requests);
+        if include_hour && hour_bucket > 0 {
+            hours
+                .entry(hour_bucket)
+                .or_default()
+                .add("", Some(model.as_str()), input, cached, output, requests);
+        }
+    }
+
+    let mut by_model: Vec<CodexSessionUsageBreakdownRow> = models
+        .into_iter()
+        .map(|(key, acc)| {
+            let label = key.clone();
+            let mut row = acc.into_row(key, label, false);
+            row.estimated_cost_usd = known_usage_cost(&row.key, &row);
+            row
         })
-        .map_err(|error| format!("遍历会话用量分组失败: {error}"))?;
-    rows.collect::<Result<Vec<_>, _>>()
-        .map_err(|error| format!("解析会话用量分组失败: {error}"))
+        .collect();
+    by_model.sort_by(|left, right| {
+        right
+            .total_tokens
+            .cmp(&left.total_tokens)
+            .then_with(|| left.key.cmp(&right.key))
+    });
+
+    let mut by_instance: Vec<CodexSessionUsageBreakdownRow> = instances
+        .into_iter()
+        .map(|(key, acc)| {
+            let label = instance_names
+                .get(&key)
+                .cloned()
+                .filter(|value| !value.trim().is_empty())
+                .unwrap_or_else(|| acc.label.clone());
+            acc.into_row(key, label, include_projects)
+        })
+        .collect();
+    by_instance.sort_by(|left, right| {
+        right
+            .total_tokens
+            .cmp(&left.total_tokens)
+            .then_with(|| left.key.cmp(&right.key))
+    });
+
+    let by_project: Vec<CodexSessionUsageBreakdownRow> = if include_projects {
+        let mut rows: Vec<_> = projects
+            .into_iter()
+            .map(|(key, acc)| {
+                let label = acc.label.clone();
+                acc.into_row(key, label, true)
+            })
+            .collect();
+        rows.sort_by(|left, right| {
+            right
+                .total_tokens
+                .cmp(&left.total_tokens)
+                .then_with(|| left.key.cmp(&right.key))
+        });
+        rows
+    } else {
+        Vec::new()
+    };
+
+    let mut by_day: Vec<CodexSessionUsageBreakdownRow> = days
+        .into_iter()
+        .map(|(key, acc)| {
+            let label = key.clone();
+            acc.into_row(key, label, true)
+        })
+        .collect();
+    by_day.sort_by(|left, right| right.key.cmp(&left.key));
+
+    let mut by_hour: Vec<CodexSessionUsageBreakdownRow> = hours
+        .into_iter()
+        .map(|(bucket, acc)| {
+            let key = bucket.to_string();
+            let label = key.clone();
+            acc.into_row(key, label, true)
+        })
+        .collect();
+    by_hour.sort_by(|left, right| {
+        left.key
+            .parse::<i64>()
+            .unwrap_or(0)
+            .cmp(&right.key.parse::<i64>().unwrap_or(0))
+    });
+
+    totals.estimated_cost_usd = by_model.iter().filter_map(|row| row.estimated_cost_usd).sum();
+
+    Ok(ReportAggregates {
+        totals,
+        by_model,
+        by_instance,
+        by_project,
+        by_day,
+        by_hour,
+    })
 }
 
+#[cfg(test)]
 fn query_day_breakdown(
     conn: &Connection,
     where_sql: &str,
@@ -1836,95 +2247,6 @@ fn query_day_breakdown(
             row
         })
         .collect())
-}
-
-fn query_hour_breakdown(
-    conn: &Connection,
-    where_sql: &str,
-    params: &[rusqlite::types::Value],
-) -> Result<Vec<CodexSessionUsageBreakdownRow>, String> {
-    let sql = format!(
-        "SELECT CASE WHEN timestamp<=0 THEN 0 ELSE (timestamp / 3600) * 3600 END AS hour_bucket,
-                model,SUM(input_tokens),SUM(cached_input_tokens),SUM(output_tokens),SUM(request_count)
-         FROM session_usage_report {where_sql} GROUP BY hour_bucket,model"
-    );
-    let mut statement = conn
-        .prepare(&sql)
-        .map_err(|error| format!("查询会话用量小时分组失败: {error}"))?;
-    let rows = statement
-        .query_map(rusqlite::params_from_iter(params.iter()), |row| {
-            Ok((
-                row.get::<_, i64>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, i64>(2)?.max(0) as u64,
-                row.get::<_, i64>(3)?.max(0) as u64,
-                row.get::<_, i64>(4)?.max(0) as u64,
-                row.get::<_, i64>(5)?.max(0) as u64,
-            ))
-        })
-        .map_err(|error| format!("遍历会话用量小时分组失败: {error}"))?;
-    let mut hours: HashMap<i64, HashMap<String, CodexSessionUsageTotals>> = HashMap::new();
-    for row in rows {
-        let (hour_bucket, model, input, cached, output, requests) =
-            row.map_err(|error| format!("解析会话用量小时分组失败: {error}"))?;
-        if hour_bucket <= 0 {
-            continue;
-        }
-        let totals = hours
-            .entry(hour_bucket)
-            .or_default()
-            .entry(model)
-            .or_default();
-        totals.input_tokens = totals.input_tokens.saturating_add(input);
-        totals.cached_input_tokens = totals.cached_input_tokens.saturating_add(cached);
-        totals.output_tokens = totals.output_tokens.saturating_add(output);
-        totals.total_tokens = totals
-            .total_tokens
-            .saturating_add(input.saturating_add(output));
-        totals.request_count = totals.request_count.saturating_add(requests);
-    }
-    let mut list: Vec<CodexSessionUsageBreakdownRow> = hours
-        .into_iter()
-        .map(|(bucket, models)| {
-            let key = bucket.to_string();
-            let mut row = CodexSessionUsageBreakdownRow {
-                label: key.clone(),
-                key,
-                input_tokens: 0,
-                cached_input_tokens: 0,
-                output_tokens: 0,
-                total_tokens: 0,
-                request_count: 0,
-                estimated_cost_usd: Some(0.0),
-            };
-            for (model, totals) in models {
-                row.input_tokens = row.input_tokens.saturating_add(totals.input_tokens);
-                row.cached_input_tokens = row
-                    .cached_input_tokens
-                    .saturating_add(totals.cached_input_tokens);
-                row.output_tokens = row.output_tokens.saturating_add(totals.output_tokens);
-                row.total_tokens = row.total_tokens.saturating_add(totals.total_tokens);
-                row.request_count = row.request_count.saturating_add(totals.request_count);
-                row.estimated_cost_usd = row.estimated_cost_usd.and_then(|cost| {
-                    crate::modules::codex_local_access::estimate_known_model_token_cost_usd(
-                        &model,
-                        totals.input_tokens,
-                        totals.cached_input_tokens,
-                        totals.output_tokens,
-                    )
-                    .map(|model_cost| cost + model_cost)
-                });
-            }
-            row
-        })
-        .collect();
-    list.sort_by(|left, right| {
-        left.key
-            .parse::<i64>()
-            .unwrap_or(0)
-            .cmp(&right.key.parse::<i64>().unwrap_or(0))
-    });
-    Ok(list)
 }
 
 #[cfg(test)]
@@ -2398,6 +2720,172 @@ mod tests {
         ]);
         let parsed = parse_codex_file(&child, Some(CHILD_ID.to_string())).unwrap();
         assert_eq!(nonzero_deltas(&parsed), vec![(60, 20, 11)]);
+    }
+
+    #[test]
+    fn lookup_cached_rollout_token_stats_uses_checkpoint_high_water_and_validates_freshness() {
+        use std::io::Write;
+        let dir = make_temp_dir("codex-usage-cached-rollout-stats");
+        let home = dir.join("home");
+        let plain = rollout_path(&home.join("sessions"), PARENT_ID);
+        let compressed = rollout_path(&home.join("sessions"), CHILD_ID).with_extension("jsonl.zst");
+        write_jsonl(
+            &plain,
+            &[
+                session_meta(PARENT_ID),
+                turn_context("gpt-5.4"),
+                token_count_total(1_000, 200, 150, "2026-07-10T03:00:02Z"),
+                token_count_total(1_600, 350, 240, "2026-07-10T03:00:03Z"),
+            ],
+        );
+        write_compressed_jsonl(
+            &compressed,
+            &[
+                session_meta(CHILD_ID),
+                turn_context("gpt-5.4"),
+                token_count_total(500, 100, 80, "2026-07-10T03:00:04Z"),
+            ],
+        );
+        let store = SessionUsageStore::open_path(dir.join("usage.sqlite"));
+        let instances = [UsageInstance {
+            id: DEFAULT_INSTANCE_ID.into(),
+            name: DEFAULT_INSTANCE_NAME.into(),
+            data_dir: home,
+        }];
+        let sync = store.sync(false, &instances).unwrap();
+        assert!(sync.errors.is_empty());
+        assert_eq!(sync.imported, 3);
+
+        let conn = store.open_conn().unwrap();
+        let mut cached = HashMap::new();
+        lookup_cached_rollout_token_stats_from_conn(
+            &conn,
+            &[plain.clone(), compressed.clone()],
+            &mut cached,
+        );
+        assert_eq!(cached.get(&plain), Some(&(1_600, 240, 1_840)));
+        assert_eq!(cached.get(&compressed), Some(&(500, 80, 580)));
+
+        // Appending invalidates the cached entry immediately.
+        let mut append = std::fs::OpenOptions::new().append(true).open(&plain).unwrap();
+        writeln!(
+            append,
+            "{}",
+            token_count_total(2_000, 400, 300, "2026-07-10T03:00:05Z")
+        )
+        .unwrap();
+        let mut refreshed = HashMap::new();
+        lookup_cached_rollout_token_stats_from_conn(
+            &conn,
+            &[plain.clone(), compressed.clone()],
+            &mut refreshed,
+        );
+        assert!(!refreshed.contains_key(&plain));
+        assert_eq!(refreshed.get(&compressed), Some(&(500, 80, 580)));
+        drop(conn);
+        fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn single_pass_query_aggregates_match_breakdowns_and_costs() {
+        let dir = make_temp_dir("codex-usage-single-pass");
+        let home = dir.join("home");
+        let file = rollout_path(&home.join("sessions"), PARENT_ID);
+        let first_ts = Local
+            .with_ymd_and_hms(2026, 7, 10, 12, 5, 0)
+            .single()
+            .unwrap()
+            .with_timezone(&Utc);
+        let second_ts = Local
+            .with_ymd_and_hms(2026, 7, 10, 13, 5, 0)
+            .single()
+            .unwrap()
+            .with_timezone(&Utc);
+        let meta_ts = Local
+            .with_ymd_and_hms(2026, 7, 10, 12, 0, 0)
+            .single()
+            .unwrap()
+            .with_timezone(&Utc);
+        write_jsonl(
+            &file,
+            &[
+                json!({
+                    "timestamp": meta_ts.to_rfc3339(),
+                    "type": "session_meta",
+                    "payload": { "id": PARENT_ID, "cwd": "/work/demo", "title": "Demo" }
+                }),
+                turn_context("gpt-5.4"),
+                token_count_with_last(
+                    1_000_000,
+                    200_000,
+                    100_000,
+                    1_000_000,
+                    200_000,
+                    100_000,
+                    "codex",
+                    &first_ts.to_rfc3339(),
+                ),
+                turn_context("gpt-5.4-mini"),
+                token_count_with_last(
+                    2_000_000,
+                    400_000,
+                    200_000,
+                    1_000_000,
+                    200_000,
+                    100_000,
+                    "codex",
+                    &second_ts.to_rfc3339(),
+                ),
+            ],
+        );
+        let store = SessionUsageStore::open_path(dir.join("usage.sqlite"));
+        let instances = [UsageInstance {
+            id: DEFAULT_INSTANCE_ID.into(),
+            name: DEFAULT_INSTANCE_NAME.into(),
+            data_dir: home,
+        }];
+        let sync = store.sync(false, &instances).unwrap();
+        assert!(sync.errors.is_empty());
+        assert_eq!(sync.imported, 2);
+
+        let from = Local
+            .with_ymd_and_hms(2026, 7, 10, 0, 0, 0)
+            .single()
+            .unwrap()
+            .timestamp();
+        let to = Local
+            .with_ymd_and_hms(2026, 7, 10, 23, 59, 59)
+            .single()
+            .unwrap()
+            .timestamp();
+        let report = store
+            .query(&CodexSessionUsageQuery {
+                from_timestamp: Some(from),
+                to_timestamp: Some(to),
+                include_projects: true,
+                ..Default::default()
+            })
+            .unwrap();
+        assert_eq!(report.totals.request_count, 2);
+        assert_eq!(report.totals.input_tokens, 2_000_000);
+        assert_eq!(report.totals.cached_input_tokens, 400_000);
+        assert_eq!(report.totals.output_tokens, 200_000);
+        assert_eq!(report.totals.total_tokens, 2_200_000);
+        assert_eq!(report.by_model.len(), 2);
+        assert_eq!(report.by_instance.len(), 1);
+        assert_eq!(report.by_project.len(), 1);
+        assert_eq!(report.by_project[0].key, "/work/demo");
+        assert_eq!(report.by_day.len(), 1);
+        assert_eq!(report.by_hour.len(), 2);
+        assert!(report.by_project[0].estimated_cost_usd.is_some());
+        assert!((report.by_project[0].estimated_cost_usd.unwrap() - report.totals.estimated_cost_usd).abs() < 1e-10);
+        assert!((report.by_day[0].estimated_cost_usd.unwrap() - report.totals.estimated_cost_usd).abs() < 1e-10);
+
+        // Second sync on unchanged file must take fast skip path with 0 imports.
+        let second = store.sync(false, &instances).unwrap();
+        assert_eq!(second.imported, 0);
+        assert_eq!(second.skipped, 0);
+        fs::remove_dir_all(dir).ok();
     }
 
     #[test]
