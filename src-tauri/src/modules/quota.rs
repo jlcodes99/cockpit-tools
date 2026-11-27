@@ -1497,37 +1497,43 @@ pub(crate) fn preserve_failed_quota_summary(quota: &mut QuotaData, previous: Opt
         .clone()
         .map(crate::models::quota::QuotaSummaryGroup::without_retired_argon)
         .filter(|groups| !groups.is_empty());
-    let summary_window_ids: std::collections::HashSet<&str> = previous_groups
-        .iter()
-        .flatten()
-        .flat_map(|group| group.windows.iter().map(|window| window.id.as_str()))
-        .collect();
-    let is_summary_window = |name: &str| {
-        !crate::models::quota::QuotaSummaryWindow::is_retired_argon(name)
-            && (summary_bucket_family(name).is_some() || summary_window_ids.contains(name))
-    };
+    let has_preserved_window = {
+        let summary_window_ids: std::collections::HashSet<&str> = previous_groups
+            .iter()
+            .flatten()
+            .flat_map(|group| group.windows.iter().map(|window| window.id.as_str()))
+            .collect();
+        let is_summary_window = |name: &str| {
+            !crate::models::quota::QuotaSummaryWindow::is_retired_argon(name)
+                && (summary_bucket_family(name).is_some() || summary_window_ids.contains(name))
+        };
 
-    for model in previous
-        .models
-        .iter()
-        .filter(|model| is_summary_window(&model.name))
-    {
-        if !quota
+        for model in previous
             .models
             .iter()
-            .any(|current| current.name == model.name)
+            .filter(|model| is_summary_window(&model.name))
         {
-            quota.models.push(model.clone());
+            if !quota
+                .models
+                .iter()
+                .any(|current| current.name == model.name)
+            {
+                quota.models.push(model.clone());
+            }
         }
-    }
+        quota
+            .models
+            .iter()
+            .any(|model| is_summary_window(&model.name))
+    };
     if quota.quota_summary_groups.is_none() {
         quota.quota_summary_groups = previous_groups;
     }
-    if quota
-        .quota_summary_groups
-        .as_ref()
-        .is_some_and(|groups| !groups.is_empty())
-        || quota.models.iter().any(|model| is_summary_window(&model.name))
+    if has_preserved_window
+        || quota
+            .quota_summary_groups
+            .as_ref()
+            .is_some_and(|groups| !groups.is_empty())
     {
         quota.quota_summary_updated_at = previous
             .quota_summary_updated_at

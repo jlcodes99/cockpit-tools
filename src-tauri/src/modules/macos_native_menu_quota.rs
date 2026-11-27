@@ -1796,14 +1796,6 @@
         (rows, has_summary_windows)
     }
 
-    fn build_antigravity_window_rows(
-        lang: &str,
-        quota: &crate::models::quota::QuotaData,
-        metric: &str,
-    ) -> Vec<QuotaRow> {
-        collect_antigravity_window_rows(lang, quota, metric).0
-    }
-
     fn build_antigravity_quota_rows(
         lang: &str,
         quota: Option<&crate::models::quota::QuotaData>,
@@ -1844,14 +1836,14 @@
         assert_eq!(selected_antigravity_menu_quota(&quota, "gemini:weekly").unwrap().percentage, 83);
         assert_eq!(selected_antigravity_menu_quota(&quota, "gemini-3.8-flash").unwrap().percentage, 45);
         assert!(selected_antigravity_menu_quota(&quota, "gemini:5h").is_none());
-        let rows = build_antigravity_window_rows("en", &quota, "gemini:weekly");
+        let rows = collect_antigravity_window_rows("en", &quota, "gemini:weekly").0;
         assert_eq!(rows[0].label, "Gemini (Weekly)");
         assert_eq!(rows[0].progress, Some(83));
         assert_eq!(rows[1].label, "Claude (5h)");
         assert_eq!(rows[1].progress, Some(0));
 
         // Alias metric must not emit a duplicate window row.
-        let alias_rows = build_antigravity_window_rows("en", &quota, "gemini-weekly");
+        let alias_rows = collect_antigravity_window_rows("en", &quota, "gemini-weekly").0;
         assert_eq!(
             alias_rows.iter().filter(|row| row.label == "Gemini (Weekly)").count(),
             1
