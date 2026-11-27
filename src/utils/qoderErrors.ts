@@ -53,14 +53,24 @@ export function formatQoderError(error: unknown): string {
       return i18n.t('qoder.diagnostics.cnDesktopUnsupported');
     case 'QODER_CLIENT_INVALID':
       return i18n.t('qoder.diagnostics.clientInvalid');
-    case 'QODER_CLIENT_RUNNING':
+    case 'QODER_CLIENT_RUNNING': {
+      // Both realms ship a desktop client and a CLI under the same process names,
+      // so the backend prefixes the realm for the CN clients ("cn desktop") and
+      // the message names the client the user actually has open.
+      const [realm, target] = detail.includes(' ') ? detail.split(/\s+/) : ['', detail];
+      const isCn = realm === 'cn';
       return i18n.t('qoder.diagnostics.clientRunning', {
-        // Both realms ship a desktop client and a CLI, so the name has to come
-        // from the error rather than from the CN platform.
-        client: detail === 'desktop'
-          ? i18n.t('qoder.clientTarget.desktop', 'Qoder 桌面端')
-          : i18n.t('qoder.clientTarget.cli', 'Qoder CLI'),
+        client: target === 'desktop'
+          ? i18n.t(
+              isCn ? 'qoder.clientTarget.desktopCn' : 'qoder.clientTarget.desktop',
+              isCn ? 'Qoder CN 桌面端' : 'Qoder 桌面端',
+            )
+          : i18n.t(
+              isCn ? 'qoder.clientTarget.cliCn' : 'qoder.clientTarget.cli',
+              isCn ? 'Qoder CN CLI' : 'Qoder CLI',
+            ),
       });
+    }
     case 'QODER_NATIVE_TOKEN_MISSING':
       return i18n.t('qoder.diagnostics.nativeTokenMissing');
     case 'QODER_NATIVE_READBACK_FAILED':

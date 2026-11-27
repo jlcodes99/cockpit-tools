@@ -56,6 +56,10 @@ runs that same sequence. Writing credentials under a live client is refused by t
 second time. If the client fails to come back the switch still counts as done: the credentials are
 already in place, so the error code (`QODER_CN_RELAUNCH_FAILED`) tells the UI to refresh.
 
+Importing a client profile also records it as the platform's current account: the credentials on disk
+are what that client is signed in with, so the pointer is read rather than guessed. Without it a
+newly imported account stays unmarked until the first switch.
+
 The same descriptor-driven adapters serve the global client, where the named targets are the Qoder
 desktop app (`com.qoder.app.stable`) and the Qoder CLI (`.qoder`); the IDE target keeps using the
 `state.vscdb` path. A global switch never reopens the client — close it first, then start it again

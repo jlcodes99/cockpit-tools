@@ -217,9 +217,18 @@ fn default_cn_client() -> qoder_native::NativeClient {
 pub async fn inject_qoder_cn_account(app: AppHandle, account_id: String) -> Result<String, String> {
     qoder_oauth::prepare_cn_account_for_switch(&account_id).await?;
     let id = account_id.clone();
-    tauri::async_runtime::spawn_blocking(move || switch_qoder_cn(&id, default_cn_client()))
+    let client = default_cn_client();
+    let relaunched = tauri::async_runtime::spawn_blocking(move || switch_qoder_cn(&id, client))
         .await
         .map_err(|_| "QODER_NATIVE_WORKER_FAILED".to_string())??;
+    // This command only answers with the account id, so a desktop client that was
+    // closed and could not be started again would otherwise look like a plain
+    // success. The page path reports it to the user; here at least leave a trace.
+    if !relaunched && default_cn_client() == qoder_native::NativeClient::Desktop {
+        logger::log_warn(&format!(
+            "[Qoder CN Switch] 凭据已写入但客户端未自动重启: account_id={account_id}"
+        ));
+    }
     if let Err(error) = crate::modules::tray::update_tray_menu(&app) {
         logger::log_warn(&format!("[Qoder CN Switch] 刷新托盘失败: {error}"));
     }
