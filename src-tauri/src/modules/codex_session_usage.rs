@@ -10,12 +10,11 @@ use std::collections::{HashMap, HashSet};
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, OnceLock};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, OnceLock, RwLock};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use chrono::{DateTime, Utc};
-#[cfg(test)]
-use chrono::{Datelike, Local, TimeZone};
+use chrono::{DateTime, Datelike, Local, TimeZone, Utc};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
@@ -26,14 +25,26 @@ const DEFAULT_INSTANCE_ID: &str = "__default__";
 const DEFAULT_INSTANCE_NAME: &str = "默认实例";
 const DB_FILE_NAME: &str = "codex_session_usage.sqlite";
 const REQUEST_ID_PREFIX: &str = "codex_session:thread-v1";
+#[cfg(test)]
 const INSERT_BATCH_SIZE: usize = 32;
 const FOREGROUND_INSERT_BATCH_SIZE: usize = 2048;
 const FOREGROUND_BATCH_BYTES: u64 = 32 * 1024 * 1024;
-const FOREGROUND_BATCH_TIME: std::time::Duration = std::time::Duration::from_millis(500);
+const FOREGROUND_BATCH_TIME: Duration = Duration::from_millis(500);
 const FOREGROUND_REWRITE_BATCH_ROWS: usize = 2048;
+const PARALLEL_PARSE_MIN_FILES: usize = 2;
+const PARALLEL_PARSE_MAX_FILE_BYTES: u64 = 64 * 1024 * 1024;
+const PARALLEL_PARSE_MAX_BYTES: u64 = 256 * 1024 * 1024;
+const PARALLEL_PARSE_MAX_EVENTS: usize = 50_000;
+const PARALLEL_PARSE_MAX_TIME: Duration = Duration::from_secs(30);
+const PARALLEL_COMMIT_BATCH_FILES: usize = 16;
+const PARALLEL_COMMIT_BATCH_ROWS: usize = 2048;
+const RECENT_SCAN_REUSE_WINDOW: Duration = Duration::from_millis(2500);
 
 static SYNC_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 static REPLAY_CACHE: OnceLock<Mutex<ReplayCaches>> = OnceLock::new();
+static LAST_CLEAN_SYNC_AT: OnceLock<Mutex<Option<Instant>>> = OnceLock::new();
+static USAGE_SNAPSHOT_REVISION: AtomicU64 = AtomicU64::new(1);
+static USAGE_BUCKET_SNAPSHOT: OnceLock<RwLock<Option<Arc<UsageBucketSnapshot>>>> = OnceLock::new();
 #[cfg(not(test))]
 static INITIALIZED_DB_PATHS: OnceLock<Mutex<HashSet<PathBuf>>> = OnceLock::new();
 
@@ -45,6 +56,42 @@ fn replay_caches() -> &'static Mutex<ReplayCaches> {
     REPLAY_CACHE.get_or_init(|| Mutex::new(ReplayCaches::default()))
 }
 
+fn last_clean_sync_at() -> &'static Mutex<Option<Instant>> {
+    LAST_CLEAN_SYNC_AT.get_or_init(|| Mutex::new(None))
+}
+
+fn is_recent_clean_sync(since: Option<Instant>) -> bool {
+    let Ok(guard) = last_clean_sync_at().lock() else {
+        return false;
+    };
+    let Some(completed_at) = *guard else {
+        return false;
+    };
+    if let Some(wait_started) = since {
+        if completed_at >= wait_started {
+            return true;
+        }
+    }
+    completed_at.elapsed() <= RECENT_SCAN_REUSE_WINDOW
+}
+
+fn record_clean_sync(clean: bool) {
+    if let Ok(mut guard) = last_clean_sync_at().lock() {
+        *guard = clean.then(Instant::now);
+    }
+}
+
+fn usage_bucket_snapshot_cache() -> &'static RwLock<Option<Arc<UsageBucketSnapshot>>> {
+    USAGE_BUCKET_SNAPSHOT.get_or_init(|| RwLock::new(None))
+}
+
+fn invalidate_usage_bucket_snapshot() {
+    USAGE_SNAPSHOT_REVISION.fetch_add(1, Ordering::AcqRel);
+    if let Ok(mut guard) = usage_bucket_snapshot_cache().write() {
+        *guard = None;
+    }
+}
+
 #[cfg(not(test))]
 fn initialized_db_paths() -> &'static Mutex<HashSet<PathBuf>> {
     INITIALIZED_DB_PATHS.get_or_init(|| Mutex::new(HashSet::new()))
@@ -54,10 +101,11 @@ fn initialized_db_paths() -> &'static Mutex<HashSet<PathBuf>> {
 struct ParseBatchBudget {
     max_bytes: u64,
     max_events: usize,
-    max_time: std::time::Duration,
+    max_time: Duration,
 }
 
 impl ParseBatchBudget {
+    #[cfg(test)]
     fn background() -> Self {
         Self {
             max_bytes: crate::modules::background_maintenance::BATCH_BYTES,
@@ -71,6 +119,14 @@ impl ParseBatchBudget {
             max_bytes: FOREGROUND_BATCH_BYTES,
             max_events: FOREGROUND_INSERT_BATCH_SIZE,
             max_time: FOREGROUND_BATCH_TIME,
+        }
+    }
+
+    fn parallel() -> Self {
+        Self {
+            max_bytes: PARALLEL_PARSE_MAX_BYTES,
+            max_events: PARALLEL_PARSE_MAX_EVENTS,
+            max_time: PARALLEL_PARSE_MAX_TIME,
         }
     }
 }
@@ -310,12 +366,40 @@ pub fn sync_session_usage(
     rebuild: bool,
     query: CodexSessionUsageQuery,
 ) -> Result<CodexSessionUsageSyncResult, String> {
+    let store = SessionUsageStore::open_default()?;
+    if !rebuild {
+        if is_recent_clean_sync(None) {
+            return Ok(CodexSessionUsageSyncResult {
+                report: Some(store.query(&query)?),
+                ..CodexSessionUsageSyncResult::default()
+            });
+        }
+        let wait_started = Instant::now();
+        let guard = sync_lock()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if is_recent_clean_sync(Some(wait_started)) {
+            drop(guard);
+            return Ok(CodexSessionUsageSyncResult {
+                report: Some(store.query(&query)?),
+                ..CodexSessionUsageSyncResult::default()
+            });
+        }
+        let instances = collect_usage_instances()?;
+        let mut result = store.sync(false, &instances)?;
+        record_clean_sync(result.errors.is_empty() && result.deferred_files == 0);
+        drop(guard);
+        result.report = Some(store.query(&query)?);
+        return Ok(result);
+    }
+
     let _guard = sync_lock()
         .try_lock()
         .map_err(|_| crate::modules::background_maintenance::busy_message())?;
-    let store = SessionUsageStore::open_default()?;
+    record_clean_sync(false);
     let instances = collect_usage_instances()?;
-    let mut result = store.sync(rebuild, &instances)?;
+    let mut result = store.sync(true, &instances)?;
+    record_clean_sync(result.errors.is_empty() && result.deferred_files == 0);
     result.report = Some(store.query(&query)?);
     Ok(result)
 }
@@ -534,6 +618,7 @@ impl SessionUsageStore {
             if let Ok(mut caches) = replay_caches().lock() {
                 *caches = ReplayCaches::default();
             }
+            invalidate_usage_bucket_snapshot();
         }
 
         let mut cursors = load_cursors(&conn)?;
@@ -543,66 +628,29 @@ impl SessionUsageStore {
         };
 
         for instance in instances {
-            let files = collect_codex_session_files(&instance.data_dir);
+            if crate::modules::app_lifecycle::is_shutdown_started() {
+                invalidate_usage_bucket_snapshot();
+                return Ok(result);
+            }
+            let no_existing_checkpoints = !conn
+                .query_row(
+                    "SELECT EXISTS(SELECT 1 FROM session_parser_checkpoints)",
+                    [],
+                    |row| row.get::<_, bool>(0),
+                )
+                .unwrap_or(true);
+            let files = collect_codex_session_files_with_meta(&instance.data_dir);
             let rollout_index = build_rollout_index(&files);
             result.files_scanned = result.files_scanned.saturating_add(files.len() as u32);
-
-            for file_path in &files {
-                let mut file_changed = false;
-                let mut reader = UsageReaderCache::default();
-                let mut parent_reader = UsageReaderCache::default();
-                loop {
-                    if crate::modules::app_lifecycle::is_shutdown_started() {
-                        return Ok(result);
-                    }
-                    let Some(resource) = crate::modules::background_maintenance::try_resource()
-                    else {
-                        std::thread::sleep(std::time::Duration::from_millis(10));
-                        continue;
-                    };
-                    let file_result = sync_single_file(
-                        &mut conn,
-                        instance,
-                        file_path,
-                        &rollout_index,
-                        &mut cursors,
-                        &mut reader,
-                        &mut parent_reader,
-                    );
-                    drop(resource);
-                    match file_result {
-                        Ok(file_result) => {
-                            result.imported = result.imported.saturating_add(file_result.imported);
-                            result.skipped = result.skipped.saturating_add(file_result.skipped);
-                            if !file_changed
-                                && (file_result.imported > 0 || file_result.skipped > 0)
-                            {
-                                result.files_changed = result.files_changed.saturating_add(1);
-                                file_changed = true;
-                            }
-                            if file_result.deferred {
-                                result.deferred_files = result.deferred_files.saturating_add(1);
-                            }
-                            if file_result.more {
-                                std::thread::yield_now();
-                                continue;
-                            }
-                        }
-                        Err(error) => {
-                            tracing::warn!(
-                                "[CODEX-SESSION-USAGE] 解析失败 {}: {error}",
-                                file_path.display()
-                            );
-                            if result.errors.len() < 20 {
-                                result
-                                    .errors
-                                    .push(format!("{}: {error}", file_path.display()));
-                            }
-                        }
-                    }
-                    break;
-                }
-            }
+            sync_instance_files(
+                &mut conn,
+                instance,
+                &files,
+                &rollout_index,
+                &mut cursors,
+                no_existing_checkpoints,
+                &mut result,
+            )?;
         }
 
         set_meta(&conn, "last_synced_at", &now_unix_seconds().to_string())?;
@@ -612,10 +660,61 @@ impl SessionUsageStore {
             "last_deferred_files",
             &result.deferred_files.to_string(),
         )?;
+        invalidate_usage_bucket_snapshot();
         Ok(result)
     }
 
+    #[cfg(not(test))]
+    fn try_query_from_snapshot_cache(
+        &self,
+        query: &CodexSessionUsageQuery,
+        instances: &[UsageInstance],
+    ) -> Result<Option<CodexSessionUsageReport>, String> {
+        if query
+            .session_id
+            .as_deref()
+            .is_some_and(|value| !value.is_empty())
+        {
+            return Ok(None);
+        }
+        let current_revision = USAGE_SNAPSHOT_REVISION.load(Ordering::Acquire);
+        if let Ok(guard) = usage_bucket_snapshot_cache().read() {
+            if let Some(snapshot) = guard.as_ref() {
+                if snapshot.db_path == self.db_path && snapshot.revision == current_revision {
+                    if snapshot_covers_query(snapshot, query) {
+                        return Ok(Some(query_report_from_snapshot(snapshot, query, instances)));
+                    }
+                    return Ok(None);
+                }
+            }
+        }
+        let conn = self.open_conn()?;
+        conn.execute_batch("BEGIN").map_err(|e| e.to_string())?;
+        let Some(snapshot) = load_usage_bucket_snapshot(&conn, &self.db_path)? else {
+            return Ok(None);
+        };
+        let snapshot = Arc::new(snapshot);
+        if USAGE_SNAPSHOT_REVISION.load(Ordering::Acquire) == snapshot.revision {
+            if let Ok(mut guard) = usage_bucket_snapshot_cache().write() {
+                if USAGE_SNAPSHOT_REVISION.load(Ordering::Acquire) == snapshot.revision {
+                    *guard = Some(Arc::clone(&snapshot));
+                }
+            }
+        }
+        if snapshot_covers_query(&snapshot, query) {
+            Ok(Some(query_report_from_snapshot(&snapshot, query, instances)))
+        } else {
+            Ok(None)
+        }
+    }
+
     fn query(&self, query: &CodexSessionUsageQuery) -> Result<CodexSessionUsageReport, String> {
+        let usage_instances = collect_usage_instances().unwrap_or_default();
+        #[cfg(not(test))]
+        if let Some(report) = self.try_query_from_snapshot_cache(query, &usage_instances)? {
+            return Ok(report);
+        }
+
         let conn = self.open_conn()?;
         conn.execute_batch("BEGIN").map_err(|e| e.to_string())?;
         let (from, to) = (
@@ -641,7 +740,10 @@ impl SessionUsageStore {
 
         let projects_complete = usage_projects_complete(&conn);
         let (where_sql, params) = usage_filters(query, projects_complete);
-        let instance_names = current_instance_names();
+        let instance_names: HashMap<String, String> = usage_instances
+            .iter()
+            .map(|instance| (instance.id.clone(), instance.name.clone()))
+            .collect();
         let include_hour = query
             .from_timestamp
             .is_some_and(|from_ts| to.saturating_sub(from_ts) <= 48 * 3600);
@@ -705,8 +807,7 @@ impl SessionUsageStore {
             project_options,
             by_day,
             by_hour,
-            instances: collect_usage_instances()
-                .unwrap_or_default()
+            instances: usage_instances
                 .into_iter()
                 .map(|instance| CodexSessionUsageInstanceOption {
                     id: instance.id,
@@ -761,16 +862,37 @@ fn current_instance_names() -> HashMap<String, String> {
         .collect()
 }
 
+#[derive(Debug, Clone)]
+struct DiscoveredRolloutFile {
+    path: PathBuf,
+    modified: i64,
+    size: u64,
+}
+
+impl AsRef<Path> for DiscoveredRolloutFile {
+    fn as_ref(&self) -> &Path {
+        &self.path
+    }
+}
+
+#[cfg(test)]
 fn collect_codex_session_files(codex_dir: &Path) -> Vec<PathBuf> {
+    collect_codex_session_files_with_meta(codex_dir)
+        .into_iter()
+        .map(|file| file.path)
+        .collect()
+}
+
+fn collect_codex_session_files_with_meta(codex_dir: &Path) -> Vec<DiscoveredRolloutFile> {
     let mut files = Vec::new();
     let sessions_dir = codex_dir.join("sessions");
     if sessions_dir.is_dir() {
-        collect_jsonl_recursive(&sessions_dir, &mut files, 0, 3);
+        collect_jsonl_recursive_with_meta(&sessions_dir, &mut files, 0, 3);
     }
     let active_names: HashSet<_> = files
         .iter()
-        .filter_map(|path| {
-            logical_rollout_path(path)
+        .filter_map(|file| {
+            logical_rollout_path(&file.path)
                 .file_name()
                 .map(ToOwned::to_owned)
         })
@@ -785,26 +907,73 @@ fn collect_codex_session_files(codex_dir: &Path) -> Vec<PathBuf> {
                         .file_name()
                         .is_some_and(|name| active_names.contains(name))
                 {
-                    files.push(path);
+                    if let Some(discovered) = discovered_rollout_from_entry(&entry, path) {
+                        files.push(discovered);
+                    }
                 }
             }
         }
     }
-    files.retain(|path| !is_compressed_rollout(path) || !logical_rollout_path(path).is_file());
-    files.sort();
+    let plain_paths: HashSet<PathBuf> = files
+        .iter()
+        .filter(|file| !is_compressed_rollout(&file.path))
+        .map(|file| file.path.clone())
+        .collect();
+    files.retain(|file| {
+        if !is_compressed_rollout(&file.path) {
+            return true;
+        }
+        let logical = logical_rollout_path(&file.path);
+        !plain_paths.contains::<Path>(&logical)
+    });
+    files.sort_by(|left, right| left.path.cmp(&right.path));
     files
 }
 
-fn collect_jsonl_recursive(dir: &Path, files: &mut Vec<PathBuf>, depth: u32, max_depth: u32) {
+fn discovered_rollout_from_entry(
+    entry: &fs::DirEntry,
+    path: PathBuf,
+) -> Option<DiscoveredRolloutFile> {
+    let is_symlink = entry
+        .file_type()
+        .map(|file_type| file_type.is_symlink())
+        .unwrap_or(false);
+    let metadata = if is_symlink {
+        fs::metadata(&path).ok()?
+    } else {
+        entry.metadata().ok()?
+    };
+    if !metadata.is_file() {
+        return None;
+    }
+    Some(DiscoveredRolloutFile {
+        path,
+        modified: metadata_modified_nanos(&metadata),
+        size: metadata.len(),
+    })
+}
+
+fn collect_jsonl_recursive_with_meta(
+    dir: &Path,
+    files: &mut Vec<DiscoveredRolloutFile>,
+    depth: u32,
+    max_depth: u32,
+) {
     let Ok(entries) = fs::read_dir(dir) else {
         return;
     };
     for entry in entries.flatten() {
         let path = entry.path();
-        if path.is_dir() && depth < max_depth {
-            collect_jsonl_recursive(&path, files, depth + 1, max_depth);
-        } else if is_rollout_path(&path) {
-            files.push(path);
+        let is_dir = entry
+            .file_type()
+            .map(|file_type| file_type.is_dir() || (file_type.is_symlink() && path.is_dir()))
+            .unwrap_or_else(|_| path.is_dir());
+        if is_dir && depth < max_depth {
+            collect_jsonl_recursive_with_meta(&path, files, depth + 1, max_depth);
+        } else if !is_dir && is_rollout_path(&path) {
+            if let Some(discovered) = discovered_rollout_from_entry(&entry, path) {
+                files.push(discovered);
+            }
         }
     }
 }
@@ -871,11 +1040,12 @@ fn continuation_root_thread_id(file_path: &Path) -> Option<String> {
 
 type RolloutIndex = HashMap<String, Vec<PathBuf>>;
 
-fn build_rollout_index(files: &[PathBuf]) -> RolloutIndex {
+fn build_rollout_index<P: AsRef<Path>>(files: &[P]) -> RolloutIndex {
     let mut index = RolloutIndex::new();
-    for path in files {
+    for entry in files {
+        let path = entry.as_ref();
         if let Some(thread_id) = thread_id_from_filename(path) {
-            index.entry(thread_id).or_default().push(path.clone());
+            index.entry(thread_id).or_default().push(path.to_path_buf());
         }
     }
     for paths in index.values_mut() {
@@ -977,10 +1147,743 @@ fn inherit_archived_cursor(
     )))
 }
 
+fn is_cursor_unchanged_completed(
+    cursor: &SyncCursorState,
+    file_modified: i64,
+    file_size: u64,
+    compressed: bool,
+) -> bool {
+    cursor.last_modified > 0
+        && file_modified == cursor.last_modified
+        && file_size == cursor.last_size.max(0) as u64
+        && cursor.last_offset > 0
+        && if cursor.checkpoint_exists {
+            cursor.checkpoint_complete
+                && cursor.checkpoint_compressed == compressed
+                && cursor.checkpoint_version_valid
+                && (compressed || cursor.checkpoint_byte_offset <= file_size)
+        } else {
+            !compressed
+        }
+}
+
+struct ParallelParseJob {
+    file: DiscoveredRolloutFile,
+    logical_path: PathBuf,
+    file_path_str: String,
+    last_size: i64,
+    last_offset: i64,
+    prior_offset: u64,
+    checkpoint: Option<ParserCheckpoint>,
+}
+
+struct ParallelParseOutcome {
+    job: ParallelParseJob,
+    parsed: Result<ParsedCodexFile, String>,
+    project: Option<RolloutUsageProject>,
+}
+
+struct ReadyFileCommit {
+    file_path_str: String,
+    logical_path: PathBuf,
+    file_size: u64,
+    cursor_modified: i64,
+    line_offset: i64,
+    checkpoint: ParserCheckpoint,
+    project: Option<RolloutUsageProject>,
+    has_billable_tokens: bool,
+    root_thread_id: String,
+    to_insert: Vec<(ParsedTokenEvent, u32)>,
+    pre_skipped: u32,
+}
+
+fn sync_instance_files(
+    conn: &mut Connection,
+    instance: &UsageInstance,
+    files: &[DiscoveredRolloutFile],
+    rollout_index: &RolloutIndex,
+    cursors: &mut HashMap<String, SyncCursorState>,
+    no_existing_checkpoints: bool,
+    result: &mut CodexSessionUsageSyncResult,
+) -> Result<(), String> {
+    let mut parallel_jobs = Vec::new();
+    let mut serial_files = Vec::new();
+
+    for file in files {
+        if crate::modules::app_lifecycle::is_shutdown_started() {
+            return Ok(());
+        }
+        let logical_path = logical_rollout_path(&file.path).into_owned();
+        let file_path_str = logical_path.to_string_lossy().into_owned();
+        let compressed = is_compressed_rollout(&file.path);
+
+        if cursors.get(&file_path_str).is_some_and(|cursor| {
+            is_cursor_unchanged_completed(cursor, file.modified, file.size, compressed)
+        }) {
+            continue;
+        }
+
+        let (last_modified, last_size, last_offset) = match cursors.get(&file_path_str) {
+            Some(cursor) => (cursor.last_modified, cursor.last_size, cursor.last_offset),
+            None if compressed || cursors.is_empty() => (0, 0, 0),
+            None => inherit_archived_cursor(conn, &file.path, cursors)?.unwrap_or((0, 0, 0)),
+        };
+
+        let (checkpoint, checkpoint_exists) = if no_existing_checkpoints {
+            (None, false)
+        } else {
+            let checkpoint = if last_modified > 0
+                && file.modified != last_modified
+                && file.size == last_size.max(0) as u64
+            {
+                None
+            } else {
+                load_parser_checkpoint(conn, &file.path, file.size, last_size)?
+            };
+            let checkpoint_exists = checkpoint.is_some()
+                || conn
+                    .query_row(
+                        "SELECT EXISTS(SELECT 1 FROM session_parser_checkpoints WHERE file_path=?1)",
+                        [&file_path_str],
+                        |r| r.get::<_, bool>(0),
+                    )
+                    .map_err(|e| e.to_string())?;
+            (checkpoint, checkpoint_exists)
+        };
+
+        if file.size >= last_size.max(0) as u64
+            && file.modified <= last_modified
+            && last_offset > 0
+            && (checkpoint.as_ref().is_some_and(|c| c.complete)
+                || (!compressed && !checkpoint_exists))
+        {
+            continue;
+        }
+
+        if let Ok(mut caches) = replay_caches().lock() {
+            if let Some(pending) = caches.pending.get(&file.path).cloned() {
+                if pending.modified == file.modified && pending.size == file.size {
+                    match &pending.reason {
+                        PendingReason::MissingParent(parent)
+                            if !rollout_index.contains_key(parent) =>
+                        {
+                            result.deferred_files = result.deferred_files.saturating_add(1);
+                            continue;
+                        }
+                        PendingReason::Stable(_) => {
+                            result.deferred_files = result.deferred_files.saturating_add(1);
+                            continue;
+                        }
+                        _ => {
+                            caches.pending.remove(&file.path);
+                        }
+                    }
+                }
+            }
+        }
+
+        let rewrite =
+            file.size < last_size.max(0) as u64 || (checkpoint.is_none() && checkpoint_exists);
+        if rewrite || file.size > PARALLEL_PARSE_MAX_FILE_BYTES {
+            serial_files.push(file.clone());
+            continue;
+        }
+
+        let prior_offset = checkpoint.as_ref().map(|c| c.byte_offset).unwrap_or(0);
+        let effective_last_offset = if compressed && checkpoint.is_none() {
+            0
+        } else {
+            last_offset
+        };
+        parallel_jobs.push(ParallelParseJob {
+            file: file.clone(),
+            logical_path,
+            file_path_str,
+            last_size,
+            last_offset: effective_last_offset,
+            prior_offset,
+            checkpoint,
+        });
+    }
+
+    if parallel_jobs.len() < PARALLEL_PARSE_MIN_FILES {
+        serial_files.extend(parallel_jobs.into_iter().map(|job| job.file));
+    } else {
+        // LPT scheduling: start largest rollout files first to minimize tail latency.
+        parallel_jobs.sort_by(|left, right| right.file.size.cmp(&left.file.size));
+        let worker_count = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(2)
+            .clamp(1, 8)
+            .min(parallel_jobs.len());
+        let job_queue = Mutex::new(parallel_jobs.into_iter());
+        let (tx, rx) = std::sync::mpsc::sync_channel::<ParallelParseOutcome>(worker_count * 2);
+
+        let scope_result: Result<(), String> = std::thread::scope(|scope| {
+            for _ in 0..worker_count {
+                let worker_tx = tx.clone();
+                let queue_ref = &job_queue;
+                scope.spawn(move || loop {
+                    if crate::modules::app_lifecycle::is_shutdown_started() {
+                        break;
+                    }
+                    let Some(mut job) = queue_ref.lock().ok().and_then(|mut q| q.next()) else {
+                        break;
+                    };
+                    let mut reader = UsageReaderCache::default();
+                    let checkpoint = job.checkpoint.take();
+                    let parsed = parse_codex_file_with_budget(
+                        &job.file.path,
+                        thread_id_from_filename(&job.file.path),
+                        checkpoint,
+                        &mut reader,
+                        ParseBatchBudget::parallel(),
+                    );
+                    let project = match &parsed {
+                        Ok(parsed_file)
+                            if parsed_file.checkpoint.complete || job.prior_offset == 0 =>
+                        {
+                            rollout_usage_project(&job.file.path)
+                                .map_err(|error| {
+                                    tracing::warn!(
+                                        "[CODEX-SESSION-USAGE] 项目元数据读取失败 {}: {error}",
+                                        job.file.path.display()
+                                    );
+                                })
+                                .ok()
+                        }
+                        _ => None,
+                    };
+                    if worker_tx
+                        .send(ParallelParseOutcome {
+                            job,
+                            parsed,
+                            project,
+                        })
+                        .is_err()
+                    {
+                        break;
+                    }
+                });
+            }
+            drop(tx);
+
+            let mut parent_reader = UsageReaderCache::default();
+            let mut ready_commits: Vec<ReadyFileCommit> = Vec::new();
+            let mut pending_rows: usize = 0;
+            let mut loop_result: Result<(), String> = Ok(());
+
+            for outcome in rx.iter() {
+                if crate::modules::app_lifecycle::is_shutdown_started() {
+                    break;
+                }
+                if let Err(error) = handle_parallel_outcome(
+                    conn,
+                    instance,
+                    outcome,
+                    rollout_index,
+                    cursors,
+                    &mut parent_reader,
+                    &mut ready_commits,
+                    &mut pending_rows,
+                    &mut serial_files,
+                    result,
+                ) {
+                    loop_result = Err(error);
+                    break;
+                }
+            }
+
+            // Drop receiver before thread scope joins so any blocked worker unblocks immediately.
+            drop(rx);
+
+            if !ready_commits.is_empty() {
+                if let Err(error) = flush_ready_commits_with_resource(
+                    conn,
+                    instance,
+                    &mut ready_commits,
+                    cursors,
+                    result,
+                ) {
+                    if loop_result.is_ok() {
+                        loop_result = Err(error);
+                    }
+                }
+            }
+            loop_result
+        });
+        scope_result?;
+    }
+
+    for file in &serial_files {
+        sync_serial_file_loop(conn, instance, file, rollout_index, cursors, result)?;
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn handle_parallel_outcome(
+    conn: &mut Connection,
+    instance: &UsageInstance,
+    outcome: ParallelParseOutcome,
+    rollout_index: &RolloutIndex,
+    cursors: &mut HashMap<String, SyncCursorState>,
+    parent_reader: &mut UsageReaderCache,
+    ready_commits: &mut Vec<ReadyFileCommit>,
+    pending_rows: &mut usize,
+    followup_serial_files: &mut Vec<DiscoveredRolloutFile>,
+    result: &mut CodexSessionUsageSyncResult,
+) -> Result<(), String> {
+    let ParallelParseOutcome {
+        job,
+        parsed,
+        project,
+    } = outcome;
+    let mut parsed = match parsed {
+        Ok(parsed) => parsed,
+        Err(error) => {
+            tracing::warn!(
+                "[CODEX-SESSION-USAGE] 解析失败 {}: {error}",
+                job.file.path.display()
+            );
+            if result.errors.len() < 20 {
+                result
+                    .errors
+                    .push(format!("{}: {error}", job.file.path.display()));
+            }
+            return Ok(());
+        }
+    };
+
+    let more = !parsed.checkpoint.complete && parsed.checkpoint.byte_offset > job.prior_offset;
+    let cursor_modified = if parsed.checkpoint.complete {
+        job.file.modified
+    } else {
+        0
+    };
+
+    if !parsed.has_billable_tokens {
+        ready_commits.push(ReadyFileCommit {
+            file_path_str: job.file_path_str,
+            logical_path: job.logical_path,
+            file_size: job.file.size,
+            cursor_modified,
+            line_offset: parsed.line_offset,
+            checkpoint: parsed.checkpoint,
+            project,
+            has_billable_tokens: false,
+            root_thread_id: parsed.root_thread_id.unwrap_or_default(),
+            to_insert: Vec::new(),
+            pre_skipped: 0,
+        });
+        if more {
+            followup_serial_files.push(job.file);
+        }
+        if ready_commits.len() >= PARALLEL_COMMIT_BATCH_FILES {
+            flush_ready_commits_with_resource(conn, instance, ready_commits, cursors, result)?;
+            *pending_rows = 0;
+        }
+        return Ok(());
+    }
+
+    let Some(root_thread_id) = parsed.root_thread_id.clone() else {
+        let _ = mark_deferred(
+            &job.file.path,
+            job.file.modified,
+            job.file.size,
+            PendingReason::Stable("文件名缺少有效的尾部 UUID".to_string()),
+        );
+        result.deferred_files = result.deferred_files.saturating_add(1);
+        return Ok(());
+    };
+    if !parsed.root_meta_seen {
+        let _ = mark_deferred(
+            &job.file.path,
+            job.file.modified,
+            job.file.size,
+            PendingReason::Stable("含计费 token 但尚无 session_meta".to_string()),
+        );
+        result.deferred_files = result.deferred_files.saturating_add(1);
+        return Ok(());
+    }
+
+    let replay_prefix = if parsed.checkpoint.replay_closed {
+        0
+    } else {
+        match parsed.parent {
+            ParentResolution::None | ParentResolution::Paginated => 0,
+            ParentResolution::Deferred => {
+                let _ = mark_deferred(
+                    &job.file.path,
+                    job.file.modified,
+                    job.file.size,
+                    PendingReason::Stable(
+                        parsed
+                            .deferred_reason
+                            .unwrap_or_else(|| "分叉会话元数据不完整".to_string()),
+                    ),
+                );
+                result.deferred_files = result.deferred_files.saturating_add(1);
+                return Ok(());
+            }
+            ParentResolution::Parent => {
+                let Some(parent_id) = parsed.parent_id.as_deref() else {
+                    let _ = mark_deferred(
+                        &job.file.path,
+                        job.file.modified,
+                        job.file.size,
+                        PendingReason::Stable("分叉会话缺少父会话 ID".to_string()),
+                    );
+                    result.deferred_files = result.deferred_files.saturating_add(1);
+                    return Ok(());
+                };
+                let Some(cutoff) = parsed.root_timestamp else {
+                    let _ = mark_deferred(
+                        &job.file.path,
+                        job.file.modified,
+                        job.file.size,
+                        PendingReason::Stable(
+                            "parented rollout 的 root meta 缺少有效 timestamp".to_string(),
+                        ),
+                    );
+                    result.deferred_files = result.deferred_files.saturating_add(1);
+                    return Ok(());
+                };
+                if !ready_commits.is_empty() {
+                    flush_ready_commits_with_resource(
+                        conn,
+                        instance,
+                        ready_commits,
+                        cursors,
+                        result,
+                    )?;
+                    *pending_rows = 0;
+                }
+                let replay = loop {
+                    if crate::modules::app_lifecycle::is_shutdown_started() {
+                        return Ok(());
+                    }
+                    let Some(resource) = crate::modules::background_maintenance::try_resource()
+                    else {
+                        std::thread::sleep(Duration::from_millis(10));
+                        continue;
+                    };
+                    let outcome = resolve_parent_replay_complete(
+                        conn,
+                        parent_id,
+                        cutoff,
+                        rollout_index,
+                        &parsed.token_events,
+                        &mut parsed.checkpoint,
+                        parent_reader,
+                    );
+                    drop(resource);
+                    break outcome;
+                };
+                match replay {
+                    Ok(ParentReplay::Pending) => {
+                        followup_serial_files.push(job.file);
+                        return Ok(());
+                    }
+                    Ok(ParentReplay::Matched(count)) => count,
+                    Err(reason) => {
+                        let pending_reason = if rollout_index.contains_key(parent_id) {
+                            PendingReason::Retryable(reason)
+                        } else {
+                            PendingReason::MissingParent(parent_id.to_string())
+                        };
+                        let _ = mark_deferred(
+                            &job.file.path,
+                            job.file.modified,
+                            job.file.size,
+                            pending_reason,
+                        );
+                        result.deferred_files = result.deferred_files.saturating_add(1);
+                        return Ok(());
+                    }
+                }
+            }
+            ParentResolution::Continuation => {
+                match (parsed.parent_id.as_deref(), parsed.root_timestamp) {
+                    (Some(parent_id), Some(cutoff)) => {
+                        if !ready_commits.is_empty() {
+                            flush_ready_commits_with_resource(
+                                conn,
+                                instance,
+                                ready_commits,
+                                cursors,
+                                result,
+                            )?;
+                            *pending_rows = 0;
+                        }
+                        let replay = loop {
+                            if crate::modules::app_lifecycle::is_shutdown_started() {
+                                return Ok(());
+                            }
+                            let Some(resource) =
+                                crate::modules::background_maintenance::try_resource()
+                            else {
+                                std::thread::sleep(Duration::from_millis(10));
+                                continue;
+                            };
+                            let outcome = resolve_parent_replay_complete(
+                                conn,
+                                parent_id,
+                                cutoff,
+                                rollout_index,
+                                &parsed.token_events,
+                                &mut parsed.checkpoint,
+                                parent_reader,
+                            );
+                            drop(resource);
+                            break outcome;
+                        };
+                        match replay {
+                            Ok(ParentReplay::Pending) => {
+                                followup_serial_files.push(job.file);
+                                return Ok(());
+                            }
+                            Ok(ParentReplay::Matched(count)) => count,
+                            Err(_) => 0,
+                        }
+                    }
+                    _ => 0,
+                }
+            }
+        }
+    };
+    parsed.checkpoint.replay_closed |=
+        matches!(parsed.parent, ParentResolution::None | ParentResolution::Paginated)
+            || replay_prefix < parsed.token_events.len();
+
+    if let Ok(mut caches) = replay_caches().lock() {
+        caches.pending.remove(&job.file.path);
+    }
+
+    let mut to_insert = Vec::new();
+    let mut pre_skipped = 0u32;
+    for (token_offset, event) in parsed.token_events.into_iter().enumerate() {
+        let Some(event_index) = event.event_index else {
+            continue;
+        };
+        if token_offset < replay_prefix {
+            if event.line_offset > job.last_offset {
+                pre_skipped = pre_skipped.saturating_add(1);
+            }
+            continue;
+        }
+        if event.line_offset <= job.last_offset && job.file.size >= job.last_size.max(0) as u64 {
+            continue;
+        }
+        to_insert.push((event, event_index));
+    }
+
+    *pending_rows = pending_rows.saturating_add(to_insert.len());
+    ready_commits.push(ReadyFileCommit {
+        file_path_str: job.file_path_str,
+        logical_path: job.logical_path,
+        file_size: job.file.size,
+        cursor_modified,
+        line_offset: parsed.line_offset,
+        checkpoint: parsed.checkpoint,
+        project,
+        has_billable_tokens: true,
+        root_thread_id,
+        to_insert,
+        pre_skipped,
+    });
+    if more {
+        followup_serial_files.push(job.file);
+    }
+
+    if ready_commits.len() >= PARALLEL_COMMIT_BATCH_FILES
+        || *pending_rows >= PARALLEL_COMMIT_BATCH_ROWS
+    {
+        flush_ready_commits_with_resource(conn, instance, ready_commits, cursors, result)?;
+        *pending_rows = 0;
+    }
+    Ok(())
+}
+
+fn flush_ready_commits_with_resource(
+    conn: &mut Connection,
+    instance: &UsageInstance,
+    ready_commits: &mut Vec<ReadyFileCommit>,
+    cursors: &mut HashMap<String, SyncCursorState>,
+    result: &mut CodexSessionUsageSyncResult,
+) -> Result<(), String> {
+    if ready_commits.is_empty() {
+        return Ok(());
+    }
+    let resource = loop {
+        if let Some(resource) = crate::modules::background_maintenance::try_resource() {
+            break resource;
+        }
+        if crate::modules::app_lifecycle::is_shutdown_started() {
+            ready_commits.clear();
+            return Ok(());
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    };
+
+    let mut per_file_counts: Vec<(u32, u32)> = Vec::with_capacity(ready_commits.len());
+    {
+        let tx = conn
+            .unchecked_transaction()
+            .map_err(|error| format!("开启会话用量批量写入事务失败: {error}"))?;
+        {
+            let mut statement = tx
+                .prepare_cached(
+                    "INSERT OR IGNORE INTO session_usage_events (
+                        request_id, instance_id, instance_name, session_id, model,
+                        timestamp, input_tokens, cached_input_tokens, output_tokens, file_path
+                    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                )
+                .map_err(|error| format!("准备会话用量写入失败: {error}"))?;
+            for commit in ready_commits.iter() {
+                let mut imported = 0u32;
+                let mut skipped = commit.pre_skipped;
+                for (event, event_index) in &commit.to_insert {
+                    let request_id =
+                        format!("{REQUEST_ID_PREFIX}:{}:{event_index}", commit.root_thread_id);
+                    let changed = statement
+                        .execute(params![
+                            request_id,
+                            instance.id,
+                            instance.name,
+                            commit.root_thread_id,
+                            event.model,
+                            event.timestamp.unwrap_or(0),
+                            event.delta.input as i64,
+                            event.delta.cached_input as i64,
+                            event.delta.output as i64,
+                            commit.file_path_str,
+                        ])
+                        .map_err(|error| format!("写入会话用量失败: {error}"))?;
+                    if changed > 0 {
+                        imported = imported.saturating_add(1);
+                    } else {
+                        skipped = skipped.saturating_add(1);
+                    }
+                }
+                per_file_counts.push((imported, skipped));
+            }
+        }
+        for commit in ready_commits.iter() {
+            upsert_cursor_on_conn(
+                &tx,
+                &commit.file_path_str,
+                &instance.id,
+                commit.cursor_modified,
+                commit.file_size,
+                commit.line_offset,
+            )?;
+            save_parser_checkpoint(&tx, &commit.logical_path, &commit.checkpoint)?;
+            if commit.has_billable_tokens || commit.project.is_some() {
+                save_usage_project(
+                    &tx,
+                    &commit.file_path_str,
+                    &commit.root_thread_id,
+                    commit.project.as_ref(),
+                )?;
+            }
+            publish_rewrite(&tx, &commit.file_path_str, commit.checkpoint.complete)?;
+        }
+        tx.commit()
+            .map_err(|error| format!("提交会话用量批量写入失败: {error}"))?;
+    }
+    drop(resource);
+
+    for (commit, (imported, skipped)) in ready_commits.drain(..).zip(per_file_counts) {
+        result.imported = result.imported.saturating_add(imported);
+        result.skipped = result.skipped.saturating_add(skipped);
+        if imported > 0 || skipped > 0 {
+            result.files_changed = result.files_changed.saturating_add(1);
+        }
+        cursors.insert(
+            commit.file_path_str,
+            SyncCursorState::from_checkpoint(
+                commit.cursor_modified,
+                commit.file_size as i64,
+                commit.line_offset,
+                &commit.checkpoint,
+            ),
+        );
+    }
+    Ok(())
+}
+
+fn sync_serial_file_loop(
+    conn: &mut Connection,
+    instance: &UsageInstance,
+    file: &DiscoveredRolloutFile,
+    rollout_index: &RolloutIndex,
+    cursors: &mut HashMap<String, SyncCursorState>,
+    result: &mut CodexSessionUsageSyncResult,
+) -> Result<(), String> {
+    let mut file_changed = false;
+    let mut first_attempt = true;
+    let mut reader = UsageReaderCache::default();
+    let mut parent_reader = UsageReaderCache::default();
+    loop {
+        if crate::modules::app_lifecycle::is_shutdown_started() {
+            return Ok(());
+        }
+        let Some(resource) = crate::modules::background_maintenance::try_resource() else {
+            std::thread::sleep(Duration::from_millis(10));
+            continue;
+        };
+        let known_meta = first_attempt.then_some((file.modified, file.size));
+        first_attempt = false;
+        let file_result = sync_single_file(
+            conn,
+            instance,
+            &file.path,
+            known_meta,
+            rollout_index,
+            cursors,
+            &mut reader,
+            &mut parent_reader,
+        );
+        drop(resource);
+        match file_result {
+            Ok(file_result) => {
+                result.imported = result.imported.saturating_add(file_result.imported);
+                result.skipped = result.skipped.saturating_add(file_result.skipped);
+                if !file_changed && (file_result.imported > 0 || file_result.skipped > 0) {
+                    result.files_changed = result.files_changed.saturating_add(1);
+                    file_changed = true;
+                }
+                if file_result.deferred {
+                    result.deferred_files = result.deferred_files.saturating_add(1);
+                }
+                if file_result.more {
+                    std::thread::yield_now();
+                    continue;
+                }
+            }
+            Err(error) => {
+                tracing::warn!(
+                    "[CODEX-SESSION-USAGE] 解析失败 {}: {error}",
+                    file.path.display()
+                );
+                if result.errors.len() < 20 {
+                    result
+                        .errors
+                        .push(format!("{}: {error}", file.path.display()));
+                }
+            }
+        }
+        break;
+    }
+    Ok(())
+}
+
 fn sync_single_file(
     conn: &mut Connection,
     instance: &UsageInstance,
     file_path: &Path,
+    known_meta: Option<(i64, u64)>,
     rollout_index: &RolloutIndex,
     cursors: &mut HashMap<String, SyncCursorState>,
     reader: &mut UsageReaderCache,
@@ -989,28 +1892,20 @@ fn sync_single_file(
     let logical_path = logical_rollout_path(file_path);
     let file_path_str = logical_path.to_string_lossy().into_owned();
     let compressed = is_compressed_rollout(file_path);
-    let metadata =
-        fs::metadata(file_path).map_err(|error| format!("无法读取文件元数据: {error}"))?;
-    let file_modified = metadata_modified_nanos(&metadata);
-    let file_size = metadata.len();
+    let (file_modified, file_size) = match known_meta {
+        Some(meta) => meta,
+        None => {
+            let metadata =
+                fs::metadata(file_path).map_err(|error| format!("无法读取文件元数据: {error}"))?;
+            (metadata_modified_nanos(&metadata), metadata.len())
+        }
+    };
 
     // Fast path: skip unchanged completed files without per-file SQLite queries or SHA-256 disk reads.
-    if let Some(cursor) = cursors.get(&file_path_str) {
-        let unchanged_completed = cursor.last_modified > 0
-            && file_modified == cursor.last_modified
-            && file_size == cursor.last_size.max(0) as u64
-            && cursor.last_offset > 0
-            && if cursor.checkpoint_exists {
-                cursor.checkpoint_complete
-                    && cursor.checkpoint_compressed == compressed
-                    && cursor.checkpoint_version_valid
-                    && (compressed || cursor.checkpoint_byte_offset <= file_size)
-            } else {
-                !compressed
-            };
-        if unchanged_completed {
-            return Ok(FileSyncResult::default());
-        }
+    if cursors.get(&file_path_str).is_some_and(|cursor| {
+        is_cursor_unchanged_completed(cursor, file_modified, file_size, compressed)
+    }) {
+        return Ok(FileSyncResult::default());
     }
 
     let (last_modified, last_size, last_offset) = match cursors.get(&file_path_str) {
@@ -1965,6 +2860,461 @@ impl BreakdownAccumulator {
     }
 }
 
+struct CachedUsageBucket {
+    timestamp: i64,
+    instance_id: String,
+    instance_name: String,
+    model: String,
+    project_key: String,
+    project_path: String,
+    input_tokens: u64,
+    cached_input_tokens: u64,
+    output_tokens: u64,
+    request_count: u64,
+}
+
+struct UsageBucketSnapshot {
+    db_path: PathBuf,
+    revision: u64,
+    buckets: Vec<CachedUsageBucket>,
+    max_updated_at: i64,
+    projects_complete: bool,
+    files_tracked: u64,
+    event_count: u64,
+    last_synced_at: Option<i64>,
+    deferred_files: u32,
+    last_error_count: u32,
+}
+
+fn snapshot_covers_query(snapshot: &UsageBucketSnapshot, query: &CodexSessionUsageQuery) -> bool {
+    if query
+        .session_id
+        .as_deref()
+        .is_some_and(|value| !value.is_empty())
+    {
+        return false;
+    }
+    let from_ok = query
+        .from_timestamp
+        .map_or(true, |from| from <= 0 || from % 60 == 0);
+    let to_ok = query.to_timestamp.map_or(true, |to| {
+        to >= 0 && (to >= snapshot.max_updated_at || (to + 1) % 60 == 0)
+    });
+    from_ok && to_ok
+}
+
+fn load_usage_bucket_snapshot(
+    conn: &Connection,
+    db_path: &Path,
+) -> Result<Option<UsageBucketSnapshot>, String> {
+    if !SESSION_USAGE_ROLLUP.ready(conn) {
+        return Ok(None);
+    }
+    let active_rewrite: bool = conn
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM session_rewrite_state WHERE phase>=1)",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(true);
+    if active_rewrite {
+        return Ok(None);
+    }
+    let revision = USAGE_SNAPSHOT_REVISION.load(Ordering::Acquire);
+    let mut statement = conn
+        .prepare(
+            "SELECT
+                b.timestamp,
+                b.instance_id,
+                COALESCE(MAX(b.instance_name), ''),
+                b.model,
+                COALESCE(p.project_key, ''),
+                COALESCE(MAX(p.project_path), ''),
+                COALESCE(SUM(b.input_tokens), 0),
+                COALESCE(SUM(b.cached_input_tokens), 0),
+                COALESCE(SUM(b.output_tokens), 0),
+                COALESCE(SUM(b.request_count), 0),
+                COALESCE(MAX(b.updated_at), 0)
+             FROM session_usage_v1_buckets b
+             LEFT JOIN session_usage_projects p USING (file_path)
+             GROUP BY b.timestamp, b.instance_id, b.model, COALESCE(p.project_key, '')",
+        )
+        .map_err(|error| format!("加载会话用量快照失败: {error}"))?;
+    let mut rows = statement
+        .query([])
+        .map_err(|error| format!("查询会话用量快照失败: {error}"))?;
+    let mut buckets = Vec::new();
+    let mut max_updated_at = 0i64;
+    let mut event_count = 0u64;
+    while let Some(row) = rows
+        .next()
+        .map_err(|error| format!("遍历会话用量快照失败: {error}"))?
+    {
+        let bucket = (|| -> rusqlite::Result<(CachedUsageBucket, i64)> {
+            let request_count = row.get::<_, i64>(9)?.max(0) as u64;
+            let updated_at = row.get::<_, i64>(10)?;
+            Ok((
+                CachedUsageBucket {
+                    timestamp: row.get::<_, i64>(0)?,
+                    instance_id: row.get::<_, String>(1)?,
+                    instance_name: row.get::<_, String>(2)?,
+                    model: row.get::<_, String>(3)?,
+                    project_key: row.get::<_, String>(4)?,
+                    project_path: row.get::<_, String>(5)?,
+                    input_tokens: row.get::<_, i64>(6)?.max(0) as u64,
+                    cached_input_tokens: row.get::<_, i64>(7)?.max(0) as u64,
+                    output_tokens: row.get::<_, i64>(8)?.max(0) as u64,
+                    request_count,
+                },
+                updated_at,
+            ))
+        })()
+        .map_err(|error| format!("解析会话用量快照失败: {error}"))?;
+        max_updated_at = max_updated_at.max(bucket.1);
+        event_count = event_count.saturating_add(bucket.0.request_count);
+        buckets.push(bucket.0);
+    }
+
+    let projects_complete = usage_projects_complete(conn);
+    let files_tracked = conn
+        .query_row("SELECT COUNT(*) FROM session_log_sync", [], |row| {
+            row.get::<_, i64>(0)
+        })
+        .unwrap_or(0)
+        .max(0) as u64;
+
+    Ok(Some(UsageBucketSnapshot {
+        db_path: db_path.to_path_buf(),
+        revision,
+        buckets,
+        max_updated_at,
+        projects_complete,
+        files_tracked,
+        event_count,
+        last_synced_at: get_meta_i64(conn, "last_synced_at"),
+        deferred_files: get_meta_i64(conn, "last_deferred_files")
+            .unwrap_or(0)
+            .max(0) as u32,
+        last_error_count: get_meta_i64(conn, "last_error_count").unwrap_or(0).max(0) as u32,
+    }))
+}
+
+fn query_report_from_snapshot(
+    snapshot: &UsageBucketSnapshot,
+    query: &CodexSessionUsageQuery,
+    usage_instances: &[UsageInstance],
+) -> CodexSessionUsageReport {
+    let to = query.to_timestamp.unwrap_or(i64::MAX / 2);
+    let include_hour = query
+        .from_timestamp
+        .is_some_and(|from_ts| to.saturating_sub(from_ts) <= 48 * 3600);
+    let instance_names: HashMap<String, String> = usage_instances
+        .iter()
+        .map(|instance| (instance.id.clone(), instance.name.clone()))
+        .collect();
+    let filter_instance = query
+        .instance_id
+        .as_deref()
+        .filter(|value| !value.is_empty());
+    let filter_model = query.model.as_deref().filter(|value| !value.is_empty());
+    let filter_project = query.project_key.as_deref();
+    let has_dimension_filter =
+        query.model.is_some() || query.project_key.is_some() || query.session_id.is_some();
+    let collect_scope_options = query.include_projects && has_dimension_filter;
+
+    let mut totals = CodexSessionUsageTotals::default();
+    let mut models: HashMap<String, BreakdownAccumulator> = HashMap::new();
+    let mut instances: HashMap<String, BreakdownAccumulator> = HashMap::new();
+    let mut projects: HashMap<String, BreakdownAccumulator> = HashMap::new();
+    let mut days: HashMap<String, BreakdownAccumulator> = HashMap::new();
+    let mut hours: HashMap<i64, BreakdownAccumulator> = HashMap::new();
+    let mut scope_models: HashMap<&str, u64> = HashMap::new();
+    let mut scope_projects: HashMap<&str, (&str, u64)> = HashMap::new();
+    let mut day_cache: HashMap<i64, String> = HashMap::new();
+
+    for bucket in &snapshot.buckets {
+        if let Some(from) = query.from_timestamp {
+            if bucket.timestamp < from {
+                continue;
+            }
+        }
+        if let Some(to_ts) = query.to_timestamp {
+            if bucket.timestamp > to_ts {
+                continue;
+            }
+        }
+        if let Some(instance_id) = filter_instance {
+            if bucket.instance_id != instance_id {
+                continue;
+            }
+        }
+
+        let bucket_total = bucket.input_tokens.saturating_add(bucket.output_tokens);
+        if collect_scope_options {
+            let model_entry = scope_models.entry(bucket.model.as_str()).or_insert(0);
+            *model_entry = model_entry.saturating_add(bucket_total);
+            let project_entry = scope_projects
+                .entry(bucket.project_key.as_str())
+                .or_insert(("", 0));
+            if bucket.project_path.as_str() > project_entry.0 {
+                project_entry.0 = bucket.project_path.as_str();
+            }
+            project_entry.1 = project_entry.1.saturating_add(bucket_total);
+        }
+
+        if let Some(model) = filter_model {
+            if bucket.model != model {
+                continue;
+            }
+        }
+        if let Some(project_key) = filter_project {
+            if bucket.project_key != project_key {
+                continue;
+            }
+        }
+
+        totals.input_tokens = totals.input_tokens.saturating_add(bucket.input_tokens);
+        totals.cached_input_tokens = totals
+            .cached_input_tokens
+            .saturating_add(bucket.cached_input_tokens);
+        totals.output_tokens = totals.output_tokens.saturating_add(bucket.output_tokens);
+        totals.total_tokens = totals.total_tokens.saturating_add(bucket_total);
+        totals.request_count = totals.request_count.saturating_add(bucket.request_count);
+
+        models.entry(bucket.model.clone()).or_default().add(
+            &bucket.model,
+            None,
+            bucket.input_tokens,
+            bucket.cached_input_tokens,
+            bucket.output_tokens,
+            bucket.request_count,
+        );
+        instances
+            .entry(bucket.instance_id.clone())
+            .or_default()
+            .add(
+                &bucket.instance_name,
+                query.include_projects.then_some(bucket.model.as_str()),
+                bucket.input_tokens,
+                bucket.cached_input_tokens,
+                bucket.output_tokens,
+                bucket.request_count,
+            );
+        if query.include_projects {
+            projects
+                .entry(bucket.project_key.clone())
+                .or_default()
+                .add(
+                    &bucket.project_path,
+                    Some(bucket.model.as_str()),
+                    bucket.input_tokens,
+                    bucket.cached_input_tokens,
+                    bucket.output_tokens,
+                    bucket.request_count,
+                );
+        }
+        let day = if bucket.timestamp <= 0 {
+            String::new()
+        } else {
+            let slot = bucket.timestamp / 900;
+            day_cache
+                .entry(slot)
+                .or_insert_with(|| local_day_key(bucket.timestamp))
+                .clone()
+        };
+        days.entry(day).or_default().add(
+            "",
+            Some(bucket.model.as_str()),
+            bucket.input_tokens,
+            bucket.cached_input_tokens,
+            bucket.output_tokens,
+            bucket.request_count,
+        );
+        if include_hour && bucket.timestamp > 0 {
+            let hour_bucket = (bucket.timestamp / 3600) * 3600;
+            if hour_bucket > 0 {
+                hours.entry(hour_bucket).or_default().add(
+                    "",
+                    Some(bucket.model.as_str()),
+                    bucket.input_tokens,
+                    bucket.cached_input_tokens,
+                    bucket.output_tokens,
+                    bucket.request_count,
+                );
+            }
+        }
+    }
+
+    let aggregates = finalize_report_aggregates(
+        totals,
+        models,
+        instances,
+        projects,
+        days,
+        hours,
+        query.include_projects,
+        &instance_names,
+    );
+
+    let (model_options, project_options) = if collect_scope_options {
+        let mut model_list: Vec<(&str, u64)> = scope_models.into_iter().collect();
+        model_list.sort_by(|left, right| right.1.cmp(&left.1).then_with(|| left.0.cmp(right.0)));
+        let mut project_list: Vec<(&str, &str, u64)> = scope_projects
+            .into_iter()
+            .map(|(key, (label, total))| (key, label, total))
+            .collect();
+        project_list
+            .sort_by(|left, right| right.2.cmp(&left.2).then_with(|| left.0.cmp(right.0)));
+        (
+            model_list
+                .into_iter()
+                .map(|(key, _)| CodexSessionUsageInstanceOption {
+                    id: key.to_owned(),
+                    name: key.to_owned(),
+                })
+                .collect(),
+            project_list
+                .into_iter()
+                .map(|(key, label, _)| CodexSessionUsageInstanceOption {
+                    id: key.to_owned(),
+                    name: label.to_owned(),
+                })
+                .collect(),
+        )
+    } else {
+        (
+            usage_options(&aggregates.by_model),
+            usage_options(&aggregates.by_project),
+        )
+    };
+
+    CodexSessionUsageReport {
+        totals: aggregates.totals,
+        by_model: aggregates.by_model,
+        by_instance: aggregates.by_instance,
+        by_project: aggregates.by_project,
+        projects_pending: query.include_projects && !snapshot.projects_complete,
+        model_options,
+        project_options,
+        by_day: aggregates.by_day,
+        by_hour: aggregates.by_hour,
+        instances: usage_instances
+            .iter()
+            .map(|instance| CodexSessionUsageInstanceOption {
+                id: instance.id.clone(),
+                name: instance.name.clone(),
+            })
+            .collect(),
+        from_timestamp: query.from_timestamp,
+        to_timestamp: query.to_timestamp,
+        last_synced_at: snapshot.last_synced_at,
+        files_tracked: snapshot.files_tracked,
+        event_count: snapshot.event_count,
+        deferred_files: snapshot.deferred_files,
+        last_error_count: snapshot.last_error_count,
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn finalize_report_aggregates(
+    mut totals: CodexSessionUsageTotals,
+    models: HashMap<String, BreakdownAccumulator>,
+    instances: HashMap<String, BreakdownAccumulator>,
+    projects: HashMap<String, BreakdownAccumulator>,
+    days: HashMap<String, BreakdownAccumulator>,
+    hours: HashMap<i64, BreakdownAccumulator>,
+    include_projects: bool,
+    instance_names: &HashMap<String, String>,
+) -> ReportAggregates {
+    let mut by_model: Vec<CodexSessionUsageBreakdownRow> = models
+        .into_iter()
+        .map(|(key, acc)| {
+            let label = key.clone();
+            let mut row = acc.into_row(key, label, false);
+            row.estimated_cost_usd = known_usage_cost(&row.key, &row);
+            row
+        })
+        .collect();
+    by_model.sort_by(|left, right| {
+        right
+            .total_tokens
+            .cmp(&left.total_tokens)
+            .then_with(|| left.key.cmp(&right.key))
+    });
+
+    let mut by_instance: Vec<CodexSessionUsageBreakdownRow> = instances
+        .into_iter()
+        .map(|(key, acc)| {
+            let label = instance_names
+                .get(&key)
+                .cloned()
+                .filter(|value| !value.trim().is_empty())
+                .unwrap_or_else(|| acc.label.clone());
+            acc.into_row(key, label, include_projects)
+        })
+        .collect();
+    by_instance.sort_by(|left, right| {
+        right
+            .total_tokens
+            .cmp(&left.total_tokens)
+            .then_with(|| left.key.cmp(&right.key))
+    });
+
+    let by_project: Vec<CodexSessionUsageBreakdownRow> = if include_projects {
+        let mut rows: Vec<_> = projects
+            .into_iter()
+            .map(|(key, acc)| {
+                let label = acc.label.clone();
+                acc.into_row(key, label, true)
+            })
+            .collect();
+        rows.sort_by(|left, right| {
+            right
+                .total_tokens
+                .cmp(&left.total_tokens)
+                .then_with(|| left.key.cmp(&right.key))
+        });
+        rows
+    } else {
+        Vec::new()
+    };
+
+    let mut by_day: Vec<CodexSessionUsageBreakdownRow> = days
+        .into_iter()
+        .map(|(key, acc)| {
+            let label = key.clone();
+            acc.into_row(key, label, true)
+        })
+        .collect();
+    by_day.sort_by(|left, right| right.key.cmp(&left.key));
+
+    let mut by_hour: Vec<CodexSessionUsageBreakdownRow> = hours
+        .into_iter()
+        .map(|(bucket, acc)| {
+            let key = bucket.to_string();
+            let label = key.clone();
+            acc.into_row(key, label, true)
+        })
+        .collect();
+    by_hour.sort_by(|left, right| {
+        left.key
+            .parse::<i64>()
+            .unwrap_or(0)
+            .cmp(&right.key.parse::<i64>().unwrap_or(0))
+    });
+
+    totals.estimated_cost_usd = by_model.iter().filter_map(|row| row.estimated_cost_usd).sum();
+
+    ReportAggregates {
+        totals,
+        by_model,
+        by_instance,
+        by_project,
+        by_day,
+        by_hour,
+    }
+}
+
 fn query_report_aggregates(
     conn: &Connection,
     where_sql: &str,
@@ -2081,93 +3431,16 @@ fn query_report_aggregates(
         }
     }
 
-    let mut by_model: Vec<CodexSessionUsageBreakdownRow> = models
-        .into_iter()
-        .map(|(key, acc)| {
-            let label = key.clone();
-            let mut row = acc.into_row(key, label, false);
-            row.estimated_cost_usd = known_usage_cost(&row.key, &row);
-            row
-        })
-        .collect();
-    by_model.sort_by(|left, right| {
-        right
-            .total_tokens
-            .cmp(&left.total_tokens)
-            .then_with(|| left.key.cmp(&right.key))
-    });
-
-    let mut by_instance: Vec<CodexSessionUsageBreakdownRow> = instances
-        .into_iter()
-        .map(|(key, acc)| {
-            let label = instance_names
-                .get(&key)
-                .cloned()
-                .filter(|value| !value.trim().is_empty())
-                .unwrap_or_else(|| acc.label.clone());
-            acc.into_row(key, label, include_projects)
-        })
-        .collect();
-    by_instance.sort_by(|left, right| {
-        right
-            .total_tokens
-            .cmp(&left.total_tokens)
-            .then_with(|| left.key.cmp(&right.key))
-    });
-
-    let by_project: Vec<CodexSessionUsageBreakdownRow> = if include_projects {
-        let mut rows: Vec<_> = projects
-            .into_iter()
-            .map(|(key, acc)| {
-                let label = acc.label.clone();
-                acc.into_row(key, label, true)
-            })
-            .collect();
-        rows.sort_by(|left, right| {
-            right
-                .total_tokens
-                .cmp(&left.total_tokens)
-                .then_with(|| left.key.cmp(&right.key))
-        });
-        rows
-    } else {
-        Vec::new()
-    };
-
-    let mut by_day: Vec<CodexSessionUsageBreakdownRow> = days
-        .into_iter()
-        .map(|(key, acc)| {
-            let label = key.clone();
-            acc.into_row(key, label, true)
-        })
-        .collect();
-    by_day.sort_by(|left, right| right.key.cmp(&left.key));
-
-    let mut by_hour: Vec<CodexSessionUsageBreakdownRow> = hours
-        .into_iter()
-        .map(|(bucket, acc)| {
-            let key = bucket.to_string();
-            let label = key.clone();
-            acc.into_row(key, label, true)
-        })
-        .collect();
-    by_hour.sort_by(|left, right| {
-        left.key
-            .parse::<i64>()
-            .unwrap_or(0)
-            .cmp(&right.key.parse::<i64>().unwrap_or(0))
-    });
-
-    totals.estimated_cost_usd = by_model.iter().filter_map(|row| row.estimated_cost_usd).sum();
-
-    Ok(ReportAggregates {
+    Ok(finalize_report_aggregates(
         totals,
-        by_model,
-        by_instance,
-        by_project,
-        by_day,
-        by_hour,
-    })
+        models,
+        instances,
+        projects,
+        days,
+        hours,
+        include_projects,
+        instance_names,
+    ))
 }
 
 #[cfg(test)]
@@ -2249,7 +3522,6 @@ fn query_day_breakdown(
         .collect())
 }
 
-#[cfg(test)]
 fn local_day_key(timestamp: i64) -> String {
     if timestamp <= 0 {
         return String::new();
@@ -3032,6 +4304,213 @@ mod tests {
         let report = store.query(&CodexSessionUsageQuery::default()).unwrap();
         assert_eq!(report.totals.request_count, 1);
         assert_eq!(report.totals.input_tokens, 100);
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn parallel_lpt_sync_and_snapshot_query_match_sql_across_filters() {
+        let dir = make_temp_dir("codex-usage-parallel-snapshot");
+        let db_path = dir.join("usage.sqlite");
+        let home = dir.join("home");
+        let sessions = home.join("sessions").join("2026").join("07").join("10");
+        let third_id = "019c0000-0000-7000-8000-000000000003";
+
+        let t1 = Local
+            .with_ymd_and_hms(2026, 7, 10, 10, 15, 0)
+            .single()
+            .unwrap()
+            .with_timezone(&Utc);
+        let t2 = Local
+            .with_ymd_and_hms(2026, 7, 10, 11, 20, 0)
+            .single()
+            .unwrap()
+            .with_timezone(&Utc);
+        let t3 = Local
+            .with_ymd_and_hms(2026, 7, 10, 12, 25, 0)
+            .single()
+            .unwrap()
+            .with_timezone(&Utc);
+
+        let parent_file = sessions.join(format!("rollout-2026-07-10T10-00-00-{PARENT_ID}.jsonl"));
+        let child_file = sessions.join(format!("rollout-2026-07-10T11-00-00-{CHILD_ID}.jsonl"));
+        let compressed_file =
+            sessions.join(format!("rollout-2026-07-10T12-00-00-{third_id}.jsonl.zst"));
+
+        write_jsonl(
+            &parent_file,
+            &[
+                json!({
+                    "timestamp": t1.to_rfc3339(),
+                    "type": "session_meta",
+                    "payload": { "id": PARENT_ID, "cwd": "/work/alpha", "title": "Alpha" }
+                }),
+                turn_context("gpt-5.4"),
+                token_count_with_last(
+                    1_000_000,
+                    200_000,
+                    100_000,
+                    1_000_000,
+                    200_000,
+                    100_000,
+                    "codex",
+                    &t1.to_rfc3339(),
+                ),
+            ],
+        );
+        write_jsonl(
+            &child_file,
+            &[
+                json!({
+                    "timestamp": t2.to_rfc3339(),
+                    "type": "session_meta",
+                    "payload": {
+                        "id": CHILD_ID,
+                        "cwd": "/work/alpha",
+                        "title": "Alpha Fork",
+                        "forked_from_id": PARENT_ID
+                    }
+                }),
+                turn_context("gpt-5.4"),
+                // Replayed parent event: must be deduplicated even under parallel parsing.
+                token_count_with_last(
+                    1_000_000,
+                    200_000,
+                    100_000,
+                    1_000_000,
+                    200_000,
+                    100_000,
+                    "codex",
+                    &t1.to_rfc3339(),
+                ),
+                token_count_with_last(
+                    1_500_000,
+                    250_000,
+                    140_000,
+                    500_000,
+                    50_000,
+                    40_000,
+                    "codex",
+                    &t2.to_rfc3339(),
+                ),
+            ],
+        );
+        let compressed_plain = dir.join("third.jsonl");
+        write_jsonl(
+            &compressed_plain,
+            &[
+                json!({
+                    "timestamp": t3.to_rfc3339(),
+                    "type": "session_meta",
+                    "payload": { "id": third_id, "cwd": "/work/beta", "title": "Beta" }
+                }),
+                turn_context("gpt-5.4-mini"),
+                token_count_with_last(
+                    300_000,
+                    100_000,
+                    60_000,
+                    300_000,
+                    100_000,
+                    60_000,
+                    "codex",
+                    &t3.to_rfc3339(),
+                ),
+            ],
+        );
+        fs::create_dir_all(compressed_file.parent().unwrap()).unwrap();
+        let compressed_bytes =
+            zstd::stream::encode_all(fs::read(&compressed_plain).unwrap().as_slice(), 1).unwrap();
+        fs::write(&compressed_file, compressed_bytes).unwrap();
+
+        let store = SessionUsageStore::open_path(db_path.clone());
+        let instances = vec![UsageInstance {
+            id: DEFAULT_INSTANCE_ID.to_string(),
+            name: DEFAULT_INSTANCE_NAME.to_string(),
+            data_dir: home,
+        }];
+        let sync = store.sync(false, &instances).unwrap();
+        assert!(sync.errors.is_empty());
+        assert_eq!(sync.files_scanned, 3);
+        assert_eq!(sync.imported, 3);
+
+        // Complete rollup backfill so snapshot can be loaded cleanly.
+        let conn = store.open_conn().unwrap();
+        while !SESSION_USAGE_ROLLUP.batch(&conn).unwrap() {}
+        let snapshot = load_usage_bucket_snapshot(&conn, &db_path)
+            .unwrap()
+            .expect("rollup ready snapshot");
+        assert_eq!(snapshot.db_path, db_path);
+        assert!(snapshot.revision > 0);
+        assert_eq!(snapshot.event_count, 3);
+
+        let from = Local
+            .with_ymd_and_hms(2026, 7, 10, 0, 0, 0)
+            .single()
+            .unwrap()
+            .timestamp();
+        let to = Local
+            .with_ymd_and_hms(2026, 7, 10, 23, 59, 59)
+            .single()
+            .unwrap()
+            .timestamp();
+
+        let queries = [
+            CodexSessionUsageQuery {
+                from_timestamp: Some(from),
+                to_timestamp: Some(to),
+                include_projects: true,
+                ..Default::default()
+            },
+            CodexSessionUsageQuery {
+                from_timestamp: Some(from),
+                to_timestamp: Some(to),
+                model: Some("gpt-5.4".to_string()),
+                include_projects: true,
+                ..Default::default()
+            },
+            CodexSessionUsageQuery {
+                from_timestamp: Some(from),
+                to_timestamp: Some(to),
+                project_key: Some("/work/beta".to_string()),
+                include_projects: true,
+                ..Default::default()
+            },
+        ];
+
+        for query in &queries {
+            assert!(snapshot_covers_query(&snapshot, query));
+            let sql_report = store.query(query).unwrap();
+            let snap_report = query_report_from_snapshot(&snapshot, query, &instances);
+            assert_eq!(snap_report.totals.input_tokens, sql_report.totals.input_tokens);
+            assert_eq!(
+                snap_report.totals.cached_input_tokens,
+                sql_report.totals.cached_input_tokens
+            );
+            assert_eq!(snap_report.totals.output_tokens, sql_report.totals.output_tokens);
+            assert_eq!(snap_report.totals.total_tokens, sql_report.totals.total_tokens);
+            assert_eq!(snap_report.totals.request_count, sql_report.totals.request_count);
+            assert!(
+                (snap_report.totals.estimated_cost_usd - sql_report.totals.estimated_cost_usd)
+                    .abs()
+                    < 1e-10
+            );
+            assert_eq!(snap_report.by_model.len(), sql_report.by_model.len());
+            assert_eq!(snap_report.by_project.len(), sql_report.by_project.len());
+            assert_eq!(snap_report.by_day.len(), sql_report.by_day.len());
+            assert_eq!(snap_report.by_hour.len(), sql_report.by_hour.len());
+            assert_eq!(snap_report.model_options.len(), sql_report.model_options.len());
+            assert_eq!(snap_report.project_options.len(), sql_report.project_options.len());
+        }
+
+        // Mid-minute boundary before max_updated_at must decline snapshot and use SQL exact path.
+        assert!(!snapshot_covers_query(
+            &snapshot,
+            &CodexSessionUsageQuery {
+                from_timestamp: Some(from + 17),
+                to_timestamp: Some(t1.timestamp() + 13),
+                ..Default::default()
+            }
+        ));
+
         fs::remove_dir_all(&dir).ok();
     }
 }
