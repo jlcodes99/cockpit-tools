@@ -1397,13 +1397,9 @@
   background: color-mix(in srgb, var(--bg-tertiary, #f1f5f9) 80%, transparent);
   border-radius: 20px;
   border: 1px solid color-mix(in srgb, var(--border, #e2e8f0) 70%, transparent);
-  overflow-x: auto;
+  flex-wrap: wrap;
+  row-gap: 4px;
   max-width: 100%;
-  scrollbar-width: none;
-}
-
-.account-group-tabs::-webkit-scrollbar {
-  display: none;
 }
 
 .account-group-tab {
