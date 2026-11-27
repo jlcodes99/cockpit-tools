@@ -10,7 +10,7 @@
 
 ## [Unreleased]
 
-## [1.5.4] - 2026-11-27
+## [1.5.3] - 2026-11-27
 
 ### 新增
 - **Antigravity 按账号独立出口代理** 支持为单个 Antigravity 账号绑定独立出口代理地址（`http` / `https` / `socks5` / `socks5h`），覆盖桌面端、IDE、CLI 及多开实例启动链路，未配置时跟随设置中的全局代理。 [#3335](https://github.com/jlcodes99/cockpit-tools/pull/3335)
