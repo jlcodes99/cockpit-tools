@@ -446,16 +446,39 @@ pub(crate) fn has_managed_voice_gateway_config(config_text: &str) -> bool {
 
 const LOCAL_ACCESS_CLIENT_RETRY_KEYS: [&str; 2] = ["request_max_retries", "stream_max_retries"];
 
-/// Cockpit owns pre-response recovery. A second client retry loop would replay
-/// the whole pool after our terminal 504/SSE error (Codex ignores retry hints).
-/// This also deliberately disables client reconnects after a partial stream.
-fn apply_local_access_client_retry_policy(provider: &mut toml_edit::Table) -> bool {
+/// Cockpit owns pre-response recovery: a second whole-request retry loop would
+/// replay the entire pool after our terminal 504/SSE error (Codex ignores retry
+/// hints), so `request_max_retries` stays at 0. Stream retries are controlled
+/// separately: a zero budget turns one recoverable WebSocket drop into a
+/// session-wide HTTP fallback (Codex persists the fallback per session), so
+/// when the gateway serves Responses over WebSocket we allow the client a
+/// single stream reconnect instead of disabling it.
+fn apply_local_access_client_retry_policy(
+    provider: &mut toml_edit::Table,
+    supports_websockets: bool,
+) -> bool {
     let mut changed = false;
-    for key in LOCAL_ACCESS_CLIENT_RETRY_KEYS {
-        if provider.get(key).and_then(|item| item.as_integer()) != Some(0) {
-            provider[key] = value(0);
-            changed = true;
+    if provider.get("request_max_retries").and_then(|item| item.as_integer()) != Some(0) {
+        provider["request_max_retries"] = value(0);
+        changed = true;
+    }
+    let stream_retries = provider
+        .get("stream_max_retries")
+        .and_then(|item| item.as_integer());
+    let desired_stream_retries = if supports_websockets {
+        match stream_retries {
+            Some(retries) if retries > 0 => None, // Preserve an explicit user budget.
+            _ => Some(1),
         }
+    } else {
+        match stream_retries {
+            Some(0) => None,
+            _ => Some(0),
+        }
+    };
+    if let Some(desired) = desired_stream_retries {
+        provider["stream_max_retries"] = value(desired);
+        changed = true;
     }
     changed
 }
