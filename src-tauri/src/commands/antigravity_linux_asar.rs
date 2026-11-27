@@ -91,6 +91,38 @@ mod tests {
     }
 
     #[test]
+    fn packed_desktop_version_wins_over_stale_unpacked_product_json() {
+        let temp = tempfile::tempdir().unwrap();
+        let resources = temp.path().join("resources");
+        std::fs::create_dir_all(resources.join("app")).unwrap();
+        // Leftover from an Antigravity 1.x install in the same directory.
+        std::fs::write(
+            resources.join("app").join("product.json"),
+            r#"{"nameShort":"Antigravity","ideVersion":"1.23.2","version":"1.107.0"}"#,
+        )
+        .unwrap();
+        write_archive(
+            &resources.join("app.asar"),
+            r#"{"name":"antigravity","productName":"Antigravity","version":"2.35.0"}"#,
+            "5",
+        );
+
+        let desktop =
+            super::super::read_antigravity_root_file_metadata(temp.path(), Some("antigravity"))
+                .unwrap();
+        assert_eq!(desktop.version, "2.35.0");
+        assert_eq!(desktop.source, "app.asar/package.json");
+
+        // The IDE target keeps reading its unpacked product.json.
+        let ide = super::super::read_antigravity_root_file_metadata(
+            temp.path(),
+            Some("antigravity_ide"),
+        )
+        .unwrap();
+        assert_eq!(ide.version, "1.23.2");
+    }
+
+    #[test]
     fn ignores_an_unrelated_product_and_out_of_bounds_entries() {
         let temp = tempfile::tempdir().unwrap();
         let path = temp.path().join("app.asar");

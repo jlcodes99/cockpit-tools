@@ -547,9 +547,42 @@ fn read_macos_plist_string(path: &Path, key: &str) -> Option<String> {
     None
 }
 
-#[cfg(any(target_os = "linux", test))]
 #[path = "antigravity_linux_asar.rs"]
 mod antigravity_linux_asar;
+
+fn antigravity_asar_candidates(root: &Path) -> Vec<PathBuf> {
+    vec![
+        root.join("resources").join("app.asar"),
+        root.join("Contents").join("Resources").join("app.asar"),
+    ]
+}
+
+/// Antigravity 2.x ships its metadata inside `app.asar`. An in-place reinstall over
+/// 1.x can leave a stale unpacked `resources/app/product.json` behind, so the packed
+/// archive (what Electron actually runs) must win over it.
+fn read_antigravity_desktop_asar_metadata(root: &Path) -> Option<AntigravityInstalledVersionInfo> {
+    antigravity_asar_candidates(root).into_iter().find_map(|archive| {
+        let version = antigravity_linux_asar::desktop_version_from_asar(&archive)?;
+        Some(AntigravityInstalledVersionInfo {
+            product_name: "Antigravity".to_string(),
+            version,
+            app_path: root.to_string_lossy().to_string(),
+            source: "app.asar/package.json".to_string(),
+        })
+    })
+}
+
+fn read_antigravity_root_file_metadata(
+    root: &Path,
+    target: Option<&str>,
+) -> Option<AntigravityInstalledVersionInfo> {
+    if normalize_antigravity_metadata_target(target) != Some("antigravity_ide") {
+        if let Some(info) = read_antigravity_desktop_asar_metadata(root) {
+            return Some(info);
+        }
+    }
+    read_antigravity_product_json_metadata(root)
+}
 
 fn antigravity_product_json_candidates(root: &Path) -> Vec<PathBuf> {
     #[cfg(target_os = "macos")]
@@ -923,6 +956,9 @@ fn antigravity_metadata_root_matches_target_with_product_metadata(
         }
     }
     if prefer_product_metadata {
+        if read_antigravity_desktop_asar_metadata(root).is_some() {
+            return target == "antigravity";
+        }
         if let Some(metadata_target) = antigravity_product_json_target(root) {
             return metadata_target == target;
         }
@@ -1132,21 +1168,8 @@ fn resolve_antigravity_installed_version_info_for_target_with_mode(
     scan_mode: AntigravityVersionScanMode,
 ) -> Option<AntigravityInstalledVersionInfo> {
     for root in antigravity_metadata_candidates(target, scan_mode) {
-        if let Some(info) = read_antigravity_product_json_metadata(&root) {
+        if let Some(info) = read_antigravity_root_file_metadata(&root, target) {
             return Some(info);
-        }
-
-        #[cfg(target_os = "linux")]
-        if normalize_antigravity_metadata_target(target) != Some("antigravity_ide") {
-            let archive = root.join("resources").join("app.asar");
-            if let Some(version) = antigravity_linux_asar::desktop_version_from_asar(&archive) {
-                return Some(AntigravityInstalledVersionInfo {
-                    product_name: "Antigravity".to_string(),
-                    version,
-                    app_path: root.to_string_lossy().to_string(),
-                    source: "app.asar/package.json".to_string(),
-                });
-            }
         }
 
         #[cfg(target_os = "macos")]
