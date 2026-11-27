@@ -26,10 +26,17 @@ export function defaultQoderClient(region: QoderRegion, isWindows: boolean): Qod
 /**
  * Mirrors `qoder_channel::source_of`: `qoder_cn` marks the public CN client,
  * while `qodercn` stays reserved for the retired CN IDE adapter.
+ *
+ * The marker may sit on either raw payload — the backend resolves both and
+ * rejects a session whose two halves disagree — so reading only `raw_user_info`
+ * would list a plan-stamped CN session as global and then fail the switch with
+ * `QODER_PLATFORM_MISMATCH`.
  */
 export function getQoderRegion(account: QoderAccount): QoderRegion {
   const info = account.auth_user_info_raw as { login_source?: string } | undefined;
-  return info?.login_source === 'qoder_cn' ? 'cn' : 'global';
+  const plan = account.auth_user_plan_raw as { login_source?: string } | undefined;
+  const marker = info?.login_source ?? plan?.login_source;
+  return marker === 'qoder_cn' ? 'cn' : 'global';
 }
 
 export function qoderRegionLabel(region: QoderRegion, t: TFunction): string {
