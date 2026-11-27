@@ -19,6 +19,7 @@ import {
   getQoderCnCheckinStatus,
 } from '../services/qoderCnService';
 import { useEscClose } from '../hooks/useEscClose';
+import { formatQoderError } from '../utils/qoderErrors';
 
 type CheckinUiState = 'loading' | 'available' | 'claimed' | 'inactive' | 'error';
 
@@ -184,8 +185,13 @@ export function QoderCheckinModal({
             updateAccountState(account.id, { checkingIn: false });
           }
         } catch (err) {
-          console.warn('[QoderCheckin] 一键领取预检失败:', account.id, err);
-          updateAccountState(account.id, { checkingIn: false });
+          // 预检失败也必须落在账号上：只打日志的话这个账号既不会进领取队列，
+          // 卡片上也没有任何提示，用户会以为已经领过了。
+          updateAccountState(account.id, {
+            checkingIn: false,
+            error: formatQoderError(err),
+            uiState: 'error',
+          });
         }
       }),
     );

@@ -7,6 +7,7 @@ import {
 } from '../utils/floatingCardSelectors';
 import { useWorkbuddyAiAccountStore } from '../stores/useWorkbuddyAiAccountStore';
 import { resolveCodexAccountDisplayName } from "../utils/codexAccountDisplayName";
+import { formatQoderError } from '../utils/qoderErrors';
 import { codexWakeupResultLabel, useCodexAccountWakeupResults } from '../hooks/useCodexAccountWakeupResults';
 import React, { useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -768,6 +769,7 @@ export function DashboardPage({
       ...codebuddyAccounts,
       ...codebuddyCnAccounts,
       ...qoderAccounts,
+      ...qoderCnAccounts,
       ...zcodeAccounts,
       ...t3codeAccounts,
       ...traeAccounts,
@@ -783,13 +785,13 @@ export function DashboardPage({
       }
     }
     return Array.from(tagSet).sort((a, b) => a.localeCompare(b));
-  }, [agAccounts, codexAccounts, claudeAccounts, zedAccounts, githubCopilotAccounts, windsurfAccounts, kiroAccounts, cursorAccounts, grokAccounts, codebuddyAccounts, codebuddyCnAccounts, qoderAccounts, zcodeAccounts, t3codeAccounts, traeAccounts, workbuddyAccounts, workbuddyAiAccounts, minimaxCodeAccounts]);
+  }, [agAccounts, codexAccounts, claudeAccounts, zedAccounts, githubCopilotAccounts, windsurfAccounts, kiroAccounts, cursorAccounts, grokAccounts, codebuddyAccounts, codebuddyCnAccounts, qoderAccounts, qoderCnAccounts, zcodeAccounts, t3codeAccounts, traeAccounts, workbuddyAccounts, workbuddyAiAccounts, minimaxCodeAccounts]);
 
 
   // Refresh States
   const [refreshing, setRefreshing] = React.useState<Set<string>>(new Set());
   const [switching, setSwitching] = React.useState<Set<string>>(new Set());
-  const [grokActionMessage, setGrokActionMessage] = React.useState<{
+  const [actionMessage, setActionMessage] = React.useState<{
     text: string;
     tone: 'error';
   } | null>(null);
@@ -1040,13 +1042,13 @@ export function DashboardPage({
 
   const handleRefreshGrok = async (accountId: string) => {
     if (refreshing.has(accountId)) return;
-    setGrokActionMessage(null);
+    setActionMessage(null);
     setRefreshing((prev) => new Set(prev).add(accountId));
     try {
       await useGrokAccountStore.getState().refreshToken(accountId);
     } catch (error) {
       console.error('Refresh failed:', error);
-      setGrokActionMessage({
+      setActionMessage({
         text: t('messages.refreshFailed', {
           error: String(error).replace(/^Error:\s*/, ''),
         }),
@@ -1168,7 +1170,7 @@ export function DashboardPage({
 
   const handleRefreshGrokCard = async () => {
     if (cardRefreshing.grok) return;
-    setGrokActionMessage(null);
+    setActionMessage(null);
     setCardRefreshing((prev) => ({ ...prev, grok: true }));
     const idsToRefresh = [grokCurrent?.id, grokRecommended?.id].filter(Boolean) as string[];
     try {
@@ -1177,7 +1179,7 @@ export function DashboardPage({
       }
     } catch (error) {
       console.error('Card refresh failed:', error);
-      setGrokActionMessage({
+      setActionMessage({
         text: t('messages.refreshFailed', {
           error: String(error).replace(/^Error:\s*/, ''),
         }),
@@ -1297,13 +1299,13 @@ export function DashboardPage({
 
   const handleSwitchGrok = async (accountId: string) => {
     if (switching.has(accountId)) return;
-    setGrokActionMessage(null);
+    setActionMessage(null);
     setSwitching((prev) => new Set(prev).add(accountId));
     try {
       await switchGrokAccount(accountId);
     } catch (error) {
       console.error('Switch failed:', error);
-      setGrokActionMessage({
+      setActionMessage({
         text: t('messages.switchFailed', {
           error: String(error).replace(/^Error:\s*/, ''),
         }),
@@ -1624,10 +1626,18 @@ export function DashboardPage({
   const handleSwitchQoderCn = async (accountId: string) => {
     if (switching.has(accountId)) return;
     setSwitching((prev) => new Set(prev).add(accountId));
+    setActionMessage(null);
     try {
       await switchQoderCnAccount(accountId);
     } catch (error) {
-      console.error('Switch failed:', error);
+      // A CN switch can fail because the desktop client refused to close; the
+      // message has to reach the user instead of only the console.
+      setActionMessage({
+        text: t('accounts.switchFailed', '切换失败：{{error}}', {
+          error: formatQoderError(error),
+        }),
+        tone: 'error',
+      });
     } finally {
       setSwitching((prev) => {
         const next = new Set(prev);
@@ -3820,13 +3830,13 @@ export function DashboardPage({
         </div>
       </div>
 
-      {grokActionMessage && (
-        <div className={`action-message ${grokActionMessage.tone}`} role="alert">
-          <span className="action-message-text">{grokActionMessage.text}</span>
+      {actionMessage && (
+        <div className={`action-message ${actionMessage.tone}`} role="alert">
+          <span className="action-message-text">{actionMessage.text}</span>
           <button
             type="button"
             className="action-message-close"
-            onClick={() => setGrokActionMessage(null)}
+            onClick={() => setActionMessage(null)}
             aria-label={t('common.close', '关闭')}
           >
             <X size={14} />

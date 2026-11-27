@@ -1,4 +1,4 @@
-import { containsWithScrollbar } from '../utils/scrollbarContainment';
+import { emitAccountsChanged } from '../utils/accountSyncEvents';
 import { useDurableUiBooleanSetting } from '../hooks/useDurableUiSetting';
 import { useAccountsOverviewFilterState } from '../hooks/useAccountsOverviewFilterState';
 import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -111,6 +111,7 @@ import {
 import { getLocalOffsetMinutes } from '../utils/localTimeZone';
 
 const QODER_FLOW_NOTICE_COLLAPSED_KEY = 'agtools.qoder.flow_notice_collapsed';
+const QODER_CN_FLOW_NOTICE_COLLAPSED_KEY = 'agtools.qoder_cn.flow_notice_collapsed';
 const QODER_FILTER_PERSISTENCE_SCOPE = normalizeAccountsOverviewScope('qoder');
 const QODER_FILTER_FIELD_VIEW_MODE = 'view_mode';
 const QODER_FILTER_FIELD_SORT_BY = 'sort_by';
@@ -350,8 +351,11 @@ export function QoderAccountsPage({ region = 'global' }: { region?: QoderRegion 
         )
       : false,
   );
-  const [isFlowNoticeCollapsed, setIsFlowNoticeCollapsed] =
-    useDurableUiBooleanSetting(QODER_FLOW_NOTICE_COLLAPSED_KEY);
+  // The two realms are separate pages; sharing the key would make collapsing the
+  // notice on one hide it on the other.
+  const [isFlowNoticeCollapsed, setIsFlowNoticeCollapsed] = useDurableUiBooleanSetting(
+    region === 'cn' ? QODER_CN_FLOW_NOTICE_COLLAPSED_KEY : QODER_FLOW_NOTICE_COLLAPSED_KEY,
+  );
   const [privacyModeEnabled, setPrivacyModeEnabled] = useState<boolean>(() =>
     isPrivacyModeEnabledByDefault(),
   );
@@ -393,8 +397,9 @@ export function QoderAccountsPage({ region = 'global' }: { region?: QoderRegion 
   const loading = store.loading;
   const fetchAccounts = store.fetchAccounts;
 
+  const exportFilePrefix = region === 'cn' ? 'qoder_cn_accounts' : 'qoder_accounts';
   const exportModal = useExportJsonModal({
-    exportFilePrefix: region === 'cn' ? 'qoder_cn_accounts' : 'qoder_accounts',
+    exportFilePrefix,
     exportJsonByIds: service.exportQoderAccounts,
     onError: (error) =>
       setMessage({
@@ -527,7 +532,7 @@ export function QoderAccountsPage({ region = 'global' }: { region?: QoderRegion 
     const onPointerDown = (event: MouseEvent) => {
       const target = event.target as Node | null;
       if (!target) return;
-      if (containsWithScrollbar(tagFilterRef.current, target)) return;
+      if (tagFilterRef.current?.contains(target)) return;
       setShowTagFilter(false);
     };
     document.addEventListener('mousedown', onPointerDown);
@@ -536,10 +541,18 @@ export function QoderAccountsPage({ region = 'global' }: { region?: QoderRegion 
 
   const isAbnormalAccount = useCallback((_account: QoderAccount) => false, []);
 
+  // The store of a region should only hold that region's sessions, but a legacy
+  // import may have left the other one behind: filter once so the plan counts and
+  // the visible list can never disagree.
+  const regionAccounts = useMemo(
+    () => accounts.filter((account) => getQoderRegion(account) === region),
+    [accounts, region],
+  );
+
   const tierSummary = useMemo(() => {
     const counts = new Map<string, number>();
     counts.set('UNKNOWN', 0);
-    for (const account of accounts) {
+    for (const account of regionAccounts) {
       const plan = getQoderPlanBadge(account) || 'UNKNOWN';
       counts.set(plan, (counts.get(plan) ?? 0) + 1);
     }
@@ -547,14 +560,14 @@ export function QoderAccountsPage({ region = 'global' }: { region?: QoderRegion 
       .filter(([, count]) => count > 0)
       .sort((a, b) => a[0].localeCompare(b[0]));
     return {
-      all: accounts.length,
-      valid: accounts.reduce(
+      all: regionAccounts.length,
+      valid: regionAccounts.reduce(
         (count, account) => (isAbnormalAccount(account) ? count : count + 1),
         0,
       ),
       entries,
     };
-  }, [accounts, isAbnormalAccount]);
+  }, [regionAccounts, isAbnormalAccount]);
 
   const allFilterLabel = useMemo(() => {
     const text = t('common.shared.filter.all', {
@@ -627,7 +640,7 @@ export function QoderAccountsPage({ region = 'global' }: { region?: QoderRegion 
   );
 
   const filteredAccounts = useMemo(() => {
-    let result = accounts.filter((account) => getQoderRegion(account) === region);
+    let result = regionAccounts;
 
     const query = searchQuery.trim().toLowerCase();
     if (query) {
@@ -660,7 +673,7 @@ export function QoderAccountsPage({ region = 'global' }: { region?: QoderRegion 
 
     result.sort(compareAccountsBySort);
     return result;
-  }, [accounts, region, compareAccountsBySort, filterTypes, grouping, isAbnormalAccount, searchQuery, tagFilter]);
+  }, [regionAccounts, compareAccountsBySort, filterTypes, grouping, isAbnormalAccount, searchQuery, tagFilter]);
 
   const groupedAccounts = useMemo(() => {
     if (!groupByTag) return [] as Array<[string, QoderAccount[]]>;
@@ -803,7 +816,12 @@ export function QoderAccountsPage({ region = 'global' }: { region?: QoderRegion 
         });
       } catch (error) {
         const errorText = String(error);
-        if (errorText.startsWith('QODER_SWITCH_LAUNCH_FAILED:')) {
+        // Both codes mean "credentials written, the client just did not come back";
+        // the current account moved, so the list has to catch up.
+        if (
+          errorText.startsWith('QODER_SWITCH_LAUNCH_FAILED:')
+          || errorText.startsWith('QODER_CN_RELAUNCH_FAILED:')
+        ) {
           await store.fetchAccounts();
         }
         setMessage({
@@ -959,6 +977,8 @@ export function QoderAccountsPage({ region = 'global' }: { region?: QoderRegion 
         const content = await file.text();
         await service.importQoderFromJson(content, region);
         await store.fetchAccounts();
+        // 直接走 service 会绕过 store 的广播；悬浮窗等其它窗口靠这个事件刷新。
+        await emitAccountsChanged({ platformId, reason: 'import' });
         setAddStatus('success');
         setAddMessage(t('accounts.importJsonSuccess', 'JSON 导入成功'));
       } catch (error) {
@@ -982,6 +1002,7 @@ export function QoderAccountsPage({ region = 'global' }: { region?: QoderRegion 
     try {
       const imported = await service.importQoderFromJson(payload, region);
       await store.fetchAccounts();
+      await emitAccountsChanged({ platformId, reason: 'import' });
       setAddStatus('success');
       setAddMessage(
         t('common.shared.token.importSuccessMsg', '成功导入 {{count}} 个账号', {
@@ -1315,8 +1336,8 @@ export function QoderAccountsPage({ region = 'global' }: { region?: QoderRegion 
     const visibleIdSet = new Set(filteredIds);
     const selectedVisibleIds = Array.from(selected).filter((id) => visibleIdSet.has(id));
     const ids = selectedVisibleIds.length > 0 ? selectedVisibleIds : filteredIds;
-    await handleExportByIds(ids, 'qoder_accounts');
-  }, [filteredIds, handleExportByIds, selected]);
+    await handleExportByIds(ids, exportFilePrefix);
+  }, [exportFilePrefix, filteredIds, handleExportByIds, selected]);
 
   const formatRelativeDuration = useCallback(
     (seconds: number) => {

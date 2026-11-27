@@ -2258,6 +2258,8 @@ export function useSettingsPageController() {
         return 'CodeBuddy CN';
       case 'qoder':
         return 'Qoder';
+      case 'qoder_cn':
+        return 'Qoder CN';
       case 'zcode':
         return 'ZCode';
       case 't3code':

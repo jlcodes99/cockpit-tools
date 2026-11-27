@@ -59,8 +59,9 @@ export async function importQoderFromLocal(): Promise<QoderAccount[]> {
   return await invoke('import_qoder_cn_from_local');
 }
 
-export async function qoderOauthLoginStart(region: QoderRegion = 'cn'): Promise<QoderOAuthStartResponse> {
-  const raw = await invoke<QoderOAuthStartResponseRaw>('qoder_cn_oauth_login_start', { region });
+export async function qoderOauthLoginStart(_region?: QoderRegion): Promise<QoderOAuthStartResponse> {
+  // The CN command takes no arguments; passing one would only be ignored.
+  const raw = await invoke<QoderOAuthStartResponseRaw>('qoder_cn_oauth_login_start');
   return normalizeQoderOAuthStartResponse(raw);
 }
 

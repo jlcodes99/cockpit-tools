@@ -32,7 +32,10 @@ export function formatQoderError(error: unknown): string {
     case 'QODER_SESSION_CHANGED':
       return i18n.t('qoder.diagnostics.sessionChanged');
     case 'QODER_PLATFORM_MISMATCH':
+      return i18n.t('qoder.diagnostics.platformMismatch');
     case 'QODER_REGION_UNSUPPORTED':
+    case 'QODER_REGION_INVALID':
+      return i18n.t('qoder.diagnostics.regionUnsupported');
     case 'QODER_SESSION_ENDPOINT_UNAVAILABLE':
       return i18n.t('qoder.diagnostics.endpointUnavailable');
     case 'QODER_LAUNCH_UNCONFIRMED':
@@ -44,8 +47,6 @@ export function formatQoderError(error: unknown): string {
       return i18n.t('qoder.diagnostics.workerFailed', { detail });
     case 'QODER_SWITCH_LAUNCH_FAILED':
       return i18n.t('qoder.diagnostics.switchLaunchFailed', { detail: formatQoderError(detail) });
-    case 'QODER_PLATFORM_MISMATCH':
-      return i18n.t('qoder.diagnostics.platformMismatch');
     case 'QODER_CN_RELAUNCH_FAILED':
       return i18n.t('qoder.diagnostics.cnRelaunchFailed', { detail });
     case 'QODER_CN_DESKTOP_UNSUPPORTED':
@@ -54,7 +55,11 @@ export function formatQoderError(error: unknown): string {
       return i18n.t('qoder.diagnostics.clientInvalid');
     case 'QODER_CLIENT_RUNNING':
       return i18n.t('qoder.diagnostics.clientRunning', {
-        client: detail === 'desktop' ? 'Qoder CN' : 'Qoder CN CLI',
+        // Both realms ship a desktop client and a CLI, so the name has to come
+        // from the error rather than from the CN platform.
+        client: detail === 'desktop'
+          ? i18n.t('qoder.clientTarget.desktop', 'Qoder 桌面端')
+          : i18n.t('qoder.clientTarget.cli', 'Qoder CLI'),
       });
     case 'QODER_NATIVE_TOKEN_MISSING':
       return i18n.t('qoder.diagnostics.nativeTokenMissing');
@@ -76,9 +81,16 @@ export function formatQoderError(error: unknown): string {
       return i18n.t('qoder.diagnostics.nativeImportFailed');
     case 'QODER_NATIVE_PROCESS_PROBE_FAILED':
       return i18n.t('qoder.diagnostics.nativeProcessProbeFailed');
-    case 'QODER_REGION_UNSUPPORTED':
-    case 'QODER_REGION_INVALID':
-      return i18n.t('qoder.diagnostics.regionUnsupported');
+    case 'QODER_NATIVE_WORKER_FAILED':
+      return i18n.t('qoder.diagnostics.workerFailed', { detail });
+    case 'QODER_NATIVE_ENVELOPE_INVALID':
+    case 'QODER_NATIVE_ENVELOPE_UNSUPPORTED':
+    case 'QODER_NATIVE_JSON_INVALID':
+    case 'QODER_NATIVE_LOCAL_STATE_INVALID':
+    case 'QODER_NATIVE_MACHINE_ID_INVALID':
+    case 'QODER_NATIVE_EXPIRY_MISSING':
+    case 'QODER_NATIVE_EXPIRY_INVALID':
+      return i18n.t('qoder.diagnostics.nativeImportInvalid');
     default:
       return message;
   }

@@ -1421,9 +1421,10 @@ function detectLegacyPlatform(value: unknown): PlatformId | null {
     return 'trae';
   }
   if ('auth_user_info_raw' in sample || 'auth_credit_usage_raw' in sample || 'credits_usage_percent' in sample) {
-    // CN 会话的 login_source 是 "qoder_cn"（旧版本写过 "qodercn"），否则两个平台的账号在下发时会撞在一起。
+    // 只有 "qoder_cn" 是公共 CN 客户端的会话；"qodercn" 是已退役的 CN IDE 适配器
+    // 写下的标记，那些账号一直存在全局库里，CN 导入也会拒绝它，所以仍归到 qoder。
     const loginSource = (sample.auth_user_info_raw as Record<string, unknown> | undefined)?.login_source;
-    return loginSource === 'qoder_cn' || loginSource === 'qodercn' ? 'qoder_cn' : 'qoder';
+    return loginSource === 'qoder_cn' ? 'qoder_cn' : 'qoder';
   }
   if ('zcode_jwt_token' in sample || ('quota_raw' in sample && 'provider' in sample)) {
     return 'zcode';
