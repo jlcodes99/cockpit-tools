@@ -110,6 +110,9 @@ export function createPlatformInstanceService(
       if (payload.followLocalAccount !== undefined) {
         body.followLocalAccount = payload.followLocalAccount;
       }
+      if (payload.launchMode !== undefined) {
+        body.launchMode = payload.launchMode;
+      }
       if (payload.appSpeed !== undefined) {
         body.appSpeed = payload.appSpeed;
       }
