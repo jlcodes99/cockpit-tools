@@ -1160,17 +1160,28 @@ async fn prepare_target_for_switch(target: QoderAccount) -> Result<(), String> {
     Ok(())
 }
 
+/// Channel that owns an account's credentials, when it is one this client can
+/// talk to. Used to keep the per-channel headers (machine token, origins) apart.
+fn channel_of(account: &QoderAccount) -> Option<Channel> {
+    let source = crate::modules::qoder_channel::credential_source(account).ok()?;
+    Channel::for_source(source)
+}
+
 async fn refresh_account_from_openapi_once(
     mut target: QoderAccount,
 ) -> Result<QoderAccount, String> {
     let endpoint = account_endpoint(&target).await?;
     let client = build_reqwest_client()?;
-    let machine_info = tokio::task::spawn_blocking(read_qoder_machine_info_cache)
-        .await
-        .map_err(|_| "QODER_ACCOUNT_BUSY")?
-        .map_err(|error| logger::log_warn(&format!("[Qoder Refresh] 读取机器信息失败: {error}")))
-        .ok()
-        .flatten();
+    let channel = channel_of(&target);
+    let machine_info = tokio::task::spawn_blocking(move || match channel {
+        Some(channel) => read_qoder_machine_info_cache(channel),
+        None => Ok::<_, String>(None),
+    })
+    .await
+    .map_err(|_| "QODER_ACCOUNT_BUSY")?
+    .map_err(|error| logger::log_warn(&format!("[Qoder Refresh] 读取机器信息失败: {error}")))
+    .ok()
+    .flatten();
 
     let now = chrono::Utc::now().timestamp_millis();
     let info = target.auth_user_info_raw.as_ref();
@@ -1297,10 +1308,37 @@ fn default_cosy_info_path() -> Result<PathBuf, String> {
     Ok(user_data.join("SharedClientCache"))
 }
 
-fn read_qoder_machine_info_cache() -> Result<Option<QoderMachineInfo>, String> {
-    let cache_path = default_cosy_info_path()?
-        .join("cache")
-        .join("machine_token.json");
+/// `SharedClientCache` of the client that owns `channel`.
+///
+/// The global IDE reads `~/.qoder/SharedClientCache`, which is where the machine
+/// token of the international realm is issued. The public CN clients keep their
+/// own trees (`com.qodercn.app.stable` / `.qoder-cn`), so a CN session must never
+/// fall back to the global cache: that would hand an international machine
+/// credential to `openapi.qoder.com.cn`. A CN client that has not written such a
+/// cache yet simply contributes no machine headers.
+fn cosy_info_path(channel: Channel) -> Result<Option<PathBuf>, String> {
+    if channel.source() != CredentialSource::PublicCn {
+        return Ok(Some(default_cosy_info_path()?));
+    }
+    let mut candidates = Vec::new();
+    if let Some(dir) = dirs::config_dir() {
+        candidates.push(dir.join(channel.desktop_dir()).join("SharedClientCache"));
+    }
+    if let Some(home) = dirs::home_dir() {
+        candidates.push(home.join(channel.cli_dir()).join("SharedClientCache"));
+    }
+    Ok(candidates.into_iter().find(|path| path.is_dir()))
+}
+
+fn read_qoder_machine_info_cache(channel: Channel) -> Result<Option<QoderMachineInfo>, String> {
+    let Some(cosy_info) = cosy_info_path(channel)? else {
+        logger::log_info(&format!(
+            "[Qoder OAuth] {} 客户端未提供机器缓存，跳过机器标识注入",
+            channel.marker()
+        ));
+        return Ok(None);
+    };
+    let cache_path = cosy_info.join("cache").join("machine_token.json");
     if !cache_path.exists() {
         logger::log_warn(&format!(
             "[Qoder OAuth] 未找到官方 machine token 缓存，将跳过机器标识注入: {}",
@@ -1361,8 +1399,11 @@ fn read_qoder_machine_info_cache() -> Result<Option<QoderMachineInfo>, String> {
     }))
 }
 
-fn read_qoder_cached_machine_id() -> Result<Option<String>, String> {
-    let cache_path = default_cosy_info_path()?.join("cache").join("id");
+fn read_qoder_cached_machine_id(channel: Channel) -> Result<Option<String>, String> {
+    let Some(cosy_info) = cosy_info_path(channel)? else {
+        return Ok(None);
+    };
+    let cache_path = cosy_info.join("cache").join("id");
     if !cache_path.exists() {
         logger::log_warn(&format!(
             "[Qoder OAuth] 未找到官方 machine id 缓存，将继续使用无机器标识链路: {}",
@@ -1462,7 +1503,7 @@ fn global_channel() -> Channel {
 fn start_login_blocking(channel: Channel) -> Result<QoderOAuthStartResponse, String> {
     logger::log_info("[Qoder OAuth] 开始创建登录会话");
     let login_base_url = resolve_qoder_cli_login_endpoint();
-    let machine_info = match read_qoder_machine_info_cache() {
+    let machine_info = match read_qoder_machine_info_cache(channel) {
         Ok(value) => value,
         Err(err) => {
             logger::log_warn(&format!(
@@ -1476,7 +1517,7 @@ fn start_login_blocking(channel: Channel) -> Result<QoderOAuthStartResponse, Str
         .as_ref()
         .and_then(|value| value.machine_id.as_deref());
     let cached_machine_id = if machine_id.is_none() {
-        read_qoder_cached_machine_id()
+        read_qoder_cached_machine_id(channel)
             .map_err(|error| {
                 logger::log_warn(&format!("[Qoder OAuth] 读取机器标识失败: {error}"));
             })
@@ -2022,6 +2063,14 @@ async fn qoder_sash_request(
             if renewed {
                 return Err(UNAUTHORIZED.into());
             }
+            // Renewal rotates the refresh token, so it has to serialise with the
+            // periodic refresh: two renewals racing on the same token leave one
+            // side holding a token the server already invalidated. Re-reading the
+            // account after taking the lock also picks up a renewal that finished
+            // first, instead of replaying a token that is already spent.
+            let lock = refresh_lock(account_id)?;
+            let _guard = lock.lock().await;
+            target = load_refresh_target(account_id).await?;
             target = renew_device_token(&client, &endpoint, &target).await?;
             renewed = true;
             continue;

@@ -5,7 +5,7 @@
 //! A client profile is a flattened JSON blob whose field names differ per client
 //! generation; this module converts between that blob and the snapshot shape the
 //! account stores keep, and stamps the channel marker on the way in.
-use super::qoder_channel::{snapshot_marker, source_of, Channel};
+use super::qoder_channel::{snapshot_marker, source_of, Channel, CredentialSource};
 use serde_json::{json, Map, Value};
 
 fn text(value: &Value, keys: &[&str]) -> Option<String> {
@@ -77,7 +77,13 @@ pub(crate) fn from_client(value: &Value, channel: Channel) -> Result<Value, Stri
     require_channel(value.get("user"), Some(value), channel)?;
     let mut info = user.clone();
     info.insert("token".into(), json!(token));
-    info.insert("login_source".into(), json!(channel.marker()));
+    // Only the public CN store relies on the marker to keep realms apart. The
+    // global store treats a missing marker and "qoder" as the same session, and
+    // `same_identity` compares the raw scope: stamping the global marker here
+    // would file an account that the IDE login already stored a second time.
+    if channel.source() != CredentialSource::GlobalIde {
+        info.insert("login_source".into(), json!(channel.marker()));
+    }
     info.insert("cockpit_native_user".into(), Value::Object(user));
     if let Some(refresh) = text(value, &["refreshToken", "refresh_token"]) {
         info.insert("refreshToken".into(), json!(refresh));
@@ -233,6 +239,29 @@ mod tests {
 
     fn cn() -> Channel {
         Channel::for_source(CredentialSource::PublicCn).expect("CN channel")
+    }
+
+    fn global() -> Channel {
+        Channel::for_source(CredentialSource::GlobalIde).expect("global channel")
+    }
+
+    #[test]
+    fn global_native_import_leaves_the_source_unstamped() {
+        // IDE-login accounts carry no marker; stamping "qoder" here would make
+        // `same_identity` compare (Some("qoder"), org) against (None, org) and
+        // store the same account twice.
+        let info = from_client(
+            &json!({
+                "token": "access-test",
+                "refreshToken": "refresh-test",
+                "expiresAt": "2027-01-01T00:00:00Z",
+                "user": { "id": "u1" },
+            }),
+            global(),
+        )
+        .unwrap();
+        assert!(info.get("login_source").is_none());
+        assert_eq!(info["cockpit_native_user"]["id"], "u1");
     }
 
     #[test]

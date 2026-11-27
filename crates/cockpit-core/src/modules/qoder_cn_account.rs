@@ -109,14 +109,15 @@ impl QoderCnAccountStore {
             match self.load_account(&summary.id) {
                 Ok(Some(account)) => accounts.push(account),
                 Ok(None) => {}
-                // One file written by another channel must not make the whole
-                // page unusable: drop it from the list and say so in the log.
-                // lgtm[rs/cleartext-logging] 只记录账号 id，不含凭证；没有它用户无法判断哪个账号被跳过
-                Err(error) if error == "QODER_PLATFORM_MISMATCH" => logger::log_warn(&format!(
-                    "[Qoder CN Account] 跳过非本渠道账号: id={}, 请重新导入",
+                // A single unreadable detail — ciphertext from another machine, a
+                // key that no longer matches, a file from another channel — must
+                // not take the whole page or the tray down with it. The id and the
+                // error code are enough to tell the user which account was skipped;
+                // no credential is ever formatted here.
+                Err(error) => logger::log_warn(&format!(
+                    "[Qoder CN Account] 跳过无法读取的账号: id={}, error={error}, 请重新导入",
                     summary.id
                 )),
-                Err(error) => return Err(error),
             }
         }
         accounts.sort_by(|left, right| right.last_used.cmp(&left.last_used));
@@ -124,11 +125,8 @@ impl QoderCnAccountStore {
     }
 
     pub fn remove_account(&self, id: &str) -> Result<(), String> {
-        let _guard = index_guard()?;
-        let mut index = self.load_index_checked()?;
-        index.accounts.retain(|item| item.id != id.trim());
-        self.save_index(&index)?;
-        self.delete_details(id)
+        normalize_account_id(id)?;
+        self.remove_accounts(&[id.to_string()])
     }
 
     pub fn remove_accounts(&self, ids: &[String]) -> Result<(), String> {
@@ -141,15 +139,18 @@ impl QoderCnAccountStore {
             return Ok(());
         }
         let _guard = index_guard()?;
+        // Files go first: `delete_details` is also what validates the ids, and an
+        // error after the index was already rewritten left the detail behind as an
+        // orphan that the next repair pass would resurrect. A failed index write
+        // now leaves entries whose detail is gone, which `list_accounts` skips.
+        for id in &targets {
+            self.delete_details(id)?;
+        }
         let mut index = self.load_index_checked()?;
         index
             .accounts
             .retain(|item| !targets.contains(item.id.as_str()));
-        self.save_index(&index)?;
-        for id in targets {
-            self.delete_details(&id)?;
-        }
-        Ok(())
+        self.save_index(&index)
     }
 
     /// Records a failed quota query on the account, but only when the credentials
@@ -269,7 +270,12 @@ impl QoderCnAccountStore {
         };
         // `last_switched_at` is epoch seconds everywhere else (see `now_ts()`), and the
         // UI multiplies it by 1000 before formatting; millis here displayed year 58863.
-        account.last_switched_at = Some(chrono::Utc::now().timestamp());
+        let now = chrono::Utc::now().timestamp();
+        account.last_switched_at = Some(now);
+        // The list is ordered by `last_used` and the quota alert breaks ties with
+        // it, so a switch has to move it — otherwise CN accounts keep the order
+        // they were imported in. The global store does the same.
+        account.last_used = now;
         self.write_details(&account)
     }
 
@@ -580,6 +586,12 @@ mod tests {
             (1_600_000_000..2_000_000_000).contains(&switched),
             "expected epoch seconds"
         );
+        // The list is ordered by `last_used`; a switch has to move it too.
+        assert!(
+            saved.last_used > 1_600_000_000,
+            "expected last_used to follow the switch, got {}",
+            saved.last_used
+        );
     }
 
     #[test]
@@ -653,6 +665,28 @@ mod tests {
         // Register the id directly: the validating writer refuses this payload.
         let mut index = store.load_index_checked().unwrap();
         index.accounts.push(misfiled.summary());
+        store.save_index(&index).unwrap();
+
+        let listed: Vec<String> = store
+            .list_accounts()
+            .unwrap()
+            .into_iter()
+            .map(|account| account.id)
+            .collect();
+        assert_eq!(listed, ["kept"]);
+    }
+
+    #[test]
+    fn list_skips_an_unreadable_detail_instead_of_failing() {
+        let root = tempfile::tempdir().unwrap();
+        let store = QoderCnAccountStore::new(root.path().to_path_buf());
+        store.save_account(&cn_account("kept", 10)).unwrap();
+
+        // Ciphertext written with a key from another machine (or a truncated file)
+        // must cost only that one account, not the whole page and the tray menu.
+        fs::write(store.path("broken").unwrap(), b"not-an-envelope").unwrap();
+        let mut index = store.load_index_checked().unwrap();
+        index.accounts.push(cn_account("broken", 5).summary());
         store.save_index(&index).unwrap();
 
         let listed: Vec<String> = store

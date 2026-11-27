@@ -30,7 +30,14 @@ belongs to its own channel:
 | `dedicated_qodercn` | dedicated CN deployment, stays in its own IDE platform |
 
 A global session cannot be imported into or refreshed by the CN platform, and CN requests never
-reuse the global IDE's machine token.
+reuse the global IDE's machine token. Each realm reads the machine cache
+(`SharedClientCache/cache/machine_token.json`) from its own client tree — the global IDE's user
+data directory for `qoder`, the CN desktop (`com.qodercn.app.stable`) or CLI (`.qoder-cn`) roots for
+`qoder_cn`. A CN client that has never written such a cache contributes no machine headers instead
+of borrowing the other realm's.
+
+The same asymmetry holds for the stores: `import_qoder_from_json` rejects a payload stamped
+`qoder_cn` (the CN page has its own import), and `import_qoder_cn_from_json` rejects everything else.
 
 ## Switching
 
@@ -42,6 +49,12 @@ process), closes the running client, backs up the existing profile, writes atomi
 result, restores the backup if verification fails, and relaunches the client. Set a custom launch
 path in Settings when the client is installed outside the usual locations; the detected path is
 written back so the probe runs once.
+
+Every entry point — the CN page, the dashboard, the floating card, automation and the native menu —
+runs that same sequence. Writing credentials under a live client is refused by the adapter
+(`QODER_CLIENT_RUNNING`), and a client that cannot be closed is reported instead of being started a
+second time. If the client fails to come back the switch still counts as done: the credentials are
+already in place, so the error code (`QODER_CN_RELAUNCH_FAILED`) tells the UI to refresh.
 
 The same descriptor-driven adapters serve the global client, where the named targets are the Qoder
 desktop app (`com.qoder.app.stable`) and the Qoder CLI (`.qoder`); the IDE target keeps using the
