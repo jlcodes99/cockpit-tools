@@ -53,7 +53,11 @@
         const thread = result?.thread;
         if (thread?.id !== id) return "unknown";
         if (thread.status?.type === "active") return "busy";
-        if (thread.status?.type !== "idle") unconfirmed = true;
+        // Terminal / non-running states (e.g. "systemError") hold no active
+        // turn and must not veto the auto-switch idle guard.
+        if (thread.status?.type !== "idle" && thread.status?.type !== "systemError") {
+          unconfirmed = true;
+        }
       }
       cursor = page.nextCursor ?? null;
       if (cursor !== null) {

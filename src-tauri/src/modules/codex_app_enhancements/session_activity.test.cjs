@@ -64,6 +64,14 @@ test("an active turn on a later page keeps the desktop busy", async () => {
   assert.equal(requests[2].params.cursor, "second-page");
 });
 
+test("terminal systemError threads hold no active turn and do not block progress", async () => {
+  const { state } = await probe({
+    pages: twoPages,
+    states: { first: "systemError", second: "systemError" },
+  });
+  assert.equal(state, "idle");
+});
+
 test("a complete idle response or empty loaded list allows progress", async () => {
   const { state } = await probe({
     pages: twoPages,
