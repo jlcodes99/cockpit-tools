@@ -2011,6 +2011,27 @@ pub(crate) fn pick_quota_alert_recommendation(
     candidates.into_iter().next()
 }
 
+/// Display name of the platform a quota alert came from. Every platform that can
+/// raise one needs its own arm: the fallback is Antigravity, and a Qoder alert
+/// titled "Antigravity IDE" is worse than no title at all.
+fn quota_alert_platform_label(platform: &str) -> &'static str {
+    match platform {
+        "codex" => "Codex",
+        "github_copilot" => "GitHub Copilot",
+        "windsurf" => "Windsurf",
+        "kiro" => "Kiro",
+        "cursor" => "Cursor",
+        "grok" => "Grok CLI",
+        "codebuddy" => "CodeBuddy",
+        "codebuddy_cn" => "CodeBuddy CN",
+        "qoder" => "Qoder",
+        "qoder_cn" => "Qoder CN",
+        "zcode" => "ZCode",
+        "zed" => "Zed",
+        _ => "Antigravity IDE",
+    }
+}
+
 fn build_quota_alert_notification_text(payload: &QuotaAlertPayload) -> (String, String) {
     let locale = crate::modules::config::get_user_config().language;
     let threshold_text = payload.threshold.to_string();
@@ -2021,17 +2042,7 @@ fn build_quota_alert_notification_text(payload: &QuotaAlertPayload) -> (String, 
         payload.low_models.join(", ")
     };
 
-    let platform_label = match payload.platform.as_str() {
-        "codex" => "Codex",
-        "github_copilot" => "GitHub Copilot",
-        "windsurf" => "Windsurf",
-        "kiro" => "Kiro",
-        "cursor" => "Cursor",
-        "grok" => "Grok CLI",
-        "codebuddy" => "CodeBuddy",
-        "zed" => "Zed",
-        _ => "Antigravity IDE",
-    };
+    let platform_label = quota_alert_platform_label(payload.platform.as_str());
     let title = format!(
         "{} {}",
         platform_label,
@@ -3659,5 +3670,21 @@ mod new_antigravity_model_tests {
             normalize_model_for_group_match("gemini-3.8-flash-high"),
             normalize_model_for_group_match("gemini-4-hydrogen-xhigh")
         );
+    }
+}
+
+#[cfg(test)]
+mod quota_alert_label_tests {
+    use super::quota_alert_platform_label;
+
+    /// Both Qoder realms raise alerts now; before this arm existed the title fell
+    /// through to "Antigravity IDE" in the OS notification.
+    #[test]
+    fn qoder_realms_are_not_labelled_as_antigravity() {
+        assert_eq!(quota_alert_platform_label("qoder"), "Qoder");
+        assert_eq!(quota_alert_platform_label("qoder_cn"), "Qoder CN");
+        assert_eq!(quota_alert_platform_label("antigravity"), "Antigravity IDE");
+        // Only the unknown case may fall back to the default platform.
+        assert_eq!(quota_alert_platform_label("qoder-typo"), "Antigravity IDE");
     }
 }

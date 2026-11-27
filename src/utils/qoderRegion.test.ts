@@ -25,6 +25,17 @@ test('Qoder account region follows the qoder_cn marker, not the display name', (
     'global',
   );
   assert.equal(getQoderRegion({ ...account, tags: ['国内 CN'] }), 'global');
+  // The backend resolves the marker from both raw payloads; a session stamped
+  // only in the plan must not be listed as global and then fail to switch.
+  assert.equal(getQoderRegion({ ...account, auth_user_plan_raw: { login_source: 'qoder_cn' } }), 'cn');
+  assert.equal(
+    getQoderRegion({
+      ...account,
+      auth_user_info_raw: { login_source: 'qoder' },
+      auth_user_plan_raw: { login_source: 'qoder_cn' },
+    }),
+    'global',
+  );
   assert.equal(getQoderRegion({ ...account, auth_user_info_raw: { login_source: 'qoder' } }), 'global');
 });
 
