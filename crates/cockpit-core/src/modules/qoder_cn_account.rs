@@ -111,12 +111,13 @@ impl QoderCnAccountStore {
                 Ok(None) => {}
                 // A single unreadable detail — ciphertext from another machine, a
                 // key that no longer matches, a file from another channel — must
-                // not take the whole page or the tray down with it. The id and the
-                // error code are enough to tell the user which account was skipped;
-                // no credential is ever formatted here.
+                // not take the whole page or the tray down with it. Only the id and
+                // a fixed reason are logged: the error string still carries the
+                // decrypted account, and none of it belongs in a log file.
                 Err(error) => logger::log_warn(&format!(
-                    "[Qoder CN Account] 跳过无法读取的账号: id={}, error={error}, 请重新导入",
-                    summary.id
+                    "[Qoder CN Account] 跳过无法读取的账号: id={}, reason={}, 请重新导入",
+                    summary.id,
+                    load_error_reason(&error)
                 )),
             }
         }
@@ -423,6 +424,17 @@ impl QoderCnAccountStore {
     }
 }
 
+/// Collapses a detail-load failure into a constant, so the log never carries the
+/// account payload that the error was derived from.
+fn load_error_reason(error: &str) -> &'static str {
+    match error {
+        "QODER_PLATFORM_MISMATCH" => "platform_mismatch",
+        "QODER_SESSION_CHANGED" => "session_changed",
+        "QODER_ACCOUNT_NOT_FOUND" => "missing",
+        _ => "unreadable",
+    }
+}
+
 fn refresh_summary(index: &mut QoderCnAccountIndex, account: &QoderAccount) {
     let summary = account.summary();
     if let Some(slot) = index.accounts.iter_mut().find(|item| item.id == account.id) {
@@ -586,11 +598,12 @@ mod tests {
             (1_600_000_000..2_000_000_000).contains(&switched),
             "expected epoch seconds"
         );
-        // The list is ordered by `last_used`; a switch has to move it too.
+        // The list is ordered by `last_used`; a switch has to move it too. The
+        // message stays constant: the store's taint tracking counts a formatted
+        // account field in a panic message as cleartext logging.
         assert!(
             saved.last_used > 1_600_000_000,
-            "expected last_used to follow the switch, got {}",
-            saved.last_used
+            "expected last_used to follow the switch"
         );
     }
 
