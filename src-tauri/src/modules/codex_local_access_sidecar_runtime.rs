@@ -2204,7 +2204,10 @@ fn write_local_access_profile_transport_config(
             };
         }
         if selected_local {
-            changed |= apply_local_access_client_retry_policy(provider);
+            changed |= apply_local_access_client_retry_policy(
+                provider,
+                profile_api_key_supports_websockets(collection, &collection.api_key),
+            );
         }
     }
     // WebRTC sideband ignores model provider.base_url by default but reuses its

@@ -39,6 +39,49 @@ stream_max_retries = 8
     }
 
     #[test]
+    fn bounded_network_client_policy_keeps_stream_reconnect_for_websocket_gateway() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut collection = test_local_access_collection(Vec::new());
+        collection.responses_websockets_enabled = true;
+        let input = |provider_body: &str| {
+            format!(
+                "model_provider = \"codex_local_access\"\n[model_providers.codex_local_access]\nbase_url = \"http://127.0.0.1:8317/v1\"\n{provider_body}\n"
+            )
+        };
+        let path = super::profile_config_path(dir.path());
+
+        // No user budget: allow one stream reconnect so a recoverable WebSocket
+        // drop does not flip the whole session to HTTP.
+        fs::write(&path, input("request_max_retries = 4\n")).unwrap();
+        super::write_local_access_profile_transport_config(
+            dir.path(), &collection, "unused", None, false,
+        ).unwrap();
+        let doc = fs::read_to_string(&path).unwrap().parse::<Document>().unwrap();
+        let provider = &doc["model_providers"]["codex_local_access"];
+        assert_eq!(provider["request_max_retries"].as_integer(), Some(0));
+        assert_eq!(provider["stream_max_retries"].as_integer(), Some(1));
+
+        // An explicit user budget is preserved on takeover maintenance.
+        fs::write(&path, input("request_max_retries = 4\nstream_max_retries = 3\n")).unwrap();
+        super::write_local_access_profile_transport_config(
+            dir.path(), &collection, "unused", None, false,
+        ).unwrap();
+        let doc = fs::read_to_string(&path).unwrap().parse::<Document>().unwrap();
+        let provider = &doc["model_providers"]["codex_local_access"];
+        assert_eq!(provider["stream_max_retries"].as_integer(), Some(3));
+
+        // Without Responses WebSocket the terminal-state protection stays intact.
+        collection.responses_websockets_enabled = false;
+        fs::write(&path, input("stream_max_retries = 3\n")).unwrap();
+        super::write_local_access_profile_transport_config(
+            dir.path(), &collection, "unused", None, false,
+        ).unwrap();
+        let doc = fs::read_to_string(&path).unwrap().parse::<Document>().unwrap();
+        let provider = &doc["model_providers"]["codex_local_access"];
+        assert_eq!(provider["stream_max_retries"].as_integer(), Some(0));
+    }
+
+    #[test]
     fn bounded_network_client_policy_restores_backup_and_preserves_later_edits() {
         let current = r#"
 model_provider = "codex_local_access"
