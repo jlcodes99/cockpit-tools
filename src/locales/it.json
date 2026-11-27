@@ -9997,5 +9997,13 @@
       "goAddSourceAccount": "Aggiungi in {{platform}}",
       "emptyPoolDesc": "Aggiungi prima un account nella pagina {{platform}} per collegarlo a T3 Code."
     }
+  },
+  "antigravity": {
+    "proxy": {
+      "followHint": "Usa il proxy globale dalle impostazioni; se disattivato viene usata la rete predefinita.",
+      "independentHint": "Si applica solo a questo account e ha la precedenza sul proxy globale.",
+      "invalidUrl": "URL proxy non supportato. Sono supportati solo http, https, socks5 e socks5h.",
+      "restartHint": "Dopo il collegamento, la modifica o la rimozione di un proxy, riavvia Antigravity (desktop o una nuova sessione CLI) per applicarlo. Un proxy che fallisce non ripiega sulla connessione diretta."
+    }
   }
 }

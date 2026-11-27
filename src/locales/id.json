@@ -9997,5 +9997,13 @@
       "goAddSourceAccount": "Tambah di {{platform}}",
       "emptyPoolDesc": "Tambahkan akun di halaman {{platform}} terlebih dahulu sebelum mengalihkannya ke T3 Code."
     }
+  },
+  "antigravity": {
+    "proxy": {
+      "followHint": "Gunakan proxy global dari Pengaturan; jika nonaktif, jaringan bawaan yang digunakan.",
+      "independentHint": "Hanya berlaku untuk akun ini dan menimpa proxy global.",
+      "invalidUrl": "URL proxy tidak didukung. Hanya http, https, socks5, dan socks5h yang didukung.",
+      "restartHint": "Setelah mengikat, mengganti, atau menghapus proxy, mulai ulang Antigravity (desktop atau sesi CLI baru) untuk menerapkannya. Proxy yang gagal tidak dialihkan ke koneksi langsung."
+    }
   }
 }

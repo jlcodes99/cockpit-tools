@@ -7814,12 +7814,6 @@
       "openLayout": "打开平台布局"
     },
     "antigravity": {
-      "proxy": {
-        "followHint": "使用设置中的全局代理；未启用时使用默认网络。",
-        "independentHint": "只更改这个账号，优先于全局代理。",
-        "invalidUrl": "代理地址不支持，仅支持 http、https、socks5、socks5h 协议。",
-        "restartHint": "首次绑定、更换或清除代理后，重新启动 Antigravity（桌面端或新开 CLI 会话）后生效。代理连接失败时不会回退直连。"
-      },
       "cautions": {
         "0": "若看到异常状态（如 403/刷新失败），先刷新再判断是否删除重登。"
       },
@@ -10002,6 +9996,14 @@
       "fileOps": "文件读 / 写",
       "commands": "命令执行",
       "subagents": "子代理调用"
+    }
+  },
+  "antigravity": {
+    "proxy": {
+      "followHint": "使用设置中的全局代理；未启用时使用默认网络。",
+      "independentHint": "只更改这个账号，优先于全局代理。",
+      "invalidUrl": "代理地址不支持，仅支持 http、https、socks5、socks5h 协议。",
+      "restartHint": "首次绑定、更换或清除代理后，重新启动 Antigravity（桌面端或新开 CLI 会话）后生效。代理连接失败时不会回退直连。"
     }
   }
 }

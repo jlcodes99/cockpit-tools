@@ -9997,5 +9997,13 @@
       "goAddSourceAccount": "{{platform}} İçinde Ekle",
       "emptyPoolDesc": "T3 Code içine bağlamak için önce {{platform}} sayfasında bir hesap ekleyin."
     }
+  },
+  "antigravity": {
+    "proxy": {
+      "followHint": "Ayarlar'daki global proxy'yi kullanır; devre dışıysa varsayılan ağı kullanır.",
+      "independentHint": "Yalnızca bu hesap için geçerlidir ve global proxy'ye göre önceliklidir.",
+      "invalidUrl": "Desteklenmeyen proxy URL'si. Yalnızca http, https, socks5 ve socks5h desteklenir.",
+      "restartHint": "Bağlama, değiştirme veya temizleme işleminden sonra Antigravity'yi (masaüstü veya yeni bir CLI oturumu) yeniden başlatın. Başarısız olan proxy doğrudan bağlantıya düşmez."
+    }
   }
 }

@@ -9997,5 +9997,13 @@
       "goAddSourceAccount": "In {{platform}} hinzufügen",
       "emptyPoolDesc": "Fügen Sie zuerst auf der Seite {{platform}} ein Konto hinzu, um es in T3 Code zu nutzen."
     }
+  },
+  "antigravity": {
+    "proxy": {
+      "followHint": "Verwendet den globalen Proxy aus den Einstellungen; bei Deaktivierung wird das Standardnetzwerk genutzt.",
+      "independentHint": "Gilt nur für dieses Konto und hat Vorrang vor dem globalen Proxy.",
+      "invalidUrl": "Nicht unterstützte Proxy-URL. Nur http, https, socks5 und socks5h werden unterstützt.",
+      "restartHint": "Nach dem Binden, Wechseln oder Entfernen eines Proxys Antigravity neu starten (Desktop oder neue CLI-Sitzung), damit die Änderung wirkt. Ein fehlschlagender Proxy fällt nicht auf direkte Verbindungen zurück."
+    }
   }
 }

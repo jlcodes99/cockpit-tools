@@ -9997,5 +9997,13 @@
       "goAddSourceAccount": "{{platform}} で追加",
       "emptyPoolDesc": "先に {{platform}} ページでアカウントを追加すると、T3 Code へ切り替えられます。"
     }
+  },
+  "antigravity": {
+    "proxy": {
+      "followHint": "設定のグローバルプロキシを使用します。無効な場合は既定のネットワークを使用します。",
+      "independentHint": "このアカウントのみに適用され、グローバルプロキシより優先されます。",
+      "invalidUrl": "サポートされていないプロキシURLです。http・https・socks5・socks5h のみ対応しています。",
+      "restartHint": "バインド・変更・解除の後、Antigravity（デスクトップまたは新しいCLIセッション）を再起動すると適用されます。プロキシに失敗してもダイレクト接続にはフォールバックしません。"
+    }
   }
 }
