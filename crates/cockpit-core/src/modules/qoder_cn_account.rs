@@ -222,6 +222,7 @@ impl QoderCnAccountStore {
         {
             return Err("QODER_SESSION_CHANGED".into());
         }
+        let has_usage = usage.is_some();
         let mut updated = super::qoder_account::build_account_from_snapshot(
             user_info,
             plan,
@@ -233,10 +234,11 @@ impl QoderCnAccountStore {
             .quota_query_last_error
             .as_ref()
             .map(|_| chrono::Utc::now().timestamp_millis());
-        // The account card labels quota freshness with `usage_updated_at`; without
-        // it the list falls back to `last_used` and keeps claiming "updated 3 days
-        // ago" right after a successful refresh.
-        if updated.quota_query_last_error.is_none() {
+        // The account card labels quota freshness with `usage_updated_at`, so only
+        // a call that stored a usage snapshot may move it. A token renewal reaches
+        // this function with `usage = None` and would otherwise claim a quota it
+        // never read.
+        if has_usage && updated.quota_query_last_error.is_none() {
             updated.usage_updated_at = Some(chrono::Utc::now().timestamp());
         }
         self.write_details(&updated)?;
@@ -396,9 +398,21 @@ impl QoderCnAccountStore {
         if !directory.try_exists().unwrap_or(false) {
             return None;
         }
-        let mut accounts =
-            load_accounts_from_details(&directory, |id| self.load_account(id).ok().flatten())
-                .ok()?;
+        let mut accounts = load_accounts_from_details(&directory, |id| {
+            match self.load_account(id) {
+                Ok(account) => account,
+                // A rebuilt index is written back, so an account skipped here is
+                // invisible until the next rebuild: say which one and why.
+                Err(error) => {
+                    logger::log_warn(&format!(
+                        "[Qoder CN Account] 恢复索引时跳过无法读取的账号: id={id}, reason={}",
+                        load_error_reason(&error)
+                    ));
+                    None
+                }
+            }
+        })
+        .ok()?;
         if accounts.is_empty() {
             return None;
         }
@@ -827,6 +841,26 @@ mod tests {
                 .unwrap_err(),
             "QODER_SESSION_CHANGED"
         );
+    }
+
+    #[test]
+    fn token_renewal_does_not_claim_a_fresh_quota() {
+        let root = tempfile::tempdir().unwrap();
+        let store = QoderCnAccountStore::new(root.path().to_path_buf());
+        let mut account = cn_account("renewal", 1);
+        account.usage_updated_at = Some(1_600_000_000);
+        store.save_account(&account).unwrap();
+
+        // `renew_device_token` persists the rotated token with `usage = None`.
+        // Stamping the quota timestamp there would advertise freshness for data
+        // that was never read.
+        let mut info = account.auth_user_info_raw.clone().unwrap();
+        info["token"] = serde_json::json!("rotated-token");
+        let renewed = store
+            .save_refresh(&account, info, None, None, None)
+            .unwrap();
+
+        assert_eq!(renewed.usage_updated_at, Some(1_600_000_000));
     }
 
     #[test]
