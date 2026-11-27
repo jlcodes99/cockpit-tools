@@ -9810,15 +9810,28 @@
       "title": "Ajustes frecuentes",
       "language": "Idioma de T3 Code"
     },
+    "platformOrder": {
+      "title": "Orden de plataformas",
+      "hint": "Arrastra los controles para reordenar los grupos de plataformas en el resumen de cuentas.",
+      "saveFailed": "No se pudo guardar el orden de las plataformas. Inténtalo de nuevo. {{error}}"
+    },
     "desktopPrivacy": {
       "title": "Privacidad de T3 Code",
-      "enable": "Activar modo privado",
-      "connection": "El móvil puede seguir vinculándose y comunicándose en tiempo real al desactivar estas opciones.",
+      "enableAll": "Activar todo",
+      "disableAll": "Desactivar telemetría",
+      "statusOn": "Activado",
+      "statusOff": "Desactivado",
+      "connection": "Con la telemetría desactivada, el teléfono puede emparejarse y comunicarse con el ordenador en tiempo real.",
       "launchScope": "La telemetría se aplica a la instancia predeterminada iniciada desde Cockpit Tools.",
       "restartPending": "Ajustes guardados. Reinicia T3 Code para aplicar los cambios de telemetría.",
       "environmentBlocked": "Desactivado por la variable de entorno {{variable}}.",
       "policyBlocked": "Desactivado por la política del sistema.",
       "linked": "Desactivar el análisis de uso también desactiva el seguimiento de conexiones.",
+      "statusPending": "Aún inactivo",
+      "doNotTrack": {
+        "label": "No rastrear",
+        "description": "DO_NOT_TRACK pausa el análisis de uso y el seguimiento de conexiones. Tus opciones se conservan."
+      },
       "analytics": {
         "label": "Análisis de uso",
         "description": "Envía la versión, la plataforma y estadísticas de uso a T3 Code."

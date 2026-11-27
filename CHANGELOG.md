@@ -12,7 +12,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [1.5.2] - 2026-11-26
 
+### Added
+
+- **T3 Code** adds Common Settings to the account overview for language, privacy and platform order. Drag platform groups into your preferred order and keep that order after restarting Cockpit Tools.
+- **T3 Code** privacy settings let you toggle Do Not Track, analytics, connection tracing and Agent activity notifications individually, or turn telemetry on or off together. Phone pairing and live communication remain available when telemetry is off. Do Not Track, analytics and tracing preferences apply to the default instance launched from Cockpit Tools.
+- **Codex Session Usage** displays first-response latency and output speed (TPS) when local API service metrics are available. The Today chart groups usage by hour. [#3313](https://github.com/jlcodes99/cockpit-tools/issues/3313)
+- **Codex API Service** shows recorded history diagnostics for rejected requests, including before-and-after item counts and compaction or recovery details. [#3141](https://github.com/jlcodes99/cockpit-tools/issues/3141) · [#3295](https://github.com/jlcodes99/cockpit-tools/pull/3295)
+- **Antigravity Session Usage** adds API-equivalent cost estimates, cache savings, a 365-day activity heatmap, and a context and tool audit. An optional hook can restore recent context after compaction.
+- **WorkBuddy** shows rate limits reported in local client logs alongside probe results, with the affected account, model, and recovery time when available. [#3214](https://github.com/jlcodes99/cockpit-tools/issues/3214)
+- **Codex model providers** include a TrustedRouter preset. [#3300](https://github.com/jlcodes99/cockpit-tools/pull/3300)
+
 ### Fixed
+- **Codex API Service** can compact a conversation after switching to a model on a different provider when complete input or a valid checkpoint is available. [#3319](https://github.com/jlcodes99/cockpit-tools/issues/3319)
+- **Codex auto-switch** evaluates fresh, saved quota even when the background service cannot discover a running Codex instance after startup. [#3321](https://github.com/jlcodes99/cockpit-tools/issues/3321)
 
 - **Codex API Service** retries HTTP requests, WebSocket openings, and OAuth image requests with a fresh preparation deadline. Continuous retries now cover more upstream overload responses, including long conversations and compaction requests. [#3304](https://github.com/jlcodes99/cockpit-tools/issues/3304) · [#3320](https://github.com/jlcodes99/cockpit-tools/pull/3320)
 - **Codex API Service** returns the full requested image count for ChatGPT OAuth batches and keeps legacy `/v1/responses/compact` clients working with the current upstream compaction protocol.
@@ -30,17 +42,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **WorkBuddy → Codex** refreshes linked account quota without a false missing-key error and accepts text requests through the native API service. Direct Codex launches explain the supported connection path. [#3298](https://github.com/jlcodes99/cockpit-tools/issues/3298) · [#3301](https://github.com/jlcodes99/cockpit-tools/pull/3301)
 - **ZCode** selects the correct provider and plan when switching to a BigModel OAuth account. [#3296](https://github.com/jlcodes99/cockpit-tools/pull/3296)
 
-### Added
-
-- **Codex Session Usage** displays first-response latency and output speed (TPS) when local API service metrics are available. The Today chart groups usage by hour. [#3313](https://github.com/jlcodes99/cockpit-tools/issues/3313)
-- **Codex API Service** shows recorded history diagnostics for rejected requests, including before-and-after item counts and compaction or recovery details. [#3141](https://github.com/jlcodes99/cockpit-tools/issues/3141) · [#3295](https://github.com/jlcodes99/cockpit-tools/pull/3295)
-- **Antigravity Session Usage** adds API-equivalent cost estimates, cache savings, a 365-day activity heatmap, and a context and tool audit. An optional hook can restore recent context after compaction.
-- **T3 Code** adds Common Settings to the account overview. Change the app language or turn off analytics, connection tracing, and Agent activity notifications while keeping phone pairing and live communication available.
-- **WorkBuddy** shows rate limits reported in local client logs alongside probe results, with the affected account, model, and recovery time when available. [#3214](https://github.com/jlcodes99/cockpit-tools/issues/3214)
-- **Codex model providers** include a TrustedRouter preset. [#3300](https://github.com/jlcodes99/cockpit-tools/pull/3300)
-
 ### Changed
 
+- **T3 Code** aligns account, quota, connection and action columns in the account overview and improves the account picker and settings dialogs.
 - The **sidebar** keeps platform entries readable and scrolls when space is limited. Platform ordering and pinning remain configurable in **More → Manage Platform Layout**. [#3292](https://github.com/jlcodes99/cockpit-tools/issues/3292)
 - **WorkBuddy and ZCode** account cards use a compact icon for **Expose to Codex**, with the full action name in its tooltip.
 

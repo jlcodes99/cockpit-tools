@@ -5,6 +5,7 @@ import { SingleSelectDropdown } from '../SingleSelectDropdown';
 import { getT3codeNativeSettings, subscribeT3codeLanguage, updateT3codeNativeSettings } from '../../services/t3codeService';
 import type { T3CodeNativeModel, T3CodeNativeSettings } from '../../types/t3code';
 import { T3codeLanguageSelect } from './T3codeLanguageSelect';
+import { T3codePlatformOrderButton } from './T3codePlatformOrder';
 import { T3codePrivacySettingsButton } from './T3codePrivacySettings';
 import './T3codeNativeSettings.css';
 
@@ -205,9 +206,12 @@ export function T3codeNativeSettingsPanel({ compact = false }: { compact?: boole
           </SettingRow>
         </>
       )}
-      <div className={compact ? 'qs-row' : 'settings-row'}>
+      <SettingRow compact={compact} label={t('t3code.desktopPrivacy.title')}>
         <T3codePrivacySettingsButton compact={compact} />
-      </div>
+      </SettingRow>
+      <SettingRow compact={compact} label={t('t3code.platformOrder.title')}>
+        <T3codePlatformOrderButton compact={compact} label={t('common.edit')} />
+      </SettingRow>
       {feedback && (
         <div
           className={`t3-native-settings-feedback${compact ? ' is-compact qs-hint' : ' settings-row'}${error ? ' is-error' : ''}`}

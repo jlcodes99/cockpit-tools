@@ -41,3 +41,59 @@
   border-color: var(--primary);
   background: var(--bg-secondary);
 }
+
+/* Shared toggle switch (available even before SettingsPage lazy-loads) */
+:where(.switch) {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+:where(.switch) input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+  position: absolute;
+}
+
+:where(.slider) {
+  position: absolute;
+  cursor: pointer;
+  inset: 0;
+  background-color: var(--border);
+  transition: 0.25s cubic-bezier(0.25, 0.8, 0.25, 1);
+  border-radius: 999px;
+}
+
+:where(.slider)::before {
+  position: absolute;
+  content: "";
+  height: 20px;
+  width: 20px;
+  left: 2px;
+  bottom: 2px;
+  background-color: #ffffff;
+  transition: 0.25s cubic-bezier(0.25, 0.8, 0.25, 1);
+  border-radius: 50%;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.14);
+}
+
+:where(.switch) input:checked + :where(.slider) {
+  background-color: var(--primary);
+}
+
+:where(.switch) input:checked + :where(.slider)::before {
+  transform: translateX(20px);
+}
+
+:where(.switch) input:focus-visible + :where(.slider) {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+:where(.switch) input:disabled + :where(.slider) {
+  cursor: not-allowed;
+  opacity: 0.52;
+}

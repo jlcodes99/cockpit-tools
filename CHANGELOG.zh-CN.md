@@ -12,8 +12,19 @@
 
 ## [1.5.2] - 2026-11-26
 
-### 修复
+### 新增
 
+- **T3 Code** 账号总览新增「常用设置」，可切换客户端语言、调整隐私选项和拖动排列平台分组。重启 Cockpit Tools 后仍会保留自定义顺序。
+- **T3 Code** 隐私设置支持单独开关禁止追踪、产品使用分析、连接追踪和 Agent 活动推送，也支持一键开启或关闭遥测。关闭遥测后，手机仍可配对并实时通信。禁止追踪、使用分析和连接追踪的选择适用于由 Cockpit Tools 启动的默认实例。
+- **Codex 会话用量**有本地 API 服务指标时显示首字响应时间和输出速度（TPS），「今天」的趋势按小时统计。 [#3313](https://github.com/jlcodes99/cockpit-tools/issues/3313)
+- **Codex API 服务**的请求详情可查看已记录的历史拒绝诊断，包括条目数量以及压缩和恢复信息。 [#3141](https://github.com/jlcodes99/cockpit-tools/issues/3141) · [#3295](https://github.com/jlcodes99/cockpit-tools/pull/3295)
+- **Antigravity 会话用量**新增 API 等价参考费用、缓存节省、365 天活跃热力图及上下文与工具审计。可选钩子可在压缩后回灌近期上下文。
+- **WorkBuddy** 额度卡片新增客户端日志来源，与主动探测一起展示限流信息。有数据时显示受影响的账号、模型及恢复时间。 [#3214](https://github.com/jlcodes99/cockpit-tools/issues/3214)
+- **Codex 模型供应商**新增 TrustedRouter 预设。 [#3300](https://github.com/jlcodes99/cockpit-tools/pull/3300)
+
+### 修复
+- **Codex API 服务**在同一对话跨供应商切模型时，可用完整输入或有效检查点继续压缩上下文。 [#3319](https://github.com/jlcodes99/cockpit-tools/issues/3319)
+- **Codex 自动切号**在新额度成功保存后触发评估，冷启动后后台服务暂未识别到运行中的 Codex 实例时也可评估。 [#3321](https://github.com/jlcodes99/cockpit-tools/issues/3321)
 - **Codex API 服务**重试 HTTP 请求、重新建立 WebSocket 连接及执行 OAuth 生图请求时，使用当前尝试的准备时限。持续重试覆盖更多上游满载场景，包括长会话和压缩请求。 [#3304](https://github.com/jlcodes99/cockpit-tools/issues/3304) · [#3320](https://github.com/jlcodes99/cockpit-tools/pull/3320)
 - **Codex API 服务**补齐 ChatGPT OAuth 批量生图的请求张数。旧版 `/v1/responses/compact` 入口兼容当前上游压缩协议，压缩后可继续对话。
 - **Codex API 服务**保留 Responses 支持的 `include` 字段，Chat 流式回复保留各自独立的输出项。Claude Code 可通过网关发现、调用并续用延迟加载工具。文献检索被拒绝时，可用账号仍可用于其他请求。
@@ -30,17 +41,8 @@
 - **WorkBuddy → Codex** 已接入账号可正常刷新额度，也可通过原生 API 服务发送文本请求。直接启动 Codex 时会提示支持的接入方式。 [#3298](https://github.com/jlcodes99/cockpit-tools/issues/3298) · [#3301](https://github.com/jlcodes99/cockpit-tools/pull/3301)
 - **ZCode** 切换 BigModel OAuth 账号时正确选中当前供应方和套餐。 [#3296](https://github.com/jlcodes99/cockpit-tools/pull/3296)
 
-### 新增
-
-- **Codex 会话用量**有本地 API 服务指标时显示首字响应时间和输出速度（TPS），「今天」的趋势按小时统计。 [#3313](https://github.com/jlcodes99/cockpit-tools/issues/3313)
-- **Codex API 服务**的请求详情可查看已记录的历史拒绝诊断，包括条目数量以及压缩和恢复信息。 [#3141](https://github.com/jlcodes99/cockpit-tools/issues/3141) · [#3295](https://github.com/jlcodes99/cockpit-tools/pull/3295)
-- **Antigravity 会话用量**新增 API 等价参考费用、缓存节省、365 天活跃热力图及上下文与工具审计。可选钩子可在压缩后回灌近期上下文。
-- **T3 Code** 账号总览新增「常用设置」，可切换客户端语言，关闭产品使用分析、连接追踪和 Agent 活动推送，同时保留手机配对与实时通信。
-- **WorkBuddy** 额度卡片新增客户端日志来源，与主动探测一起展示限流信息。有数据时显示受影响的账号、模型及恢复时间。 [#3214](https://github.com/jlcodes99/cockpit-tools/issues/3214)
-- **Codex 模型供应商**新增 TrustedRouter 预设。 [#3300](https://github.com/jlcodes99/cockpit-tools/pull/3300)
-
 ### 变更
-
+- **T3 Code** 账号总览对齐账号、额度、连接状态和操作列，并优化添加账号与设置弹框的布局。
 - **侧边栏**在空间不足时滚动，平台条目保持可读。平台排序和常驻项仍可在「更多 → 管理平台布局」调整。 [#3292](https://github.com/jlcodes99/cockpit-tools/issues/3292)
 - **WorkBuddy 与 ZCode** 的「接入 Codex」改用紧凑图标，悬停可查看完整操作名称。
 

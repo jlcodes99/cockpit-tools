@@ -9810,15 +9810,28 @@
       "title": "よく使う設定",
       "language": "T3 Code の言語"
     },
+    "platformOrder": {
+      "title": "プラットフォームの順序",
+      "hint": "ハンドルをドラッグして、アカウント一覧のプラットフォームの順序を変更します。",
+      "saveFailed": "プラットフォームの順序を保存できませんでした。もう一度お試しください。{{error}}"
+    },
     "desktopPrivacy": {
       "title": "T3 Code のプライバシー設定",
-      "enable": "プライバシーモードを有効化",
-      "connection": "これらをオフにしても、スマートフォンとのペアリングやリアルタイム通信ができます。",
+      "enableAll": "すべてオン",
+      "disableAll": "テレメトリを一括オフ",
+      "statusOn": "オン",
+      "statusOff": "オフ",
+      "connection": "テレメトリをオフにしても、スマートフォンのペアリングとパソコンとのリアルタイム通信は利用できます。",
       "launchScope": "テレメトリー設定は Cockpit Tools から起動した既定のインスタンスに適用されます。",
       "restartPending": "設定を保存しました。T3 Code を再起動すると反映されます。",
       "environmentBlocked": "環境変数 {{variable}} により無効です。",
       "policyBlocked": "システムポリシーにより無効です。",
       "linked": "利用状況分析をオフにすると、接続トレースもオフになります。",
+      "statusPending": "未適用",
+      "doNotTrack": {
+        "label": "トラッキングを拒否",
+        "description": "DO_NOT_TRACK は利用状況の分析と接続トレースを一時停止します。設定内容は保持されます。"
+      },
       "analytics": {
         "label": "利用状況分析",
         "description": "アプリのバージョン、プラットフォーム、利用統計を T3 Code に送信します。"

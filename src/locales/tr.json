@@ -9810,15 +9810,28 @@
       "title": "Sık kullanılan ayarlar",
       "language": "T3 Code dili"
     },
+    "platformOrder": {
+      "title": "Platform sırası",
+      "hint": "Hesap özetindeki platform gruplarını yeniden sıralamak için tutamaçları sürükleyin.",
+      "saveFailed": "Platform sırası kaydedilemedi. Tekrar deneyin. {{error}}"
+    },
     "desktopPrivacy": {
       "title": "T3 Code gizlilik ayarları",
-      "enable": "Gizlilik modunu aç",
-      "connection": "Bu seçenekler kapalıyken telefon eşleşebilir ve gerçek zamanlı iletişim kurabilir.",
+      "enableAll": "Tümünü aç",
+      "disableAll": "Telemetriyi kapat",
+      "statusOn": "Açık",
+      "statusOff": "Kapalı",
+      "connection": "Telemetri kapalıyken telefon yine de bilgisayarla eşleşebilir ve gerçek zamanlı iletişim kurabilir.",
       "launchScope": "Telemetri ayarları Cockpit Tools üzerinden başlatılan varsayılan örneğe uygulanır.",
       "restartPending": "Ayarlar kaydedildi. Telemetri değişiklikleri için T3 Code’u yeniden başlatın.",
       "environmentBlocked": "{{variable}} ortam değişkeniyle kapatıldı.",
       "policyBlocked": "Sistem ilkesiyle kapatıldı.",
       "linked": "Kullanım analizini kapatmak bağlantı izlemeyi de kapatır.",
+      "statusPending": "Etkin değil",
+      "doNotTrack": {
+        "label": "Takip etme",
+        "description": "DO_NOT_TRACK kullanım analizini ve bağlantı izlemeyi duraklatır. Seçimleriniz kaydedilir."
+      },
       "analytics": {
         "label": "Kullanım analizi",
         "description": "Uygulama sürümünü, platformu ve kullanım istatistiklerini T3 Code’a gönderir."

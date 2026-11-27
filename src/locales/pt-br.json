@@ -2335,7 +2335,7 @@
     "noTags": "Sem tags",
     "privacy": {
       "disable": "Desativar modo de privacidade",
-      "enable": "Ativar modo de privacidade"
+      "enable": "Desativar telemetria"
     },
     "refreshAllFailed": "Falha na atualização em massa: {{error}}",
     "refreshAllSuccess": "Todas as contas atualizadas",
@@ -9810,15 +9810,28 @@
       "title": "Configurações comuns",
       "language": "Idioma do T3 Code"
     },
+    "platformOrder": {
+      "title": "Ordem das plataformas",
+      "hint": "Arraste as alças para reordenar os grupos de plataformas na visão geral das contas.",
+      "saveFailed": "Não foi possível salvar a ordem das plataformas. Tente novamente. {{error}}"
+    },
     "desktopPrivacy": {
       "title": "Privacidade do T3 Code",
-      "enable": "Ativar modo de privacidade",
-      "connection": "Mesmo com essas opções desativadas, o celular pode ser pareado e se comunicar em tempo real.",
+      "enableAll": "Ativar tudo",
+      "disableAll": "Ativar modo de privacidade",
+      "statusOn": "Ativado",
+      "statusOff": "Desativado",
+      "connection": "Com a telemetria desativada, o celular ainda pode ser pareado e se comunicar com o computador em tempo real.",
       "launchScope": "A telemetria se aplica à instância padrão iniciada pelo Cockpit Tools.",
       "restartPending": "Configurações salvas. Reinicie o T3 Code para aplicar as mudanças de telemetria.",
       "environmentBlocked": "Desativado pela variável de ambiente {{variable}}.",
       "policyBlocked": "Desativado pela política do sistema.",
       "linked": "Desativar a análise de uso também desativa o rastreamento de conexões.",
+      "statusPending": "Inativo",
+      "doNotTrack": {
+        "label": "Não rastrear",
+        "description": "DO_NOT_TRACK pausa a análise de uso e o rastreamento de conexões. Suas escolhas continuam salvas."
+      },
       "analytics": {
         "label": "Análise de uso",
         "description": "Envia a versão do app, a plataforma e estatísticas de uso ao T3 Code."
