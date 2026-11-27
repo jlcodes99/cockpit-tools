@@ -1788,7 +1788,9 @@
             return Vec::new();
         };
         let mut rows = build_antigravity_window_rows(lang, quota, metric);
-        rows.extend(build_antigravity_group_quota_rows(lang, quota));
+        if rows.is_empty() {
+            rows = build_antigravity_group_quota_rows(lang, quota);
+        }
         if rows.is_empty() {
             rows = build_antigravity_fallback_quota_rows(lang, quota);
         }
@@ -1818,6 +1820,47 @@
         assert_eq!(rows[0].progress, Some(83));
         assert_eq!(rows[1].label, "Claude (5h)");
         assert_eq!(rows[1].progress, Some(0));
+    }
+
+    #[cfg(test)]
+    #[test]
+    fn antigravity_menu_skips_local_group_rows_when_summary_windows_exist() {
+        let mut shared_pool = crate::models::quota::QuotaData::new();
+        shared_pool.add_model("3p-5h".into(), None, 100, String::new());
+        shared_pool.add_model("3p-weekly".into(), None, 100, String::new());
+        shared_pool.add_model("gemini-5h".into(), None, 54, String::new());
+        shared_pool.add_model("gemini-weekly".into(), None, 72, String::new());
+        shared_pool.add_model("gemini-4-carbon-high".into(), None, 54, String::new());
+        shared_pool.add_model("claude-sonnet-5-5-high".into(), None, 100, String::new());
+
+        let rows = build_antigravity_quota_rows("en", Some(&shared_pool), "");
+        let labels: Vec<&str> = rows.iter().map(|row| row.label.as_str()).collect();
+        assert_eq!(
+            &labels[..4],
+            &[
+                "Claude (5h)",
+                "Claude (Weekly)",
+                "Gemini (5h)",
+                "Gemini (Weekly)",
+            ]
+        );
+        assert!(!labels.contains(&"Gemini 4 Carbon"));
+        assert!(!labels.contains(&"Claude 4.5"));
+        assert_eq!(rows.len(), 5);
+
+        let mut with_carbon_bucket = shared_pool.clone();
+        with_carbon_bucket.add_model("gemini-carbon-wtu-weekly".into(), None, 21, String::new());
+        let carbon_labels: Vec<String> = build_antigravity_quota_rows("en", Some(&with_carbon_bucket), "")
+            .into_iter()
+            .map(|row| row.label)
+            .collect();
+        assert!(carbon_labels.iter().any(|label| label == "Gemini 4 Carbon (Weekly)"));
+        assert!(!carbon_labels.iter().any(|label| label == "Gemini 4 Carbon"));
+
+        let mut legacy = crate::models::quota::QuotaData::new();
+        legacy.add_model("gemini-3.1-pro-high".into(), None, 60, String::new());
+        let legacy_rows = build_antigravity_quota_rows("en", Some(&legacy), "");
+        assert!(legacy_rows.iter().any(|row| row.progress == Some(60)));
     }
 
     fn format_codex_quota_metric_label(window_minutes: Option<i64>, fallback: &str) -> String {
