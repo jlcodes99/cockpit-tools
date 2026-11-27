@@ -1745,7 +1745,7 @@ async fn terminate_owned_child(child: &mut tokio::process::Child, pid: Option<u3
                 .stdout(Stdio::null())
                 .stderr(Stdio::null())
                 .kill_on_drop(true);
-            kill.as_std_mut().creation_flags(0x08000000);
+            kill.creation_flags(0x08000000);
             let _ = tokio::time::timeout(Duration::from_secs(2), kill.status()).await;
         }
     }

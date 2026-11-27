@@ -10,7 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
-## [1.5.3] - 2026-11-27
+## [1.5.4] - 2026-11-27
 
 ### Added
 
@@ -38,6 +38,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **WorkBuddy → Codex on Windows** cleans up bridge subprocesses without opening a console window.
 - **T3 Code** honors the "Show in menu bar" setting. Its quotas appear in the macOS menu bar and can be refreshed from the tray menu. [#3332](https://github.com/jlcodes99/cockpit-tools/issues/3332)
 - **Claude and other supported platforms** save changes to the default instance's Desktop or CLI launch mode. [#3339](https://github.com/jlcodes99/cockpit-tools/issues/3339)
 - **Codex and platform account groups** wrap when space is tight, keeping the group tabs and manage button visible. [#3333](https://github.com/jlcodes99/cockpit-tools/issues/3333)

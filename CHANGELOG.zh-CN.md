@@ -10,7 +10,7 @@
 
 ## [Unreleased]
 
-## [1.5.3] - 2026-11-27
+## [1.5.4] - 2026-11-27
 
 ### 新增
 - **Antigravity 按账号独立出口代理** 支持为单个 Antigravity 账号绑定独立出口代理地址（`http` / `https` / `socks5` / `socks5h`），覆盖桌面端、IDE、CLI 及多开实例启动链路，未配置时跟随设置中的全局代理。 [#3335](https://github.com/jlcodes99/cockpit-tools/pull/3335)
@@ -34,6 +34,7 @@
 
 ### 修复
 
+- **Windows 上的 WorkBuddy → Codex** 清理桥接子进程时不会弹出控制台窗口。
 - **T3 Code** 的「菜单栏显示」设置正常生效，可在 macOS 菜单栏查看额度，并从托盘菜单刷新。 [#3332](https://github.com/jlcodes99/cockpit-tools/issues/3332)
 - **Claude 及其他受支持的平台**可保存默认实例的桌面端或 CLI 启动方式。 [#3339](https://github.com/jlcodes99/cockpit-tools/issues/3339)
 - **Codex 与各平台的账号分组**在空间不足时自动换行，保持分组标签和管理按钮可见。 [#3333](https://github.com/jlcodes99/cockpit-tools/issues/3333)
