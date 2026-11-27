@@ -831,6 +831,21 @@ export const CLAUDE_DESKTOP_GATEWAY_PROVIDER_PRESETS: readonly ClaudeDesktopGate
       'claude-haiku-5.5',
     ),
   },
+  {
+    id: 'llmtr',
+    name: 'LLMTR',
+    baseUrls: ['https://llmtr.com'],
+    authScheme: 'bearer',
+    connectionMode: 'local_mapping',
+    website: 'https://llmtr.com',
+    apiKeyUrl: 'https://llmtr.com/dashboard/keys',
+    modelMappings: roleMappedRoutes(
+      'anthropic/claude-sonnet-5.5',
+      'anthropic/claude-opus-5.5',
+      'anthropic/claude-haiku-5.5',
+      { supports1m: true },
+    ),
+  },
 ];
 
 export function getDefaultClaudeDesktopGatewayProviderPresetId(): string {
