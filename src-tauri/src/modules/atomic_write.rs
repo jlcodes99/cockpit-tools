@@ -142,17 +142,32 @@ fn write_synced_temp_file(temp_path: &Path, content: &str) -> Result<(), String>
 }
 
 fn write_secret_temp_file(temp_path: &Path, content: &str) -> Result<(), String> {
+    write_secret_temp_file_bytes(temp_path, content.as_bytes())
+}
+
+#[cfg(unix)]
+fn write_secret_temp_file_bytes(temp_path: &Path, content: &[u8]) -> Result<(), String> {
+    use std::os::unix::fs::OpenOptionsExt;
     let mut options = OpenOptions::new();
-    options.write(true).create_new(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
+    options.write(true).create_new(true).mode(0o600);
     let mut file = options
         .open(temp_path)
         .map_err(|e| format_io_error("创建私有临时文件", temp_path, &e))?;
-    file.write_all(content.as_bytes())
+    file.write_all(content)
+        .map_err(|e| format_io_error("写入私有临时文件", temp_path, &e))?;
+    file.sync_all()
+        .map_err(|e| format_io_error("同步私有临时文件", temp_path, &e))?;
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn write_secret_temp_file_bytes(temp_path: &Path, content: &[u8]) -> Result<(), String> {
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(temp_path)
+        .map_err(|e| format_io_error("创建私有临时文件", temp_path, &e))?;
+    file.write_all(content)
         .map_err(|e| format_io_error("写入私有临时文件", temp_path, &e))?;
     file.sync_all()
         .map_err(|e| format_io_error("同步私有临时文件", temp_path, &e))?;
@@ -433,6 +448,28 @@ pub fn write_bytes_atomic(path: &Path, content: &[u8]) -> Result<(), String> {
     Ok(())
 }
 
+/// Byte-level variant of [`write_string_atomic`] for credential files: the temp
+/// file is created with owner-only permissions so replacing a 0600 file cannot
+/// widen it, and the plaintext never sits in a world-readable temp path.
+pub fn write_bytes_atomic_private(path: &Path, content: &[u8]) -> Result<(), String> {
+    let lock = path_write_lock(path)?;
+    let _guard = lock.lock().map_err(|_| "文件写入锁已损坏".to_string())?;
+    let parent = path.parent().ok_or("无法定位目标目录")?;
+    fs::create_dir_all(parent).map_err(|e| format_io_error("创建目录", parent, &e))?;
+
+    let temp_path = build_temp_file_path(parent, path, "secret-atomic");
+    if let Err(err) = write_secret_temp_file_bytes(&temp_path, content) {
+        let _ = fs::remove_file(&temp_path);
+        return Err(err);
+    }
+    if let Err(err) = fs::rename(&temp_path, path) {
+        let _ = fs::remove_file(&temp_path);
+        return Err(format_io_error("替换私有文件", path, &err));
+    }
+
+    Ok(())
+}
+
 pub fn remove_file_locked(path: &Path) -> Result<bool, String> {
     let lock = path_write_lock(path)?;
     let _guard = lock.lock().map_err(|_| "文件写入锁已损坏".to_string())?;
@@ -513,8 +550,8 @@ pub fn parse_json_with_auto_restore<T: DeserializeOwned>(
 mod tests {
     use super::{
         build_backup_path, quarantine_file, remove_file_if_hash_matches, remove_file_locked,
-        replace_string_if_matches, restore_from_backup, write_secret_string_atomic, write_string_atomic,
-        write_string_atomic_if_hash_matches,
+        replace_string_if_matches, restore_from_backup, write_bytes_atomic_private,
+        write_secret_string_atomic, write_string_atomic, write_string_atomic_if_hash_matches,
     };
     use sha2::{Digest, Sha256};
     use std::fs;
@@ -529,6 +566,24 @@ mod tests {
             std::env::temp_dir().join(format!("{}_{}_{}", prefix, std::process::id(), unique));
         fs::create_dir_all(&dir).expect("create temp dir");
         dir
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn private_byte_write_keeps_the_file_owner_only() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = make_temp_dir("atomic_private_bytes");
+        let target = dir.join("auth.v1.dat");
+        fs::write(&target, b"previous").unwrap();
+        fs::set_permissions(&target, fs::Permissions::from_mode(0o600)).unwrap();
+
+        write_bytes_atomic_private(&target, b"next").unwrap();
+
+        assert_eq!(fs::read(&target).unwrap(), b"next");
+        let mode = fs::metadata(&target).unwrap().permissions().mode() & 0o777;
+        // A 0644 temp file renamed over the original used to widen a 0600
+        // credential file that the client itself keeps private.
+        assert_eq!(mode, 0o600, "credential file must stay 0600, got {mode:o}");
     }
 
     #[test]

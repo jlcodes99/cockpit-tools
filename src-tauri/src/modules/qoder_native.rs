@@ -496,7 +496,7 @@ pub fn switch(
     let backup = backup_root.join(uuid::Uuid::new_v4().to_string());
     fs::create_dir_all(&backup).map_err(io_error)?;
     if let Some(previous) = &previous {
-        atomic_write::write_bytes_atomic(&backup.join(client.filename()), previous)?;
+        atomic_write::write_bytes_atomic_private(&backup.join(client.filename()), previous)?;
     }
     // The desktop client keeps per-account overlays next to its credentials. They
     // describe the account on its way out, so they are cleared with the switch and
@@ -507,7 +507,7 @@ pub fn switch(
             let target = root.join(name);
             match fs::read(&target) {
                 Ok(bytes) => {
-                    atomic_write::write_bytes_atomic(&backup.join(name), &bytes)?;
+                    atomic_write::write_bytes_atomic_private(&backup.join(name), &bytes)?;
                     overlays.push((target, bytes));
                 }
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
@@ -521,7 +521,7 @@ pub fn switch(
         if fs::read(&path).ok() != previous {
             return Err("QODER_SESSION_CHANGED".into());
         }
-        atomic_write::write_bytes_atomic(&path, &next)?;
+        atomic_write::write_bytes_atomic_private(&path, &next)?;
         // Only now can a rollback be needed: a failed atomic write leaves the
         // original file intact, and restoring it would be a second mutation.
         write_started = true;
@@ -538,12 +538,12 @@ pub fn switch(
             return Err(error);
         }
         let restore = match &previous {
-            Some(bytes) => atomic_write::write_bytes_atomic(&path, bytes),
+            Some(bytes) => atomic_write::write_bytes_atomic_private(&path, bytes),
             None => fs::remove_file(&path).map_err(io_error),
         };
         let mut rollback_failed = restore.is_err();
         for (target, bytes) in &overlays {
-            rollback_failed |= atomic_write::write_bytes_atomic(target, bytes).is_err();
+            rollback_failed |= atomic_write::write_bytes_atomic_private(target, bytes).is_err();
         }
         if rollback_failed {
             return Err(format!(
@@ -553,7 +553,14 @@ pub fn switch(
         }
         return Err(error);
     }
-    region.mark_switched(account_id)?;
+    // The credentials are already in place; a bookkeeping failure must not report
+    // a completed switch as an error — a retry would trip the session-changed
+    // guard. Same rule as the pointer write right below.
+    if let Err(error) = region.mark_switched(account_id) {
+        logger::log_warn(&format!(
+            "[Qoder Switch] 记录切换时间失败: account_id={account_id}, error={error}"
+        ));
+    }
     // The CN client stores are outside the app's control, so the recorded pointer
     // is the only way to show which account they currently hold. The global
     // platform derives its pointer from the IDE database instead, so writing it

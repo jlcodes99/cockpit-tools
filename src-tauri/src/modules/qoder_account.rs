@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use crate::models::qoder::{QoderAccount, QoderAccountIndex};
-use crate::modules::{account, logger, qoder_identity};
+use crate::modules::{account, logger, qoder_channel, qoder_identity};
 
 const ACCOUNTS_INDEX_FILE: &str = "qoder_accounts.json";
 const ACCOUNTS_DIR: &str = "qoder_accounts";
@@ -1456,6 +1456,23 @@ fn parse_import_item(item: &Value) -> Result<QoderAccount, String> {
     Ok(snapshot_to_account(snapshot, None))
 }
 
+/// Rejects sessions that belong to the public CN channel before anything is
+/// written. Without this the global store accepts them, while the page filters
+/// the list by region: the account would exist but stay invisible and undeletable.
+fn reject_public_cn_items(items: &[Value]) -> Result<(), String> {
+    for item in items {
+        let marker = qoder_channel::snapshot_marker(
+            item.get("auth_user_info_raw").or_else(|| item.get("userInfo")),
+            item.get("auth_user_plan_raw")
+                .or_else(|| item.get("userPlan")),
+        )?;
+        if qoder_channel::source_of(marker) == qoder_channel::CredentialSource::PublicCn {
+            return Err("QODER_PLATFORM_MISMATCH".into());
+        }
+    }
+    Ok(())
+}
+
 pub fn import_from_json(json_content: &str) -> Result<Vec<QoderAccount>, String> {
     let parsed: Value =
         serde_json::from_str(json_content).map_err(|e| format!("JSON 解析失败: {}", e))?;
@@ -1474,6 +1491,8 @@ pub fn import_from_json(json_content: &str) -> Result<Vec<QoderAccount>, String>
     if items.is_empty() {
         return Ok(Vec::new());
     }
+
+    reject_public_cn_items(&items)?;
 
     let mut imported = Vec::new();
     for item in items {

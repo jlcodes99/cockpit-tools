@@ -149,11 +149,10 @@ fn switch_qoder_cn(
     let system = sysinfo::System::new_all();
     let pids = qoder_native::qoder_cn_desktop_pids(&system);
     if !pids.is_empty() {
-        if let Err(close_error) = crate::modules::process::close_qoder_cn_desktop(&pids, 20) {
-            // The client may already be gone: never leave the user with a bare
-            // "switch failed" while nothing is running.
-            return Err(restore_after_failure(launch_path.as_deref(), close_error));
-        }
+        // A close timeout means the client is still running. Starting another copy
+        // here would leave the user with two instances holding the same profile,
+        // so the failure is reported as-is.
+        crate::modules::process::close_qoder_cn_desktop(&pids, 20)?;
     }
     if let Err(error) = qoder_native::switch(qoder_native::NativeRegion::Cn, account_id, target) {
         // Credentials were rolled back and the client is closed, so the real
@@ -175,6 +174,11 @@ fn restore_after_failure(executable: Option<&std::path::Path>, cause: String) ->
     let Some(path) = executable else {
         return cause;
     };
+    // The launcher may have brought the client back on its own while the write was
+    // failing; only start one when nothing is running.
+    if !qoder_native::qoder_cn_desktop_pids(&sysinfo::System::new_all()).is_empty() {
+        return cause;
+    }
     match crate::modules::process::start_qoder_cn_desktop(path) {
         Ok(_) => cause,
         Err(relaunch_error) => {
@@ -205,13 +209,15 @@ fn default_cn_client() -> qoder_native::NativeClient {
     }
 }
 
+/// Switch used by the dashboard, the floating card, automation and the native
+/// menu. It runs the same close → write → relaunch sequence as the CN page: a
+/// live desktop client would reject the write (`QODER_CLIENT_RUNNING`) and undo it
+/// with its own next save, so every entry point has to go through one path.
 #[tauri::command]
 pub async fn inject_qoder_cn_account(app: AppHandle, account_id: String) -> Result<String, String> {
     qoder_oauth::prepare_cn_account_for_switch(&account_id).await?;
     let id = account_id.clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        qoder_native::switch(qoder_native::NativeRegion::Cn, &id, default_cn_client())
-    })
+    tauri::async_runtime::spawn_blocking(move || switch_qoder_cn(&id, default_cn_client()))
         .await
         .map_err(|_| "QODER_NATIVE_WORKER_FAILED".to_string())??;
     if let Err(error) = crate::modules::tray::update_tray_menu(&app) {
