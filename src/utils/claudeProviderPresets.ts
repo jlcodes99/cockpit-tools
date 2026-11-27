@@ -614,6 +614,17 @@ const CC_SWITCH_DIRECT_CLAUDE_PROVIDER_PRESETS: readonly ClaudeApiProviderPreset
       ANTHROPIC_DEFAULT_OPUS_MODEL: 'claude-opus-5.5',
     }),
   }),
+  createClaudeApiProviderPreset({
+    id: 'llmtr',
+    name: 'LLMTR',
+    baseUrl: 'https://llmtr.com',
+    website: 'https://llmtr.com',
+    apiKeyUrl: 'https://llmtr.com/dashboard/keys',
+    extraEnv: modelEnv('anthropic/claude-sonnet-5.5', {
+      ANTHROPIC_DEFAULT_HAIKU_MODEL: 'anthropic/claude-haiku-5.5',
+      ANTHROPIC_DEFAULT_OPUS_MODEL: 'anthropic/claude-opus-5.5',
+    }),
+  }),
 ];
 
 export const CLAUDE_API_PROVIDER_PRESETS: readonly ClaudeApiProviderPreset[] = [

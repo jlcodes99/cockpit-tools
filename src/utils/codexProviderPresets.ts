@@ -487,6 +487,19 @@ export const CODEX_API_PROVIDER_PRESETS: readonly CodexApiProviderPreset[] = [
     website: "https://onomeo.com/",
     apiKeyUrl: "https://onomeo.com/dashboard",
   },
+  {
+    id: "llmtr",
+    name: "LLMTR",
+    baseUrls: ["https://llmtr.com/v1"],
+    modelCatalog: [
+      "openai/gpt-6.2-sol",
+      "openai/gpt-6.2-astra",
+      "openai/gpt-6.1-terra",
+      "openai/gpt-6-luna",
+    ],
+    website: "https://llmtr.com/",
+    apiKeyUrl: "https://llmtr.com/dashboard/keys",
+  },
 ];
 
 function normalizeCodexProviderBaseUrl(value: string): string | null {

@@ -172,6 +172,16 @@ test("TrustedRouter preset uses its native Responses endpoint directly", () => {
   assert.equal(profile.requiresGateway, false);
 });
 
+test("LLMTR preset uses its native Responses endpoint directly", () => {
+  const preset = findCodexApiProviderPresetByBaseUrl("https://llmtr.com/v1/");
+  assert.equal(preset?.id, "llmtr");
+  assert.equal(preset.modelCatalog?.[0], "openai/gpt-6.2-sol");
+  const profile = resolveCodexProviderCapabilityProfile({ baseUrl: preset.baseUrls[0] });
+  assert.equal(profile.wireApi, "responses");
+  assert.equal(profile.supportsDirect, true);
+  assert.equal(profile.requiresGateway, false);
+});
+
 test("DeepSeek keeps its native Responses default", () => {
   const profile = resolveCodexProviderCapabilityProfile({
     presetId: "deepseek",
