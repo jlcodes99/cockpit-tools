@@ -774,7 +774,9 @@ export function QoderAccountsPage({ region = 'global' }: { region?: QoderRegion 
     if (refreshingAll) return;
     setRefreshingAll(true);
     try {
-      const total = accounts.length;
+      // Refresh covers this realm's store, so the count has to be compared with
+      // the same set the list renders — not with every account the store holds.
+      const total = regionAccounts.length;
       const count = await service.refreshAllQoderTokens();
       await store.fetchAccounts();
       setMessage(count === total
@@ -788,7 +790,7 @@ export function QoderAccountsPage({ region = 'global' }: { region?: QoderRegion 
     } finally {
       setRefreshingAll(false);
     }
-  }, [accounts.length, refreshingAll, store, t]);
+  }, [regionAccounts.length, refreshingAll, store, t]);
 
   const handleSwitch = useCallback(
     async (accountId: string) => {
