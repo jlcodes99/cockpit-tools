@@ -32,3 +32,9 @@ The approved minimum correction rejects managed-key rotation at both backend ent
 - Symlink/ownership/file-change checks are path-based. This feature does not claim a dirfd-anchored defense against every check-to-use race, and it does not delete the profile directory or user session data.
 - The external installed WorkBuddy CLI is not treated as an OS security sandbox. Codex retains the configured tool sandbox and approval controls.
 - This follow-up requires deterministic local tests only. It neither uploads a real project nor performs additional WorkBuddy inference. It does not resolve or close the security alert on the maintainer's behalf.
+
+## 2026-11-27 CI configuration boundary
+
+The latest-upstream integration was verified at `f74f80f1` and merged non-rewritingly as `358e4c3ce`. The inspected repository snapshots contain no tracked Go source or Go module/workspace files; their CodeQL workflow is unchanged by this PR and analyzes JavaScript/TypeScript and Rust. The aggregate check's missing `/language:go` configuration therefore needs a maintainer to inspect the stored default-branch analysis baseline and reconcile an obsolete configuration or identify actual missing source. A dummy Go project, empty SARIF, renamed category or disabled check is not an acceptable repair.
+
+This configuration issue is separate from alert #579. The contributor still lacks a successfully loaded complete source-to-sink trace. The requested review evidence is the rule ID and commit, actual sensitive source, actual SHA sink, complete flow, and whether the flow runs in production or a synthetic fixture. No algorithm, ownership comparison, key-revocation behavior or CodeQL suppression is changed by the Core OAuth repair; neither security gate is represented as resolved merely because compilation succeeds.

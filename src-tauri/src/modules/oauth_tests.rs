@@ -214,3 +214,117 @@ fn detects_missing_aicode_scope_and_persists_granted_scopes() {
         Some("openid https://www.googleapis.com/auth/cloud-platform")
     );
 }
+
+fn current_token_with_scope_metadata() -> crate::models::TokenData {
+    let mut token = crate::models::TokenData::new(
+        "fixture-access".into(),
+        "fixture-refresh".into(),
+        60,
+        Some("fixture@example.com".into()),
+        Some("fixture-project".into()),
+        Some("fixture-session".into()),
+    )
+    .with_oauth_metadata(
+        Some(DEFAULT_OAUTH_CLIENT_KEY.into()),
+        Some("fixture-id".into()),
+    )
+    .with_granted_scopes(Some("openid previous-scope".into()));
+    token.is_gcp_tos = Some(true);
+    token
+}
+
+fn refresh_response_with_scope(scope: Option<&str>) -> TokenResponse {
+    TokenResponse {
+        access_token: "fixture-access".into(),
+        expires_in: 3600,
+        token_type: "Bearer".into(),
+        refresh_token: None,
+        id_token: None,
+        scope: scope.map(str::to_owned),
+        oauth_client_key: Some(DEFAULT_OAUTH_CLIENT_KEY.into()),
+    }
+}
+
+#[test]
+fn refresh_without_scope_retains_previous_scope_and_other_metadata() {
+    let current = current_token_with_scope_metadata();
+    let refreshed = build_refreshed_token(&current, refresh_response_with_scope(None));
+
+    assert_eq!(refreshed.access_token, current.access_token);
+    assert_eq!(refreshed.granted_scopes, current.granted_scopes);
+    assert_eq!(refreshed.refresh_token, current.refresh_token);
+    assert_eq!(refreshed.id_token, current.id_token);
+    assert_eq!(refreshed.oauth_client_key, current.oauth_client_key);
+    assert_eq!(refreshed.email, current.email);
+    assert_eq!(refreshed.project_id, current.project_id);
+    assert_eq!(refreshed.session_id, current.session_id);
+    assert_eq!(refreshed.is_gcp_tos, current.is_gcp_tos);
+    assert_eq!(refreshed.expires_in, 3600);
+}
+
+#[test]
+fn refresh_replaces_and_trims_scope_even_when_access_token_is_unchanged() {
+    let current = current_token_with_scope_metadata();
+    let refreshed = build_refreshed_token(
+        &current,
+        refresh_response_with_scope(Some(" \topenid   https://www.googleapis.com/auth/aicode\n")),
+    );
+
+    assert_eq!(refreshed.access_token, current.access_token);
+    assert_eq!(
+        refreshed.granted_scopes.as_deref(),
+        Some("openid   https://www.googleapis.com/auth/aicode")
+    );
+    assert!(!refreshed.lacks_aicode_scope());
+}
+
+#[test]
+fn explicit_blank_refresh_scope_clears_the_old_scope_instead_of_falling_back() {
+    let current = current_token_with_scope_metadata();
+    for scope in ["", " \n\t "] {
+        let refreshed = build_refreshed_token(&current, refresh_response_with_scope(Some(scope)));
+        assert!(refreshed.granted_scopes.is_none());
+        assert!(!refreshed.lacks_aicode_scope());
+    }
+}
+
+#[test]
+fn token_json_without_scope_remains_compatible_and_scope_roundtrips() {
+    let legacy = serde_json::json!({
+        "access_token": "legacy-fixture-access",
+        "refresh_token": "legacy-fixture-refresh",
+        "expires_in": 3600,
+        "expiry_timestamp": 1_800_000_000,
+        "token_type": "Bearer",
+        "email": "fixture@example.com"
+    });
+    let token: crate::models::TokenData = serde_json::from_value(legacy).unwrap();
+    assert!(token.granted_scopes.is_none());
+    assert!(!token.lacks_aicode_scope());
+    let without_scope = serde_json::to_value(&token).unwrap();
+    assert!(without_scope.get("granted_scopes").is_none());
+
+    let scoped = token.with_granted_scopes(Some(
+        " \topenid https://www.googleapis.com/auth/aicode\n".into(),
+    ));
+    let encoded = serde_json::to_value(&scoped).unwrap();
+    assert_eq!(
+        encoded["granted_scopes"],
+        "openid https://www.googleapis.com/auth/aicode"
+    );
+    let decoded: crate::models::TokenData = serde_json::from_value(encoded).unwrap();
+    assert_eq!(decoded.granted_scopes, scoped.granted_scopes);
+    assert_eq!(decoded.expiry_timestamp, scoped.expiry_timestamp);
+    assert_eq!(decoded.refresh_token, scoped.refresh_token);
+    assert!(!decoded.lacks_aicode_scope());
+}
+
+#[test]
+fn scope_matching_uses_complete_whitespace_delimited_items_case_insensitively() {
+    assert!(!scope_lacks_aicode(Some(
+        "openid\tHTTPS://WWW.GOOGLEAPIS.COM/AUTH/AICODE\nother-scope"
+    )));
+    assert!(scope_lacks_aicode(Some(
+        "openid https://www.googleapis.com/auth/aicode-extra"
+    )));
+}

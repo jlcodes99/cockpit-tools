@@ -5,6 +5,25 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use tauri::Emitter;
 
+// Keep response metadata in one mapping used by every OAuth refresh import path.
+fn token_data_from_oauth_response(
+    response: modules::oauth::TokenResponse,
+    fallback_refresh_token: String,
+    email: String,
+    project_id: Option<String>,
+) -> models::TokenData {
+    models::TokenData::new(
+        response.access_token,
+        response.refresh_token.unwrap_or(fallback_refresh_token),
+        response.expires_in,
+        Some(email),
+        project_id,
+        None,
+    )
+    .with_oauth_metadata(response.oauth_client_key, response.id_token)
+    .with_granted_scopes(response.scope)
+}
+
 // ==================== 辅助结构体和函数 ====================
 
 #[derive(Debug, Deserialize)]
@@ -375,15 +394,7 @@ pub async fn import_from_local_logic() -> Result<models::Account, String> {
     let email = user_info.email.clone();
 
     // 构建 TokenData
-    let token = models::TokenData::new(
-        token_response.access_token,
-        token_response.refresh_token.unwrap_or(refresh_token),
-        token_response.expires_in,
-        Some(email.clone()),
-        None,
-        None,
-    )
-    .with_oauth_metadata(token_response.oauth_client_key, token_response.id_token);
+    let token = token_data_from_oauth_response(token_response, refresh_token, email.clone(), None);
 
     // 添加或更新账号
     let account = modules::upsert_account(email.clone(), user_info.get_display_name(), token)?;
@@ -428,15 +439,12 @@ pub async fn import_from_json_logic(json_content: String) -> Result<Vec<models::
             match modules::oauth::refresh_access_token(&simple.refresh_token).await {
                 Ok(token_response) => {
                     // 构建 TokenData
-                    let token = models::TokenData::new(
-                        token_response.access_token,
-                        token_response.refresh_token.unwrap_or(simple.refresh_token),
-                        token_response.expires_in,
-                        Some(simple.email.clone()),
+                    let token = token_data_from_oauth_response(
+                        token_response,
+                        simple.refresh_token,
+                        simple.email.clone(),
                         None,
-                        None,
-                    )
-                    .with_oauth_metadata(token_response.oauth_client_key, token_response.id_token);
+                    );
 
                     match modules::upsert_account(simple.email.clone(), None, token) {
                         Ok(mut new_account) => {
@@ -648,15 +656,12 @@ pub async fn import_from_files_logic(file_paths: Vec<String>) -> Result<FileImpo
                     }
                 };
 
-                let token = models::TokenData::new(
-                    token_response.access_token,
-                    token_response.refresh_token.unwrap_or(entry.refresh_token),
-                    token_response.expires_in,
-                    Some(email.clone()),
+                let token = token_data_from_oauth_response(
+                    token_response,
+                    entry.refresh_token,
+                    email.clone(),
                     None,
-                    None,
-                )
-                .with_oauth_metadata(token_response.oauth_client_key, token_response.id_token);
+                );
 
                 match modules::upsert_account(email.clone(), None, token) {
                     Ok(mut new_account) => {
@@ -806,15 +811,12 @@ pub async fn import_from_extension_credentials(
         match modules::oauth::refresh_access_token(&refresh_token).await {
             Ok(token_response) => {
                 let user_info = modules::oauth::get_user_info(&token_response.access_token).await?;
-                let token = models::TokenData::new(
-                    token_response.access_token,
-                    token_response.refresh_token.unwrap_or(refresh_token),
-                    token_response.expires_in,
-                    Some(user_info.email.clone()),
+                let token = token_data_from_oauth_response(
+                    token_response,
+                    refresh_token,
+                    user_info.email.clone(),
                     item.project_id.clone(),
-                    None,
-                )
-                .with_oauth_metadata(token_response.oauth_client_key, token_response.id_token);
+                );
 
                 match modules::add_account(
                     user_info.email.clone(),
@@ -873,4 +875,84 @@ pub async fn import_from_extension_credentials(
     }
 
     Ok(imported_count)
+}
+
+#[cfg(test)]
+mod oauth_scope_import_tests {
+    use super::*;
+
+    fn response(scope: Option<&str>, refresh: Option<&str>) -> modules::oauth::TokenResponse {
+        modules::oauth::TokenResponse {
+            access_token: "fixture-access".into(),
+            expires_in: 3600,
+            token_type: "Bearer".into(),
+            refresh_token: refresh.map(str::to_owned),
+            id_token: Some("fixture-id".into()),
+            oauth_client_key: Some("antigravity_enterprise".into()),
+            scope: scope.map(str::to_owned),
+        }
+    }
+
+    #[test]
+    fn oauth_import_mapping_keeps_scope_and_existing_metadata() {
+        let token = token_data_from_oauth_response(
+            response(
+                Some("  openid https://www.googleapis.com/auth/aicode  "),
+                Some("rotated-refresh"),
+            ),
+            "old-refresh".into(),
+            "scope@example.test".into(),
+            Some("fixture-project".into()),
+        );
+        assert_eq!(token.access_token, "fixture-access");
+        assert_eq!(token.refresh_token, "rotated-refresh");
+        assert_eq!(token.expires_in, 3600);
+        assert_eq!(token.email.as_deref(), Some("scope@example.test"));
+        assert_eq!(token.project_id.as_deref(), Some("fixture-project"));
+        assert_eq!(token.id_token.as_deref(), Some("fixture-id"));
+        assert_eq!(
+            token.oauth_client_key.as_deref(),
+            Some("antigravity_enterprise")
+        );
+        assert_eq!(token.session_id, None);
+        assert_eq!(
+            token.granted_scopes.as_deref(),
+            Some("openid https://www.googleapis.com/auth/aicode")
+        );
+        assert!(!token.lacks_aicode_scope());
+        let restored: models::TokenData =
+            serde_json::from_value(serde_json::to_value(&token).unwrap()).unwrap();
+        assert_eq!(restored.granted_scopes, token.granted_scopes);
+    }
+
+    #[test]
+    fn oauth_import_mapping_keeps_original_refresh_when_response_omits_it() {
+        let token = token_data_from_oauth_response(
+            response(None, None),
+            "original-refresh".into(),
+            "scope@example.test".into(),
+            None,
+        );
+        assert_eq!(token.refresh_token, "original-refresh");
+        assert_eq!(token.granted_scopes, None);
+        assert!(!token.lacks_aicode_scope());
+        assert!(serde_json::to_value(&token)
+            .unwrap()
+            .get("granted_scopes")
+            .is_none());
+    }
+
+    #[test]
+    fn oauth_import_mapping_normalizes_blank_scope_and_keeps_known_missing_permission() {
+        for (scope, expected) in [(" \t ", None), (" openid ", Some("openid"))] {
+            let token = token_data_from_oauth_response(
+                response(Some(scope), None),
+                "original-refresh".into(),
+                "scope@example.test".into(),
+                None,
+            );
+            assert_eq!(token.granted_scopes.as_deref(), expected);
+            assert_eq!(token.lacks_aicode_scope(), expected.is_some());
+        }
+    }
 }

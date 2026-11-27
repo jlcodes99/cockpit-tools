@@ -1432,6 +1432,27 @@ async fn start_official_ls_process(
     }
 }
 
+fn persist_wakeup_token_refresh(
+    account: &mut crate::models::account::Account,
+    token: &crate::models::token::TokenData,
+) -> crate::models::token::TokenData {
+    if token.access_token != account.token.access_token
+        || token.refresh_token != account.token.refresh_token
+        || token.expiry_timestamp != account.token.expiry_timestamp
+        || token.project_id != account.token.project_id
+        || token.is_gcp_tos != account.token.is_gcp_tos
+    {
+        account.token = token.clone();
+        let _ = crate::modules::account::save_account(account);
+    } else if token.granted_scopes != account.token.granted_scopes {
+        if crate::modules::account::persist_scope_only_token_refresh(account, token).is_ok() {
+            return account.token.clone();
+        }
+    }
+    // Retain the old fresh-token fallback when persistence fails or no save is needed.
+    token.clone()
+}
+
 async fn ensure_wakeup_account_token(
     account_id: &str,
 ) -> Result<
@@ -1443,16 +1464,8 @@ async fn ensure_wakeup_account_token(
 > {
     let mut account = crate::modules::account::load_account(account_id)?;
     let token = crate::modules::oauth::ensure_fresh_token(&account.token).await?;
-    if token.access_token != account.token.access_token
-        || token.refresh_token != account.token.refresh_token
-        || token.expiry_timestamp != account.token.expiry_timestamp
-        || token.project_id != account.token.project_id
-        || token.is_gcp_tos != account.token.is_gcp_tos
-    {
-        account.token = token.clone();
-        let _ = crate::modules::account::save_account(&account);
-    }
-    Ok((account, token))
+    let selected_token = persist_wakeup_token_refresh(&mut account, &token);
+    Ok((account, selected_token))
 }
 
 async fn handle_prepare_start_context(body: &[u8]) -> Result<Value, (u16, String)> {
@@ -1738,5 +1751,182 @@ pub async fn clear_local_gateway_base_url_cache() {
             "[WakeupGateway] 清理本地网关地址缓存: {}",
             current
         ));
+    }
+}
+
+#[cfg(test)]
+mod oauth_scope_refresh_tests {
+    use super::*;
+    use crate::models::{account::Account, token::TokenData};
+
+    struct DataEnvGuard(Option<std::ffi::OsString>);
+    impl DataEnvGuard {
+        fn new(path: &std::path::Path) -> Self {
+            let previous = std::env::var_os("COCKPIT_TOOLS_DATA_DIR");
+            std::env::set_var("COCKPIT_TOOLS_DATA_DIR", path);
+            Self(previous)
+        }
+    }
+    impl Drop for DataEnvGuard {
+        fn drop(&mut self) {
+            match self.0.as_ref() {
+                Some(value) => std::env::set_var("COCKPIT_TOOLS_DATA_DIR", value),
+                None => std::env::remove_var("COCKPIT_TOOLS_DATA_DIR"),
+            }
+        }
+    }
+
+    fn fixture() -> Account {
+        let token = TokenData::new(
+            "fixture-access".into(),
+            "fixture-refresh".into(),
+            3600,
+            Some("wakeup-scope@example.test".into()),
+            Some("fixture-project".into()),
+            Some("fixture-session".into()),
+        )
+        .with_granted_scopes(Some("openid".into()));
+        let mut account = Account::new(
+            uuid::Uuid::new_v4().to_string(),
+            "wakeup-scope@example.test".into(),
+            token,
+        );
+        account.notes = Some("keep-note".into());
+        crate::modules::account::save_account(&account).unwrap();
+        account
+    }
+
+    #[test]
+    fn wakeup_refresh_persists_scope_only_changes_and_explicit_clear() {
+        let dir = tempfile::tempdir().unwrap();
+        let _env = DataEnvGuard::new(dir.path());
+        for scope in [Some("openid https://www.googleapis.com/auth/aicode"), None] {
+            let mut account = fixture();
+            let fresh = account
+                .token
+                .clone()
+                .with_granted_scopes(scope.map(str::to_owned));
+            assert_eq!(fresh.access_token, account.token.access_token);
+            assert_eq!(fresh.expiry_timestamp, account.token.expiry_timestamp);
+            persist_wakeup_token_refresh(&mut account, &fresh);
+            let saved = crate::modules::account::load_account(&account.id).unwrap();
+            assert_eq!(saved.token.granted_scopes.as_deref(), scope);
+            assert_eq!(saved.token.project_id.as_deref(), Some("fixture-project"));
+            assert_eq!(saved.token.session_id.as_deref(), Some("fixture-session"));
+            assert_eq!(saved.notes.as_deref(), Some("keep-note"));
+        }
+    }
+
+    #[test]
+    fn wakeup_scope_only_refresh_preserves_late_control_and_credential_changes() {
+        let dir = tempfile::tempdir().unwrap();
+        let _env = DataEnvGuard::new(dir.path());
+        for newer_credentials in [false, true] {
+            let mut account = fixture();
+            let mut latest = account.clone();
+            latest.disabled = true;
+            latest.disabled_reason = Some("manual".into());
+            latest.disabled_at = Some(1_800_000_000);
+            latest.notes = Some("newer-note".into());
+            latest.quota_error = Some(crate::models::QuotaErrorInfo {
+                code: Some(403),
+                message: "fixture-existing-error".into(),
+                reason: Some("manual".into()),
+                validation_url: None,
+                timestamp: 1_800_000_000,
+            });
+            if newer_credentials {
+                latest.token.access_token = "newer-fixture-access".into();
+            }
+            crate::modules::account::save_account(&latest).unwrap();
+            let fresh = account
+                .token
+                .clone()
+                .with_granted_scopes(Some("openid https://www.googleapis.com/auth/aicode".into()));
+            let selected_token = persist_wakeup_token_refresh(&mut account, &fresh);
+            let saved = crate::modules::account::load_account(&account.id).unwrap();
+            assert!(saved.disabled);
+            assert_eq!(saved.disabled_reason, latest.disabled_reason);
+            assert_eq!(saved.disabled_at, latest.disabled_at);
+            assert_eq!(
+                serde_json::to_value(&saved.quota_error).unwrap(),
+                serde_json::to_value(&latest.quota_error).unwrap()
+            );
+            assert_eq!(saved.notes.as_deref(), Some("newer-note"));
+            if newer_credentials {
+                assert_eq!(
+                    serde_json::to_value(&saved.token).unwrap(),
+                    serde_json::to_value(&latest.token).unwrap()
+                );
+                assert_eq!(account.token.access_token, latest.token.access_token);
+                assert_eq!(
+                    serde_json::to_value(&selected_token).unwrap(),
+                    serde_json::to_value(&latest.token).unwrap()
+                );
+            } else {
+                assert_eq!(saved.token.granted_scopes, fresh.granted_scopes);
+                assert_eq!(
+                    serde_json::to_value(&selected_token).unwrap(),
+                    serde_json::to_value(&fresh).unwrap()
+                );
+            }
+            assert!(account.disabled);
+        }
+    }
+
+    #[test]
+    fn wakeup_scope_only_io_failure_keeps_the_fresh_token_fallback() {
+        let dir = tempfile::tempdir().unwrap();
+        let _env = DataEnvGuard::new(dir.path());
+        let token = TokenData::new(
+            "fixture-access".into(),
+            "fixture-refresh".into(),
+            3600,
+            Some("missing-scope@example.test".into()),
+            None,
+            None,
+        )
+        .with_granted_scopes(Some("openid".into()));
+        let mut account = Account::new(
+            uuid::Uuid::new_v4().to_string(),
+            "missing-scope@example.test".into(),
+            token,
+        );
+        let fresh = account
+            .token
+            .clone()
+            .with_granted_scopes(Some("openid https://www.googleapis.com/auth/aicode".into()));
+        let selected = persist_wakeup_token_refresh(&mut account, &fresh);
+        assert_eq!(
+            serde_json::to_value(&selected).unwrap(),
+            serde_json::to_value(&fresh).unwrap()
+        );
+        assert!(crate::modules::account::load_account(&account.id).is_err());
+    }
+
+    #[test]
+    fn wakeup_refresh_keeps_existing_expiry_trigger_and_unchanged_noop() {
+        let dir = tempfile::tempdir().unwrap();
+        let _env = DataEnvGuard::new(dir.path());
+        let mut account = fixture();
+        account.notes = Some("unsaved-note".into());
+        let mut fresh = account.token.clone();
+        persist_wakeup_token_refresh(&mut account, &fresh);
+        assert_eq!(
+            crate::modules::account::load_account(&account.id)
+                .unwrap()
+                .notes
+                .as_deref(),
+            Some("keep-note")
+        );
+        fresh.expiry_timestamp += 60;
+        persist_wakeup_token_refresh(&mut account, &fresh);
+        assert_eq!(
+            crate::modules::account::load_account(&account.id)
+                .unwrap()
+                .token
+                .expiry_timestamp,
+            fresh.expiry_timestamp
+        );
     }
 }

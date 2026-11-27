@@ -1730,6 +1730,38 @@ pub async fn refresh_all_quotas_logic(
     })
 }
 
+// Scope metadata must not overwrite control state or a newer credential generation.
+pub(super) fn persist_scope_only_token_refresh(
+    account: &mut Account,
+    token: &TokenData,
+) -> Result<(), String> {
+    let mut latest = load_account(&account.id)?;
+    if latest.token.access_token != account.token.access_token
+        || latest.token.refresh_token != account.token.refresh_token
+        || latest.token.oauth_client_key != account.token.oauth_client_key
+    {
+        *account = latest;
+        return Ok(());
+    }
+    latest.token = token.clone();
+    save_account(&latest)?;
+    *account = latest;
+    Ok(())
+}
+
+// Preserve the old access-token upsert behavior. Scope metadata alone is not a re-import.
+fn apply_quota_token_refresh(account: &mut Account, token: &TokenData) {
+    if token.access_token != account.token.access_token {
+        account.token = token.clone();
+        let _ = upsert_account(account.email.clone(), account.name.clone(), token.clone());
+    } else if token.granted_scopes != account.token.granted_scopes {
+        if persist_scope_only_token_refresh(account, token).is_err() {
+            // Keep using the fresh in-memory token, matching the old quota path's IO policy.
+            account.token = token.clone();
+        }
+    }
+}
+
 /// 配额查询，并在查询前确保 Token 有效
 /// skip_cache: 是否跳过缓存，单个账号刷新应传 true
 pub async fn fetch_quota_with_fresh_token(
@@ -1764,10 +1796,7 @@ pub async fn fetch_quota_with_fresh_token(
         }
     };
 
-    if token.access_token != account.token.access_token {
-        account.token = token.clone();
-        let _ = upsert_account(account.email.clone(), account.name.clone(), token.clone());
-    }
+    apply_quota_token_refresh(account, &token);
 
     let result =
         modules::quota::fetch_quota_for_token(&account.token, &account.email, skip_cache).await;
@@ -2225,17 +2254,24 @@ pub async fn switch_account_local_no_restart(account_id: &str) -> Result<Account
     Ok(account)
 }
 
+fn persist_injection_token_refresh(account: &mut Account, token: &TokenData) -> Result<(), String> {
+    if token.access_token != account.token.access_token {
+        modules::logger::log_info("[Account] Token 已刷新");
+        account.token = token.clone();
+        save_account(account)?;
+    } else if token.granted_scopes != account.token.granted_scopes {
+        persist_scope_only_token_refresh(account, token)?;
+    }
+    Ok(())
+}
+
 /// 准备账号注入：确保 Token 新鲜并落盘
 pub async fn prepare_account_for_injection(account_id: &str) -> Result<Account, String> {
     let mut account = load_account(account_id)?;
     let fresh_token = modules::oauth::ensure_fresh_token(&account.token)
         .await
         .map_err(|e| format!("Token 刷新失败: {}", e))?;
-    if fresh_token.access_token != account.token.access_token {
-        modules::logger::log_info("[Account] Token 已刷新");
-        account.token = fresh_token.clone();
-        save_account(&account)?;
-    }
+    persist_injection_token_refresh(&mut account, &fresh_token)?;
     Ok(account)
 }
 
@@ -2281,6 +2317,215 @@ mod tests {
 
     static TEST_ENV_LOCK: std::sync::LazyLock<std::sync::Mutex<()>> =
         std::sync::LazyLock::new(|| std::sync::Mutex::new(()));
+
+    fn scope_refresh_fixture() -> Account {
+        let token = TokenData::new(
+            "fixture-access".into(),
+            "fixture-refresh".into(),
+            3600,
+            Some("scope-only@example.test".into()),
+            Some("fixture-project".into()),
+            Some("fixture-session".into()),
+        )
+        .with_oauth_metadata(
+            Some("antigravity_enterprise".into()),
+            Some("fixture-id".into()),
+        )
+        .with_granted_scopes(Some("openid".into()));
+        let mut account = upsert_account(
+            "scope-only@example.test".into(),
+            Some("Fixture".into()),
+            token,
+        )
+        .unwrap();
+        account.notes = Some("keep-note".into());
+        save_account(&account).unwrap();
+        account
+    }
+
+    #[test]
+    fn quota_refresh_persists_scope_only_changes_and_explicit_clear() {
+        let _lock = TEST_ENV_LOCK
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let _guard = TestEnvGuard::new("core-quota-scope-refresh");
+        for scope in [Some("openid https://www.googleapis.com/auth/aicode"), None] {
+            let mut account = scope_refresh_fixture();
+            let fresh = account
+                .token
+                .clone()
+                .with_granted_scopes(scope.map(str::to_owned));
+            assert_eq!(fresh.access_token, account.token.access_token);
+            assert_eq!(fresh.expiry_timestamp, account.token.expiry_timestamp);
+            apply_quota_token_refresh(&mut account, &fresh);
+            let saved = load_account(&account.id).unwrap();
+            assert_eq!(saved.token.granted_scopes.as_deref(), scope);
+            assert_eq!(account.token.granted_scopes, saved.token.granted_scopes);
+            assert_eq!(saved.token.project_id.as_deref(), Some("fixture-project"));
+            assert_eq!(saved.token.session_id.as_deref(), Some("fixture-session"));
+            assert_eq!(saved.token.id_token.as_deref(), Some("fixture-id"));
+            assert_eq!(saved.notes.as_deref(), Some("keep-note"));
+        }
+    }
+
+    #[test]
+    fn scope_only_refresh_preserves_disabled_state_and_existing_errors() {
+        let _lock = TEST_ENV_LOCK
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let _guard = TestEnvGuard::new("core-scope-disabled-refresh");
+        for quota_path in [true, false] {
+            for stale_snapshot in [false, true] {
+                let mut account = scope_refresh_fixture();
+                let mut latest = account.clone();
+                latest.disabled = true;
+                latest.disabled_reason = Some("manual".into());
+                latest.disabled_at = Some(1_800_000_000);
+                latest.quota_error = Some(QuotaErrorInfo {
+                    code: Some(403),
+                    message: "fixture-existing-error".into(),
+                    reason: Some("manual".into()),
+                    validation_url: None,
+                    timestamp: 1_800_000_000,
+                });
+                latest.notes = Some("newer-note".into());
+                save_account(&latest).unwrap();
+                if !stale_snapshot {
+                    account = latest.clone();
+                }
+                let fresh = account.token.clone().with_granted_scopes(Some(
+                    "openid https://www.googleapis.com/auth/aicode".into(),
+                ));
+                if quota_path {
+                    apply_quota_token_refresh(&mut account, &fresh);
+                } else {
+                    persist_injection_token_refresh(&mut account, &fresh).unwrap();
+                }
+                let saved = load_account(&account.id).unwrap();
+                assert!(
+                    saved.disabled,
+                    "scope metadata must not re-enable the account"
+                );
+                assert_eq!(saved.disabled_reason, latest.disabled_reason);
+                assert_eq!(saved.disabled_at, latest.disabled_at);
+                assert_eq!(
+                    serde_json::to_value(&saved.quota_error).unwrap(),
+                    serde_json::to_value(&latest.quota_error).unwrap()
+                );
+                assert_eq!(saved.notes.as_deref(), Some("newer-note"));
+                assert_eq!(saved.token.granted_scopes, fresh.granted_scopes);
+                assert!(account.disabled);
+            }
+        }
+    }
+
+    #[test]
+    fn scope_only_refresh_does_not_roll_back_newer_credentials() {
+        let _lock = TEST_ENV_LOCK
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let _guard = TestEnvGuard::new("core-scope-newer-credentials");
+        for quota_path in [true, false] {
+            for changed_field in ["access", "refresh", "client"] {
+                let mut account = scope_refresh_fixture();
+                let mut latest = account.clone();
+                match changed_field {
+                    "access" => latest.token.access_token = "newer-fixture-access".into(),
+                    "refresh" => latest.token.refresh_token = "newer-fixture-refresh".into(),
+                    _ => latest.token.oauth_client_key = Some("newer-fixture-client".into()),
+                }
+                save_account(&latest).unwrap();
+                let fresh = account
+                    .token
+                    .clone()
+                    .with_granted_scopes(Some("stale-response-scope".into()));
+                if quota_path {
+                    apply_quota_token_refresh(&mut account, &fresh);
+                } else {
+                    persist_injection_token_refresh(&mut account, &fresh).unwrap();
+                }
+                let saved = load_account(&account.id).unwrap();
+                assert_eq!(
+                    serde_json::to_value(&saved.token).unwrap(),
+                    serde_json::to_value(&latest.token).unwrap()
+                );
+                assert_eq!(
+                    serde_json::to_value(&account.token).unwrap(),
+                    serde_json::to_value(&latest.token).unwrap()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn injection_refresh_persists_scope_only_changes_and_explicit_clear() {
+        let _lock = TEST_ENV_LOCK
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let _guard = TestEnvGuard::new("core-injection-scope-refresh");
+        for scope in [Some("openid https://www.googleapis.com/auth/aicode"), None] {
+            let mut account = scope_refresh_fixture();
+            let fresh = account
+                .token
+                .clone()
+                .with_granted_scopes(scope.map(str::to_owned));
+            assert_eq!(fresh.access_token, account.token.access_token);
+            assert_eq!(fresh.expiry_timestamp, account.token.expiry_timestamp);
+            persist_injection_token_refresh(&mut account, &fresh).unwrap();
+            let saved = load_account(&account.id).unwrap();
+            assert_eq!(saved.token.granted_scopes.as_deref(), scope);
+            assert_eq!(saved.token.refresh_token, "fixture-refresh");
+            assert_eq!(
+                saved.token.oauth_client_key.as_deref(),
+                Some("antigravity_enterprise")
+            );
+            assert_eq!(saved.notes.as_deref(), Some("keep-note"));
+        }
+    }
+
+    #[test]
+    fn unchanged_refreshes_do_not_write_unrelated_in_memory_edits() {
+        let _lock = TEST_ENV_LOCK
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let _guard = TestEnvGuard::new("core-unchanged-scope-refresh");
+        for quota_path in [true, false] {
+            let mut account = scope_refresh_fixture();
+            account.notes = Some("unsaved-note".into());
+            let fresh = account.token.clone();
+            if quota_path {
+                apply_quota_token_refresh(&mut account, &fresh);
+            } else {
+                persist_injection_token_refresh(&mut account, &fresh).unwrap();
+            }
+            assert_eq!(
+                load_account(&account.id).unwrap().notes.as_deref(),
+                Some("keep-note")
+            );
+        }
+    }
+
+    #[test]
+    fn changed_access_token_still_persists_on_both_refresh_paths() {
+        let _lock = TEST_ENV_LOCK
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let _guard = TestEnvGuard::new("core-access-token-refresh");
+        for quota_path in [true, false] {
+            let mut account = scope_refresh_fixture();
+            let mut fresh = account.token.clone();
+            fresh.access_token = "replacement-fixture-access".into();
+            if quota_path {
+                apply_quota_token_refresh(&mut account, &fresh);
+            } else {
+                persist_injection_token_refresh(&mut account, &fresh).unwrap();
+            }
+            assert_eq!(
+                load_account(&account.id).unwrap().token.access_token,
+                "replacement-fixture-access"
+            );
+        }
+    }
 
     #[test]
     fn upsert_account_overwrites_existing_same_email_with_new_refresh_token() {
