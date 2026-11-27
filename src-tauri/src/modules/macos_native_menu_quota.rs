@@ -1822,13 +1822,15 @@
             }
         }
 
-        rows.push(QuotaRow {
-            label: modules::i18n::translate(lang, "common.shared.credits.availableAiCredits", &[]),
-            value: format_antigravity_available_credits(Some(quota)).unwrap_or_default(),
-            progress: None,
-            progress_tone: None,
-            subtext: None,
-        });
+        if let Some(credits) = format_antigravity_available_credits(Some(quota)) {
+            rows.push(QuotaRow {
+                label: modules::i18n::translate(lang, "common.shared.credits.availableAiCredits", &[]),
+                value: credits,
+                progress: None,
+                progress_tone: None,
+                subtext: None,
+            });
+        }
         rows
     }
 
@@ -1901,11 +1903,22 @@
         let rows = build_antigravity_quota_rows("en", Some(&dynamic_quota), "neon:weekly");
         let labels: Vec<&str> = rows.iter().map(|row| row.label.as_str()).collect();
         assert_eq!(
-            &labels[..3],
+            labels,
             &["Neon Preview (Weekly)", "Gemini (5h)", "Gemini (Weekly)"]
         );
         assert!(!labels.contains(&"Gemini 4 Carbon"));
         assert_eq!(selected_antigravity_menu_percentage(&dynamic_quota, "neon:weekly"), Some(42));
+
+        // 1b. Available AI Credits row is shown only when valid credit amounts exist.
+        let mut with_credits = dynamic_quota.clone();
+        with_credits.credits.push(crate::models::quota::CreditInfo {
+            credit_type: "AI".into(),
+            credit_amount: Some("25.50".into()),
+            minimum_credit_amount_for_usage: None,
+        });
+        let rows_with_credits = build_antigravity_quota_rows("en", Some(&with_credits), "neon:weekly");
+        assert_eq!(rows_with_credits.len(), 4);
+        assert_eq!(rows_with_credits[3].value, "25.5");
 
         // 2. Legacy models with a pinned model metric still keep local group fallback rows.
         let mut legacy = crate::models::quota::QuotaData::new();
