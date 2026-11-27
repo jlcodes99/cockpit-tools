@@ -138,11 +138,15 @@ fn cli_sync_before_quota_refresh_adopts_rotation_only_from_still_bound_identity(
     }});
     fs::write(&config_path, config.to_string()).unwrap();
     let old = credentials("old", "old-refresh", Some(1000));
-    let account = save_account_and_index(derive_account_from_snapshots(old.clone(), config.clone(), None).unwrap()).unwrap();
+    let account = save_account_and_index(
+        derive_account_from_snapshots(old.clone(), config.clone(), None).unwrap(),
+    )
+    .unwrap();
     let store: crate::models::InstanceStore = serde_json::from_value(json!({"instances":[{
         "id":"cli","name":"CLI","userDataDir":dir,"extraArgs":"","bindAccountId":account.id,
         "launchMode":"cli","createdAt":0
-    }]})).unwrap();
+    }]}))
+    .unwrap();
     crate::modules::claude_instance::save_instance_store(&store).unwrap();
     let rotated = credentials("new", "new-refresh", Some(now_ts_ms() + 3_600_000));
     let mut other_org = config.clone();
@@ -150,7 +154,7 @@ fn cli_sync_before_quota_refresh_adopts_rotation_only_from_still_bound_identity(
     assert!(sync_cli_account_from_config_dir(
         &account.id,
         &dir,
-        CliCredentialSource::BoundInstance,
+        CliCredentialSource::BoundInstance { default_dir: None },
         |_| {
             fs::write(&config_path, other_org.to_string()).unwrap();
             Ok(rotated.clone())
@@ -158,30 +162,48 @@ fn cli_sync_before_quota_refresh_adopts_rotation_only_from_still_bound_identity(
     )
     .unwrap()
     .is_none());
-    assert_eq!(load_account(&account.id).unwrap().claude_credentials_raw, Some(old));
+    assert_eq!(
+        load_account(&account.id).unwrap().claude_credentials_raw,
+        Some(old)
+    );
     fs::write(&config_path, config.to_string()).unwrap();
     let adopted = sync_cli_account_from_config_dir(
         &account.id,
         &dir,
-        CliCredentialSource::BoundInstance,
+        CliCredentialSource::BoundInstance { default_dir: None },
         |_| Ok(rotated.clone()),
     )
     .unwrap()
     .unwrap();
-    let saved = load_account(&account.id).unwrap().claude_credentials_raw.unwrap();
-    assert_eq!(credentials_refresh_token(&saved), credentials_refresh_token(&rotated));
-    assert!(!token_is_expired(adopted.claude_credentials_raw.as_ref().unwrap()));
+    let saved = load_account(&account.id)
+        .unwrap()
+        .claude_credentials_raw
+        .unwrap();
+    assert_eq!(
+        credentials_refresh_token(&saved),
+        credentials_refresh_token(&rotated)
+    );
+    assert!(!token_is_expired(
+        adopted.claude_credentials_raw.as_ref().unwrap()
+    ));
 
     let mut store = crate::modules::claude_instance::load_instance_store().unwrap();
     store.instances.clear();
     crate::modules::claude_instance::save_instance_store(&store).unwrap();
     let rotated_again = credentials("newer", "newer-refresh", Some(now_ts_ms() + 7_200_000));
+    let unchanged = read_cli_oauth_before_refresh_blocking(&account.id, Some(dir.clone()), |_| {
+        panic!("an unbound default CLI directory must not be read before refresh")
+    })
+    .unwrap();
+    assert_eq!(unchanged.claude_credentials_raw, Some(rotated.clone()));
+
+    store.default_settings.launch_mode = crate::models::InstanceLaunchMode::Cli;
+    store.default_settings.bind_account_id = Some(account.id.clone());
+    crate::modules::claude_instance::save_instance_store(&store).unwrap();
     fs::write(&config_path, other_org.to_string()).unwrap();
-    let unchanged = read_cli_oauth_before_refresh_blocking(
-        &account.id,
-        Some(dir.clone()),
-        |_| panic!("a different organization must be rejected before reading credentials"),
-    )
+    let unchanged = read_cli_oauth_before_refresh_blocking(&account.id, Some(dir.clone()), |_| {
+        panic!("a different organization must be rejected before reading credentials")
+    })
     .unwrap();
     assert_eq!(unchanged.claude_credentials_raw, Some(rotated));
     fs::write(&config_path, config.to_string()).unwrap();
@@ -190,6 +212,144 @@ fn cli_sync_before_quota_refresh_adopts_rotation_only_from_still_bound_identity(
     })
     .unwrap();
     assert_eq!(adopted.claude_credentials_raw, Some(rotated_again));
+}
+
+#[test]
+fn cli_sync_keeps_unbound_default_terminal_isolated_across_refresh_and_writeback() {
+    let _lock = crate::modules::test_support::env_lock().lock().unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    let previous = std::env::var_os("COCKPIT_TOOLS_TEST_DATA_DIR");
+    struct RestoreEnv(Option<std::ffi::OsString>);
+    impl Drop for RestoreEnv {
+        fn drop(&mut self) {
+            match &self.0 {
+                Some(previous) => std::env::set_var("COCKPIT_TOOLS_TEST_DATA_DIR", previous),
+                None => std::env::remove_var("COCKPIT_TOOLS_TEST_DATA_DIR"),
+            }
+        }
+    }
+    let _restore = RestoreEnv(previous);
+    std::env::set_var("COCKPIT_TOOLS_TEST_DATA_DIR", temp.path());
+
+    let default_dir = temp.path().join("default-cli");
+    let bound_dir = temp.path().join("bound-cli");
+    fs::create_dir(&default_dir).unwrap();
+    fs::create_dir(&bound_dir).unwrap();
+
+    let config = json!({"oauthAccount":{
+        "accountUuid":"shared-account","emailAddress":"shared@example.com","organizationUuid":"org-a"
+    }});
+    fs::write(
+        default_dir.join(CLAUDE_CODE_CONFIG_FILE),
+        config.to_string(),
+    )
+    .unwrap();
+    fs::write(bound_dir.join(CLAUDE_CODE_CONFIG_FILE), config.to_string()).unwrap();
+
+    let saved = credentials("saved", "saved-refresh", Some(1000));
+    let account = save_account_and_index(
+        derive_account_from_snapshots(saved.clone(), config.clone(), None).unwrap(),
+    )
+    .unwrap();
+
+    // Default terminal is unbound (or in desktop mode) while another CLI instance is bound.
+    let store: crate::models::InstanceStore = serde_json::from_value(json!({
+        "instances": [{
+            "id": "cli-1",
+            "name": "Bound CLI",
+            "userDataDir": bound_dir,
+            "extraArgs": "",
+            "bindAccountId": account.id,
+            "launchMode": "cli",
+            "createdAt": 0
+        }],
+        "defaultSettings": {
+            "bindAccountId": null,
+            "launchMode": "app"
+        }
+    }))
+    .unwrap();
+    crate::modules::claude_instance::save_instance_store(&store).unwrap();
+
+    let bound_rotated = credentials("bound-new", "bound-refresh", Some(2000));
+    let before_refresh =
+        read_cli_oauth_before_refresh_blocking(&account.id, Some(default_dir.clone()), |path| {
+            if path == default_dir {
+                panic!("unbound default CLI credentials must not be adopted before refresh");
+            }
+            assert_eq!(path, bound_dir);
+            Ok(bound_rotated.clone())
+        })
+        .unwrap();
+    assert_eq!(
+        before_refresh.claude_credentials_raw,
+        Some(bound_rotated.clone())
+    );
+
+    // Simulate Cockpit rotating the bound credential chain during quota refresh.
+    let refreshed = credentials("cockpit-refreshed", "cockpit-refresh-2", Some(9000));
+    update_oauth_account_if_current(
+        &account.id,
+        &before_refresh.claude_credentials_raw,
+        |current| {
+            current.claude_credentials_raw = Some(refreshed.clone());
+            Ok(())
+        },
+    )
+    .unwrap();
+
+    let written = std::cell::RefCell::new(Vec::<(PathBuf, Value)>::new());
+    sync_account_oauth_to_bound_cli_instances_blocking(
+        &account.id,
+        Some(default_dir.clone()),
+        |path| {
+            if path == default_dir {
+                panic!("unbound default CLI credentials must not be read during write-back");
+            }
+            assert_eq!(path, bound_dir);
+            Ok(bound_rotated.clone())
+        },
+        |path, merged| {
+            written
+                .borrow_mut()
+                .push((path.to_path_buf(), merged.clone()));
+            Ok(())
+        },
+    )
+    .unwrap();
+    let written = written.into_inner();
+    assert_eq!(written, vec![(bound_dir.clone(), refreshed.clone())]);
+
+    // Explicitly binding the default CLI instance enables symmetric read and write-back.
+    let mut store = crate::modules::claude_instance::load_instance_store().unwrap();
+    store.default_settings.launch_mode = crate::models::InstanceLaunchMode::Cli;
+    store.default_settings.bind_account_id = Some(account.id.clone());
+    crate::modules::claude_instance::save_instance_store(&store).unwrap();
+
+    let default_stale = credentials("default-old", "default-old-refresh", Some(3000));
+    let written_bound_default = std::cell::RefCell::new(Vec::<(PathBuf, Value)>::new());
+    sync_account_oauth_to_bound_cli_instances_blocking(
+        &account.id,
+        Some(default_dir.clone()),
+        |path| {
+            if path == default_dir {
+                Ok(default_stale.clone())
+            } else {
+                Ok(refreshed.clone())
+            }
+        },
+        |path, merged| {
+            written_bound_default
+                .borrow_mut()
+                .push((path.to_path_buf(), merged.clone()));
+            Ok(())
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        written_bound_default.into_inner(),
+        vec![(default_dir, refreshed)]
+    );
 }
 
 #[test]
