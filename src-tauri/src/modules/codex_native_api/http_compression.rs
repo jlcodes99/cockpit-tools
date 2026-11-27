@@ -84,25 +84,34 @@ pub(super) async fn request(
     if !compress || !codex_endpoint(request.url()) {
         return Ok((request, None));
     }
-    let Some(plain) = request
+    if !request
         .body()
         .and_then(reqwest::Body::as_bytes)
-        .filter(|bytes| bytes.len() >= MIN_BYTES)
-    else {
+        .is_some_and(|bytes| bytes.len() >= MIN_BYTES)
+    {
+        return Ok((request, None));
+    }
+    super::blocking::run_prepared(state, move || compress_request(request)).await
+}
+
+fn compress_request(
+    mut request: reqwest::Request,
+) -> Result<(reqwest::Request, Option<reqwest::Request>), ServiceError> {
+    let Some(plain) = request.body_mut().take() else {
         return Ok((request, None));
     };
-    let plain = plain.to_vec();
-    let level = if plain.len() > 4 * 1024 * 1024 { 1 } else { 3 };
-    let compressed = super::blocking::run_prepared(state, move || {
-        zstd::stream::encode_all(plain.as_slice(), level).map_err(compression_error)
-    })
-    .await?;
-    if compressed.len()
-        >= request
-            .body()
-            .and_then(reqwest::Body::as_bytes)
-            .map_or(0, <[u8]>::len)
-    {
+    let Some(bytes) = plain.as_bytes().filter(|bytes| bytes.len() >= MIN_BYTES) else {
+        *request.body_mut() = Some(plain);
+        return Ok((request, None));
+    };
+    let plain_len = bytes.len();
+    let level = if plain_len > 4 * 1024 * 1024 { 1 } else { 3 };
+    // Move the reusable body into the bounded worker instead of allocating a
+    // second full plaintext buffer. Restore that same body for identity fallback;
+    // Request::try_clone shares its Bytes without copying the image history.
+    let compressed = zstd::stream::encode_all(bytes, level).map_err(compression_error)?;
+    *request.body_mut() = Some(plain);
+    if compressed.len() >= plain_len {
         return Ok((request, None));
     }
     let plain = request.try_clone();
@@ -112,6 +121,10 @@ pub(super) async fn request(
         .insert(header::CONTENT_ENCODING, HeaderValue::from_static("zstd"));
     Ok((request, plain))
 }
+
+#[cfg(test)]
+#[path = "large_compression_tests.rs"]
+mod large_compression_tests;
 
 fn compression_error(error: std::io::Error) -> ServiceError {
     ServiceError::new(

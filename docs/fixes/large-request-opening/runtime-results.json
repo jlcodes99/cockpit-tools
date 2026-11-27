@@ -1,0 +1,217 @@
+{
+  "testExecutions": 103.0,
+  "artifactSha256": "1F5D42083BCDA8D3E428EDCB33A9514AFA853C6D5E04A437B7E4EDA4D6A180B4",
+  "suites": [
+    {
+      "passed": 5,
+      "filter": "modules::codex_native_api::request_upload::tests::",
+      "listMatched": true,
+      "names": [
+        "modules::codex_native_api::request_upload::tests::upload_progress_does_not_credit_connect_time_or_unpolled_stalls",
+        "modules::codex_native_api::request_upload::tests::upload_progress_expired_ready_result_and_late_poll_cannot_revive_attempt",
+        "modules::codex_native_api::request_upload::tests::upload_progress_leaves_small_other_routes_and_streams_unmodified",
+        "modules::codex_native_api::request_upload::tests::upload_progress_preserves_exact_bytes_encoding_and_plain_backup",
+        "modules::codex_native_api::request_upload::tests::upload_progress_shared_fallback_credit_and_total_cap_never_renew"
+      ],
+      "ignored": 0
+    },
+    {
+      "passed": 10,
+      "filter": "modules::codex_native_api::tests::request_upload_http_tests::",
+      "listMatched": true,
+      "names": [
+        "modules::codex_native_api::tests::request_upload_http_tests::upload_http_cancel_drops_the_inflight_body_without_retry",
+        "modules::codex_native_api::tests::request_upload_http_tests::upload_http_early_headers_do_not_park_the_remaining_request_body",
+        "modules::codex_native_api::tests::request_upload_http_tests::upload_http_fast_body_does_not_buy_a_slow_response_header_budget",
+        "modules::codex_native_api::tests::request_upload_http_tests::upload_http_headers_end_opening_and_do_not_limit_successful_stream",
+        "modules::codex_native_api::tests::request_upload_http_tests::upload_http_only_validated_encoding_rejection_replays_plain_body",
+        "modules::codex_native_api::tests::request_upload_http_tests::upload_http_real_gateway_uses_progress_before_first_response",
+        "modules::codex_native_api::tests::request_upload_http_tests::upload_http_real_slow_receiver_red_green_http1_and_http2",
+        "modules::codex_native_api::tests::request_upload_http_tests::upload_http_reqwest_timeout_and_redirect_policy_are_preserved",
+        "modules::codex_native_api::tests::request_upload_http_tests::upload_http_stalled_receiver_and_hard_cap_still_stop",
+        "modules::codex_native_api::tests::request_upload_http_tests::upload_http_total_and_existing_network_recovery_override_progress"
+      ],
+      "ignored": 0
+    },
+    {
+      "passed": 4,
+      "filter": "modules::codex_native_api::tests::request_upload_nack_tests::",
+      "listMatched": true,
+      "names": [
+        "modules::codex_native_api::tests::request_upload_nack_tests::upload_nack_explicit_request_timeout_still_bounds_headers",
+        "modules::codex_native_api::tests::request_upload_nack_tests::upload_nack_refused_stream_and_goaway_preserve_reqwest_baseline",
+        "modules::codex_native_api::tests::request_upload_nack_tests::upload_nack_small_body_does_not_stack_an_extra_retry_budget",
+        "modules::codex_native_api::tests::request_upload_nack_tests::upload_nack_three_refusals_stop_and_other_failures_never_replay"
+      ],
+      "ignored": 0
+    },
+    {
+      "passed": 7,
+      "filter": "modules::codex_native_api::http_compression::large_compression_tests::",
+      "listMatched": true,
+      "names": [
+        "modules::codex_native_api::http_compression::large_compression_tests::cancelled_compression_waiter_drops_its_body_after_worker_completion",
+        "modules::codex_native_api::http_compression::large_compression_tests::duplicate_inline_images_keep_the_existing_compression_exclusion",
+        "modules::codex_native_api::http_compression::large_compression_tests::five_mebibyte_image_history_roundtrips_with_original_plain_fallback",
+        "modules::codex_native_api::http_compression::large_compression_tests::one_hundred_ten_mebibyte_image_history_roundtrips_with_original_plain_fallback",
+        "modules::codex_native_api::http_compression::large_compression_tests::small_missing_and_streaming_bodies_keep_their_original_content",
+        "modules::codex_native_api::http_compression::large_compression_tests::thirty_mebibyte_image_history_roundtrips_with_original_plain_fallback",
+        "modules::codex_native_api::http_compression::large_compression_tests::uncompressible_body_is_preserved_without_an_encoding_or_fallback"
+      ],
+      "ignored": 6
+    },
+    {
+      "passed": 7,
+      "filter": "modules::codex_native_api::network_recovery::tests::",
+      "listMatched": true,
+      "names": [
+        "modules::codex_native_api::network_recovery::tests::network_recovery_failure_cap_wakes_existing_waiter",
+        "modules::codex_native_api::network_recovery::tests::network_recovery_headers_clear_expired_state_before_next_episode",
+        "modules::codex_native_api::network_recovery::tests::network_recovery_headers_win_when_old_timer_and_reset_are_both_ready",
+        "modules::codex_native_api::network_recovery::tests::network_recovery_images_keep_their_longer_opening_budget",
+        "modules::codex_native_api::network_recovery::tests::network_recovery_is_unarmed_for_healthy_and_quota_requests",
+        "modules::codex_native_api::network_recovery::tests::network_recovery_shared_deadline_does_not_renew",
+        "modules::codex_native_api::network_recovery::tests::network_recovery_stale_timer_rechecks_live_state_without_select_luck"
+      ],
+      "ignored": 0
+    },
+    {
+      "passed": 3,
+      "filter": "modules::codex_native_api::tests::compression_upstream_tests::",
+      "listMatched": true,
+      "names": [
+        "modules::codex_native_api::tests::compression_upstream_tests::duplicate_inline_images_use_identity_and_keep_the_original_input",
+        "modules::codex_native_api::tests::compression_upstream_tests::full_compat_compound_upstream_compression_decodes_stream_and_error",
+        "modules::codex_native_api::tests::compression_upstream_tests::full_compat_official_zstd_request_rejection_retries_exact_plaintext_once"
+      ],
+      "ignored": 0
+    },
+    {
+      "passed": 2,
+      "filter": "modules::codex_native_api::http_compression::duplicate_image_tests::",
+      "listMatched": true,
+      "names": [
+        "modules::codex_native_api::http_compression::duplicate_image_tests::different_or_non_inline_images_and_plain_text_do_not_disable_compression",
+        "modules::codex_native_api::http_compression::duplicate_image_tests::repeated_inline_images_are_detected_across_tool_and_user_content"
+      ],
+      "ignored": 0
+    },
+    {
+      "passed": 9,
+      "filter": "modules::codex_native_api::http_compression::",
+      "listMatched": true,
+      "names": [
+        "modules::codex_native_api::http_compression::duplicate_image_tests::different_or_non_inline_images_and_plain_text_do_not_disable_compression",
+        "modules::codex_native_api::http_compression::duplicate_image_tests::repeated_inline_images_are_detected_across_tool_and_user_content",
+        "modules::codex_native_api::http_compression::large_compression_tests::cancelled_compression_waiter_drops_its_body_after_worker_completion",
+        "modules::codex_native_api::http_compression::large_compression_tests::duplicate_inline_images_keep_the_existing_compression_exclusion",
+        "modules::codex_native_api::http_compression::large_compression_tests::five_mebibyte_image_history_roundtrips_with_original_plain_fallback",
+        "modules::codex_native_api::http_compression::large_compression_tests::one_hundred_ten_mebibyte_image_history_roundtrips_with_original_plain_fallback",
+        "modules::codex_native_api::http_compression::large_compression_tests::small_missing_and_streaming_bodies_keep_their_original_content",
+        "modules::codex_native_api::http_compression::large_compression_tests::thirty_mebibyte_image_history_roundtrips_with_original_plain_fallback",
+        "modules::codex_native_api::http_compression::large_compression_tests::uncompressible_body_is_preserved_without_an_encoding_or_fallback"
+      ],
+      "ignored": 6
+    },
+    {
+      "passed": 42,
+      "filter": "modules::codex_native_api::bootstrap::tests::",
+      "listMatched": true,
+      "names": [
+        "modules::codex_native_api::bootstrap::tests::comments_or_partial_json_do_not_spend_the_response_id_hold_budget",
+        "modules::codex_native_api::bootstrap::tests::empty_incomplete_requires_explicit_zero_and_is_not_an_interrupt",
+        "modules::codex_native_api::bootstrap::tests::input_faults_win_over_capacity_and_quota_hints",
+        "modules::codex_native_api::bootstrap::tests::network_recovery_http_tests::network_recovery_auth_and_quota_do_not_arm_transport_budget",
+        "modules::codex_native_api::bootstrap::tests::network_recovery_http_tests::network_recovery_can_succeed_before_exhaustion",
+        "modules::codex_native_api::bootstrap::tests::network_recovery_http_tests::network_recovery_cancel_releases_global_and_account_slots",
+        "modules::codex_native_api::bootstrap::tests::network_recovery_http_tests::network_recovery_deadline_also_bounds_stalled_replacement_routing",
+        "modules::codex_native_api::bootstrap::tests::network_recovery_http_tests::network_recovery_deadline_interrupts_retry_waiting_for_headers",
+        "modules::codex_native_api::bootstrap::tests::network_recovery_http_tests::network_recovery_does_not_truncate_successful_long_stream",
+        "modules::codex_native_api::bootstrap::tests::network_recovery_http_tests::network_recovery_new_request_gets_a_fresh_budget",
+        "modules::codex_native_api::bootstrap::tests::network_recovery_http_tests::network_recovery_quota_response_clears_timer_before_slow_healthy_route",
+        "modules::codex_native_api::bootstrap::tests::network_recovery_http_tests::network_recovery_stops_45_candidates_at_shared_failure_cap",
+        "modules::codex_native_api::bootstrap::tests::network_recovery_http_tests::network_recovery_valid_auth_response_ends_previous_network_episode",
+        "modules::codex_native_api::bootstrap::tests::network_recovery_http_tests::network_recovery_window_is_not_a_healthy_first_attempt_deadline",
+        "modules::codex_native_api::bootstrap::tests::no_replay_after_output_or_handshake_limit",
+        "modules::codex_native_api::bootstrap::tests::nonofficial_pre_business_http_tests::nonofficial_http_late_quota_excludes_all_exhausted_accounts_beyond_credential_budget",
+        "modules::codex_native_api::bootstrap::tests::nonofficial_pre_business_http_tests::nonofficial_http_quota_recovery_for_oauth_and_api_key_long_history",
+        "modules::codex_native_api::bootstrap::tests::overload_http_tests::capacity_aliases_are_explicit_and_input_faults_take_precedence",
+        "modules::codex_native_api::bootstrap::tests::overload_http_tests::capacity_does_not_replay_execution_input_faults_long_retry_after_or_revoked_access",
+        "modules::codex_native_api::bootstrap::tests::overload_http_tests::capacity_exhaustion_keeps_error_and_never_restarts_budget_after_metadata",
+        "modules::codex_native_api::bootstrap::tests::overload_http_tests::capacity_recovery_window_bounds_a_stalled_retry_with_no_total_request_limit",
+        "modules::codex_native_api::bootstrap::tests::overload_http_tests::continuous_capacity_cancels_backoff_when_client_disconnects",
+        "modules::codex_native_api::bootstrap::tests::overload_http_tests::continuous_capacity_hides_rejections_and_counts_every_upstream_attempt",
+        "modules::codex_native_api::bootstrap::tests::overload_http_tests::continuous_capacity_recovers_after_responsesapi_and_subscription_usage_metadata",
+        "modules::codex_native_api::bootstrap::tests::overload_http_tests::continuous_capacity_recovers_chatgpt_plan_http_and_sse_overloads",
+        "modules::codex_native_api::bootstrap::tests::overload_http_tests::continuous_capacity_recovers_large_echoed_handshake_and_compact_requests",
+        "modules::codex_native_api::bootstrap::tests::overload_http_tests::continuous_capacity_reselects_the_same_owner_after_temporary_contention",
+        "modules::codex_native_api::bootstrap::tests::overload_http_tests::disconnect_during_capacity_backoff_stops_upstream_retries",
+        "modules::codex_native_api::bootstrap::tests::overload_http_tests::safety_tests::available_alternate_wins_before_capacity_fallback_for_http_and_sse",
+        "modules::codex_native_api::bootstrap::tests::overload_http_tests::safety_tests::configured_status_budget_is_retained_before_normal_failover",
+        "modules::codex_native_api::bootstrap::tests::overload_http_tests::safety_tests::execution_evidence_blocks_status_retries_and_account_failover",
+        "modules::codex_native_api::bootstrap::tests::overload_http_tests::safety_tests::http_503_with_executed_tool_never_replays",
+        "modules::codex_native_api::bootstrap::tests::overload_http_tests::safety_tests::response_configuration_and_tool_declarations_do_not_block_failover",
+        "modules::codex_native_api::bootstrap::tests::overload_http_tests::safety_tests::same_account_fallback_does_not_pin_a_later_available_alternate",
+        "modules::codex_native_api::bootstrap::tests::overload_http_tests::safety_tests::sse_execution_and_unknown_tool_state_disable_every_replay",
+        "modules::codex_native_api::bootstrap::tests::overload_http_tests::safety_tests::tool_started_on_capacity_retry_cannot_trigger_a_third_send",
+        "modules::codex_native_api::bootstrap::tests::overload_http_tests::shutdown_interrupts_capacity_backoff_without_another_send",
+        "modules::codex_native_api::bootstrap::tests::overload_http_tests::single_account_capacity_recovers_before_and_after_metadata_visibility",
+        "modules::codex_native_api::bootstrap::tests::published_created_retains_pre_business_recovery_after_visibility_budget",
+        "modules::codex_native_api::bootstrap::tests::same_account_status_budget_recovers_without_rotating_ids",
+        "modules::codex_native_api::bootstrap::tests::unlimited_credential_count_stops_when_pool_is_exhausted",
+        "modules::codex_native_api::bootstrap::tests::zero_tries_all_distinct_accounts_positive_limits_include_first_for_stream_and_json"
+      ],
+      "ignored": 0
+    },
+    {
+      "passed": 10,
+      "filter": "modules::codex_native_api::http::preparation_timeout_tests::",
+      "listMatched": true,
+      "names": [
+        "modules::codex_native_api::http::preparation_timeout_tests::account_and_body_preparation_can_outlast_body_read_cap_within_execution_budget",
+        "modules::codex_native_api::http::preparation_timeout_tests::credential_refresh_gets_a_new_open_budget_without_resetting_total",
+        "modules::codex_native_api::http::preparation_timeout_tests::images_initial_selection_uses_the_image_execution_budget",
+        "modules::codex_native_api::http::preparation_timeout_tests::immediate_sse_headers_precede_selection_and_disabled_mode_keeps_real_status",
+        "modules::codex_native_api::http::preparation_timeout_tests::immediate_sse_preserves_actual_upstream_json_plaintext_and_retry_after_errors",
+        "modules::codex_native_api::http::preparation_timeout_tests::opening_timeout_retry_uses_the_next_attempts_preparation_budget",
+        "modules::codex_native_api::http::preparation_timeout_tests::selection_and_policy_preparation_share_one_total_deadline",
+        "modules::codex_native_api::http::preparation_timeout_tests::total_and_open_deadlines_cancel_initial_selection_before_any_upstream_attempt",
+        "modules::codex_native_api::http::preparation_timeout_tests::websocket_automatic_history_preparation_timeout_keeps_cipher_and_never_commits_or_retries",
+        "modules::codex_native_api::http::preparation_timeout_tests::websocket_first_and_followup_selection_each_use_execution_instead_of_read_budget"
+      ],
+      "ignored": 0
+    },
+    {
+      "passed": 1,
+      "filter": "modules::codex_native_api::blocking::tests::",
+      "listMatched": true,
+      "names": [
+        "modules::codex_native_api::blocking::tests::cancelling_waiter_keeps_worker_capacity_reserved_until_real_completion"
+      ],
+      "ignored": 0
+    },
+    {
+      "passed": 1,
+      "filter": "modules::codex_native_api::execution::layout_tests::",
+      "listMatched": true,
+      "names": [
+        "modules::codex_native_api::execution::layout_tests::protocol_entry_futures_fit_the_default_runtime_stack"
+      ],
+      "ignored": 0
+    },
+    {
+      "passed": 2,
+      "filter": "modules::codex_native_api::tests::reasoning_policy_transport_tests::",
+      "listMatched": true,
+      "names": [
+        "modules::codex_native_api::tests::reasoning_policy_transport_tests::reasoning_policy_rejects_http_and_sse_before_upstream_dispatch",
+        "modules::codex_native_api::tests::reasoning_policy_transport_tests::reasoning_policy_rejects_websocket_turns_without_losing_the_previous_response"
+      ],
+      "ignored": 0
+    }
+  ],
+  "uniquePassed": 94,
+  "baseCommit": "f74f80f1d052694b16cbdcf04e7515e36a4f7fdd",
+  "platform": "Windows x64",
+  "ignoredBenchmarksSeparate": 6
+}

@@ -32,6 +32,10 @@ mod http_parity_tests;
 mod audit_protocol_tests;
 #[path = "request_size_tests.rs"]
 mod request_size_tests;
+#[path = "request_upload_http_tests.rs"]
+mod request_upload_http_tests;
+#[path = "request_upload_nack_tests.rs"]
+mod request_upload_nack_tests;
 #[path = "legacy_relay_item_ids_tests.rs"]
 mod legacy_relay_item_ids_tests;
 #[path = "thinking_suffix_tests.rs"]

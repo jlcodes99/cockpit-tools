@@ -79,6 +79,7 @@ mod request_body;
 mod request_compat;
 mod encrypted_reasoning;
 mod request_metrics;
+mod request_upload;
 mod response_wire;
 mod replay_wire;
 mod responses_custom_results;

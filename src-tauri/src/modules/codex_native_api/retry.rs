@@ -506,17 +506,21 @@ async fn send_inner(
             });
         }
         let mut inspecting_rejection = false;
+        let opening = super::request_upload::Opening::new(open_deadline, deadline, policy.open_timeout);
+        let native_upload = codex_backend && !prepared.route.chatgpt_plan;
+        let progress_opening = super::request_upload::Opening::eligible(&request, native_upload)
+            || plain_request.as_ref().is_some_and(|plain| super::request_upload::Opening::eligible(plain, native_upload));
         let result = tokio::select! {
             biased;
             _ = stop.wait() => Err(stopping_error()),
-            result = deadline::timeout_at(open_deadline, async {
+            result = opening.run_if(progress_opening, async {
                 tracker.begin_attempt("http");
                 if let Some(bytes) = request.body().and_then(reqwest::Body::as_bytes) { tracker.upstream_request_bytes(bytes.len()); }
                 tracker.capability_fallback(prepared.capability_fallback.clone());
                 tracker.payload_with("upstream_request", "http", request.headers(), || body.to_string());
                 tracker.upstream_headers(request.headers());
                 tracker.quota_request_started();
-                let response = client.execute(request).await?;
+                let response = opening.execute(&client, request, native_upload).await?;
                 tracker.network_recovery.recovered();
                 // Keep decoder/read failures separate from connection failures:
                 // an error body is not permission to replay a dispatched turn.
@@ -534,7 +538,7 @@ async fn send_inner(
                         tracker.begin_attempt("http");
                         if let Some(bytes) = plain.body().and_then(reqwest::Body::as_bytes) { tracker.upstream_request_bytes(bytes.len()); }
                         tracker.upstream_headers(plain.headers());
-                        return client.execute(plain).await.map(Ok);
+                        return opening.execute(&client, plain, native_upload).await.map(Ok);
                     }
                 }
                 Ok(Ok(response))

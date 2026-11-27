@@ -1,0 +1,48 @@
+{
+  "version": "1.5.2+preview.20261127.1",
+  "build": {
+    "beforeBuildCommand": null,
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Cockpit Tools 社区抢先版",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 900,
+        "minHeight": 600,
+        "center": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "transparent": false,
+        "resizable": true
+      },
+      {
+        "label": "floating-card",
+        "title": "Cockpit Tools 社区抢先版",
+        "create": false,
+        "width": 250,
+        "height": 290,
+        "minWidth": 250,
+        "minHeight": 290,
+        "decorations": false,
+        "transparent": true,
+        "shadow": false,
+        "resizable": false,
+        "skipTaskbar": true,
+        "alwaysOnTop": false,
+        "visible": false
+      }
+    ]
+  },
+  "bundle": {
+    "createUpdaterArtifacts": false,
+    "shortDescription": "基于 Cockpit Tools 1.5.2 的社区修复抢先版（非作者官方发布）",
+    "targets": [
+      "nsis"
+    ],
+    "useLocalToolsDir": true
+  }
+}
