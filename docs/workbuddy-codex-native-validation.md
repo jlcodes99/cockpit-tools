@@ -94,6 +94,22 @@ The initial integration results above describe the earlier #3301-based build. Th
 - Independent read-only review found no additional P1/P2 issue in this change. This is not a security proof or a substitute for test execution.
 - No additional real WorkBuddy inference was performed. SHA-256, profile ownership comparisons and monotonic revocation checks were deliberately retained; alert #579 was not dismissed or declared resolved. See the [security review](workbuddy-codex-native-security.md) for the hash purposes, unavailable alert trace and remaining boundaries.
 
+## CI repair after latest upstream integration (2026-11-27)
+
+The latest release page still identified v1.5.2. The feature branch already contained that release; subsequent upstream main `f74f80f1` was merged non-rewritingly as `358e4c3ce`, with 42 upstream files integrated without conflicts.
+
+The real full `cockpit-core` CI package selection was reproduced on the merged baseline: compilation failed with eight errors in the shared OAuth tests, exposing missing scope response/model behavior in Core. The correction synchronizes the existing desktop scope semantics, keeps the shared tests, maps scope in all four refresh-import paths, and persists scope-only updates. Two additional source-parity tests constrain future drift without replacing behavioral coverage.
+
+Independent review caught scope-only persistence using re-import semantics or stale whole-account snapshots. The final metadata-only paths reload current account state, retain disabled/error/notes fields, avoid overwriting a newer credential generation, and pass the selected token through the actual wakeup return path. Regressions call production helpers and verify real temporary-file saves/reloads; old access-token refresh and persistence-error policies remain intentionally unchanged.
+
+- Final post-review full Core CI selection: **251 unit tests passed, 0 failed, 1 ignored**, plus **2 source-parity integration tests passed**. The final suite includes all metadata-only state preservation, credential-generation and actual wakeup-token-return corrections.
+- Final desktop regression selections: **WorkBuddy 179 passed / 2 ignored**, **OAuth 12 passed**, **context rebuild 87 passed**, **quota sync 21 passed**, and **T3 privacy 5 passed**; no selected test failed. The same installed-process path probe is explicitly excluded from the WorkBuddy selection; ignored live checks were not invoked. These are filtered selections, not a claim that all 5,780 desktop tests ran.
+- Core, WorkBuddy, OAuth and context rebuild ran through Cargo. After another worktree acquired the shared build lock, the queued wrapper was stopped and quota/T3 selections ran from a private copy-on-write snapshot of that same freshly built desktop test binary. No source, feature or test implementation was substituted, and no other worktree process was interrupted.
+- Merged frontend regression selection: **99 passed, 0 failed**. All 18 locales validate with **9,243 keys each**; full TypeScript typecheck passes.
+- Merged production frontend build: passed, **2,767 modules**. Existing mixed-import/bundle-size warnings remain.
+- The older broader Native API failure disclosures above remain historical disclosures, not silently converted into a full-suite pass.
+- No additional real WorkBuddy inference was used. Both CodeQL language analyses and all ownership/revocation checks remain enabled. A missing historical Go baseline and the unavailable complete hashing-alert trace require maintainer evidence; compiling Core does not resolve either security gate.
+
 ## Claims deliberately not made
 
 - No Windows installed-build, Codex desktop injection, different WorkBuddy CLI version, arbitrary model, malicious CLI containment or process-restart recovery claim.
