@@ -86,6 +86,22 @@ the desktop host uses.
   target is available.
 - Multiple instances of the CN desktop client are not supported.
 
+## Code scanning
+
+CodeQL reports one `rust/cleartext-transmission` alert against this platform, on the campaign
+request in `qoder_sash_request`. It is a false positive and has to be dismissed in the Security tab:
+Rust has no `AlertSuppression.ql` (github/codeql#21637), so neither `// codeql[...]` nor
+`// lgtm[...]` suppresses anything, and the `rs/...` comments already in this repository are inert
+for the same reason.
+
+The query follows `QoderAccount` → `session_endpoint` → `format!("{}{}", endpoint, path)` →
+`reqwest::Client::request(url)` and treats the account as the tainted source. Nothing sensitive
+actually travels in that URL: `endpoint` is one of two https constants, or an origin that
+`dedicated_openapi_endpoint` / the legacy-CN branch already validated as https (userinfo rejected,
+official host required); the access token is sent in the `Authorization` header; and the appended
+path is a constant. The identical construct already exists in `poll_device_token_once` and
+`fetch_openapi_json` on `main`, where it is not reported only because those lines are unchanged.
+
 ## Attribution
 
 Native profile and device-login conventions are adapted from
