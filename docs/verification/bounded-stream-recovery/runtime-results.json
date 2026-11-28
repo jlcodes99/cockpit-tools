@@ -742,7 +742,7 @@
   },
   "limitations": [
     "Not the full repository suite.",
-    "One existing upload test fails in the full module; see baseline comparison.",
+    "One existing upload test failed in the initial full-module run; see all subsequent fixed-artifact baseline comparisons.",
     "Synthetic loopback upstream; no claim of production account or video-task recovery."
   ]
 }
