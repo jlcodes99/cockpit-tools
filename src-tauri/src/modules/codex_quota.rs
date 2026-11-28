@@ -1212,8 +1212,45 @@ pub fn supports_quota_refresh(account: &CodexAccount) -> bool {
     !account.is_api_key_auth() || (is_new_api_account(account) && !relay_balance_disabled())
 }
 
-// Manual refresh remains a successful no-op for this provider. Explicit
-// presence flags mean callers cannot interpret zeroes as exhausted windows.
+fn supports_quota_refresh_for_priority(
+    account: &CodexAccount,
+    priority: crate::modules::codex_quota_refresh_scheduler::RefreshPriority,
+) -> bool {
+    supports_quota_refresh(account)
+        || (priority == crate::modules::codex_quota_refresh_scheduler::RefreshPriority::Manual
+            && codex_account::is_workbuddy_upstream_provider(account))
+}
+
+/// Refresh the linked source without persisting credits as Codex quota windows.
+async fn refresh_workbuddy_credits_with<F, Fut>(
+    account: &CodexAccount,
+    refresh: F,
+) -> Result<CodexQuota, String>
+where
+    F: FnOnce(String) -> Fut,
+    Fut: std::future::Future<Output = Result<(), String>>,
+{
+    codex_account::clear_workbuddy_codex_quota(account)?;
+    let source_id = account
+        .api_credential_ref
+        .as_deref()
+        .unwrap_or_default()
+        .trim();
+    let result = refresh(source_id.to_string()).await;
+    // The WorkBuddy refresh can commit cached-data error state before returning.
+    // Notify both pages on success and failure without inventing a Codex quota.
+    if let Some(app) = crate::get_app_handle() {
+        use tauri::Emitter;
+        let _ = app.emit(
+            "accounts:changed",
+            json!({"platformId": "workbuddy", "accountId": source_id, "reason": "refresh"}),
+        );
+    }
+    result?;
+    Ok(workbuddy_quota_unavailable())
+}
+
+// Explicit presence flags mean callers cannot interpret zeroes as exhausted windows.
 fn workbuddy_quota_unavailable() -> CodexQuota {
     CodexQuota {
         hourly_percentage: 0,
@@ -1902,8 +1939,15 @@ async fn refresh_account_quota_once(
         }
     };
     if codex_account::is_workbuddy_upstream_provider(&account) {
-        codex_account::clear_workbuddy_codex_quota(&account)?;
-        return Ok(workbuddy_quota_unavailable());
+        return refresh_workbuddy_credits_with(&account, |source_id| async move {
+            let source =
+                crate::modules::workbuddy_account::refresh_account_token(&source_id).await?;
+            if let Some(error) = source.quota_query_last_error {
+                return Err(error);
+            }
+            Ok(())
+        })
+        .await;
     }
     if account.is_api_key_auth() {
         if is_new_api_account(&account) {
@@ -2412,7 +2456,7 @@ async fn refresh_all_quotas_with_options(
     };
     let account_ids: Vec<String> = codex_account::list_accounts()
         .into_iter()
-        .filter(supports_quota_refresh)
+        .filter(|account| supports_quota_refresh_for_priority(account, priority))
         .filter(|account| !disabled.contains(&account.id))
         .filter(|account| !running_oauth_account_ids.contains(&account.id))
         .map(|account| account.id)
@@ -3373,6 +3417,20 @@ mod workbuddy_quota_tests {
     }
 
     #[test]
+    fn workbuddy_manual_bulk_refresh_does_not_add_a_second_background_schedule() {
+        use crate::modules::codex_quota_refresh_scheduler::RefreshPriority;
+        let account = linked_account();
+        assert!(supports_quota_refresh_for_priority(
+            &account,
+            RefreshPriority::Manual
+        ));
+        assert!(!supports_quota_refresh_for_priority(
+            &account,
+            RefreshPriority::Background
+        ));
+    }
+
+    #[test]
     fn workbuddy_exclusion_preserves_ordinary_relay_and_oauth_classification() {
         let mut relay = linked_account();
         relay.api_credential_kind = None;
@@ -3408,10 +3466,10 @@ mod workbuddy_quota_tests {
         let mut account = linked_account();
         stale_quota(&mut account);
         codex_account::save_account(&account).unwrap();
-        let quota = refresh_account_quota_once(
-            &account.id,
-            &codex_account::CodexQuotaRuntimeSnapshot::empty(),
-        )
+        let quota = refresh_workbuddy_credits_with(&account, |source_id| async move {
+            assert_eq!(source_id, "fixture-source");
+            Ok(())
+        })
         .await
         .unwrap();
         assert_no_windows(&quota);
@@ -3423,6 +3481,48 @@ mod workbuddy_quota_tests {
         assert!(current.openai_api_key.is_none());
         assert_eq!(current.api_credential_ref, account.api_credential_ref);
         assert_eq!(current.plan_type.as_deref(), Some("Cockpit Api"));
+    }
+
+    #[tokio::test]
+    async fn workbuddy_credit_refresh_failure_is_not_reported_as_success_or_zero_quota() {
+        let _lock = crate::modules::test_support::env_lock()
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let _storage = Storage::new();
+        let mut account = linked_account();
+        stale_quota(&mut account);
+        codex_account::save_account(&account).unwrap();
+        let result = refresh_workbuddy_credits_with(&account, |source_id| async move {
+            assert_eq!(source_id, "fixture-source");
+            Err("fixture credits query failed".to_string())
+        })
+        .await;
+        assert_eq!(result.unwrap_err(), "fixture credits query failed");
+        let current = codex_account::load_account(&account.id).unwrap();
+        assert!(current.quota.is_none());
+        assert!(current.openai_api_key.is_none());
+        assert_eq!(current.api_credential_ref, account.api_credential_ref);
+    }
+
+    #[tokio::test]
+    async fn workbuddy_missing_source_refresh_fails_without_openai_credentials_or_network() {
+        let _lock = crate::modules::test_support::env_lock()
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let _storage = Storage::new();
+        let account = linked_account();
+        codex_account::save_account(&account).unwrap();
+        let error = refresh_account_quota_once(
+            &account.id,
+            &codex_account::CodexQuotaRuntimeSnapshot::empty(),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(error, "账号不存在");
+        assert!(codex_account::load_account(&account.id)
+            .unwrap()
+            .quota
+            .is_none());
     }
 
     #[tokio::test]
