@@ -1,3 +1,6 @@
+import { CodexWorkbuddyCredits } from '../components/codex/CodexWorkbuddyCredits';
+import { codexWorkbuddySourceId, resolveCodexWorkbuddySource } from '../utils/codexWorkbuddyCredits';
+import { useCodexWorkbuddyCredits } from '../hooks/useCodexWorkbuddyCredits';
 import { CodexDeviceRestrictionBadge } from "../components/codex/CodexDeviceRestrictions";
 import { resolveNewApiQuotaSnapshot } from "../services/modelProviderUsageService";
 import { ModelProviderUsagePanel } from "../components/model-provider/ModelProviderUsagePanel";
@@ -331,6 +334,15 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
     toggleAccountApiKeyVisible,
     visibleApiKeyAccountIds,
   } = context;
+  const { sources: workbuddySources, loaded: workbuddySourcesLoaded, readFailed: workbuddyReadFailed } = useCodexWorkbuddyCredits(accounts);
+  const renderWorkbuddyCredits = (account: (typeof accounts)[number], compact = false) => (
+    <CodexWorkbuddyCredits
+      source={resolveCodexWorkbuddySource(account, workbuddySources)}
+      loading={!workbuddySourcesLoaded}
+      readFailed={workbuddyReadFailed}
+      compact={compact}
+    />
+  );
   const [accountRefreshStates, setAccountRefreshStates] = useState(
     () => new Map<string, "pending" | CodexAccountRefreshMessage>(),
   );
@@ -359,7 +371,7 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
     timers.delete(accountId);
     setAccountRefreshStates((previous) => new Map(previous).set(accountId, "pending"));
     const message = await getCodexAccountRefreshFeedback(async () => {
-      if (canRefreshApiKeyUsage(account, provider)) return refreshApiKeyUsage(account, provider);
+      if (!codexWorkbuddySourceId(account) && canRefreshApiKeyUsage(account, provider)) return refreshApiKeyUsage(account, provider);
       await context.store.refreshQuota(accountId);
       return { ok: true };
     }, t);
@@ -504,7 +516,7 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
             <AccountLastUsed accountId={account.id} lastSwitchedAt={account.last_switched_at} createdAt={account.created_at} formatDate={formatDate} />
             {renderWakeupResult(account.id)}
             <div className="codex-compact-quotas">
-              {isApiKeyAccount ? (
+              {codexWorkbuddySourceId(account) ? renderWorkbuddyCredits(account, true) : isApiKeyAccount ? (
                 (!hideRelayQuota || apiKeyUsageMap[account.id]?.summary?.cockpit || shouldShowCodexApiKeyUsagePanel(account, hideRelayQuota)) &&
                 (isOpenAIOfficialUsageAccount(account) || isMoonshotBalanceUrl(account.api_base_url)
                   ? renderApiKeyUsagePanel(account, resolveUsageProviderForApiKeyAccount(account), 'table')
@@ -703,6 +715,7 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
             apiKeyUsageProvider?.integrationType === "new_api" ||
             apiKeyUsageProvider?.integrationType === "sub2api");
         const shouldRenderQuotaSection =
+          Boolean(codexWorkbuddySourceId(account)) ||
           showApiKeyUsagePanel ||
           !isApiKeyAccount ||
           (isNewApiAccount && !hideRelayQuota);
@@ -930,7 +943,7 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
             )}
             {shouldRenderQuotaSection && (
               <div className="codex-quota-section">
-                {showApiKeyUsagePanel ? (
+                {codexWorkbuddySourceId(account) ? renderWorkbuddyCredits(account) : showApiKeyUsagePanel ? (
                   renderApiKeyUsagePanel(account, apiKeyUsageProvider)
                 ) : (
                   <>
@@ -1098,6 +1111,7 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
                   </button>
                   {!isPendingOAuthAccount &&
                     (!isApiKeyAccount ||
+                      Boolean(codexWorkbuddySourceId(account)) ||
                       (isNewApiAccount && !hideRelayQuota) ||
                       canRefreshApiKeyUsage(account, apiKeyUsageProvider)) && (
                       <button
@@ -2182,7 +2196,7 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
               )}
             </td>
             <td>
-              {showApiKeyUsagePanel ? (
+              {codexWorkbuddySourceId(account) ? renderWorkbuddyCredits(account) : showApiKeyUsagePanel ? (
                 renderApiKeyUsagePanel(account, apiKeyUsageProvider, "table")
               ) : isChatCompletionsApiKey || (isApiKeyAccount && hideRelayQuota) ? (
                 <span className="codex-subscription-table-empty">-</span>
@@ -2308,6 +2322,7 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
                 </button>
                 {!isPendingOAuthAccount &&
                   (!isApiKeyAccount ||
+                    Boolean(codexWorkbuddySourceId(account)) ||
                     (isNewApiAccount && !hideRelayQuota) ||
                     canRefreshApiKeyUsage(account, apiKeyUsageProvider)) && (
                     <button

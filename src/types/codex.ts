@@ -137,6 +137,9 @@ export interface CodexAccount {
   api_image_generation_account_ids?: string[] | null;
   api_image_generation_account_models?: Record<string, string> | null;
   bound_oauth_account_id?: string | null;
+  /** Linked provider account reference only; never contains the source credentials. */
+  api_credential_kind?: string | null;
+  api_credential_ref?: string | null;
   /** Grok 供应商账号绑定的 Grok 平台账号 ID：上游凭据来自该 Grok 账号（OAuth）。 */
   upstream_grok_account_id?: string | null;
   user_id?: string;
