@@ -69,19 +69,30 @@ fn pending_start_contexts() -> &'static Mutex<VecDeque<PreparedStartContext>> {
 }
 
 fn pop_prepared_start_context() -> Result<Option<PreparedStartContext>, String> {
+    pop_prepared_start_context_for(None)
+}
+
+/// 按 accountId 精确弹出对应的准备上下文；account_id 为 None 时退回 FIFO。
+/// 批量验证/唤醒并发时，某次 StartCascade 失败可能遗留脏上下文，
+/// FIFO 弹出会让后续账号拿到别人（可能已被判 TOS 违规）的上下文，导致串号。
+fn pop_prepared_start_context_for(
+    account_id: Option<&str>,
+) -> Result<Option<PreparedStartContext>, String> {
     let mut guard = pending_start_contexts()
         .lock()
         .map_err(|_| "准备上下文锁失败".to_string())?;
-    while let Some(front) = guard.front() {
-        if Utc::now()
-            .signed_duration_since(front.prepared_at)
+    guard.retain(|ctx| {
+        Utc::now()
+            .signed_duration_since(ctx.prepared_at)
             .num_seconds()
-            > 60
-        {
-            let _ = guard.pop_front();
-            continue;
+            <= 60
+    });
+    if let Some(id) = account_id {
+        let pos = guard.iter().position(|ctx| ctx.account_id == id);
+        if let Some(pos) = pos {
+            return Ok(guard.remove(pos));
         }
-        break;
+        return Ok(None);
     }
     Ok(guard.pop_front())
 }
@@ -1889,15 +1900,39 @@ async fn handle_health_check() -> Result<Value, (u16, String)> {
 }
 
 async fn handle_start_cascade(body: &[u8]) -> Result<Value, (u16, String)> {
-    let payload = parse_json_object_body(body, "StartCascade")?;
-    let prepared = pop_prepared_start_context()
+    let mut payload = parse_json_object_body(body, "StartCascade")?;
+    // StartCascade 请求可能携带 accountId（内部唤醒流程附加），
+    // 用于精确匹配 prepareStartContext；转发给官方 LS 前需剥离该内部字段。
+    let request_account_id = payload
+        .get("accountId")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .map(str::to_string);
+    if let Some(obj) = payload.as_object_mut() {
+        obj.remove("accountId");
+    }
+
+    let prepared = pop_prepared_start_context_for(request_account_id.as_deref())
         .map_err(|e| (500, e))?
-        .ok_or_else(|| {
-            (
+        .ok_or_else(|| match request_account_id.as_deref() {
+            Some(id) => (
+                400,
+                format!("缺少账号上下文，请先调用内部 prepareStartContext (accountId={id})"),
+            ),
+            None => (
                 400,
                 "缺少账号上下文，请先调用内部 prepareStartContext".to_string(),
-            )
+            ),
         })?;
+    if let Some(id) = request_account_id.as_deref() {
+        if prepared.account_id != id {
+            crate::modules::logger::log_warn(&format!(
+                "[WakeupGateway] StartCascade 账号上下文不匹配: request_account_id={}, prepared_account_id={}",
+                id, prepared.account_id
+            ));
+        }
+    }
 
     let (start_resp, session) = start_official_ls_cascade_session(prepared, &payload)
         .await
