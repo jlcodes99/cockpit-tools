@@ -1,0 +1,398 @@
+{
+  "schemaVersion": 1,
+  "scope": "Sanitized local-only Windows release and exact-artifact WebView acceptance; no installer distributed and no production deployment performed",
+  "source": {
+    "commit": "ce26ba83dc6f90f1864f25b9cd7d678c61dbfd3f",
+    "fileCount": 3350,
+    "fingerprintSha256": "B327DE3A19D1C08B91EACC66B5496906EA164E9E908F6C91C77C934C6A48589F",
+    "fingerprintAlgorithm": "SHA256 over sorted checkout-relative file name, TAB, SHA256 pairs joined with LF",
+    "cleanBeforeBuild": true,
+    "cleanAfterBuild": true,
+    "sourceStable": true,
+    "docsOnlyFollowupAfterBuild": true,
+    "productionSourceChangedByFollowup": false
+  },
+  "artifact": {
+    "fileName": "cockpit-tools.exe",
+    "version": "1.5.3",
+    "sha256": "0468F8AA3EF52FD71AB22893C980F9B641E28B34FC437113E7E18443AA63894D",
+    "bytes": 175255552,
+    "mebibytes": 167.14
+  },
+  "build": {
+    "tauriCliVersion": "2.12.6",
+    "nodeVersion": "24.22.0",
+    "command": "tauri build --no-bundle --no-sign --config src-tauri/tauri.ci.conf.json --features tauri/custom-protocol --ci -- --locked --offline",
+    "beforeBuildCommand": "node scripts/prepare-tauri.cjs && npm run build",
+    "frontendBuild": "npm run sync-version && tsc && vite build",
+    "frontendDist": "../dist",
+    "profile": "release",
+    "optimized": true,
+    "cargoLocked": true,
+    "cargoOffline": true,
+    "inheritedEnvironmentCleared": true,
+    "tauriChildExitCode": 0,
+    "tauriChildExitCodeEvidence": "Original wrapper populates artifact metadata only inside its child-exit-0 branch; preserved launcher SHA matches invocation, and Tauri Finished release/Built application log markers match the artifact.",
+    "releaseCompileDurationSeconds": 1402,
+    "viteDurationSeconds": 16.82,
+    "frontendPackagingGuardVerifiedEntryAssets": 11,
+    "libraryCompilerWarningCount": 854,
+    "binaryCompilerWarningCount": 1,
+    "futureIncompatibilityWarning": "proc-macro-error2 2.0.1",
+    "originalWrapperExitCode": 1,
+    "originalWrapperFailure": "PowerShell Measure-Object could not read the bytes key directly from OrderedDictionary records under strict mode during frontend-manifest postprocessing.",
+    "finalization": {
+      "exitCode": 0,
+      "sourceStable": true,
+      "fix": "Explicitly enumerate numeric dictionary values before summing; revalidate the unchanged EXE and source before producing manifests.",
+      "rebuildPerformed": false,
+      "originalFailureReceiptPreserved": true,
+      "receiptSha256": "4FCE0CED1A3237E37E952536F7794C8006A6B2646249812D346FBDC256A4BB08",
+      "originalWrapperReceiptSha256": "DC10261B8B5794647B0C7ADE4D9CD036EA4F46700AE3CB7B50CCBFB47FD88AD4"
+    }
+  },
+  "frontend": {
+    "fileCount": 173,
+    "bytes": 19171199,
+    "treeSha256": "4D9FB81A9B31FBC29BB90E614DD81C98B2D1482B21A30DD256E71E6E1497F500",
+    "indexSha256": "4BB1B621E3F54681E6683DFFB5725EA845490A3D8E9443FA16DD78CC5C711E85",
+    "manifestSha256": "B0A4DEA76EFDDFDA222E1B6805624BA2621B55F3BE09B813C96CBCCE03584647",
+    "manifestAlgorithm": "SHA256 over sorted frontend-relative path:bytes:SHA256 rows joined with LF",
+    "productionJavaScriptAndCssVerified": true
+  },
+  "deploymentFiles": {
+    "totalCount": 22,
+    "executableCount": 1,
+    "adjacentResourceCount": 21,
+    "allConfiguredResourcesCopiedAndHashVerified": true,
+    "files": [
+      {
+        "path": "cockpit-tools.exe",
+        "bytes": 175255552,
+        "sha256": "0468F8AA3EF52FD71AB22893C980F9B641E28B34FC437113E7E18443AA63894D"
+      },
+      {
+        "path": "scripts/claude-desktop-auth-helper.cjs",
+        "bytes": 19721,
+        "sha256": "B576A53C6B5F84D9E1021423A1CDF6CE04EFD203D2F7F207B48DEA48FCF8E91E"
+      },
+      {
+        "path": "native-menu-icons/antigravity-menu.png",
+        "bytes": 2025,
+        "sha256": "BEFD3C78F579FC623B2BCFEAFBE4D6C9F04C3241993FF18B187D0E68C1D7DE16"
+      },
+      {
+        "path": "native-menu-icons/claude.png",
+        "bytes": 753321,
+        "sha256": "8D8D51AC7DFF1060C5F787D5AAB984950650BA4F29D73A24D5DE642778345A35"
+      },
+      {
+        "path": "native-menu-icons/codebuddy.png",
+        "bytes": 277727,
+        "sha256": "C303A0608F6FA81ED0712E87DE3813B36A532080A563CFB0F589BB4E96CBAEB7"
+      },
+      {
+        "path": "native-menu-icons/codex.svg",
+        "bytes": 2010,
+        "sha256": "0FF92785BF18871C1779C2384AAD498624D1C91449BE6C910C44F36C2F6C2ABA"
+      },
+      {
+        "path": "native-menu-icons/cursor-menu.png",
+        "bytes": 2566,
+        "sha256": "1ED32EB96C3F74ED720EB6A74285DBECD3863D1DC0F9A67E14B2D387EAD30899"
+      },
+      {
+        "path": "native-menu-icons/github-copilot.svg",
+        "bytes": 1691,
+        "sha256": "66CBD93D245009899F191EE08499A968BDF5ED18F588FB7A241BCE0016298756"
+      },
+      {
+        "path": "native-menu-icons/kiro-menu.png",
+        "bytes": 7941,
+        "sha256": "05E1C78800642A0AA6CA1C2DA8FCCB2399A53D1E95288AC8DFCFBA959E204C04"
+      },
+      {
+        "path": "native-menu-icons/minimax-code.png",
+        "bytes": 7492,
+        "sha256": "61013FA11BABCECED08BFAB0505A5CBB17E5FA4079F8AD53D648B8BDB3B18926"
+      },
+      {
+        "path": "native-menu-icons/qoder.png",
+        "bytes": 6869,
+        "sha256": "19650286BBD73AE47B420394A46BDF0BA1C94B2D6E904EF7873078C053C727AF"
+      },
+      {
+        "path": "native-menu-icons/trae.png",
+        "bytes": 94126,
+        "sha256": "701EB6586E316B02BA54B2AC2BCB609543AFEDBFC1AEB684A391B3C330BF1EAF"
+      },
+      {
+        "path": "native-menu-icons/trae-cn.png",
+        "bytes": 94126,
+        "sha256": "701EB6586E316B02BA54B2AC2BCB609543AFEDBFC1AEB684A391B3C330BF1EAF"
+      },
+      {
+        "path": "native-menu-icons/trae-work.png",
+        "bytes": 3544,
+        "sha256": "4DEE82AE020F6D587E2BED8265FBA8BD75C7C24088F09DB5C75E6006C13214BD"
+      },
+      {
+        "path": "native-menu-icons/windsurf.svg",
+        "bytes": 14856,
+        "sha256": "FD34D3DD8F899463DE0504C79FF90F077CEE961199CDD26A24123FBC6AB721C2"
+      },
+      {
+        "path": "native-menu-icons/workbuddy.png",
+        "bytes": 15114,
+        "sha256": "FAA1F98ECA981B7C771954D859F0B69752646FAA934133D3199F7EACE35198E8"
+      },
+      {
+        "path": "native-menu-icons/zed.png",
+        "bytes": 168173,
+        "sha256": "77453D98D46494B3B34B94AA863B686EA299E0190030A5C7CA5377B238332522"
+      },
+      {
+        "path": "native-menu-icons/zcode.png",
+        "bytes": 215707,
+        "sha256": "EDD87A182097389B0F59C07F8DE283DBE433C9D37CD6E9A2A372611516AB81EB"
+      },
+      {
+        "path": "licenses/CLIProxyAPI.txt",
+        "bytes": 1137,
+        "sha256": "93DF585E5FA07EAD6D47A3AB2DBDF0255782A39FE830022C0274A70394223CC8"
+      },
+      {
+        "path": "licenses/WorkBuddy-Switch-Next.txt",
+        "bytes": 1087,
+        "sha256": "56821BAC86BC8027C358328AEDE0473ADAF18CC76F17B48CE43371CE101B944B"
+      },
+      {
+        "path": "licenses/dnd-kit.txt",
+        "bytes": 1096,
+        "sha256": "D13E5BAF2F73FD9B2E57B581BC49D56BA5978CB781980B99A209C926EE5B6038"
+      },
+      {
+        "path": "licenses/Primer-Octicons.txt",
+        "bytes": 1089,
+        "sha256": "C238F05B133887803259EEFEA2F82586B56C2452A9D8C75AD505C5FF5CDF3BD5"
+      }
+    ],
+    "inventoryScope": "Approved deployment manifest inventory: the EXE and 21 configured resources. This count is not the total directory inventory after WebView execution; other runtime-created files are excluded from installation and public delivery."
+  },
+  "webview": {
+    "sameExecutable": true,
+    "artifactSha256": "0468F8AA3EF52FD71AB22893C980F9B641E28B34FC437113E7E18443AA63894D",
+    "wrapperStatus": "Passed",
+    "innerStatus": "Passed",
+    "exitCode": 0,
+    "frontendAssetMarkerFound": true,
+    "frontendReady": true,
+    "eventLoopExited": true,
+    "testProcessExited": true,
+    "consecutiveValidSnapshots": 3,
+    "stableForMs": 2000,
+    "frontendStages": [
+      "script_loaded",
+      "react_mount_start"
+    ],
+    "reactMountedStageObserved": false,
+    "snapshots": [
+      {
+        "readyState": "complete",
+        "rootChildren": 1,
+        "rootTextNonempty": true,
+        "appVisible": true,
+        "mainVisible": true,
+        "indexScriptLoaded": true,
+        "styleSheets": 10,
+        "fatalErrors": 0,
+        "resourceErrors": 0,
+        "expectedRejections": 0,
+        "viewport": {
+          "height": 800,
+          "width": 1280
+        }
+      },
+      {
+        "readyState": "complete",
+        "rootChildren": 1,
+        "rootTextNonempty": true,
+        "appVisible": true,
+        "mainVisible": true,
+        "indexScriptLoaded": true,
+        "styleSheets": 10,
+        "fatalErrors": 0,
+        "resourceErrors": 0,
+        "expectedRejections": 0,
+        "viewport": {
+          "height": 800,
+          "width": 1280
+        }
+      },
+      {
+        "readyState": "complete",
+        "rootChildren": 1,
+        "rootTextNonempty": true,
+        "appVisible": true,
+        "mainVisible": true,
+        "indexScriptLoaded": true,
+        "styleSheets": 10,
+        "fatalErrors": 0,
+        "resourceErrors": 0,
+        "expectedRejections": 0,
+        "viewport": {
+          "height": 800,
+          "width": 1280
+        }
+      }
+    ],
+    "productionHandlersRegistered": false,
+    "productionPluginsRegistered": false,
+    "deniedBusinessCommandKinds": 32,
+    "productionBusinessApiExercised": false,
+    "inheritedEnvironmentCleared": true,
+    "webviewOverridesPresent": false,
+    "dedicatedProfile": true,
+    "configuredAndObservedDataDirectoryVerified": true,
+    "observedRuntimeSuffix": "EBWebView",
+    "observedDescendantCount": 8,
+    "observedDescendantsStillAlive": 0,
+    "processObservationLimit": "Exact host plus descendants observed during bounded polling; not proof about unobserved detached processes.",
+    "screenCaptureUsed": false,
+    "productionModified": false,
+    "externalResourceOrigins": [
+      "fonts.googleapis.com"
+    ],
+    "zeroExternalNetworkClaim": false,
+    "osNetworkSandboxClaim": false,
+    "acceptanceSha256": "687E10A8BF5EAA8227421199C4B277A66163EBB1395CE39D6AB2D3A0F815C38F",
+    "innerEvidenceSha256": "54A24EEE90ADDC86660C37C07A6F6E84CF1DD4A30C15C308A652F5B7FCE815C5",
+    "firstAttempt": {
+      "sameArtifact": true,
+      "innerStatus": "Passed",
+      "wrapperStatus": "Failed",
+      "wrapperFailure": "WebView used an unexpected data directory",
+      "frontendStages": [
+        "script_loaded",
+        "react_mount_start"
+      ],
+      "reactMountedStageObserved": false,
+      "failureCleanupStopRequests": 2,
+      "unconfirmedChildren": 0,
+      "failureReceiptPreserved": true,
+      "correction": "Verify the exact configured isolated directory plus the documented EBWebView runtime suffix, then rerun the same EXE; no relaxation to arbitrary descendant paths and no EXE rebuild.",
+      "innerVerifierExitCode": 0,
+      "outerWrapperExitCode": 1
+    },
+    "microsoftReference": "https://learn.microsoft.com/en-us/microsoft-edge/web-platform/devtools-mcp-server#step-2-find-the-webview2-user-data-directory",
+    "microsoftReferenceScope": "The WebView2 Runtime appends EBWebView to the user-data directory; this reference does not mean DevTools MCP or a debug port was used for this acceptance."
+  },
+  "ci": {
+    "head": "ce26ba83dc6f90f1864f25b9cd7d678c61dbfd3f",
+    "checkedAtUtc": "2026-11-28T05:41:12.4085687+00:00",
+    "counts": {
+      "success": 11,
+      "neutral": 1,
+      "failure": 0,
+      "pending": 0
+    },
+    "buildMatrixSuccessCount": 9,
+    "codeqlLanguageAnalysisSuccessCount": 2,
+    "policyConclusion": "neutral",
+    "policyTitle": "1 configuration not found",
+    "remainingMissingConfiguration": "/language:go",
+    "annotationCount": 0,
+    "priorCriticalAnnotationStillReported": false,
+    "privateAlertDismissalVerified": false,
+    "limit": "Latest-head check output has zero annotations; the remaining missing-Go comparison configuration prevents an unqualified all-green or zero-repository-alert claim.",
+    "checks": [
+      {
+        "name": "Analyze (javascript-typescript)",
+        "status": "COMPLETED",
+        "conclusion": "SUCCESS",
+        "url": "https://github.com/jlcodes99/cockpit-tools/actions/runs/46111136017/job/140874707594"
+      },
+      {
+        "name": "🚦 Prepare shared build inputs",
+        "status": "COMPLETED",
+        "conclusion": "SUCCESS",
+        "url": "https://github.com/jlcodes99/cockpit-tools/actions/runs/46111136025/job/140874785434"
+      },
+      {
+        "name": "Analyze (rust)",
+        "status": "COMPLETED",
+        "conclusion": "SUCCESS",
+        "url": "https://github.com/jlcodes99/cockpit-tools/actions/runs/46111136017/job/140874707701"
+      },
+      {
+        "name": "🧪 Preflight: Regression Tests",
+        "status": "COMPLETED",
+        "conclusion": "SUCCESS",
+        "url": "https://github.com/jlcodes99/cockpit-tools/actions/runs/46111136025/job/140874785150"
+      },
+      {
+        "name": "🪟 Preflight: TypeScript Tests",
+        "status": "COMPLETED",
+        "conclusion": "SUCCESS",
+        "url": "https://github.com/jlcodes99/cockpit-tools/actions/runs/46111136025/job/140874785399"
+      },
+      {
+        "name": "🍎 macOS arm64",
+        "status": "COMPLETED",
+        "conclusion": "SUCCESS",
+        "url": "https://github.com/jlcodes99/cockpit-tools/actions/runs/46111136025/job/140875473191"
+      },
+      {
+        "name": "🍎 macOS x64",
+        "status": "COMPLETED",
+        "conclusion": "SUCCESS",
+        "url": "https://github.com/jlcodes99/cockpit-tools/actions/runs/46111136025/job/140875473189"
+      },
+      {
+        "name": "🐧 Ubuntu 22.04 x64",
+        "status": "COMPLETED",
+        "conclusion": "SUCCESS",
+        "url": "https://github.com/jlcodes99/cockpit-tools/actions/runs/46111136025/job/140875473213"
+      },
+      {
+        "name": "🐧 Ubuntu 24.04 arm64",
+        "status": "COMPLETED",
+        "conclusion": "SUCCESS",
+        "url": "https://github.com/jlcodes99/cockpit-tools/actions/runs/46111136025/job/140875473293"
+      },
+      {
+        "name": "🪟 Windows x64",
+        "status": "COMPLETED",
+        "conclusion": "SUCCESS",
+        "url": "https://github.com/jlcodes99/cockpit-tools/actions/runs/46111136025/job/140875473175"
+      },
+      {
+        "name": "🪟 Windows ARM64",
+        "status": "COMPLETED",
+        "conclusion": "SUCCESS",
+        "url": "https://github.com/jlcodes99/cockpit-tools/actions/runs/46111136025/job/140875473182"
+      },
+      {
+        "name": "CodeQL",
+        "status": "COMPLETED",
+        "conclusion": "NEUTRAL",
+        "url": "https://github.com/jlcodes99/cockpit-tools/runs/140875301972"
+      }
+    ],
+    "policyUrl": "https://github.com/jlcodes99/cockpit-tools/runs/140875301972"
+  },
+  "deployment": {
+    "status": "Prepared; not executed",
+    "installed": false,
+    "productionExecutableReplaced": false,
+    "requiresNormalUserExitBeforeDeployment": true,
+    "shareableInstallerCreated": false,
+    "installerPublished": false
+  },
+  "limits": [
+    "This is exact embedded-frontend acceptance in isolated WebView2, not production account/API correctness or a real upstream inference test.",
+    "Neither wrapper failure is erased by the later passing result; both original receipts remain local.",
+    "The original 145-test first pass remains 144 passed and 1 failed, with separate later upload cross-checks; this release is not a full repository regression rerun.",
+    "Public evidence excludes machine-specific absolute paths, account data, process identifiers and raw runtime logs."
+  ]
+}
