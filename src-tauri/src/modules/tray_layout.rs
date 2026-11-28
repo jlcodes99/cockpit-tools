@@ -54,6 +54,33 @@ pub const SUPPORTED_PLATFORM_IDS: [&str; 21] = [
     PLATFORM_MINIMAX_CODE,
 ];
 
+const LEGACY_CORE_TRAY_PLATFORM_IDS: [&str; 4] = [
+    PLATFORM_ANTIGRAVITY,
+    PLATFORM_CODEX,
+    PLATFORM_GITHUB_COPILOT,
+    PLATFORM_WINDSURF,
+];
+
+const MIGRATED_TRAY_PLATFORM_IDS: [&str; 17] = [
+    PLATFORM_CLAUDE_MANAGER,
+    PLATFORM_T3CODE,
+    PLATFORM_ZED,
+    PLATFORM_KIRO,
+    PLATFORM_CURSOR,
+    PLATFORM_GROK,
+    PLATFORM_CODEBUDDY,
+    PLATFORM_CODEBUDDY_CN,
+    PLATFORM_QODER,
+    PLATFORM_QODER_CN,
+    PLATFORM_ZCODE,
+    PLATFORM_TRAE,
+    PLATFORM_TRAE_SOLO,
+    PLATFORM_TRAE_CN,
+    PLATFORM_TRAE_SOLO_CN,
+    PLATFORM_WORKBUDDY,
+    PLATFORM_MINIMAX_CODE,
+];
+
 pub const SORT_MODE_AUTO: &str = "auto";
 pub const SORT_MODE_MANUAL: &str = "manual";
 
@@ -194,27 +221,11 @@ fn normalize_tray_platforms(
         return sanitized;
     }
 
-    let has_legacy_all = contains_platform(&sanitized, PLATFORM_ANTIGRAVITY)
-        && contains_platform(&sanitized, PLATFORM_CODEX)
-        && contains_platform(&sanitized, PLATFORM_GITHUB_COPILOT)
-        && contains_platform(&sanitized, PLATFORM_WINDSURF);
+    let has_legacy_all = LEGACY_CORE_TRAY_PLATFORM_IDS
+        .iter()
+        .all(|platform| contains_platform(&sanitized, platform));
 
-    for &new_platform in &[
-        PLATFORM_T3CODE,
-        PLATFORM_ZED,
-        PLATFORM_KIRO,
-        PLATFORM_CURSOR,
-        PLATFORM_CODEBUDDY,
-        PLATFORM_CODEBUDDY_CN,
-        PLATFORM_QODER,
-        PLATFORM_ZCODE,
-        PLATFORM_TRAE,
-        PLATFORM_TRAE_SOLO,
-        PLATFORM_TRAE_CN,
-        PLATFORM_TRAE_SOLO_CN,
-        PLATFORM_WORKBUDDY,
-        PLATFORM_MINIMAX_CODE,
-    ] {
+    for &new_platform in &MIGRATED_TRAY_PLATFORM_IDS {
         let already_present = contains_platform(&sanitized, new_platform);
         let was_in_raw_order = raw_order_has_new.contains(&new_platform);
         let looks_like_old_default = !already_present
@@ -412,24 +423,16 @@ fn normalize_config(
 ) -> TrayLayoutConfig {
     let ordered_platform_ids = normalize_order(&config.ordered_platform_ids);
 
-    let raw_order_new_platforms: Vec<&str> = [
-        PLATFORM_T3CODE,
-        PLATFORM_KIRO,
-        PLATFORM_CURSOR,
-        PLATFORM_CODEBUDDY,
-        PLATFORM_CODEBUDDY_CN,
-        PLATFORM_QODER,
-        PLATFORM_TRAE,
-        PLATFORM_TRAE_SOLO,
-        PLATFORM_TRAE_CN,
-        PLATFORM_TRAE_SOLO_CN,
-        PLATFORM_WORKBUDDY,
-        PLATFORM_MINIMAX_CODE,
-    ]
-    .iter()
-    .filter(|&&p| config.ordered_platform_ids.iter().any(|id| id.trim() == p))
-    .copied()
-    .collect();
+    let raw_order_new_platforms: Vec<&str> = MIGRATED_TRAY_PLATFORM_IDS
+        .iter()
+        .filter(|&&p| {
+            config
+                .ordered_platform_ids
+                .iter()
+                .any(|id| normalize_platform_id(id) == Some(p))
+        })
+        .copied()
+        .collect();
 
     let platform_groups = normalize_platform_groups(&config.platform_groups);
     let ordered_entry_ids = normalize_ordered_entries(
@@ -731,5 +734,77 @@ mod tests {
         assert!(migrated
             .tray_platform_ids
             .contains(&PLATFORM_T3CODE.to_string()));
+    }
+
+    #[test]
+    fn migrated_tray_platforms_partition_supported_ids_and_persist_unchecked_state() {
+        let mut partitioned: Vec<&str> = LEGACY_CORE_TRAY_PLATFORM_IDS
+            .iter()
+            .chain(MIGRATED_TRAY_PLATFORM_IDS.iter())
+            .copied()
+            .collect();
+        let mut supported: Vec<&str> = SUPPORTED_PLATFORM_IDS.to_vec();
+        partitioned.sort_unstable();
+        supported.sort_unstable();
+        assert_eq!(partitioned, supported);
+
+        let defaults = TrayLayoutConfig::default();
+        for platform in MIGRATED_TRAY_PLATFORM_IDS {
+            let mut unchecked_config = defaults.clone();
+            unchecked_config
+                .tray_platform_ids
+                .retain(|id| id != platform);
+            let saved_unchecked = normalize_config(unchecked_config, false);
+            assert!(
+                !saved_unchecked
+                    .tray_platform_ids
+                    .contains(&platform.to_string()),
+                "platform '{platform}' should stay unchecked on save"
+            );
+
+            let reloaded_unchecked = normalize_config(saved_unchecked, true);
+            assert!(
+                !reloaded_unchecked
+                    .tray_platform_ids
+                    .contains(&platform.to_string()),
+                "platform '{platform}' should stay unchecked after reload"
+            );
+
+            let mut legacy = defaults.clone();
+            legacy.ordered_platform_ids.retain(|id| id != platform);
+            legacy.tray_platform_ids.retain(|id| id != platform);
+            let migrated = normalize_config(legacy, true);
+            assert!(
+                migrated.tray_platform_ids.contains(&platform.to_string()),
+                "legacy config missing '{platform}' in orderedPlatformIds should migrate it into trayPlatformIds"
+            );
+        }
+
+        // Hyphenated legacy Trae spellings in orderedPlatformIds still count as
+        // already-known platforms so explicit unchecks survive reload.
+        for (legacy_alias, canonical) in [
+            ("trae-solo", PLATFORM_TRAE_SOLO),
+            ("trae-cn", PLATFORM_TRAE_CN),
+            ("trae-solo-cn", PLATFORM_TRAE_SOLO_CN),
+        ] {
+            let mut config = defaults.clone();
+            config.ordered_platform_ids = config
+                .ordered_platform_ids
+                .into_iter()
+                .map(|id| {
+                    if id == canonical {
+                        legacy_alias.to_string()
+                    } else {
+                        id
+                    }
+                })
+                .collect();
+            config.tray_platform_ids.retain(|id| id != canonical);
+            let reloaded = normalize_config(config, true);
+            assert!(
+                !reloaded.tray_platform_ids.contains(&canonical.to_string()),
+                "alias '{legacy_alias}' should preserve unchecked state for '{canonical}'"
+            );
+        }
     }
 }

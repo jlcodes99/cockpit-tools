@@ -33,6 +33,8 @@ enum ProviderIconRegistry {
         switch platformId {
         case "antigravity":
             return ProviderIconResource(name: "antigravity-menu", ext: "png", renderingMode: .original)
+        case "t3code":
+            return ProviderIconResource(name: "t3code", ext: "png", renderingMode: .original)
         case "codex":
             return ProviderIconResource(name: "codex", ext: "svg", renderingMode: .template)
         case "claude_manager":
@@ -51,6 +53,10 @@ enum ProviderIconRegistry {
             return ProviderIconResource(name: "codebuddy", ext: "png", renderingMode: .original)
         case "qoder":
             return ProviderIconResource(name: "qoder", ext: "png", renderingMode: .original)
+        case "qoder_cn", "qoder-cn":
+            return ProviderIconResource(name: "qoder-cn", ext: "png", renderingMode: .original)
+        case "zcode":
+            return ProviderIconResource(name: "zcode", ext: "png", renderingMode: .original)
         case "trae":
             return ProviderIconResource(name: "trae", ext: "png", renderingMode: .original)
         case "trae_solo", "trae-solo", "trae_solo_cn", "trae-solo-cn":
@@ -59,7 +65,7 @@ enum ProviderIconRegistry {
             return ProviderIconResource(name: "trae-cn", ext: "png", renderingMode: .original)
         case "workbuddy":
             return ProviderIconResource(name: "workbuddy", ext: "png", renderingMode: .original)
-        case "minimax_code":
+        case "minimaxcode", "minimax_code", "minimax-code":
             return ProviderIconResource(name: "minimax-code", ext: "png", renderingMode: .original)
         default:
             return nil
