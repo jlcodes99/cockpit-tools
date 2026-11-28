@@ -10126,7 +10126,8 @@
       "followHint": "Use the global proxy from Settings; falls back to the default network when disabled.",
       "independentHint": "Applies to this account only and overrides the global proxy.",
       "invalidUrl": "Unsupported proxy URL. Only http, https, socks5 and socks5h are supported.",
-      "restartHint": "After binding, switching or clearing a proxy, restart Antigravity (desktop or a new CLI session) to apply. A failing proxy does not fall back to a direct connection."
+      "restartHint": "Restart Antigravity after first binding, clearing a binding or switching accounts. Proxy failures never fall back to direct connections.",
+      "hostHint": "Keep Cockpit running. After restarting Cockpit, launch the client again through Cockpit to restore its proxy entry."
     }
   }
 }

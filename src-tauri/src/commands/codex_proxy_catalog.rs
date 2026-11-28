@@ -38,6 +38,7 @@ pub async fn codex_proxy_catalog_rename(
     let view = catalog::rename(source_id.clone(), name).await?;
     crate::modules::codex_unified_proxy::resync_source(&source_id, false).await;
     crate::modules::codex_client_proxy::resync_source(&source_id, false).await?;
+    crate::modules::antigravity_proxy::resync_source(&source_id, false).await?;
     Ok(view)
 }
 #[tauri::command]
@@ -60,6 +61,7 @@ pub async fn codex_proxy_catalog_refresh(
     let view = catalog::refresh_with_directory(request_id, source_id.clone(), resource_directory).await?;
     crate::modules::codex_unified_proxy::resync_source(&source_id, false).await;
     crate::modules::codex_client_proxy::resync_source(&source_id, false).await?;
+    crate::modules::antigravity_proxy::resync_source(&source_id, false).await?;
     Ok(view)
 }
 #[tauri::command]
@@ -229,6 +231,7 @@ async fn remove_source(source_id: String) -> Result<CatalogView, String> {
     })?;
     crate::modules::codex_unified_proxy::resync_source(&source_id, true).await;
     crate::modules::codex_client_proxy::resync_source(&source_id, true).await?;
+    crate::modules::antigravity_proxy::resync_source(&source_id, true).await?;
     Ok(removed)
 }
 /// 保存自建多节点策略：带 id 时保留原来源 ID，新建时生成新 ID。
@@ -248,6 +251,7 @@ pub async fn codex_proxy_strategy_save(
         // 统一代理引用同一策略时必须同步快照，否则账号仍走旧成员。
         crate::modules::codex_unified_proxy::resync_source(&id, false).await;
     crate::modules::codex_client_proxy::resync_source(&id, false).await?;
+    crate::modules::antigravity_proxy::resync_source(&id, false).await?;
     }
     Ok(view)
 }
@@ -325,6 +329,7 @@ pub async fn codex_proxy_catalog_network(
     crate::modules::codex_proxy_runtime::sync_source_network(&source_id, network).await?;
     crate::modules::codex_unified_proxy::resync_source(&source_id, false).await;
     crate::modules::codex_client_proxy::resync_source(&source_id, false).await?;
+    crate::modules::antigravity_proxy::resync_source(&source_id, false).await?;
     Ok(view)
 }
 #[tauri::command]
@@ -337,6 +342,7 @@ pub async fn codex_proxy_catalog_insecure(
     let view = catalog::set_insecure(source_id.clone(), node_id, revision, enabled).await?;
     crate::modules::codex_unified_proxy::resync_source(&source_id, false).await;
     crate::modules::codex_client_proxy::resync_source(&source_id, false).await?;
+    crate::modules::antigravity_proxy::resync_source(&source_id, false).await?;
     Ok(view)
 }
 
@@ -350,5 +356,6 @@ pub async fn codex_proxy_catalog_group_insecure(
     let view = catalog::set_group_insecure(source_id.clone(), group_id, revision, enabled).await?;
     crate::modules::codex_unified_proxy::resync_source(&source_id, false).await;
     crate::modules::codex_client_proxy::resync_source(&source_id, false).await?;
+    crate::modules::antigravity_proxy::resync_source(&source_id, false).await?;
     Ok(view)
 }

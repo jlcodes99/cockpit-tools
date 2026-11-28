@@ -10126,7 +10126,8 @@
       "followHint": "使用设置中的全局代理；未启用时使用默认网络。",
       "independentHint": "只更改这个账号，优先于全局代理。",
       "invalidUrl": "代理地址不支持，仅支持 http、https、socks5、socks5h 协议。",
-      "restartHint": "首次绑定、更换或清除代理后，重新启动 Antigravity（桌面端或新开 CLI 会话）后生效。代理连接失败时不会回退直连。"
+      "restartHint": "首次绑定、清除绑定或切换账号后，请重新启动 Antigravity。代理失败不会回退直连。",
+      "hostHint": "请保持 Cockpit 运行。重启 Cockpit 后，需通过 Cockpit 重新启动客户端以恢复代理入口。"
     }
   }
 }

@@ -19,6 +19,7 @@ pub(crate) fn switch(
     target: SwitchTarget,
     launch: bool,
     ide_is_shared: bool,
+    egress_proxy_url: Option<&str>,
 ) -> Result<(Account, Option<String>), String> {
     let desktop_is_shared = target == SwitchTarget::Desktop
         || matches!(
@@ -109,7 +110,7 @@ pub(crate) fn switch(
         process::start_antigravity_legacy_with_args_proxy(
             "",
             &args,
-            account.egress_proxy_url.as_deref(),
+            egress_proxy_url,
         )
             .and_then(|pid| antigravity_legacy_instance::update_default_pid(Some(pid)).map(|_| ()))
             .err()
@@ -124,7 +125,7 @@ pub(crate) fn switch(
         process::start_antigravity_with_args_proxy(
             "",
             &args,
-            account.egress_proxy_url.as_deref(),
+            egress_proxy_url,
         )
             .and_then(|pid| instance::update_default_pid(Some(pid)).map(|_| ()))
             .err()

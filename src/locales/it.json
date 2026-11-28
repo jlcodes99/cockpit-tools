@@ -10126,7 +10126,8 @@
       "followHint": "Usa il proxy globale dalle impostazioni; se disattivato viene usata la rete predefinita.",
       "independentHint": "Si applica solo a questo account e ha la precedenza sul proxy globale.",
       "invalidUrl": "URL proxy non supportato. Sono supportati solo http, https, socks5 e socks5h.",
-      "restartHint": "Dopo il collegamento, la modifica o la rimozione di un proxy, riavvia Antigravity (desktop o una nuova sessione CLI) per applicarlo. Un proxy che fallisce non ripiega sulla connessione diretta."
+      "restartHint": "Riavvia Antigravity dopo il primo collegamento, la rimozione del collegamento o un cambio di account. Gli errori del proxy non causano connessioni dirette.",
+      "hostHint": "Mantieni Cockpit in esecuzione. Dopo averlo riavviato, avvia nuovamente il client da Cockpit per ripristinare il punto di ingresso proxy."
     }
   }
 }

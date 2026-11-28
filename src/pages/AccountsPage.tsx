@@ -31,6 +31,7 @@ import { AccountLastUsed } from '../components/AccountLastUsed'
 import { AntigravityLaunchDialog } from '../components/AntigravityLaunchDialog'
 import { AntigravityAccountProxyButton } from '../components/antigravity/AntigravityAccountProxyButton'
 import { AntigravityProxyAccountDialog } from '../components/antigravity/AntigravityProxyAccountDialog'
+import { useAntigravityProxyStore } from '../stores/useAntigravityProxyStore'
 import { setAntigravityRuntimeTarget, type AntigravityLaunchClient, type AntigravityRuntimeTarget } from '../utils/antigravityRuntimeTarget'
 import { useAccountStore } from '../stores/useAccountStore'
 import * as accountService from '../services/accountService'
@@ -203,6 +204,8 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
     updateAccountTags,
     updateAccountNotes
   } = useAccountStore()
+  const proxyAccountIds = accounts.map((account) => account.id).sort().join(',')
+  useEffect(() => { void useAntigravityProxyStore.getState().reload() }, [proxyAccountIds])
   const currentAccount = currentAccountsByTarget[antigravityRuntimeTarget] ?? null
 
   // ─── 验证状态标记 ────────────────────────────────────────────────────
