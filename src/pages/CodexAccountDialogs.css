@@ -106,3 +106,39 @@
   width: 100%;
   margin-bottom: 10px;
 }
+
+.codex-browser-login-mode-overlay {
+  z-index: 10010;
+  padding: 16px;
+  overscroll-behavior: contain;
+}
+
+.modal.codex-browser-login-mode-modal {
+  width: min(440px, calc(100vw - 32px));
+  max-width: 440px;
+}
+
+.codex-browser-login-mode-modal .modal-header {
+  padding: 18px 22px;
+}
+
+.codex-browser-login-mode-modal .modal-header h2 {
+  font-size: 16px;
+}
+
+.codex-browser-login-mode-modal .modal-body {
+  padding: 18px 22px;
+}
+
+.codex-browser-login-mode-warning {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--danger);
+}
+
+.codex-browser-login-mode-actions {
+  padding: 14px 22px;
+  justify-content: flex-end;
+  gap: 10px;
+}

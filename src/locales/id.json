@@ -3246,7 +3246,13 @@
       "timeout": "Autentikasi habis waktu. Silakan klik",
       "timeoutRetry": "Perbarui Link Auth",
       "reauthEmailLabel": "Akun otorisasi ulang",
-      "reauthEmailChangeHint": "Jika email masuk Anda telah berubah, gunakan alamat baru di peramban. Cockpit memperbarui alamat tersimpan setelah memastikan pengguna dan ruang kerjanya sama."
+      "reauthEmailChangeHint": "Jika email masuk Anda telah berubah, gunakan alamat baru di peramban. Cockpit memperbarui alamat tersimpan setelah memastikan pengguna dan ruang kerjanya sama.",
+      "browserMode": {
+        "title": "Pilih Mode Login Browser",
+        "warning": "Login tanpa mode penyamaran dapat menyebabkan OpenAI mengeluarkan akun yang sebelumnya sudah masuk. Mode penyamaran disarankan.",
+        "normal": "Mode Biasa",
+        "incognito": "Mode Penyamaran"
+      }
     },
     "token": {
       "importPartial": "Impor selesai. Berhasil: {{success}}, gagal: {{failed}}. {{errors}}",

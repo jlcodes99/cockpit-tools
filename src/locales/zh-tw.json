@@ -3196,7 +3196,13 @@
       "timeout": "驗證逾時，請點擊",
       "timeoutRetry": "更新驗證連結",
       "reauthEmailLabel": "重新授權帳號",
-      "reauthEmailChangeHint": "如果已更換登入電子郵件，請在瀏覽器使用新地址登入。確認是同一使用者和工作區後，Cockpit 會更新這筆記錄的電子郵件。"
+      "reauthEmailChangeHint": "如果已更換登入電子郵件，請在瀏覽器使用新地址登入。確認是同一使用者和工作區後，Cockpit 會更新這筆記錄的電子郵件。",
+      "browserMode": {
+        "title": "選擇瀏覽器登入模式",
+        "warning": "非無痕模式登入會導致先前登入的帳號被 OpenAI 登出，建議採用無痕模式。",
+        "normal": "非無痕模式",
+        "incognito": "無痕模式"
+      }
     },
     "token": {
       "importPartial": "匯入完成。成功 {{success}} 個，失敗 {{failed}} 個。{{errors}}",

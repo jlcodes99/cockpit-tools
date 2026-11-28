@@ -3196,7 +3196,13 @@
       "timeout": "L'authentification a expiré. Cliquez",
       "timeoutRetry": "Actualiser le lien d'authentification",
       "reauthEmailLabel": "Compte à réautoriser",
-      "reauthEmailChangeHint": "Si votre adresse de connexion a changé, utilisez la nouvelle dans le navigateur. Cockpit mettra à jour l’adresse enregistrée après avoir vérifié le même utilisateur et le même espace de travail."
+      "reauthEmailChangeHint": "Si votre adresse de connexion a changé, utilisez la nouvelle dans le navigateur. Cockpit mettra à jour l’adresse enregistrée après avoir vérifié le même utilisateur et le même espace de travail.",
+      "browserMode": {
+        "title": "Choisir le mode de connexion du navigateur",
+        "warning": "La connexion sans navigation privée peut entraîner la déconnexion des comptes précédemment connectés par OpenAI. Le mode privé est recommandé.",
+        "normal": "Mode normal",
+        "incognito": "Mode privé"
+      }
     },
     "token": {
       "importPartial": "Import terminé. Réussites : {{success}}, échecs : {{failed}}. {{errors}}",

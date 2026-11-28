@@ -54,7 +54,9 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
     handleImportFromLocal,
     handleCancelCodexTempLogin,
     handleOpenCodexSecuritySettings,
+    handleOpenDeviceAuthIncognitoBrowser,
     handleOpenDeviceAuthUrl,
+    handleOpenOauthIncognitoBrowser,
     handleOpenOauthIncognitoWindow,
     handleOpenOauthUrl,
     handleOauthProxyToggle,
@@ -155,6 +157,27 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
   const oauthCallbackInputRef = useRef<HTMLInputElement>(null);
   const addDialogRef = useRef<HTMLDivElement>(null);
   const instancePickerDialogRef = useRef<HTMLDivElement>(null);
+  const browserModeDialogRef = useRef<HTMLDivElement>(null);
+  const [browserLoginModeTarget, setBrowserLoginModeTarget] = useState<"oauth" | "device" | null>(null);
+  useEffect(() => {
+    if (
+      !showAddModal ||
+      addTab !== "oauth" ||
+      oauthProxyEnabled ||
+      (browserLoginModeTarget === "oauth" && (!oauthUrl || isOauthTimeoutState)) ||
+      (browserLoginModeTarget === "device" && !deviceAuthInfo?.verificationUrl)
+    ) {
+      setBrowserLoginModeTarget(null);
+    }
+  }, [
+    showAddModal,
+    addTab,
+    oauthProxyEnabled,
+    browserLoginModeTarget,
+    oauthUrl,
+    isOauthTimeoutState,
+    deviceAuthInfo?.verificationUrl,
+  ]);
   useEffect(() => {
     if (!showAddModal || addStatus !== "error" || !addMessage) return;
     const frame = window.requestAnimationFrame(() => {
@@ -174,6 +197,11 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
   useEscCloseTopmost(
     Boolean(localImportInstances),
     handleCloseLocalImportInstancePicker, instancePickerDialogRef,
+  );
+  useEscCloseTopmost(
+    Boolean(browserLoginModeTarget),
+    () => setBrowserLoginModeTarget(null),
+    browserModeDialogRef,
   );
   useModalScrollLock(Boolean(showAddModal));
   // 官方登录进行中时，ESC 先取消登录再关闭弹框，避免留下无人接管的临时 profile。
@@ -694,7 +722,7 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
                             <button
                               type="button"
                               className="btn btn-primary btn-full"
-                              onClick={() => void handleOpenDeviceAuthUrl()}
+                              onClick={() => setBrowserLoginModeTarget("device")}
                             >
                               <ExternalLink size={16} />
                               {t(
@@ -777,7 +805,9 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
                                 onClick={
                                   isOauthTimeoutState
                                     ? handleRetryOauthAfterTimeout
-                                    : handleOpenOauthUrl
+                                    : oauthProxyEnabled
+                                      ? handleOpenOauthUrl
+                                      : () => setBrowserLoginModeTarget("oauth")
                                 }
                               >
                                 {isOauthTimeoutState ? (
@@ -1692,6 +1722,77 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
                         disabled={localImportBusy}
                       >
                         {t("common.cancel", "取消")}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+              {browserLoginModeTarget ? (
+                <div
+                  className="modal-overlay codex-browser-login-mode-overlay"
+                  onClick={() => setBrowserLoginModeTarget(null)}
+                >
+                  <div
+                    className="modal codex-browser-login-mode-modal"
+                    ref={browserModeDialogRef}
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="codex-browser-login-mode-title"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="modal-header">
+                      <h2 id="codex-browser-login-mode-title">
+                        {t("codex.oauth.browserMode.title", "选择浏览器登录模式")}
+                      </h2>
+                      <button
+                        className="modal-close"
+                        type="button"
+                        onClick={() => setBrowserLoginModeTarget(null)}
+                        aria-label={t("common.close", "关闭")}
+                      >
+                        <X />
+                      </button>
+                    </div>
+                    <div className="modal-body">
+                      <p className="codex-browser-login-mode-warning">
+                        {t(
+                          "codex.oauth.browserMode.warning",
+                          "非无痕模式登录会导致之前登录的账号被 OpenAI 退出，建议采用无痕模式。",
+                        )}
+                      </p>
+                    </div>
+                    <div className="modal-footer codex-browser-login-mode-actions">
+                      <button
+                        type="button"
+                        className="btn btn-danger"
+                        onClick={() => {
+                          const target = browserLoginModeTarget;
+                          setBrowserLoginModeTarget(null);
+                          if (target === "device") {
+                            void handleOpenDeviceAuthUrl();
+                          } else {
+                            void handleOpenOauthUrl();
+                          }
+                        }}
+                      >
+                        {t("codex.oauth.browserMode.normal", "非无痕模式")}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        autoFocus
+                        onClick={() => {
+                          const target = browserLoginModeTarget;
+                          setBrowserLoginModeTarget(null);
+                          if (target === "device") {
+                            void handleOpenDeviceAuthIncognitoBrowser();
+                          } else {
+                            void handleOpenOauthIncognitoBrowser();
+                          }
+                        }}
+                      >
+                        <ShieldCheck size={16} />
+                        {t("codex.oauth.browserMode.incognito", "无痕模式")}
                       </button>
                     </div>
                   </div>

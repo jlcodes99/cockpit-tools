@@ -3196,7 +3196,13 @@
       "timeout": "인증이 시간 초과되었습니다. 클릭하세요",
       "timeoutRetry": "인증 링크 새로고침",
       "reauthEmailLabel": "재인증 계정",
-      "reauthEmailChangeHint": "로그인 이메일이 변경되었다면 브라우저에서 새 주소를 사용하세요. Cockpit은 같은 사용자와 작업 공간임을 확인한 뒤 저장된 이메일을 업데이트합니다."
+      "reauthEmailChangeHint": "로그인 이메일이 변경되었다면 브라우저에서 새 주소를 사용하세요. Cockpit은 같은 사용자와 작업 공간임을 확인한 뒤 저장된 이메일을 업데이트합니다.",
+      "browserMode": {
+        "title": "브라우저 로그인 모드 선택",
+        "warning": "시크릿 모드가 아닌 일반 모드로 로그인하면 OpenAI에서 기존에 로그인된 계정을 로그아웃할 수 있습니다. 시크릿 모드를 권장합니다.",
+        "normal": "일반 모드",
+        "incognito": "시크릿 모드"
+      }
     },
     "token": {
       "importPartial": "가져오기를 마쳤습니다. 성공 {{success}}개, 실패 {{failed}}개. {{errors}}",

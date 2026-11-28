@@ -1284,6 +1284,7 @@ pub fn run() {
             commands::chatgpt_plan_service::chatgpt_plan_remove_from_service,
             commands::codex::codex_oauth_device_auth_start,
             commands::codex::codex_oauth_open_incognito_window,
+            commands::codex::codex_oauth_open_incognito_browser,
             commands::codex::codex_oauth_login_completed,
             commands::codex::codex_oauth_submit_callback_url,
             commands::codex::codex_oauth_login_cancel,

@@ -3196,7 +3196,13 @@
       "timeout": "Kimlik doğrulama zaman aşımına uğradı. Lütfen tıklayın",
       "timeoutRetry": "Kimlik Doğrulama Bağlantısını Yenile",
       "reauthEmailLabel": "Yeniden yetkilendirilecek hesap",
-      "reauthEmailChangeHint": "Giriş e-postanız değiştiyse tarayıcıda yeni adresi kullanın. Cockpit, kullanıcının ve çalışma alanının aynı olduğunu doğruladıktan sonra kayıtlı adresi günceller."
+      "reauthEmailChangeHint": "Giriş e-postanız değiştiyse tarayıcıda yeni adresi kullanın. Cockpit, kullanıcının ve çalışma alanının aynı olduğunu doğruladıktan sonra kayıtlı adresi günceller.",
+      "browserMode": {
+        "title": "Tarayıcı Giriş Modunu Seçin",
+        "warning": "Gizli mod olmadan giriş yapmak, OpenAI'nin daha önce giriş yapılmış hesapların oturumunu kapatmasına neden olabilir. Gizli mod önerilir.",
+        "normal": "Normal Mod",
+        "incognito": "Gizli Mod"
+      }
     },
     "token": {
       "importPartial": "İçe aktarma tamamlandı. Başarılı: {{success}}, başarısız: {{failed}}. {{errors}}",

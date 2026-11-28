@@ -3196,7 +3196,13 @@
       "timeout": "Autenticazione scaduta. Fare clic",
       "timeoutRetry": "Aggiorna link autenticazione",
       "reauthEmailLabel": "Account da riautorizzare",
-      "reauthEmailChangeHint": "Se l’email di accesso è cambiata, usa il nuovo indirizzo nel browser. Cockpit aggiornerà l’indirizzo salvato dopo aver verificato che utente e spazio di lavoro siano gli stessi."
+      "reauthEmailChangeHint": "Se l’email di accesso è cambiata, usa il nuovo indirizzo nel browser. Cockpit aggiornerà l’indirizzo salvato dopo aver verificato che utente e spazio di lavoro siano gli stessi.",
+      "browserMode": {
+        "title": "Scegli la modalità di accesso del browser",
+        "warning": "Accedere senza la modalità privata può far sì che OpenAI disconnetta gli account già collegati. Si consiglia la modalità privata.",
+        "normal": "Modalità normale",
+        "incognito": "Modalità privata"
+      }
     },
     "token": {
       "importPartial": "Importazione terminata. Riuscite: {{success}}, non riuscite: {{failed}}. {{errors}}",

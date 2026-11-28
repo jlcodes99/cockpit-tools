@@ -3196,7 +3196,13 @@
       "timeout": "Xác thực đã hết thời gian. Vui lòng nhấn",
       "timeoutRetry": "Làm mới link xác thực",
       "reauthEmailLabel": "Tài khoản ủy quyền lại",
-      "reauthEmailChangeHint": "Nếu email đăng nhập đã thay đổi, hãy dùng địa chỉ mới trong trình duyệt. Cockpit cập nhật địa chỉ đã lưu sau khi xác minh đúng người dùng và không gian làm việc."
+      "reauthEmailChangeHint": "Nếu email đăng nhập đã thay đổi, hãy dùng địa chỉ mới trong trình duyệt. Cockpit cập nhật địa chỉ đã lưu sau khi xác minh đúng người dùng và không gian làm việc.",
+      "browserMode": {
+        "title": "Chọn chế độ đăng nhập trình duyệt",
+        "warning": "Đăng nhập không dùng chế độ ẩn danh có thể khiến OpenAI đăng xuất các tài khoản đã đăng nhập trước đó. Khuyên dùng chế độ ẩn danh.",
+        "normal": "Chế độ thường",
+        "incognito": "Chế độ ẩn danh"
+      }
     },
     "token": {
       "importPartial": "Đã nhập xong. Thành công: {{success}}, thất bại: {{failed}}. {{errors}}",

@@ -3196,7 +3196,13 @@
       "timeout": "La autenticación expiró. Haga clic",
       "timeoutRetry": "Actualizar enlace de autenticación",
       "reauthEmailLabel": "Cuenta para reautorizar",
-      "reauthEmailChangeHint": "Si cambió tu correo de inicio de sesión, usa la dirección nueva en el navegador. Cockpit actualizará la dirección guardada tras verificar que se trata del mismo usuario y espacio de trabajo."
+      "reauthEmailChangeHint": "Si cambió tu correo de inicio de sesión, usa la dirección nueva en el navegador. Cockpit actualizará la dirección guardada tras verificar que se trata del mismo usuario y espacio de trabajo.",
+      "browserMode": {
+        "title": "Seleccionar modo de inicio de sesión",
+        "warning": "Iniciar sesión sin modo privado puede hacer que OpenAI cierre la sesión de las cuentas anteriores. Se recomienda usar el modo privado.",
+        "normal": "Modo normal",
+        "incognito": "Modo privado"
+      }
     },
     "token": {
       "importPartial": "Importación terminada. Correctas: {{success}}, fallidas: {{failed}}. {{errors}}",
