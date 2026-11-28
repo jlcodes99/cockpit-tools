@@ -25,10 +25,17 @@ export function defaultQoderClient(region: QoderRegion, isWindows: boolean, isMa
 /**
  * Cockpit's public CN account store uses `qoder_cn`. The IDE's native
  * `qodercn` marker is translated when writing that client's profile.
+ *
+ * The marker may sit on either raw payload — the backend resolves both and
+ * rejects a session whose two halves disagree — so reading only
+ * `auth_user_info_raw` would list a plan-stamped CN session as global and then
+ * fail the switch with `QODER_PLATFORM_MISMATCH`.
  */
 export function getQoderRegion(account: QoderAccount): QoderRegion {
   const info = account.auth_user_info_raw as { login_source?: string } | undefined;
-  return info?.login_source === 'qoder_cn' ? 'cn' : 'global';
+  const plan = account.auth_user_plan_raw as { login_source?: string } | undefined;
+  const marker = info?.login_source ?? plan?.login_source;
+  return marker === 'qoder_cn' ? 'cn' : 'global';
 }
 
 export function qoderRegionLabel(region: QoderRegion, t: TFunction): string {

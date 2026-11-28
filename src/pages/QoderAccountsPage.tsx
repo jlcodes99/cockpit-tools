@@ -631,8 +631,16 @@ export function QoderAccountsPage({ region = 'global' }: { region?: QoderRegion 
     [currentAccountId, sortBy, sortDirection],
   );
 
+  // A store should only hold its own realm's sessions, but a legacy import can
+  // leave the other one behind: filter once, so the refresh count and the list
+  // that renders can never disagree.
+  const regionAccounts = useMemo(
+    () => accounts.filter((account) => getQoderRegion(account) === region),
+    [accounts, region],
+  );
+
   const filteredAccounts = useMemo(() => {
-    let result = accounts.filter((account) => getQoderRegion(account) === region);
+    let result = regionAccounts;
 
     const query = searchQuery.trim().toLowerCase();
     if (query) {
@@ -665,7 +673,7 @@ export function QoderAccountsPage({ region = 'global' }: { region?: QoderRegion 
 
     result.sort(compareAccountsBySort);
     return result;
-  }, [accounts, region, compareAccountsBySort, filterTypes, grouping, isAbnormalAccount, searchQuery, tagFilter]);
+  }, [regionAccounts, compareAccountsBySort, filterTypes, grouping, isAbnormalAccount, searchQuery, tagFilter]);
 
   const groupedAccounts = useMemo(() => {
     if (!groupByTag) return [] as Array<[string, QoderAccount[]]>;
@@ -766,7 +774,7 @@ export function QoderAccountsPage({ region = 'global' }: { region?: QoderRegion 
     if (refreshingAll) return;
     setRefreshingAll(true);
     try {
-      const total = accounts.length;
+      const total = regionAccounts.length;
       const count = await service.refreshAllQoderTokens();
       await store.fetchAccounts();
       setMessage(count === total
@@ -780,7 +788,7 @@ export function QoderAccountsPage({ region = 'global' }: { region?: QoderRegion 
     } finally {
       setRefreshingAll(false);
     }
-  }, [accounts.length, refreshingAll, region, service, store, t]);
+  }, [regionAccounts.length, refreshingAll, region, service, store, t]);
 
   const handleSwitch = useCallback((accountId: string) => {
     setSwitchAccount(accounts.find((account) => account.id === accountId) ?? null);

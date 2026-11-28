@@ -938,6 +938,7 @@ pub(crate) fn save_refresh(
         return Err("QODER_SESSION_CHANGED".into());
     }
     let mut index = load_account_index_checked()?;
+    let has_usage = usage.is_some();
     let mut updated = snapshot_to_account(
         QoderSnapshot {
             user_info_raw: Some(user_info),
@@ -954,8 +955,10 @@ pub(crate) fn save_refresh(
         .quota_query_last_error
         .as_ref()
         .map(|_| chrono::Utc::now().timestamp_millis());
-    // The account card labels quota freshness with `usage_updated_at`.
-    if updated.quota_query_last_error.is_none() {
+    // The account card labels quota freshness with `usage_updated_at`, so only a
+    // call that stored a usage snapshot may move it. A token renewal reaches this
+    // function with `usage = None` and would otherwise claim a quota it never read.
+    if has_usage && updated.quota_query_last_error.is_none() {
         updated.usage_updated_at = Some(now_ts());
     }
     save_account_file(&updated)?;
