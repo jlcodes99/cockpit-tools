@@ -147,6 +147,73 @@ final class NativeMenuStatusTitleTests: XCTestCase {
         }
     }
 
+    func testProviderIconRegistryResolvesCanonicalPlatformIdsAndBundledAssets() throws {
+        let packageRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let srcTauriDir = packageRoot
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let tauriConfURL = srcTauriDir.appendingPathComponent("tauri.conf.json")
+        let tauriConfData = try Data(contentsOf: tauriConfURL)
+        let tauriConf = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: tauriConfData) as? [String: Any]
+        )
+        let bundle = try XCTUnwrap(tauriConf["bundle"] as? [String: Any])
+        let resources = try XCTUnwrap(bundle["resources"] as? [String: String])
+        var sourceByTarget: [String: String] = [:]
+        for (source, target) in resources {
+            sourceByTarget[target] = source
+        }
+
+        let expectedByPlatformId: [(String, String, String)] = [
+            ("antigravity", "antigravity-menu", "png"),
+            ("t3code", "t3code", "png"),
+            ("codex", "codex", "svg"),
+            ("claude_manager", "claude", "png"),
+            ("zed", "zed", "png"),
+            ("github-copilot", "github-copilot", "svg"),
+            ("windsurf", "windsurf", "svg"),
+            ("kiro", "kiro-menu", "png"),
+            ("cursor", "cursor-menu", "png"),
+            ("codebuddy", "codebuddy", "png"),
+            ("codebuddy_cn", "codebuddy", "png"),
+            ("qoder", "qoder", "png"),
+            ("qoder_cn", "qoder-cn", "png"),
+            ("zcode", "zcode", "png"),
+            ("trae", "trae", "png"),
+            ("trae_solo", "trae-work", "png"),
+            ("trae_cn", "trae-cn", "png"),
+            ("trae_solo_cn", "trae-work", "png"),
+            ("workbuddy", "workbuddy", "png"),
+            ("minimaxcode", "minimax-code", "png"),
+        ]
+
+        for (platformId, expectedName, expectedExt) in expectedByPlatformId {
+            let resolved = try XCTUnwrap(
+                ProviderIconRegistry.resource(for: platformId),
+                "Expected icon resource for canonical platformId '\(platformId)'"
+            )
+            XCTAssertEqual(resolved.name, expectedName, "platformId=\(platformId)")
+            XCTAssertEqual(resolved.ext, expectedExt, "platformId=\(platformId)")
+
+            let bundleTarget = "native-menu-icons/\(resolved.name).\(resolved.ext)"
+            let relativeSource = try XCTUnwrap(
+                sourceByTarget[bundleTarget],
+                "Missing '\(bundleTarget)' in tauri.conf.json bundle.resources"
+            )
+            let sourceURL = srcTauriDir.appendingPathComponent(relativeSource).standardizedFileURL
+            XCTAssertTrue(
+                FileManager.default.fileExists(atPath: sourceURL.path),
+                "Bundled icon asset missing at \(sourceURL.path)"
+            )
+        }
+
+        XCTAssertNil(ProviderIconRegistry.resource(for: "grok"))
+        XCTAssertEqual(ProviderIconRegistry.monogram(for: "Grok CLI"), "GR")
+    }
+
     private func title(_ value: String, prefix: String = "", stacked: Bool) -> NSAttributedString {
         menuBarQuotaTitle(accountPrefix: prefix, valueText: value, remainingPercent: 36, stacked: stacked)
     }
