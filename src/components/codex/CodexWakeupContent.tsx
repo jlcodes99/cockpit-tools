@@ -1,3 +1,4 @@
+import { containsWithScrollbar } from '../../utils/scrollbarContainment';
 import { LOCAL_HISTORY_TIMEOUT, useLocalHistory } from '../../hooks/useLocalHistory';
 import {
   type Dispatch,
@@ -685,8 +686,8 @@ function WakeupSingleSelectDropdown({
     const handlePointerDown = (event: MouseEvent) => {
       const target = event.target as Node | null;
       if (!target) return;
-      if (rootRef.current?.contains(target)) return;
-      if (panelRef.current?.contains(target)) return;
+      if (containsWithScrollbar(rootRef.current, target)) return;
+      if (containsWithScrollbar(panelRef.current, target)) return;
       setOpen(false);
     };
     document.addEventListener('mousedown', handlePointerDown);

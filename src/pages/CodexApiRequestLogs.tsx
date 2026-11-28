@@ -1,3 +1,4 @@
+import { containsWithScrollbar } from '../utils/scrollbarContainment';
 import { resolveCodexAccountReferenceDisplayName } from "../utils/codexAccountDisplayName";
 import { useEffect, useState } from "react";
 import { useDurableUiSetting } from "../hooks/useDurableUiSetting";
@@ -416,7 +417,7 @@ export function CodexApiRequestLogs(props: Props) {
                   <div
                     className="codex-request-log-column-picker"
                     onBlur={(event) => {
-                      if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setColumnSettingsOpen(false);
+                      if (!containsWithScrollbar(event.currentTarget, event.relatedTarget as Node | null)) setColumnSettingsOpen(false);
                     }}
                     onKeyDown={(event) => {
                       if (event.key === "Escape") {

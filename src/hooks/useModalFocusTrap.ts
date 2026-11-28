@@ -1,3 +1,4 @@
+import { containsWithScrollbar } from '../utils/scrollbarContainment';
 import { useEffect, type RefObject } from 'react';
 import { registerModal, topModal, unregisterModal } from './modalStack';
 
@@ -25,7 +26,7 @@ export function useModalFocusTrap(
       // for its own closing priority, while ignoring other detached registry entries.
       const closingWasTop = topFocusTrap(undefined, node)?.node() === node;
       if (restoreFocus && previous instanceof HTMLElement && previous.isConnected
-        && (!remaining || remaining.node()?.contains(previous))) previous.focus();
+        && (!remaining || containsWithScrollbar(remaining.node(), previous))) previous.focus();
       else if (restoreFocus && closingWasTop && remaining) remaining.node()?.focus();
     };
   }, [dialog, open, restoreFocus]);
@@ -36,7 +37,7 @@ export function useModalFocusTrap(
     const node = dialog.current;
     if (!node) return;
     const entry = registerModal({ node: () => node, focus: true });
-    if (topFocusTrap() === entry && !node.contains(document.activeElement)) node.focus();
+    if (topFocusTrap() === entry && !containsWithScrollbar(node, document.activeElement)) node.focus();
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Tab' || topFocusTrap() !== entry) return;
       const controls = node.querySelectorAll<HTMLElement>('button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex="0"]');

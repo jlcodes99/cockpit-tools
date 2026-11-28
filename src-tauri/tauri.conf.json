@@ -95,6 +95,7 @@
       "../resources/codex/LICENSE.CLIProxyAPI": "licenses/CLIProxyAPI.txt",
       "../resources/licenses/WorkBuddy-Switch-Next.txt": "licenses/WorkBuddy-Switch-Next.txt",
       "../resources/licenses/dnd-kit.txt": "licenses/dnd-kit.txt",
+      "../resources/licenses/OverlayScrollbars.txt": "licenses/OverlayScrollbars.txt",
       "../resources/licenses/Primer-Octicons.txt": "licenses/Primer-Octicons.txt"
     },
     "macOS": {

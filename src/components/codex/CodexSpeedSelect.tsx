@@ -1,3 +1,4 @@
+import { containsWithScrollbar } from '../../utils/scrollbarContainment';
 import {
   useCallback,
   useEffect,
@@ -146,7 +147,7 @@ export function CodexSpeedSelect({
 
     const handlePointerDown = (event: MouseEvent) => {
       const target = event.target as Node;
-      if (triggerRef.current?.contains(target) || menuRef.current?.contains(target)) {
+      if (containsWithScrollbar(triggerRef.current, target) || containsWithScrollbar(menuRef.current, target)) {
         return;
       }
       setOpen(false);

@@ -8,16 +8,21 @@
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--bg-tertiary);
-  border-radius: 5px;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: 5px;
+  background: color-mix(in srgb, var(--text-muted, #94a3b8) 38%, transparent);
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #cbd5e1;
+  background-color: color-mix(in srgb, var(--text-secondary, #64748b) 62%, transparent);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
 }
 

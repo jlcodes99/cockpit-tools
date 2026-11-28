@@ -1,4 +1,5 @@
 import { isLaunchPathApp, readInvalidWorkbuddyPath, readMissingLaunchPathApp } from '../utils/appLaunchPath';
+import { containsWithScrollbar } from '../utils/scrollbarContainment';
 import { useDurableUiSetting } from '../hooks/useDurableUiSetting';
 import { previewDurableUiSetting } from '../utils/durableUiSettings';
 import { isCodexLaunchCancelled } from '../utils/codexLaunchCancellation';
@@ -426,7 +427,7 @@ const InlineAccountSelect = <TAccount extends AccountLike>({
     if (
       event?.type === "scroll" &&
       eventTarget instanceof Node &&
-      portalMenuRef.current?.contains(eventTarget)
+      containsWithScrollbar(portalMenuRef.current, eventTarget)
     ) {
       return;
     }
@@ -450,10 +451,10 @@ const InlineAccountSelect = <TAccount extends AccountLike>({
     const handleClick = (event: MouseEvent) => {
       const target = event.target as Node;
       const inTrigger = Boolean(
-        menuRef.current && menuRef.current.contains(target),
+        menuRef.current && containsWithScrollbar(menuRef.current, target),
       );
       const inPortalMenu = Boolean(
-        portalMenuRef.current && portalMenuRef.current.contains(target),
+        portalMenuRef.current && containsWithScrollbar(portalMenuRef.current, target),
       );
       if (!inTrigger && !inPortalMenu) {
         setOpen(false);
