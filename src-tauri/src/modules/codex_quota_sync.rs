@@ -381,6 +381,13 @@ impl Drop for DiscoveryFlight {
 }
 
 async fn discover() -> Result<Discovery, String> {
+    // Platform Layout "disabled" is documented to stop background automatic
+    // activity (token keep-alive, account scans, and similar). Quota discovery
+    // must not call list_accounts() while Codex is disabled, or an empty store
+    // re-enters index repair on every DISCOVERY_INTERVAL tick.
+    if !crate::modules::tray_layout::is_platform_enabled("codex") {
+        return Ok(Discovery::default());
+    }
     if DISCOVERY_RUNNING.swap(true, Ordering::AcqRel) {
         return Err("CODEX_QUOTA_DISCOVERY_BUSY".into());
     }

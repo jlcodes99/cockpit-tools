@@ -261,3 +261,47 @@ fn quota_event_serialization_contains_no_credentials() {
     assert_eq!(json["quota"]["hourly_percentage"], 30);
     assert!(serde_json::to_value(config::UserConfig::default()).unwrap().get("codex_quota_sync_enabled").is_none());
 }
+
+#[test]
+fn discover_skips_account_store_when_codex_platform_is_disabled() {
+    let _lock = crate::modules::test_support::env_lock()
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let dir = tempfile::tempdir().unwrap();
+    const KEY: &str = "COCKPIT_TOOLS_TEST_DATA_DIR";
+    struct Restore(Option<std::ffi::OsString>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            match &self.0 {
+                Some(value) => std::env::set_var(KEY, value),
+                None => std::env::remove_var(KEY),
+            }
+        }
+    }
+    let _restore = Restore(std::env::var_os(KEY));
+    std::env::set_var(KEY, dir.path());
+
+    std::fs::write(
+        dir.path().join("tray_layout.json"),
+        serde_json::json!({
+            "disabledPlatformIds": ["codex", "codex_api_service"]
+        })
+        .to_string(),
+    )
+    .unwrap();
+
+    let discovery = tokio::runtime::Runtime::new()
+        .unwrap()
+        .block_on(discover())
+        .expect("disabled discovery should succeed without scanning the account store");
+    assert!(discovery.profiles.is_empty());
+    assert!(discovery.probes.is_empty());
+    assert!(discovery.running.is_empty());
+    assert!(discovery.runtime.is_none());
+    // list_accounts() on a missing index starts [Codex Account][Repair] and
+    // creates the accounts directory. That must not happen while disabled.
+    assert!(
+        !dir.path().join("codex_accounts").exists(),
+        "quota discovery must not create or repair the Codex account store when the platform is disabled"
+    );
+}
