@@ -1984,6 +1984,7 @@
           "claude": "Claude",
           "codex": "Codex",
           "workbuddy": "WorkBuddy",
+          "workbuddy_ai": "WorkBuddy AI",
           "codebuddy": "CodeBuddy",
           "trae": "Trae",
           "other": "其他"
@@ -7481,6 +7482,9 @@
     "workbuddy": {
       "title": "WorkBuddy 设置",
       "appPath": "WorkBuddy 路径"
+    },
+    "workbuddyAi": {
+      "title": "WorkBuddy AI 设置"
     },
     "minimaxCode": {
       "title": "MiniMax Code 设置",

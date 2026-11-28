@@ -1781,6 +1781,7 @@
           "claude": "Claude",
           "codex": "Codex",
           "workbuddy": "WorkBuddy",
+          "workbuddy_ai": "WorkBuddy AI",
           "codebuddy": "CodeBuddy",
           "trae": "Trae",
           "other": "Khác"
@@ -7094,6 +7095,9 @@
     "workbuddy": {
       "title": "Cài đặt WorkBuddy",
       "appPath": "Đường dẫn WorkBuddy"
+    },
+    "workbuddyAi": {
+      "title": "Cài đặt WorkBuddy AI"
     },
     "minimaxCode": {
       "title": "Cài đặt MiniMax Code",

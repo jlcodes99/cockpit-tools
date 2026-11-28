@@ -460,6 +460,9 @@ pub struct UserConfig {
     /// 切换 WorkBuddy 账号时是否在本机账号间合并本地会话
     #[serde(default = "default_workbuddy_share_sessions_on_switch")]
     pub workbuddy_share_sessions_on_switch: bool,
+    /// 切换 WorkBuddy AI 账号时是否在本机账号间合并本地会话
+    #[serde(default)]
+    pub workbuddy_ai_share_sessions_on_switch: bool,
     /// 切换 Codex 时是否自动重启 OpenCode
     #[serde(default = "default_opencode_sync_on_switch")]
     pub opencode_sync_on_switch: bool,
@@ -1513,6 +1516,7 @@ impl Default for UserConfig {
             minimax_code_app_path: default_minimax_code_app_path(),
             minimax_code_region: default_minimax_code_region(),
             workbuddy_share_sessions_on_switch: default_workbuddy_share_sessions_on_switch(),
+            workbuddy_ai_share_sessions_on_switch: false,
             opencode_sync_on_switch: default_opencode_sync_on_switch(),
             opencode_auth_overwrite_on_switch: default_opencode_auth_overwrite_on_switch(),
             ghcp_opencode_sync_on_switch: default_ghcp_opencode_sync_on_switch(),

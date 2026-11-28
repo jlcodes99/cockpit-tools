@@ -17,6 +17,10 @@ use crate::models::workbuddy::WorkbuddyAccount;
 use crate::modules::{codebuddy_session_transfer, logger, workbuddy_account, workbuddy_instance};
 
 static TRANSFER_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+static WORKBUDDY_AI_TRANSFER_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+
+const WORKBUDDY_AI_BACKUP_SOURCE: &str = "workbuddy_ai";
+const SQLITE_SIDE_SUFFIXES: [&str; 3] = ["", "-wal", "-shm"];
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct WorkbuddySessionTransferReport {
@@ -28,9 +32,170 @@ pub struct WorkbuddySessionTransferReport {
 }
 
 #[derive(Clone, Copy)]
-struct WorkbuddyAccountScope<'a> {
-    uid: &'a str,
-    enterprise_id: Option<&'a str>,
+pub(crate) struct WorkbuddyAccountScope<'a> {
+    pub(crate) uid: &'a str,
+    pub(crate) enterprise_id: Option<&'a str>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub(crate) struct WorkbuddyAiSessionTransferOutcome {
+    pub report: WorkbuddySessionTransferReport,
+    pub backup_dir: Option<PathBuf>,
+}
+
+/// Official WorkBuddy AI config root (`~/.workbuddy-ai`).
+pub(crate) fn default_workbuddy_ai_config_dir() -> Result<PathBuf, String> {
+    let home = dirs::home_dir().ok_or("无法获取用户主目录")?;
+    Ok(home.join(".workbuddy-ai"))
+}
+
+/// 合并 WorkBuddy AI 本地会话（`workbuddy.db` 索引重映射 + 置顶任务迁移）。
+///
+/// 仅操作 WorkBuddy AI 配置目录（`~/.workbuddy-ai`），备份隔离到 `"workbuddy_ai"`
+/// 命名空间，不触碰国内版 WorkBuddy 目录或数据。
+pub(crate) fn transfer_workbuddy_ai_local_sessions(
+    config_dir: &Path,
+    source: WorkbuddyAccountScope<'_>,
+    target: WorkbuddyAccountScope<'_>,
+) -> Result<WorkbuddyAiSessionTransferOutcome, String> {
+    transfer_workbuddy_ai_local_sessions_with_backup_root(config_dir, source, target, None)
+}
+
+pub(crate) fn transfer_workbuddy_ai_local_sessions_with_backup_root(
+    config_dir: &Path,
+    source: WorkbuddyAccountScope<'_>,
+    target: WorkbuddyAccountScope<'_>,
+    custom_backup_root: Option<&Path>,
+) -> Result<WorkbuddyAiSessionTransferOutcome, String> {
+    let (source_uid, target_uid) = (source.uid, target.uid);
+    validate_uid(source_uid)?;
+    validate_uid(target_uid)?;
+    if source_uid == target_uid {
+        return Ok(WorkbuddyAiSessionTransferOutcome::default());
+    }
+
+    let _guard = WORKBUDDY_AI_TRANSFER_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .map_err(|_| "WorkBuddy AI 会话迁移锁已损坏".to_string())?;
+
+    reject_symlink_if_exists(config_dir)?;
+    let db_path = config_dir.join("workbuddy.db");
+    reject_sqlite_symlinks(&db_path)?;
+    for path in pinned_conversation_paths(config_dir, source)?
+        .into_iter()
+        .chain(pinned_conversation_paths(config_dir, target)?)
+    {
+        reject_symlink_components_under(config_dir, &path)?;
+    }
+
+    match fs::symlink_metadata(&db_path) {
+        Ok(metadata) if metadata.file_type().is_symlink() => {
+            return Err(format!(
+                "拒绝通过符号链接读写 WorkBuddy 会话: {}",
+                db_path.display()
+            ));
+        }
+        Ok(metadata) if metadata.is_file() => {}
+        Ok(_) => {
+            return Err(format!(
+                "WorkBuddy AI 会话数据库路径不是常规文件: {}",
+                db_path.display()
+            ));
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(WorkbuddyAiSessionTransferOutcome::default());
+        }
+        Err(error) => {
+            return Err(format!(
+                "读取 WorkBuddy AI 会话数据库属性失败: path={}, error={}",
+                db_path.display(),
+                error
+            ));
+        }
+    }
+
+    let scope = crate::modules::backup_storage::scope_for_path(config_dir);
+    let op_id = operation_id();
+    let mut backup_state: Option<(PathBuf, PathBuf)> = None;
+    let create_backup_dir =
+        |state: &mut Option<(PathBuf, PathBuf)>| -> Result<(PathBuf, PathBuf), String> {
+            if let Some(existing) = state.as_ref() {
+                return Ok(existing.clone());
+            }
+            let (boundary, dir) = if let Some(root) = custom_backup_root {
+                reject_symlink_if_exists(root)?;
+                let op_dir = root
+                    .join("behavior")
+                    .join(WORKBUDDY_AI_BACKUP_SOURCE)
+                    .join(&scope)
+                    .join(&op_id);
+                reject_symlink_components_under(root, &op_dir)?;
+                fs::create_dir_all(&op_dir).map_err(|error| {
+                    format!(
+                        "创建 WorkBuddy AI 备份目录失败({}): {}",
+                        op_dir.display(),
+                        error
+                    )
+                })?;
+                (root.to_path_buf(), op_dir)
+            } else {
+                let root = crate::modules::backup_storage::get_backup_root_dir()?;
+                let expected_dir = root
+                    .join("behavior")
+                    .join(WORKBUDDY_AI_BACKUP_SOURCE)
+                    .join(&scope)
+                    .join(&op_id);
+                reject_symlink_components_under(&root, &expected_dir)?;
+                let op_dir = crate::modules::backup_storage::behavior_backup_dir(
+                    WORKBUDDY_AI_BACKUP_SOURCE,
+                    &scope,
+                    &op_id,
+                )?;
+                (root, op_dir)
+            };
+            *state = Some((boundary.clone(), dir.clone()));
+            Ok((boundary, dir))
+        };
+
+    let mut report = WorkbuddySessionTransferReport::default();
+    report.updated_session_rows =
+        remap_workbuddy_ai_database(config_dir, &db_path, target_uid, &mut || {
+            create_backup_dir(&mut backup_state)
+        })?;
+    let db_backed_up = backup_state.is_some();
+
+    match transfer_workbuddy_ai_pins(config_dir, source, target, &mut || {
+        create_backup_dir(&mut backup_state)
+    }) {
+        Ok(added) => report.added_pins = added,
+        Err(error) => {
+            if !db_backed_up {
+                if let Some((_, dir)) = backup_state.take() {
+                    let _ = fs::remove_dir_all(&dir);
+                }
+            }
+            logger::log_warn(&format!(
+                "[WorkBuddy AI Session Transfer] 置顶任务同步失败: {error}"
+            ));
+        }
+    }
+
+    let backup_dir = backup_state.map(|(_, dir)| dir);
+    if report.updated_session_rows > 0 || report.added_pins > 0 {
+        logger::log_info(&format!(
+            "[WorkBuddy AI Session Transfer] 合并完成: source_uid={}, target_uid={}, db_rows={}, pins={}",
+            source_uid, target_uid, report.updated_session_rows, report.added_pins
+        ));
+    }
+    if custom_backup_root.is_none() && backup_dir.is_some() {
+        let _ = crate::modules::backup_storage::prune_behavior_backups(
+            WORKBUDDY_AI_BACKUP_SOURCE,
+            &scope,
+        );
+    }
+
+    Ok(WorkbuddyAiSessionTransferOutcome { report, backup_dir })
 }
 
 /// 在写入目标账号认证前合并来源账号的本地会话。
@@ -312,6 +477,112 @@ fn transfer_local_pins(
     Ok(added)
 }
 
+fn transfer_workbuddy_ai_pins<F>(
+    config_dir: &Path,
+    source: WorkbuddyAccountScope<'_>,
+    target: WorkbuddyAccountScope<'_>,
+    ensure_backup_dir: &mut F,
+) -> Result<usize, String>
+where
+    F: FnMut() -> Result<(PathBuf, PathBuf), String>,
+{
+    let db_path = config_dir.join("workbuddy.db");
+    let [source_path, source_legacy, source_uid_legacy] =
+        pinned_conversation_paths(config_dir, source)?;
+    let mut source_pins = Vec::new();
+    for path in [&source_path, &source_legacy, &source_uid_legacy] {
+        reject_symlink_components_under(config_dir, path)?;
+        source_pins.extend(pinned_items(&read_conversation_namespace(path)?).cloned());
+    }
+    if source_pins.is_empty() {
+        return Ok(0);
+    }
+
+    reject_symlink_components_under(config_dir, &db_path)?;
+    match fs::symlink_metadata(&db_path) {
+        Ok(metadata) if metadata.is_file() => {}
+        Ok(_) => return Ok(0),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(0),
+        Err(error) => {
+            return Err(format!(
+                "读取 WorkBuddy AI 置顶任务索引属性失败: path={}, error={}",
+                db_path.display(),
+                error
+            ));
+        }
+    }
+
+    let connection =
+        Connection::open_with_flags(&db_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .map_err(|error| format!("打开 WorkBuddy AI 置顶任务索引失败: {error}"))?;
+    let columns = read_sessions_columns(&connection, &db_path)?;
+    if columns.is_empty() {
+        return Ok(0);
+    }
+    let sql = if columns.contains("transport") {
+        "SELECT id FROM sessions WHERE user_id = ?1 AND deleted_at IS NULL AND transport = 'local'"
+    } else {
+        "SELECT id FROM sessions WHERE user_id = ?1 AND deleted_at IS NULL"
+    };
+    let local_ids = connection
+        .prepare(sql)
+        .and_then(|mut query| {
+            query
+                .query_map([target.uid], |row| row.get::<_, String>(0))?
+                .collect::<Result<HashSet<_>, _>>()
+        })
+        .map_err(|error| format!("读取 WorkBuddy AI 本地任务失败: {error}"))?;
+    drop(connection);
+    source_pins.retain(|item| pinned_id(item).is_some_and(|id| local_ids.contains(id)));
+    if source_pins.is_empty() {
+        return Ok(0);
+    }
+
+    let [target_path, target_legacy, target_uid_legacy] =
+        pinned_conversation_paths(config_dir, target)?;
+    for path in [&target_path, &target_legacy, &target_uid_legacy] {
+        reject_symlink_components_under(config_dir, path)?;
+    }
+    let mut namespace = read_conversation_namespace(&target_path)?;
+    let mut pins: Vec<Value> = pinned_items(&namespace).cloned().collect();
+    let mut seen: HashSet<String> = pins
+        .iter()
+        .filter_map(pinned_id)
+        .map(str::to_owned)
+        .collect();
+    for path in [&target_legacy, &target_uid_legacy] {
+        pins.extend(
+            pinned_items(&read_conversation_namespace(path)?)
+                .filter(|item| pinned_id(item).is_some_and(|id| seen.insert(id.to_owned())))
+                .cloned(),
+        );
+    }
+    let target_count = pins.len();
+    pins.extend(
+        source_pins
+            .into_iter()
+            .filter(|item| pinned_id(item).is_some_and(|id| seen.insert(id.to_owned()))),
+    );
+    let added = pins.len() - target_count;
+    if added == 0 {
+        return Ok(0);
+    }
+
+    namespace.insert("pinned".into(), Value::Array(pins));
+    if fs::symlink_metadata(&target_path).is_ok_and(|metadata| metadata.is_file()) {
+        let (backup_boundary, backup_op_dir) = ensure_backup_dir()?;
+        let backup_dir = backup_op_dir.join("pins");
+        let backup_path = backup_dir.join("conversations.json");
+        reject_symlink_components_under(&backup_boundary, &backup_path)?;
+        fs::create_dir_all(&backup_dir)
+            .and_then(|()| fs::copy(&target_path, &backup_path).map(|_| ()))
+            .map_err(|error| format!("备份 WorkBuddy AI 置顶任务失败: {error}"))?;
+    }
+    let content = serde_json::to_string_pretty(&namespace).map_err(|error| error.to_string())?;
+    crate::modules::atomic_write::write_secret_string_atomic(&target_path, &content)?;
+    Ok(added)
+}
+
 fn validate_uid(uid: &str) -> Result<(), String> {
     let trimmed = uid.trim();
     if trimmed.is_empty() || trimmed != uid {
@@ -374,6 +645,309 @@ fn account_has_history(extension_data_dir: &Path, uid: &str) -> Result<bool, Str
         }
     }
     Ok(false)
+}
+
+fn sqlite_sidecar_path(db_path: &Path, suffix: &str) -> PathBuf {
+    if suffix.is_empty() {
+        db_path.to_path_buf()
+    } else {
+        let mut path = db_path.as_os_str().to_os_string();
+        path.push(suffix);
+        PathBuf::from(path)
+    }
+}
+
+fn reject_sqlite_symlinks(db_path: &Path) -> Result<(), String> {
+    for suffix in SQLITE_SIDE_SUFFIXES {
+        reject_symlink_if_exists(&sqlite_sidecar_path(db_path, suffix))?;
+    }
+    Ok(())
+}
+
+fn reject_symlink_components_under(root: &Path, target: &Path) -> Result<(), String> {
+    reject_symlink_if_exists(root)?;
+    if let Ok(relative) = target.strip_prefix(root) {
+        let mut cursor = root.to_path_buf();
+        for component in relative.components() {
+            cursor.push(component);
+            reject_symlink_if_exists(&cursor)?;
+        }
+        Ok(())
+    } else {
+        reject_symlink_if_exists(target)
+    }
+}
+
+fn read_sessions_columns(connection: &Connection, path: &Path) -> Result<HashSet<String>, String> {
+    connection
+        .prepare("SELECT name FROM pragma_table_info('sessions')")
+        .and_then(|mut query| {
+            query
+                .query_map([], |row| row.get::<_, String>(0))?
+                .collect::<Result<HashSet<_>, _>>()
+        })
+        .map_err(|error| {
+            format!(
+                "检查 WorkBuddy AI 会话数据库结构失败: path={}, error={}",
+                path.display(),
+                error
+            )
+        })
+}
+
+fn verify_sqlite_quick_check(connection: &Connection, path: &Path) -> Result<(), String> {
+    let status: String = connection
+        .query_row("PRAGMA quick_check", [], |row| row.get(0))
+        .map_err(|error| {
+            format!(
+                "校验 WorkBuddy AI 数据库快照失败: path={}, error={}",
+                path.display(),
+                error
+            )
+        })?;
+    if status != "ok" {
+        return Err(format!(
+            "WorkBuddy AI 数据库快照完整性校验异常: path={}, status={}",
+            path.display(),
+            status
+        ));
+    }
+    Ok(())
+}
+
+fn verify_sqlite_snapshot(
+    backup_boundary: &Path,
+    backup_file: &Path,
+    require_transport_column: bool,
+) -> Result<(), String> {
+    reject_symlink_components_under(backup_boundary, backup_file)?;
+    let metadata = match fs::symlink_metadata(backup_file) {
+        Ok(metadata) if metadata.file_type().is_symlink() => {
+            return Err(format!(
+                "拒绝通过符号链接访问 WorkBuddy AI 数据库快照: {}",
+                backup_file.display()
+            ));
+        }
+        Ok(metadata) if metadata.is_file() => metadata,
+        Ok(_) => {
+            return Err(format!(
+                "WorkBuddy AI 会话数据库快照路径不是常规文件: {}",
+                backup_file.display()
+            ));
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Err(format!(
+                "WorkBuddy AI 会话数据库快照文件缺失: {}",
+                backup_file.display()
+            ));
+        }
+        Err(error) => {
+            return Err(format!(
+                "读取 WorkBuddy AI 会话数据库快照属性失败: path={}, error={}",
+                backup_file.display(),
+                error
+            ));
+        }
+    };
+    if metadata.len() == 0 {
+        return Err(format!(
+            "WorkBuddy AI 会话数据库快照为空文件(0 字节): {}",
+            backup_file.display()
+        ));
+    }
+    let connection =
+        Connection::open_with_flags(backup_file, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .map_err(|error| {
+                format!(
+                    "打开 WorkBuddy AI 会话数据库快照失败: path={}, error={}",
+                    backup_file.display(),
+                    error
+                )
+            })?;
+    verify_sqlite_quick_check(&connection, backup_file)?;
+    let columns = read_sessions_columns(&connection, backup_file)?;
+    for column in ["id", "user_id", "deleted_at"] {
+        if !columns.contains(column) {
+            return Err(format!(
+                "WorkBuddy AI 会话数据库快照缺少必需列 sessions.{}: {}",
+                column,
+                backup_file.display()
+            ));
+        }
+    }
+    if require_transport_column && !columns.contains("transport") {
+        return Err(format!(
+            "WorkBuddy AI 会话数据库快照缺少必需列 sessions.transport: {}",
+            backup_file.display()
+        ));
+    }
+    Ok(())
+}
+
+fn run_sqlite_backup_with_timeout(
+    src: &Connection,
+    dst: &mut Connection,
+    timeout: Duration,
+) -> Result<(), rusqlite::Error> {
+    // 备份期间禁用 SQLite 内置 busy_timeout，让 step 遇锁立即返回 Busy/Locked，
+    // 由外层循环统一按剩余预算休眠与截止，避免最后一步超出总超时。
+    src.busy_timeout(Duration::ZERO)?;
+    dst.busy_timeout(Duration::ZERO)?;
+    let backup = rusqlite::backup::Backup::new(src, dst)?;
+    let deadline = std::time::Instant::now() + timeout;
+    loop {
+        if std::time::Instant::now() >= deadline {
+            return Err(rusqlite::Error::SqliteFailure(
+                rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_BUSY),
+                Some("SQLite backup timed out waiting for consistent snapshot".to_string()),
+            ));
+        }
+        match backup.step(100)? {
+            rusqlite::backup::StepResult::Done => return Ok(()),
+            rusqlite::backup::StepResult::More => {}
+            rusqlite::backup::StepResult::Busy | rusqlite::backup::StepResult::Locked => {
+                let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+                if remaining.is_zero() {
+                    return Err(rusqlite::Error::SqliteFailure(
+                        rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_BUSY),
+                        Some("SQLite backup timed out waiting for lock".to_string()),
+                    ));
+                }
+                std::thread::sleep(remaining.min(Duration::from_millis(10)));
+            }
+            _ => {}
+        }
+    }
+}
+
+fn remap_workbuddy_ai_database<F>(
+    config_dir: &Path,
+    db_path: &Path,
+    target_uid: &str,
+    ensure_backup_dir: &mut F,
+) -> Result<usize, String>
+where
+    F: FnMut() -> Result<(PathBuf, PathBuf), String>,
+{
+    reject_symlink_components_under(config_dir, db_path)?;
+    reject_sqlite_symlinks(db_path)?;
+
+    let mut connection = Connection::open(db_path).map_err(|error| {
+        format!(
+            "打开 WorkBuddy AI 会话数据库失败: path={}, error={}",
+            db_path.display(),
+            error
+        )
+    })?;
+    connection
+        .busy_timeout(Duration::from_secs(5))
+        .map_err(|error| format!("设置 WorkBuddy AI 会话数据库超时失败: {}", error))?;
+
+    let columns = read_sessions_columns(&connection, db_path)?;
+    if columns.is_empty() {
+        return Ok(0);
+    }
+    for required in ["id", "user_id", "deleted_at"] {
+        if !columns.contains(required) {
+            return Err(format!(
+                "WorkBuddy AI 会话数据库缺少必需列 sessions.{}: {}",
+                required,
+                db_path.display()
+            ));
+        }
+    }
+
+    let filter_local_transport = columns.contains("transport");
+    let local_filter = if filter_local_transport {
+        " AND transport = 'local'"
+    } else {
+        ""
+    };
+    let count_sql = format!(
+        "SELECT COUNT(*) FROM sessions WHERE user_id != ?1 AND deleted_at IS NULL{local_filter}"
+    );
+    let update_count: usize = connection
+        .query_row(&count_sql, [target_uid], |row| row.get(0))
+        .map_err(|error| format!("读取 WorkBuddy AI 会话索引失败: {}", error))?;
+    if update_count == 0 {
+        return Ok(0);
+    }
+
+    let (backup_boundary, backup_op_dir) = ensure_backup_dir()?;
+    struct BackupOpCleanup(Option<PathBuf>);
+    impl Drop for BackupOpCleanup {
+        fn drop(&mut self) {
+            if let Some(dir) = self.0.take() {
+                let _ = fs::remove_dir_all(dir);
+            }
+        }
+    }
+    let mut backup_cleanup = BackupOpCleanup(Some(backup_op_dir.clone()));
+
+    let backup_db_dir = backup_op_dir.join("database");
+    let backup_file_name = db_path
+        .file_name()
+        .ok_or_else(|| format!("无法解析 WorkBuddy AI 数据库文件名: {}", db_path.display()))?;
+    let backup_file = backup_db_dir.join(backup_file_name);
+    reject_symlink_components_under(&backup_boundary, &backup_file)?;
+    fs::create_dir_all(&backup_db_dir).map_err(|error| {
+        format!(
+            "创建 WorkBuddy AI 会话数据库备份目录失败: path={}, error={}",
+            backup_db_dir.display(),
+            error
+        )
+    })?;
+    reject_symlink_components_under(&backup_boundary, &backup_file)?;
+
+    // 记录 data_version，用 SQLite Online Backup 生成单文件一致快照（含未 checkpoint WAL）
+    // 并校验快照非空且结构完整，再在 IMMEDIATE 写事务内复核无并发写入后执行重映射。
+    let version_before_backup: i64 = connection
+        .query_row("PRAGMA data_version", [], |row| row.get(0))
+        .map_err(|error| format!("读取 WorkBuddy AI 数据库版本失败: {}", error))?;
+    let mut backup_conn = Connection::open(&backup_file).map_err(|error| {
+        format!(
+            "创建 WorkBuddy AI 会话数据库快照失败: path={}, error={}",
+            backup_file.display(),
+            error
+        )
+    })?;
+    let backup_result =
+        run_sqlite_backup_with_timeout(&connection, &mut backup_conn, Duration::from_secs(5));
+    drop(backup_conn);
+    connection
+        .busy_timeout(Duration::from_secs(5))
+        .map_err(|error| format!("恢复 WorkBuddy AI 会话数据库超时失败: {}", error))?;
+    backup_result.map_err(|error| {
+        format!(
+            "写入 WorkBuddy AI 会话数据库快照失败: path={}, error={}",
+            backup_file.display(),
+            error
+        )
+    })?;
+    verify_sqlite_snapshot(&backup_boundary, &backup_file, filter_local_transport)?;
+
+    let transaction = connection
+        .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+        .map_err(|error| format!("获取 WorkBuddy AI 会话数据库写锁失败: {}", error))?;
+    let version_in_tx: i64 = transaction
+        .query_row("PRAGMA data_version", [], |row| row.get(0))
+        .map_err(|error| format!("复核 WorkBuddy AI 数据库版本失败: {}", error))?;
+    if version_in_tx != version_before_backup {
+        return Err("检测到 WorkBuddy AI 会话数据库正在被其他进程写入，已停止合并".to_string());
+    }
+    backup_cleanup.0 = None;
+
+    let update_sql = format!(
+        "UPDATE sessions SET user_id = ?1 WHERE user_id != ?1 AND deleted_at IS NULL{local_filter}"
+    );
+    let changed = transaction
+        .execute(&update_sql, [target_uid])
+        .map_err(|error| format!("更新 WorkBuddy AI 会话 user_id 失败: {}", error))?;
+    transaction
+        .commit()
+        .map_err(|error| format!("提交 WorkBuddy AI 会话数据库事务失败: {}", error))?;
+    drop(connection);
+    Ok(changed)
 }
 
 fn remap_workbuddy_database_user_id(
@@ -896,5 +1470,521 @@ mod tests {
         assert!(target_account
             .join("check-point/workspace/source-only/meta.json")
             .is_file());
+    }
+
+    struct ScopedBackupCleanup {
+        paths: Vec<PathBuf>,
+    }
+
+    impl Drop for ScopedBackupCleanup {
+        fn drop(&mut self) {
+            for path in &self.paths {
+                let _ = fs::remove_dir_all(path);
+            }
+        }
+    }
+
+    fn sqlite_integrity_ok(db_path: &Path) -> bool {
+        let conn = Connection::open(db_path).unwrap();
+        let status: String = conn
+            .query_row("PRAGMA integrity_check", [], |row| row.get(0))
+            .unwrap();
+        status == "ok"
+    }
+
+    #[test]
+    fn workbuddy_ai_transfer_remaps_local_sessions_preserves_cloud_and_isolates_backup_namespace() {
+        let _env_lock = crate::modules::test_support::env_lock()
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let temp = TestDir::new();
+        let scope = crate::modules::backup_storage::scope_for_path(&temp.0);
+        let backup_root = crate::modules::backup_storage::get_backup_root_dir().unwrap();
+        let ai_scope_dir = backup_root
+            .join("behavior")
+            .join(WORKBUDDY_AI_BACKUP_SOURCE)
+            .join(&scope);
+        let domestic_scope_dir = backup_root.join("behavior").join("workbuddy").join(&scope);
+        let _cleanup = ScopedBackupCleanup {
+            paths: vec![ai_scope_dir.clone(), domestic_scope_dir.clone()],
+        };
+
+        let stale_ai_backup = ai_scope_dir.join("0000-stale-op");
+        fs::create_dir_all(&stale_ai_backup).unwrap();
+        fs::write(stale_ai_backup.join("old.db"), b"stale").unwrap();
+        std::thread::sleep(Duration::from_millis(25));
+
+        let domestic_sentinel = domestic_scope_dir.join("domestic-op/sentinel.txt");
+        fs::create_dir_all(domestic_sentinel.parent().unwrap()).unwrap();
+        fs::write(&domestic_sentinel, b"domestic").unwrap();
+
+        let db_path = temp.0.join("workbuddy.db");
+        let conn = Connection::open(&db_path).unwrap();
+        conn.execute_batch(
+            "PRAGMA journal_mode=WAL;
+             CREATE TABLE sessions (
+                 id TEXT PRIMARY KEY,
+                 user_id TEXT NOT NULL,
+                 deleted_at INTEGER,
+                 transport TEXT
+             );
+             INSERT INTO sessions VALUES
+                 ('local-1', 'initial', NULL, 'local'),
+                 ('other-1', 'other', NULL, 'local'),
+                 ('deleted-1', 'source', 1700000000, 'local'),
+                 ('cloud-1', 'source', NULL, 'cloud'),
+                 ('target-1', 'target', NULL, 'local');",
+        )
+        .unwrap();
+        drop(conn);
+
+        // Keep an uncheckpointed WAL update alive so snapshot capture is verified against WAL.
+        let wal_writer = Connection::open(&db_path).unwrap();
+        wal_writer
+            .execute_batch(
+                "PRAGMA wal_autocheckpoint=0;
+                 UPDATE sessions SET user_id = 'source' WHERE id = 'local-1';",
+            )
+            .unwrap();
+        assert!(sqlite_sidecar_path(&db_path, "-wal").is_file());
+
+        let source_pins = temp
+            .0
+            .join("storage/user-source-org/global/conversations.json");
+        let target_pins = temp
+            .0
+            .join("storage/user-target-personal/global/conversations.json");
+        fs::create_dir_all(source_pins.parent().unwrap()).unwrap();
+        fs::create_dir_all(target_pins.parent().unwrap()).unwrap();
+        fs::write(
+            &source_pins,
+            json!({
+                "pinned": [
+                    {"id": "local-1", "groupKey": "ws-1"},
+                    {"id": "target-1", "groupKey": "ws-dup"},
+                    {"id": "cloud-1", "groupKey": "cloud"},
+                    {"id": "deleted-1", "groupKey": "ws-1"},
+                    {"id": "missing-1", "groupKey": "ws-1"}
+                ]
+            })
+            .to_string(),
+        )
+        .unwrap();
+        let original_target_pins = json!({
+            "pinned": [{"id": "target-1", "groupKey": "ws-target"}],
+            "keep": true
+        })
+        .to_string();
+        fs::write(&target_pins, &original_target_pins).unwrap();
+
+        let source = WorkbuddyAccountScope {
+            uid: "source",
+            enterprise_id: Some("org"),
+        };
+        let target = WorkbuddyAccountScope {
+            uid: "target",
+            enterprise_id: None,
+        };
+
+        let outcome = transfer_workbuddy_ai_local_sessions(&temp.0, source, target).unwrap();
+        drop(wal_writer);
+        assert_eq!(outcome.report.updated_session_rows, 2);
+        assert_eq!(outcome.report.added_pins, 1);
+
+        let conn = Connection::open(&db_path).unwrap();
+        let read_uid = |id: &str| -> String {
+            conn.query_row("SELECT user_id FROM sessions WHERE id = ?1", [id], |row| {
+                row.get(0)
+            })
+            .unwrap()
+        };
+        assert_eq!(read_uid("local-1"), "target");
+        assert_eq!(read_uid("other-1"), "target");
+        assert_eq!(read_uid("target-1"), "target");
+        assert_eq!(
+            read_uid("cloud-1"),
+            "source",
+            "cloud cache must stay untouched"
+        );
+        assert_eq!(
+            read_uid("deleted-1"),
+            "source",
+            "deleted row must stay untouched"
+        );
+        drop(conn);
+        assert!(sqlite_integrity_ok(&db_path));
+
+        let merged_pins = Value::Object(read_conversation_namespace(&target_pins).unwrap());
+        assert_eq!(
+            merged_pins,
+            json!({
+                "pinned": [
+                    {"id": "target-1", "groupKey": "ws-target"},
+                    {"id": "local-1", "groupKey": "ws-1"}
+                ],
+                "keep": true
+            })
+        );
+
+        let ai_ops: Vec<PathBuf> = fs::read_dir(&ai_scope_dir)
+            .unwrap()
+            .flatten()
+            .map(|entry| entry.path())
+            .filter(|path| path.is_dir())
+            .collect();
+        assert_eq!(ai_ops.len(), 1, "old workbuddy_ai backups should be pruned");
+        let snapshot_db = ai_ops[0].join("database/workbuddy.db");
+        assert!(snapshot_db.is_file());
+        let snapshot_uid: String = Connection::open(&snapshot_db)
+            .unwrap()
+            .query_row(
+                "SELECT user_id FROM sessions WHERE id = 'local-1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            snapshot_uid, "source",
+            "Online Backup snapshot must include pre-switch uncheckpointed WAL state"
+        );
+        assert_eq!(
+            fs::read_to_string(ai_ops[0].join("pins/conversations.json")).unwrap(),
+            original_target_pins
+        );
+        assert!(
+            domestic_sentinel.is_file(),
+            "domestic workbuddy backup namespace must remain isolated"
+        );
+    }
+
+    #[test]
+    fn workbuddy_ai_transfer_supports_legacy_schema_without_transport_column() {
+        let temp = TestDir::new();
+        let backup_root = TestDir::new();
+        let db_path = temp.0.join("workbuddy.db");
+        let conn = Connection::open(&db_path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE sessions (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, deleted_at INTEGER);
+             INSERT INTO sessions VALUES ('s1', 'source', NULL), ('s2', 'source', 10);",
+        )
+        .unwrap();
+        drop(conn);
+
+        let outcome = transfer_workbuddy_ai_local_sessions_with_backup_root(
+            &temp.0,
+            WorkbuddyAccountScope {
+                uid: "source",
+                enterprise_id: None,
+            },
+            WorkbuddyAccountScope {
+                uid: "target",
+                enterprise_id: None,
+            },
+            Some(&backup_root.0),
+        )
+        .unwrap();
+        assert_eq!(outcome.report.updated_session_rows, 1);
+
+        let conn = Connection::open(&db_path).unwrap();
+        let active: String = conn
+            .query_row("SELECT user_id FROM sessions WHERE id = 's1'", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        let deleted: String = conn
+            .query_row("SELECT user_id FROM sessions WHERE id = 's2'", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(active, "target");
+        assert_eq!(deleted, "source");
+    }
+
+    #[test]
+    fn workbuddy_ai_transfer_skips_same_uid_and_missing_db_without_creating_backups() {
+        let temp = TestDir::new();
+        let backup_root = TestDir::new();
+
+        // Missing DB is a clean no-op with no backup dir created.
+        let outcome = transfer_workbuddy_ai_local_sessions_with_backup_root(
+            &temp.0,
+            WorkbuddyAccountScope {
+                uid: "source",
+                enterprise_id: None,
+            },
+            WorkbuddyAccountScope {
+                uid: "target",
+                enterprise_id: None,
+            },
+            Some(&backup_root.0),
+        )
+        .unwrap();
+        assert_eq!(outcome.report, WorkbuddySessionTransferReport::default());
+        assert!(outcome.backup_dir.is_none());
+        assert!(!backup_root.0.join("behavior").exists());
+
+        // Same UID skips DB mutation and backup creation even when DB exists.
+        let db_path = temp.0.join("workbuddy.db");
+        let conn = Connection::open(&db_path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE sessions (id TEXT PRIMARY KEY, user_id TEXT, deleted_at INTEGER);
+             INSERT INTO sessions VALUES ('s1', 'other', NULL);",
+        )
+        .unwrap();
+        drop(conn);
+
+        let same_outcome = transfer_workbuddy_ai_local_sessions_with_backup_root(
+            &temp.0,
+            WorkbuddyAccountScope {
+                uid: "same",
+                enterprise_id: None,
+            },
+            WorkbuddyAccountScope {
+                uid: "same",
+                enterprise_id: Some("org"),
+            },
+            Some(&backup_root.0),
+        )
+        .unwrap();
+        assert_eq!(
+            same_outcome.report,
+            WorkbuddySessionTransferReport::default()
+        );
+        assert!(same_outcome.backup_dir.is_none());
+        assert!(!backup_root.0.join("behavior").exists());
+
+        let uid: String = Connection::open(&db_path)
+            .unwrap()
+            .query_row("SELECT user_id FROM sessions WHERE id = 's1'", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(uid, "other");
+    }
+
+    #[test]
+    fn workbuddy_ai_transfer_rejects_unsafe_uids_links_and_invalid_snapshots() {
+        let temp = TestDir::new();
+        let backup_root = TestDir::new();
+        let db_path = temp.0.join("workbuddy.db");
+        let conn = Connection::open(&db_path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE sessions (id TEXT PRIMARY KEY, user_id TEXT, deleted_at INTEGER);
+             INSERT INTO sessions VALUES ('s1', 'source', NULL);",
+        )
+        .unwrap();
+        drop(conn);
+
+        for (source_uid, target_uid, enterprise_id) in [
+            ("../bad", "target", None),
+            ("source", "a/b", None),
+            ("source", "target", Some("../org")),
+            (" source ", "target", None),
+        ] {
+            let err = transfer_workbuddy_ai_local_sessions_with_backup_root(
+                &temp.0,
+                WorkbuddyAccountScope {
+                    uid: source_uid,
+                    enterprise_id,
+                },
+                WorkbuddyAccountScope {
+                    uid: target_uid,
+                    enterprise_id: None,
+                },
+                Some(&backup_root.0),
+            );
+            assert!(
+                err.is_err(),
+                "expected error for {source_uid} -> {target_uid}"
+            );
+        }
+
+        // Snapshot validator rejects 0-byte files and valid empty SQLite DBs lacking sessions.
+        let zero_byte = backup_root.0.join("zero.db");
+        fs::write(&zero_byte, b"").unwrap();
+        assert!(verify_sqlite_snapshot(&backup_root.0, &zero_byte, true).is_err());
+
+        let empty_sqlite = backup_root.0.join("empty-valid.db");
+        {
+            let empty_conn = Connection::open(&empty_sqlite).unwrap();
+            empty_conn
+                .execute_batch("CREATE TABLE unrelated (k TEXT);")
+                .unwrap();
+        }
+        assert!(verify_sqlite_snapshot(&backup_root.0, &empty_sqlite, true).is_err());
+
+        #[cfg(any(unix, windows))]
+        {
+            let external = TestDir::new();
+            let storage_link = temp.0.join("storage");
+            #[cfg(unix)]
+            std::os::unix::fs::symlink(&external.0, &storage_link).unwrap();
+            #[cfg(windows)]
+            junction::create(&external.0, &storage_link).unwrap();
+
+            let err = transfer_workbuddy_ai_local_sessions_with_backup_root(
+                &temp.0,
+                WorkbuddyAccountScope {
+                    uid: "source",
+                    enterprise_id: None,
+                },
+                WorkbuddyAccountScope {
+                    uid: "target",
+                    enterprise_id: None,
+                },
+                Some(&backup_root.0),
+            );
+            assert!(err.is_err(), "linked storage directory must be rejected");
+            let uid: String = Connection::open(&db_path)
+                .unwrap()
+                .query_row("SELECT user_id FROM sessions WHERE id = 's1'", [], |row| {
+                    row.get(0)
+                })
+                .unwrap();
+            assert_eq!(
+                uid, "source",
+                "DB must not be modified when link is rejected"
+            );
+            #[cfg(windows)]
+            let _ = junction::delete(&storage_link);
+            let _ = fs::remove_dir_all(&storage_link);
+            let _ = fs::remove_file(&storage_link);
+
+            let linked_backup_root = TestDir::new();
+            let behavior_dir = linked_backup_root.0.join("behavior");
+            fs::create_dir_all(&behavior_dir).unwrap();
+            let backup_source_link = behavior_dir.join(WORKBUDDY_AI_BACKUP_SOURCE);
+            #[cfg(unix)]
+            std::os::unix::fs::symlink(&external.0, &backup_source_link).unwrap();
+            #[cfg(windows)]
+            junction::create(&external.0, &backup_source_link).unwrap();
+
+            let backup_err = transfer_workbuddy_ai_local_sessions_with_backup_root(
+                &temp.0,
+                WorkbuddyAccountScope {
+                    uid: "source",
+                    enterprise_id: None,
+                },
+                WorkbuddyAccountScope {
+                    uid: "target",
+                    enterprise_id: None,
+                },
+                Some(&linked_backup_root.0),
+            );
+            assert!(
+                backup_err.is_err(),
+                "linked backup ancestor directory must be rejected"
+            );
+            #[cfg(windows)]
+            let _ = junction::delete(&backup_source_link);
+            let _ = fs::remove_dir_all(&backup_source_link);
+            let _ = fs::remove_file(&backup_source_link);
+        }
+    }
+
+    #[test]
+    fn workbuddy_ai_transfer_cleans_up_failed_backup_op_without_displacing_existing_backup() {
+        let temp = TestDir::new();
+        let backup_root = TestDir::new();
+        let scope = crate::modules::backup_storage::scope_for_path(&temp.0);
+        let ai_scope_dir = backup_root
+            .0
+            .join("behavior")
+            .join(WORKBUDDY_AI_BACKUP_SOURCE)
+            .join(&scope);
+        let existing_valid_op = ai_scope_dir.join("0000-valid-op");
+        fs::create_dir_all(existing_valid_op.join("database")).unwrap();
+        fs::write(existing_valid_op.join("database/workbuddy.db"), b"valid").unwrap();
+
+        let db_path = temp.0.join("workbuddy.db");
+        let conn = Connection::open(&db_path).unwrap();
+        conn.execute_batch(
+            "PRAGMA journal_mode=WAL;
+             CREATE TABLE sessions (
+                 id TEXT PRIMARY KEY,
+                 user_id TEXT NOT NULL,
+                 deleted_at INTEGER,
+                 transport TEXT
+             );
+             INSERT INTO sessions VALUES ('s1', 'source', NULL, 'local');",
+        )
+        .unwrap();
+        drop(conn);
+
+        // Hold an IMMEDIATE write lock until the backup snapshot file appears (after
+        // PRAGMA data_version is captured), then commit so the transfer aborts before UPDATE.
+        let (ready_tx, ready_rx) = std::sync::mpsc::channel();
+        let writer_db_path = db_path.clone();
+        let writer_scope_dir = ai_scope_dir.clone();
+        let writer = std::thread::spawn(move || {
+            let writer_conn = Connection::open(&writer_db_path).unwrap();
+            writer_conn
+                .execute_batch(
+                    "BEGIN IMMEDIATE;
+                     INSERT INTO sessions VALUES ('concurrent', 'other', NULL, 'local');",
+                )
+                .unwrap();
+            ready_tx.send(()).unwrap();
+
+            let deadline = std::time::Instant::now() + Duration::from_secs(4);
+            while std::time::Instant::now() < deadline {
+                let new_snapshot_created = fs::read_dir(&writer_scope_dir)
+                    .into_iter()
+                    .flatten()
+                    .flatten()
+                    .any(|entry| {
+                        entry.file_name() != "0000-valid-op"
+                            && entry.path().join("database/workbuddy.db").is_file()
+                    });
+                if new_snapshot_created {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            writer_conn.execute_batch("COMMIT;").unwrap();
+        });
+        ready_rx.recv().unwrap();
+
+        let err = transfer_workbuddy_ai_local_sessions_with_backup_root(
+            &temp.0,
+            WorkbuddyAccountScope {
+                uid: "source",
+                enterprise_id: None,
+            },
+            WorkbuddyAccountScope {
+                uid: "target",
+                enterprise_id: None,
+            },
+            Some(&backup_root.0),
+        )
+        .unwrap_err();
+        writer.join().unwrap();
+
+        assert!(
+            err.contains("其他进程写入"),
+            "expected concurrent-writer abort, got: {err}"
+        );
+        let remaining_ops: Vec<PathBuf> = fs::read_dir(&ai_scope_dir)
+            .unwrap()
+            .flatten()
+            .map(|entry| entry.path())
+            .filter(|path| path.is_dir())
+            .collect();
+        assert_eq!(
+            remaining_ops,
+            vec![existing_valid_op.clone()],
+            "failed backup op dir must be cleaned up without displacing existing valid backup"
+        );
+        assert_eq!(
+            fs::read(existing_valid_op.join("database/workbuddy.db")).unwrap(),
+            b"valid"
+        );
+        let uid: String = Connection::open(&db_path)
+            .unwrap()
+            .query_row("SELECT user_id FROM sessions WHERE id = 's1'", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(uid, "source");
     }
 }

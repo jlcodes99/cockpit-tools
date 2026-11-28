@@ -1213,6 +1213,11 @@ fn running_app_candidate_matches(
         return false;
     }
 
+    if app == "workbuddy_ai" && crate::modules::workbuddy_ai_account::executable_at(path).is_none()
+    {
+        return false;
+    }
+
     #[cfg(target_os = "windows")]
     if let Some(platform) = windows_trae_platform_for_app(app) {
         if !windows_trae_candidate_matches_platform(path, platform) {
@@ -2421,5 +2426,29 @@ mod windows_launch_candidate_tests {
             r"C:\Users\coder\AppData\Local\Programs\Qoder CN\.qoder-versions\0.5.12\Qoder CN.exe",
         );
         assert!(running_app_candidate_matches("qoder_cn", desktop, signature));
+    }
+
+    #[test]
+    fn workbuddy_ai_candidate_filter_rejects_helpers_and_accepts_official_exe() {
+        let signature =
+            windows_app_launch_signature("workbuddy_ai").expect("workbuddy_ai signature");
+        let dir = tempfile::tempdir().unwrap();
+        let install_dir = dir.path().join("WorkBuddy AI");
+        let helper = install_dir.join("resources").join("node.exe");
+        let official = install_dir.join("WorkBuddyAI.exe");
+        std::fs::create_dir_all(helper.parent().unwrap()).unwrap();
+        std::fs::write(&helper, b"helper").unwrap();
+        std::fs::write(&official, b"exe").unwrap();
+
+        assert!(!running_app_candidate_matches(
+            "workbuddy_ai",
+            &helper,
+            signature
+        ));
+        assert!(running_app_candidate_matches(
+            "workbuddy_ai",
+            &official,
+            signature
+        ));
     }
 }

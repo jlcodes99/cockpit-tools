@@ -256,6 +256,8 @@ pub struct GeneralConfig {
     pub minimax_code_region: String,
     /// 切换 WorkBuddy 账号时是否在本机账号间合并本地会话
     pub workbuddy_share_sessions_on_switch: bool,
+    /// 切换 WorkBuddy AI 账号时是否在本机账号间合并本地会话
+    pub workbuddy_ai_share_sessions_on_switch: bool,
     /// 切换 Codex 时是否自动重启 OpenCode
     pub opencode_sync_on_switch: bool,
     /// 切换 Codex 时是否覆盖 OpenCode 登录信息
@@ -1385,9 +1387,11 @@ fn is_general_config_patch_field(key: &str) -> bool {
             | "trae_cn_app_scan_roots"
             | "trae_solo_cn_app_scan_roots"
             | "workbuddy_app_path"
+            | "workbuddy_ai_app_path"
             | "minimax_code_app_path"
             | "minimax_code_region"
             | "workbuddy_share_sessions_on_switch"
+            | "workbuddy_ai_share_sessions_on_switch"
             | "opencode_sync_on_switch"
             | "opencode_auth_overwrite_on_switch"
             | "ghcp_opencode_sync_on_switch"
@@ -1606,6 +1610,18 @@ fn apply_general_config_updates(
             .map_err(|error| {
                 modules::process::format_workbuddy_app_path_error(error, &next.language)
             })?;
+    }
+    normalize_app_path_field!("workbuddy_ai_app_path", workbuddy_ai_app_path);
+    #[cfg(target_os = "windows")]
+    if updates.contains_key("workbuddy_ai_app_path")
+        && next.workbuddy_ai_app_path != current.workbuddy_ai_app_path
+    {
+        modules::process::validate_workbuddy_app_path(std::path::Path::new(
+            &next.workbuddy_ai_app_path,
+        ))
+        .map_err(|error| {
+            modules::process::format_workbuddy_app_path_error(error, &next.language)
+        })?;
     }
     normalize_app_path_field!("minimax_code_app_path", minimax_code_app_path);
 

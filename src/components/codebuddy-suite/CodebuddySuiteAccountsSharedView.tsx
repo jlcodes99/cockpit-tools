@@ -1,4 +1,3 @@
-import { LaunchPathSettingsButton } from '../LaunchPathSettingsButton';
 import { useAccountsOverviewFilterState } from '../../hooks/useAccountsOverviewFilterState';
 import {
   useMemo,
@@ -89,7 +88,7 @@ export interface CodebuddySuiteAccountsPlatformConfig<
 > {
   pageClassName: string;
   accountPlatformKey?: string;
-  quickSettingsType?: "codebuddy_cn" | "workbuddy" | "zcode" | "t3code" | "grok" | "minimaxcode";
+  quickSettingsType?: "codebuddy_cn" | "workbuddy" | "workbuddy_ai" | "zcode" | "t3code" | "grok" | "minimaxcode";
   /** 签到按钮 tooltip 的 i18n key，默认沿用 workbuddy */
   checkinModalTitleKey?: string;
   checkinModalTitleDefault?: string;
@@ -1255,9 +1254,6 @@ export function CodebuddySuiteAccountsSharedView<
           </button>
           {platformConfig.quickSettingsType && (
             <QuickSettingsPopover type={platformConfig.quickSettingsType} />
-          )}
-          {platformConfig.accountPlatformKey === 'workbuddy_ai' && (
-            <LaunchPathSettingsButton app="workbuddy_ai" iconOnly />
           )}
         </div>
       </div>

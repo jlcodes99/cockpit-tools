@@ -1828,6 +1828,7 @@
           "claude": "Claude",
           "codex": "Codex",
           "workbuddy": "WorkBuddy",
+          "workbuddy_ai": "WorkBuddy AI",
           "codebuddy": "CodeBuddy",
           "trae": "Trae",
           "other": "Lainnya"
@@ -7274,6 +7275,9 @@
     "workbuddy": {
       "title": "WorkBuddy Settings​",
       "appPath": "WorkBuddy Path​"
+    },
+    "workbuddyAi": {
+      "title": "Pengaturan WorkBuddy AI"
     },
     "minimaxCode": {
       "title": "MiniMax Code Settings​",

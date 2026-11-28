@@ -1781,6 +1781,7 @@
           "claude": "Claude",
           "codex": "Codex",
           "workbuddy": "WorkBuddy",
+          "workbuddy_ai": "WorkBuddy AI",
           "codebuddy": "CodeBuddy",
           "trae": "Trae",
           "other": "Другое"
@@ -7094,6 +7095,9 @@
     "workbuddy": {
       "title": "Настройки WorkBuddy",
       "appPath": "Путь WorkBuddy"
+    },
+    "workbuddyAi": {
+      "title": "Настройки WorkBuddy AI"
     },
     "minimaxCode": {
       "title": "Настройки MiniMax Code",

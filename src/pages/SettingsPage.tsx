@@ -220,7 +220,9 @@ interface GeneralConfig extends AntigravityDesktopSettings {
   trae_cn_app_scan_roots: string;
   trae_solo_cn_app_scan_roots: string;
   workbuddy_app_path: string;
+  workbuddy_ai_app_path: string;
   workbuddy_share_sessions_on_switch: boolean;
+  workbuddy_ai_share_sessions_on_switch: boolean;
   minimax_code_app_path: string;
   zed_app_path: string;
   codebuddy_auto_refresh_minutes: number;
@@ -328,6 +330,7 @@ type AppPathTarget =
   | 'trae_cn'
   | 'trae_solo_cn'
   | 'workbuddy'
+  | 'workbuddy_ai'
   | 'minimaxcode'
   | 'zed';
 
@@ -651,7 +654,9 @@ export function useSettingsPageController() {
   const [traeCnAppPath, setTraeCnAppPath] = useState('');
   const [traeSoloCnAppPath, setTraeSoloCnAppPath] = useState('');
   const [workbuddyAppPath, setWorkbuddyAppPath] = useState('');
+  const [workbuddyAiAppPath, setWorkbuddyAiAppPath] = useState('');
   const [workbuddyShareSessionsOnSwitch, setWorkbuddyShareSessionsOnSwitch] = useState(false);
+  const [workbuddyAiShareSessionsOnSwitch, setWorkbuddyAiShareSessionsOnSwitch] = useState(false);
   const [minimaxCodeAppPath, setMinimaxCodeAppPath] = useState('');
   const [zedAppPath, setZedAppPath] = useState('');
   const [codebuddyAutoRefresh, setCodebuddyAutoRefresh] = useState('10');
@@ -1246,7 +1251,9 @@ export function useSettingsPageController() {
       trae_cn_app_scan_roots: traeCnAppScanRoots,
       trae_solo_cn_app_scan_roots: traeSoloCnAppScanRoots,
       workbuddy_app_path: workbuddyAppPath,
+      workbuddy_ai_app_path: workbuddyAiAppPath,
       workbuddy_share_sessions_on_switch: workbuddyShareSessionsOnSwitch,
+      workbuddy_ai_share_sessions_on_switch: workbuddyAiShareSessionsOnSwitch,
       minimax_code_app_path: minimaxCodeAppPath,
       zed_app_path: zedAppPath,
       opencode_sync_on_switch: opencodeSyncOnSwitch,
@@ -1505,7 +1512,9 @@ export function useSettingsPageController() {
     traeCnAppScanRoots,
     traeSoloCnAppScanRoots,
     workbuddyAppPath,
+    workbuddyAiAppPath,
     workbuddyShareSessionsOnSwitch,
+    workbuddyAiShareSessionsOnSwitch,
     minimaxCodeAppPath,
     zedAppPath,
     opencodeSyncOnSwitch,
@@ -1836,7 +1845,9 @@ export function useSettingsPageController() {
       setTraeLaunchCandidatesTarget('trae');
       setTraeLaunchCandidates([]);
       setWorkbuddyAppPath(config.workbuddy_app_path || '');
+      setWorkbuddyAiAppPath(config.workbuddy_ai_app_path || '');
       setWorkbuddyShareSessionsOnSwitch(config.workbuddy_share_sessions_on_switch ?? false);
+      setWorkbuddyAiShareSessionsOnSwitch(config.workbuddy_ai_share_sessions_on_switch ?? false);
       setMinimaxCodeAppPath(config.minimax_code_app_path || '');
       setZedAppPath(config.zed_app_path || '');
       setCodebuddyAutoRefresh(String(config.codebuddy_auto_refresh_minutes ?? 10));
@@ -2217,6 +2228,8 @@ export function useSettingsPageController() {
       setTraeLaunchCandidates([]);
     } else if (target === 'workbuddy') {
       setWorkbuddyAppPath(path);
+    } else if (target === 'workbuddy_ai') {
+      setWorkbuddyAiAppPath(path);
     } else if (target === 'minimaxcode') {
       setMinimaxCodeAppPath(path);
     } else if (target === 'zed') {
@@ -2261,6 +2274,8 @@ export function useSettingsPageController() {
         return getTraeAppDisplayName(target);
       case 'workbuddy':
         return 'WorkBuddy';
+      case 'workbuddy_ai':
+        return 'WorkBuddy AI';
       case 'minimaxcode':
         return 'MiniMax Code';
       case 'zed':
@@ -2304,7 +2319,7 @@ export function useSettingsPageController() {
     if (isTraeAppPathTarget(target)) {
       return t('settings.general.traePathReset', '重置默认');
     }
-    if (target === 'workbuddy') {
+    if (target === 'workbuddy' || target === 'workbuddy_ai') {
       return t('settings.general.workbuddyPathReset', '重置默认');
     }
     if (target === 'minimaxcode') {
@@ -3755,12 +3770,14 @@ export function useSettingsPageController() {
     setWindsurfQuotaAlertThreshold,
     setWindsurfQuotaAlertThresholdCustomMode,
     setWorkbuddyAppPath,
+    setWorkbuddyAiAppPath,
     setWorkbuddyAutoRefresh,
     setWorkbuddyAutoRefreshCustomMode,
     setWorkbuddyQuotaAlertEnabled,
     setWorkbuddyQuotaAlertThreshold,
     setWorkbuddyQuotaAlertThresholdCustomMode,
     setWorkbuddyShareSessionsOnSwitch,
+    setWorkbuddyAiShareSessionsOnSwitch,
     setWsEnabled,
     setWsPort,
     setZcodeAppPath,
@@ -3843,6 +3860,7 @@ export function useSettingsPageController() {
     windsurfQuotaAlertThresholdCustomMode,
     windsurfQuotaAlertThresholdIsPreset,
     workbuddyAppPath,
+    workbuddyAiAppPath,
     workbuddyAutoRefresh,
     workbuddyAutoRefreshCustomMode,
     workbuddyAutoRefreshIsPreset,
@@ -3851,6 +3869,7 @@ export function useSettingsPageController() {
     workbuddyQuotaAlertThresholdCustomMode,
     workbuddyQuotaAlertThresholdIsPreset,
     workbuddyShareSessionsOnSwitch,
+    workbuddyAiShareSessionsOnSwitch,
     wsEnabled,
     wsPort,
     zcodeAppPath,

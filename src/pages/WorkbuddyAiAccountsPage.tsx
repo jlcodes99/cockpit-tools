@@ -19,6 +19,7 @@ import { getWorkbuddyAiCredits, getWorkbuddyAiPlan } from '../utils/workbuddyCre
 const config: CodebuddySuiteAccountsPlatformConfig<WorkbuddyAccount> = {
   pageClassName: 'workbuddy-accounts-page',
   accountPlatformKey: 'workbuddy_ai',
+  quickSettingsType: 'workbuddy_ai',
   searchPlaceholderKey: 'workbuddyAi.search',
   searchPlaceholderDefault: '',
   flowNotice: {

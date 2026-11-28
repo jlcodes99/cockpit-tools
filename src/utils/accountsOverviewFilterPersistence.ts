@@ -35,6 +35,7 @@ const QUICK_SETTINGS_SCOPE_MAP: Record<string, string> = {
   trae_cn: 'trae_cn',
   trae_solo_cn: 'trae_solo_cn',
   workbuddy: 'workbuddy',
+  workbuddy_ai: 'workbuddy_ai',
   minimaxcode: 'minimaxcode',
   zed: 'zed',
 };
