@@ -51,6 +51,12 @@ impl SseDecoder {
         }
     }
 
+    /// A transport retry cannot discard an incomplete semantic frame. The
+    /// missing-delimiter JSON compatibility path also cannot prove a boundary.
+    pub(super) fn at_frame_boundary(&self) -> bool {
+        self.pending.is_empty() && !self.raw_json_tail && !self.terminal && !self.done
+    }
+
     pub(super) fn push(&mut self, bytes: &[u8]) -> Result<Vec<Value>, ServiceError> {
         Ok(self
             .push_frames(bytes)?

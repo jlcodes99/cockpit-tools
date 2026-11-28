@@ -1,0 +1,206 @@
+{
+  "baselineCommit": "a243d9415da9a45a61dc9f98451c615bfad4ffcd",
+  "baselineClean": true,
+  "testFile": "src-tauri/src/modules/codex_native_api/request_upload_http_tests.rs",
+  "bothTestFileSha256": "7E7CE9C7FDB03841F1278034BF5968F914780A2E6C68FD10065196644012DB87",
+  "parameters": {
+    "inputBytes": 25165824,
+    "receiverBytesPerSecond": 12582912,
+    "openingMs": 1500,
+    "headerDelayMs": 100,
+    "testThreads": 1,
+    "defaultThreadStack": true
+  },
+  "predeterminedSampling": {
+    "plannedAtUtc": "2026-11-28T03:56:01.7935546Z",
+    "additionalPairs": 2,
+    "order": [
+      "baseline",
+      "patched",
+      "baseline",
+      "patched"
+    ],
+    "stopOnFailure": true
+  },
+  "runs": [
+    {
+      "kind": "initial-patch",
+      "run": "20261128-112025-run-0a1be680",
+      "artifactSha256": "73ABA0288A66B813E6C135A296A2B23DFFC0CF350940B91B4B7F623E604F07EB",
+      "exitCode": 101,
+      "sourceStable": true,
+      "sourceFingerprint": "7ADA9D1F48EC073F36D38A2686BC924AC634B7FDC1E80F3F6BB804399BAB44F0",
+      "arguments": [
+        "modules::codex_native_api::tests::request_upload_http_tests::",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "passed": 9,
+      "failed": 1,
+      "ignored": 0,
+      "seconds": 21.15
+    },
+    {
+      "kind": "final-patch-exact",
+      "run": "20261128-113317-run-30b6fd3d",
+      "artifactSha256": "D6A074A68402BC5BA7CFAF4C8DA45D86353BA127A053526DE90825F9F300DB8B",
+      "exitCode": 0,
+      "sourceStable": true,
+      "sourceFingerprint": "764FE37A3FCB1901A06E64F478027E696A313392B49A793456CB3C19B80ABE4C",
+      "arguments": [
+        "modules::codex_native_api::tests::request_upload_http_tests::upload_http_real_gateway_uses_progress_before_first_response",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0,
+      "seconds": 5.71
+    },
+    {
+      "kind": "final-patch-original-module",
+      "run": "20261128-113849-run-996b68e5",
+      "artifactSha256": "D6A074A68402BC5BA7CFAF4C8DA45D86353BA127A053526DE90825F9F300DB8B",
+      "exitCode": 101,
+      "sourceStable": true,
+      "sourceFingerprint": "764FE37A3FCB1901A06E64F478027E696A313392B49A793456CB3C19B80ABE4C",
+      "arguments": [
+        "modules::codex_native_api::tests::request_upload_http_tests::",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "passed": 9,
+      "failed": 1,
+      "ignored": 0,
+      "seconds": 20.96
+    },
+    {
+      "kind": "baseline-module",
+      "run": "20261128-115233-baseline-run-fd87e817",
+      "artifactSha256": "C9911146FC1D09EA2BCD233ED73815E61ADB95BAD5579FC099F5FF394C85B561",
+      "exitCode": 0,
+      "sourceStable": true,
+      "sourceFingerprint": "8C24EF4F337BE952F81E4A8C7ECD3E95881A475B973D90F5BAD3E8F9404B79AB",
+      "arguments": [
+        "modules::codex_native_api::tests::request_upload_http_tests::",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "passed": 10,
+      "failed": 0,
+      "ignored": 0,
+      "seconds": 19.66
+    },
+    {
+      "kind": "baseline-exact",
+      "run": "20261128-115322-baseline-run-ab922f2d",
+      "artifactSha256": "C9911146FC1D09EA2BCD233ED73815E61ADB95BAD5579FC099F5FF394C85B561",
+      "exitCode": 0,
+      "sourceStable": true,
+      "sourceFingerprint": "8C24EF4F337BE952F81E4A8C7ECD3E95881A475B973D90F5BAD3E8F9404B79AB",
+      "arguments": [
+        "modules::codex_native_api::tests::request_upload_http_tests::upload_http_real_gateway_uses_progress_before_first_response",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0,
+      "seconds": 5.85
+    },
+    {
+      "kind": "final-patch-crossover",
+      "run": "20261128-115433-run-0e920d55",
+      "artifactSha256": "D6A074A68402BC5BA7CFAF4C8DA45D86353BA127A053526DE90825F9F300DB8B",
+      "exitCode": 0,
+      "sourceStable": true,
+      "sourceFingerprint": "764FE37A3FCB1901A06E64F478027E696A313392B49A793456CB3C19B80ABE4C",
+      "arguments": [
+        "modules::codex_native_api::tests::request_upload_http_tests::",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "passed": 10,
+      "failed": 0,
+      "ignored": 0,
+      "seconds": 19.73
+    },
+    {
+      "kind": "baseline-pair-1",
+      "run": "20261128-115602-baseline-run-47c7351b",
+      "artifactSha256": "C9911146FC1D09EA2BCD233ED73815E61ADB95BAD5579FC099F5FF394C85B561",
+      "exitCode": 0,
+      "sourceStable": true,
+      "sourceFingerprint": "8C24EF4F337BE952F81E4A8C7ECD3E95881A475B973D90F5BAD3E8F9404B79AB",
+      "arguments": [
+        "modules::codex_native_api::tests::request_upload_http_tests::",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "passed": 10,
+      "failed": 0,
+      "ignored": 0,
+      "seconds": 19.63
+    },
+    {
+      "kind": "final-patch-pair-1",
+      "run": "20261128-115627-run-1edb16de",
+      "artifactSha256": "D6A074A68402BC5BA7CFAF4C8DA45D86353BA127A053526DE90825F9F300DB8B",
+      "exitCode": 0,
+      "sourceStable": true,
+      "sourceFingerprint": "764FE37A3FCB1901A06E64F478027E696A313392B49A793456CB3C19B80ABE4C",
+      "arguments": [
+        "modules::codex_native_api::tests::request_upload_http_tests::",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "passed": 10,
+      "failed": 0,
+      "ignored": 0,
+      "seconds": 19.65
+    },
+    {
+      "kind": "baseline-pair-2",
+      "run": "20261128-115652-baseline-run-df0e14b6",
+      "artifactSha256": "C9911146FC1D09EA2BCD233ED73815E61ADB95BAD5579FC099F5FF394C85B561",
+      "exitCode": 0,
+      "sourceStable": true,
+      "sourceFingerprint": "8C24EF4F337BE952F81E4A8C7ECD3E95881A475B973D90F5BAD3E8F9404B79AB",
+      "arguments": [
+        "modules::codex_native_api::tests::request_upload_http_tests::",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "passed": 10,
+      "failed": 0,
+      "ignored": 0,
+      "seconds": 19.72
+    },
+    {
+      "kind": "final-patch-pair-2",
+      "run": "20261128-115717-run-187c7c3e",
+      "artifactSha256": "D6A074A68402BC5BA7CFAF4C8DA45D86353BA127A053526DE90825F9F300DB8B",
+      "exitCode": 0,
+      "sourceStable": true,
+      "sourceFingerprint": "764FE37A3FCB1901A06E64F478027E696A313392B49A793456CB3C19B80ABE4C",
+      "arguments": [
+        "modules::codex_native_api::tests::request_upload_http_tests::",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "passed": 10,
+      "failed": 0,
+      "ignored": 0,
+      "seconds": 19.74
+    }
+  ],
+  "futureLayouts": {
+    "baselineRun": "20261128-115741-baseline-run-b517215e",
+    "finalRun": "20261128-113413-run-dc66eaac",
+    "baselineResponsesBytes": 21160,
+    "finalResponsesBytes": 21200,
+    "baselineCompactBytes": 21160,
+    "finalCompactBytes": 21200
+  },
+  "conclusion": "Final patch original module had 9 passed / 1 failed; exact passed. Three subsequent fixed-artifact full-module runs per side passed 10/10 under unchanged parameters. The initial failure cause remains unknown; neither a pre-existing upstream failure nor absence of performance regressions is established. Not deployment acceptance."
+}

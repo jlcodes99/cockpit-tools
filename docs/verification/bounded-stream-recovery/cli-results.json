@@ -1,0 +1,55 @@
+{
+  "cliVersion": "0.171.0-alpha.13.2",
+  "run": "20261128-113524-cli-8b5d1834",
+  "transport": "HTTP body error",
+  "cases": [
+    {
+      "scenario": "metadata-recovered",
+      "binarySha256": "2a1ec3f1dd463fd30224be4c0c67d3fe83d3d863a3d7539ccad366952436d2aa",
+      "blockedProxyRequests": 0,
+      "budgetExhausted": false,
+      "clientPostCount": 1,
+      "exitCode": 0,
+      "finalAnswerMatched": true,
+      "reportErrors": [
+        null
+      ],
+      "timedOut": false,
+      "transmittedCreatedCount": 2,
+      "transmittedCreatedResponseIds": [
+        "resp_cli_attempt_1",
+        "resp_cli_attempt_2"
+      ],
+      "turnCompleted": true,
+      "turnFailed": false,
+      "upstreamBodiesIdentical": true,
+      "upstreamPostCount": 2,
+      "metadataFallbackNotice": "CLI emitted fallback-metadata item.error for the synthetic model in both scenarios."
+    },
+    {
+      "scenario": "budget-exhausted",
+      "binarySha256": "2a1ec3f1dd463fd30224be4c0c67d3fe83d3d863a3d7539ccad366952436d2aa",
+      "blockedProxyRequests": 0,
+      "budgetExhausted": true,
+      "clientPostCount": 1,
+      "exitCode": 1,
+      "finalAnswerMatched": false,
+      "reportErrors": [
+        "network_recovery_exhausted"
+      ],
+      "timedOut": false,
+      "transmittedCreatedCount": 1,
+      "transmittedCreatedResponseIds": [
+        "resp_cli_attempt_1"
+      ],
+      "turnCompleted": false,
+      "turnFailed": true,
+      "upstreamBodiesIdentical": false,
+      "upstreamPostCount": 1,
+      "metadataFallbackNotice": "CLI emitted fallback-metadata item.error for the synthetic model in both scenarios."
+    }
+  ],
+  "scope": "Installed CLI -> byte-preserving tap -> real branch gateway -> synthetic loopback upstream. TLS/H2 and namespace tested separately.",
+  "cleanup": "Both child processes exited and exact test entry ports were no longer listening at acceptance.",
+  "isolation": "Empty child application directories, cleared inherited environment, file credentials, Apps/plugins/MCP/project instructions/daemon disabled, retries 0/0. Not an OS network sandbox."
+}

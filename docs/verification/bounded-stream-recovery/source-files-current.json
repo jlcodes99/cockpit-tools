@@ -1,0 +1,68 @@
+[
+  {
+    "path": "src-tauri/src/modules/codex_native_api/events.rs",
+    "bytes": 50664,
+    "sha256": "1DDB77BF1E6BC58E71FC6FA863C9231F2CBA4DD1CBB93681962F33E9430D3D69",
+    "gitBlobSha1": "ce95ad4a6de033437157b3490139cffa3a18094d"
+  },
+  {
+    "path": "src-tauri/src/modules/codex_native_api/http.rs",
+    "bytes": 67377,
+    "sha256": "D5C2C758D752635DE3289237C0A87E3F6B2832F5AB9FD6D7C158893ABD21F877",
+    "gitBlobSha1": "ca20088f5290a7e72467d182b5c65df816b8e704"
+  },
+  {
+    "path": "src-tauri/src/modules/codex_native_api/lifecycle.rs",
+    "bytes": 63491,
+    "sha256": "ECAB3A64A98482811D3F7D3D82CB6751288A557CC905D53B064D8555D9A62FEB",
+    "gitBlobSha1": "541dbc42d27b9cf508d3be53e2c781cc257ce41e"
+  },
+  {
+    "path": "src-tauri/src/modules/codex_native_api/mod.rs",
+    "bytes": 3560,
+    "sha256": "0ABCBC43C6DC8EA4A9887DD092EB98A1295987080487EB431AED6B7ECA05441E",
+    "gitBlobSha1": "0f0bce0701e95442b407783bd0276dd96e15eba3"
+  },
+  {
+    "path": "src-tauri/src/modules/codex_native_api/retry.rs",
+    "bytes": 80981,
+    "sha256": "5CEDA424579842A6918212475DAF1659630AC00630594FECC2E0AA909B189DCA",
+    "gitBlobSha1": "366093436d099aa6b72dfa74dae3792ac8e132d0"
+  },
+  {
+    "path": "src-tauri/src/modules/codex_native_api/upstream.rs",
+    "bytes": 25422,
+    "sha256": "3D716DA5162B0BCECDA38A9230AF9291B7078432D332F17358096E11DD7B6E0A",
+    "gitBlobSha1": "e1aa1f7de5c366292f6ea1137451de628c856a64"
+  },
+  {
+    "path": "src-tauri/src/modules/codex_native_api/stream_recovery.rs",
+    "bytes": 25017,
+    "sha256": "AB67F505D19DB67142AC11CFCFEB4D82AEA7766944E5384FC58D22B98A40EEC5",
+    "gitBlobSha1": "99644759f0d5ad850d4a0587c0550240f870946f"
+  },
+  {
+    "path": "src-tauri/src/modules/codex_native_api/stream_recovery_http_tests.rs",
+    "bytes": 39633,
+    "sha256": "6BAA98CB3A1D60FFED6E2A038FEDA2DC698F16B9EB94BB4005EA4C1B8C4E8201",
+    "gitBlobSha1": "ea768e91d8666fa43dd88dab94150958307fa5d1"
+  },
+  {
+    "path": "src-tauri/src/modules/codex_native_api/stream_recovery_cli_tests.rs",
+    "bytes": 25896,
+    "sha256": "1A4F7D9D39F758732FB8654CDABF663ADA77E540A70BA5282037D8D48E4E1E53",
+    "gitBlobSha1": "473ed3564d059dd65b30f67946e214ac26103ece"
+  },
+  {
+    "path": "src-tauri/src/modules/codex_native_api/stream_recovery_cli_wire.rs",
+    "bytes": 10478,
+    "sha256": "830885A3E87837513777D66CA6605CAD734E744E71BDC2C39986D77282157D78",
+    "gitBlobSha1": "89f501dd45f7915aaefb87523f2fafbce0c07e24"
+  },
+  {
+    "path": "src-tauri/src/modules/codex_native_api/tls_recovery_http_tests.rs",
+    "bytes": 35646,
+    "sha256": "6833BA9E4794417C88F122DE4526A710FB13357EF4BD3CA967962546AEDF8360",
+    "gitBlobSha1": "bd1778ab060337ff6fc2302d7be63c47f82c2258"
+  }
+]

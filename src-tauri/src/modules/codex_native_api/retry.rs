@@ -521,6 +521,7 @@ async fn send_inner(
             _ = stop.wait() => Err(stopping_error()),
             result = opening.run_if(progress_opening, async {
                 tracker.begin_attempt("http");
+                tracker.capture_stream_recovery(prepared, &body, &request);
                 if let Some(bytes) = request.body().and_then(reqwest::Body::as_bytes) { tracker.upstream_request_bytes(bytes.len()); }
                 tracker.capability_fallback(prepared.capability_fallback.clone());
                 tracker.payload_with("upstream_request", "http", request.headers(), || body.to_string());

@@ -72,6 +72,8 @@ pub(super) struct RequestTracker {
     peer_ip: Option<std::net::IpAddr>,
     pub overload: super::overload::Budget,
     pub network_recovery: super::network_recovery::Budget,
+    pub(super) stream_recovery: Option<Box<super::stream_recovery::Candidate>>,
+    stream_recovery_captured: bool,
     pub(super) quota_exhausted_accounts: std::collections::HashSet<String>,
     quota_exhausted_attempt: Option<usize>,
     pub field_compat: super::request_compat::Budget,
@@ -219,6 +221,8 @@ impl RequestTracker {
             capture_payloads: false,
             overload: Default::default(),
             network_recovery: Default::default(),
+            stream_recovery: None,
+            stream_recovery_captured: false,
             quota_exhausted_accounts: Default::default(),
             quota_exhausted_attempt: None,
             field_compat: Default::default(),
@@ -270,6 +274,8 @@ impl RequestTracker {
         self.capture_payloads = capture_payloads;
         self.overload = Default::default();
         self.network_recovery = Default::default();
+        self.stream_recovery = None;
+        self.stream_recovery_captured = false;
         self.quota_exhausted_accounts.clear();
         self.quota_exhausted_attempt = None;
         self.field_compat = Default::default();
@@ -445,6 +451,7 @@ impl RequestTracker {
         if self.dispatch_open {
             return;
         }
+        self.stream_recovery = None;
         // Keep diagnostics bounded even when the opt-in recovery keeps running.
         if let Some(context) = &mut self.diagnostics {
             if self.overload.continuous() && context.attempts.len() >= 32 {
@@ -551,6 +558,19 @@ impl RequestTracker {
 
     pub(super) fn upstream_attempt_count(&self) -> usize {
         self.dispatch_count
+    }
+
+    /// Only the first actual dispatch can arm this one-shot body recovery.
+    /// This latch deliberately is not part of discard_unsent_attempt's rollback.
+    pub(super) fn capture_stream_recovery(
+        &mut self, prepared: &super::mapping::Prepared, body: &serde_json::Value,
+        request: &reqwest::Request,
+    ) {
+        if self.stream_recovery_captured { return; }
+        self.stream_recovery_captured = true;
+        if self.dispatch_count == 1 {
+            self.stream_recovery = super::stream_recovery::Candidate::capture(prepared, body, request);
+        }
     }
 
     pub(super) fn upstream_account_ids(&self) -> std::collections::HashSet<String> {

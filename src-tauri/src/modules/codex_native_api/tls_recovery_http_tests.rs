@@ -48,6 +48,7 @@ struct TlsHost {
     headers_observed: Arc<Notify>,
     local_fallback: AtomicBool,
     fallback_refreshes: Mutex<Vec<bool>>,
+    optimize: AtomicBool,
 }
 
 fn trusted_client(root: &reqwest::Certificate, http2: bool) -> reqwest::Client {
@@ -63,6 +64,12 @@ fn trusted_client(root: &reqwest::Certificate, http2: bool) -> reqwest::Client {
 }
 
 impl Host for TlsHost {
+    fn multi_agent_policy<'a>(&'a self, _: &'a Caller, _: Option<&'a Route>, _: &'a str)
+        -> BoxFuture<'a, Result<MultiAgentPolicy, ServiceError>> {
+        Box::pin(async { Ok(MultiAgentPolicy { options: MultiAgentOptions {
+            optimize: self.optimize.load(Ordering::SeqCst), ..Default::default()
+        }, ..Default::default() }) })
+    }
     fn observe_rate_limits(
         &self,
         _: &str,
@@ -275,6 +282,7 @@ struct Fixture {
     release: Arc<Notify>,
     requests: Arc<AtomicUsize>,
     path: std::path::PathBuf,
+    bodies: Arc<Mutex<Vec<Value>>>,
 }
 
 impl Fixture {
@@ -291,6 +299,10 @@ impl Fixture {
     }
 
     async fn start_failure(mode: Mode, before_output: bool, http2: bool, network: bool) -> Self {
+        Self::start_failure_phase(mode, before_output, http2, network, false).await
+    }
+
+    async fn start_failure_phase(mode: Mode, before_output: bool, http2: bool, network: bool, metadata_only: bool) -> Self {
         let certificate = rcgen::generate_simple_self_signed(vec!["127.0.0.1".into()]).unwrap();
         let root = reqwest::Certificate::from_der(certificate.cert.der()).unwrap();
         let mut config = rustls::ServerConfig::builder_with_provider(Arc::new(
@@ -318,6 +330,8 @@ impl Fixture {
         let server_headers_observed = headers_observed.clone();
         let server_release = release.clone();
         let server_requests = requests.clone();
+        let bodies = Arc::new(Mutex::new(Vec::new()));
+        let server_bodies = bodies.clone();
         let server = tokio::spawn(async move {
             tokio::time::timeout(DEADLINE,async move {
                 let acceptor=tokio_rustls::TlsAcceptor::from(Arc::new(config));
@@ -341,9 +355,12 @@ impl Fixture {
                             body.extend_from_slice(&data.unwrap());
                         }
                         assert_eq!(serde_json::from_slice::<Value>(&body).unwrap()["model"], "fixture");
+                        server_bodies.lock().unwrap().push(serde_json::from_slice(&body).unwrap());
                         server_requests.fetch_add(1, Ordering::SeqCst);
                         let healthy = index == 1;
-                        let events = if matches!(mode,Mode::Chat) {chat_events(healthy)} else {response_events(healthy)};
+                        let events = if metadata_only && !healthy {
+                            format!("data: {}\n\n", json!({"type":"response.created","response":{"id":"resp_metadata","status":"in_progress","output":[]}}))
+                        } else if matches!(mode,Mode::Chat) {chat_events(healthy)} else {response_events(healthy)};
                         let response = axum::http::Response::builder().status(200)
                             .header("content-type", "text/event-stream")
                             .header("x-codex-primary-used-percent", "1").body(()).unwrap();
@@ -376,9 +393,12 @@ impl Fixture {
                     let endpoint=if matches!(mode,Mode::Chat) {"/v1/chat/completions"} else {"/v1/responses"};
                     assert!(head.starts_with(&format!("POST {endpoint} HTTP/1.1")),"{head}");
                     assert_eq!(body["model"],"fixture");
+                    server_bodies.lock().unwrap().push(body);
                     server_requests.fetch_add(1,Ordering::SeqCst);
                     let healthy=index==1;
-                    let events=if matches!(mode,Mode::Chat) {chat_events(healthy)} else {response_events(healthy)};
+                    let events=if metadata_only && !healthy {
+                        format!("data: {}\n\n", json!({"type":"response.created","response":{"id":"resp_metadata","status":"in_progress","output":[]}}))
+                    } else if matches!(mode,Mode::Chat) {chat_events(healthy)} else {response_events(healthy)};
                     let header=b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\nConnection: close\r\nx-codex-primary-used-percent: 1\r\n\r\n";
                     tls.write_all(header).await.unwrap();
                     if healthy || !before_output {
@@ -434,6 +454,7 @@ impl Fixture {
             headers_observed,
             local_fallback: AtomicBool::new(false),
             fallback_refreshes: Mutex::new(Vec::new()),
+            optimize: AtomicBool::new(false),
         });
         let path = std::env::temp_dir().join(format!(
             "native-tls-recovery-{}.sqlite",
@@ -454,6 +475,7 @@ impl Fixture {
             release,
             requests,
             path,
+            bodies,
         }
     }
 
@@ -745,4 +767,42 @@ async fn native_network_disconnect_through_chat_adapter_recovers_next_request() 
 #[tokio::test]
 async fn native_network_disconnect_keeps_the_official_fallback_owner() {
     assert_bootstrap_transport_recovery(true, true, true).await;
+}
+
+#[tokio::test]
+async fn native_tls_metadata_disconnect_recovers_once_over_http1_and_http2() {
+    for http2 in [false, true] {
+        for network in [false, true] {
+            for optimize in [false, true] {
+                let fixture = Fixture::start_failure_phase(Mode::Codex, false, http2, network, true).await;
+                fixture.host.optimize.store(optimize, Ordering::SeqCst);
+                let body = json!({"model":"fixture","stream":true,"input":[{"role":"user","content":"synthetic TLS metadata recovery"}],
+                    "tools":[{"type":"namespace","name":"collaboration","tools":[{"type":"function","name":"spawn_agent","parameters":{"type":"object","properties":{"message":{"type":"string"}}}}]}]});
+                let response = reqwest::Client::builder().no_proxy().timeout(DEADLINE).build().unwrap()
+                    .post(format!("http://{}/v1/responses",fixture.handle.addr)).bearer_auth("synthetic")
+                    .header("user-agent","codex_cli_rs/0.171.0").json(&body).send().await.unwrap();
+                let mut bytes = response.bytes_stream();
+                let first = bytes.next().await.unwrap().unwrap();
+                let mut output = String::from_utf8_lossy(&first).into_owned();
+                assert!(output.contains("resp_metadata"), "{output}");
+                // The body probe already exposed metadata after MAX_HOLD; the
+                // failure must enter the new path, not the bootstrap retry.
+                tokio::time::sleep(Duration::from_millis(100)).await;
+                fixture.release.notify_one();
+                while let Some(bytes) = bytes.next().await { output.push_str(&String::from_utf8_lossy(&bytes.unwrap())); }
+                assert!(output.contains("response.completed"), "h2={http2} network={network} optimize={optimize}: {output}");
+                assert!(!output.contains("response.failed"), "{output}");
+                fixture.reports(1).await;
+                assert_eq!(fixture.requests.load(Ordering::SeqCst), 2);
+                {
+                    let bodies = fixture.bodies.lock().unwrap();
+                    assert_eq!(bodies.len(), 2);
+                    assert_eq!(bodies[0], bodies[1]);
+                }
+                assert_eq!(*fixture.host.invalidated.lock().unwrap(), vec!["tls-generation-0"]);
+                assert!(fixture.host.routed.lock().unwrap().iter().all(|(request,_)| !request.force_refresh && request.excluded_account_ids.is_empty()));
+                fixture.shutdown().await;
+            }
+        }
+    }
 }

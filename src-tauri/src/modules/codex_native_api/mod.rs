@@ -90,6 +90,11 @@ mod responses_host_results;
 mod responses_http_input;
 mod responses_tool_history;
 mod retry;
+mod stream_recovery;
+#[cfg(all(test, target_os = "windows"))]
+mod stream_recovery_cli_tests;
+#[cfg(test)]
+mod stream_recovery_http_tests;
 mod reasoning_policy;
 mod server;
 mod token_count;

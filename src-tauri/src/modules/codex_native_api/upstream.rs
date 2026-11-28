@@ -29,6 +29,7 @@ pub(super) async fn canonical_stream(
     request_body: &Value,
     anthropic_search_scope: Option<String>,
     idle_timeout: Duration,
+    raw_recovery: Option<super::stream_recovery::RawProof>,
 ) -> Result<CanonicalStream, ServiceError> {
     let chat = route.wire_api == WireApi::Chat && (!compact || route.compact_endpoint.is_none());
     let anthropic = route.wire_api == WireApi::Anthropic;
@@ -56,6 +57,7 @@ pub(super) async fn canonical_stream(
         });
     }
     if !is_sse {
+        if let Some(proof) = &raw_recovery { proof.deny(); }
         let mut data = Vec::new();
         loop {
             let mut stop = state.stop.clone();
@@ -188,6 +190,7 @@ pub(super) async fn canonical_stream(
         },
     );
     state.multi_agent_context = multi_agent_context;
+    state.raw_recovery = raw_recovery;
     let bytes = stream::unfold(state, |mut state| async move {
         loop {
             if let Some(item) = state.pending.pop_front() {
@@ -200,6 +203,11 @@ pub(super) async fn canonical_stream(
             let result: Result<(), ServiceError> = match state.source.next().await {
                 Some(Ok(bytes)) => match state.decoder.push_frames(&bytes) {
                     Ok(events) => {
+                        // Inspect the entire raw batch and its pending tail before
+                        // restore can hide an event-only frame or partial JSON.
+                        if let Some(proof) = &state.raw_recovery {
+                            proof.observe(&events, &state.decoder, bytes.len());
+                        }
                         let mut failure = None;
                         for frame in events {
                             if matches!(&state.adapter, Transform::Chat(..)) {
@@ -243,15 +251,19 @@ pub(super) async fn canonical_stream(
                         }
                         failure.map_or(Ok(()), Err)
                     }
-                    Err(error) => Err(error),
+                    Err(error) => {
+                        if let Some(proof) = &state.raw_recovery { proof.deny(); }
+                        Err(error)
+                    },
                 },
-                Some(Err(error)) => Err(transport_failure(
-                    502,
-                    "upstream_stream_error",
-                    "Upstream response stream disconnected",
-                    &error,
-                )),
+                Some(Err(error)) => {
+                    let error = transport_failure(502, "upstream_stream_error",
+                        "Upstream response stream disconnected", &error);
+                    if let Some(proof) = &state.raw_recovery { proof.transport_failure(&error); }
+                    Err(error)
+                },
                 None => {
+                    if let Some(proof) = &state.raw_recovery { proof.deny(); }
                     state.finished = true;
                     match state.decoder.finish_frames() {
                         Err(error) => Err(error),
@@ -296,6 +308,9 @@ pub(super) async fn canonical_stream(
                 }
             };
             if let Err(error) = result {
+                if error.code != "upstream_stream_error" || error.transport_failure_kind().is_none() {
+                    if let Some(proof) = &state.raw_recovery { proof.deny(); }
+                }
                 state.finished = true;
                 if let Some(event) = structured_failure {
                     enqueue(&mut state.pending, vec![event]);
@@ -423,6 +438,7 @@ struct ChatStream {
     decoder: SseDecoder,
     adapter: Transform,
     multi_agent_context: super::multi_agent_compat::Context,
+    raw_recovery: Option<super::stream_recovery::RawProof>,
     pending: VecDeque<Result<Bytes, std::io::Error>>,
     finished: bool,
 }
@@ -435,6 +451,7 @@ impl ChatStream {
             decoder: SseDecoder::without_output_repair(limit),
             adapter,
             multi_agent_context: Default::default(),
+            raw_recovery: None,
             pending: VecDeque::new(),
             finished: false,
         }
