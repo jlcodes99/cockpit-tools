@@ -82,6 +82,9 @@ pub(super) fn convert(
                 } else {
                     call["function"] = json!({"name":name,"arguments":if custom {json!({"input":item["input"].as_str().unwrap_or("")}).to_string()}else{item["arguments"].as_str().unwrap_or("").to_owned()}});
                 }
+                if let Some(extra_content) = item.get("extra_content") {
+                    call["extra_content"] = extra_content.clone();
+                }
                 merge_reasoning(
                     &mut reasoning,
                     item["reasoning_content"].as_str().unwrap_or(""),

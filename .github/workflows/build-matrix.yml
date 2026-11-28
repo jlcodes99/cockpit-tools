@@ -241,6 +241,11 @@ jobs:
         if: matrix.platform == 'ubuntu-22.04'
         run: node scripts/check_codex_protocol_parity.cjs
 
+      - name: "?? Test Gemini thought signature round-trip"
+        if: matrix.platform == 'ubuntu-22.04'
+        working-directory: src-tauri
+        run: cargo test -p cockpit-tools --lib gemini_thought_signature
+
       - name: "🧱 Compile and link application"
         run: |
           echo "::group::Cargo build (${{ matrix.target }})"

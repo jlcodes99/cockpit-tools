@@ -353,6 +353,9 @@ pub(crate) fn chat_to_response_with_context(
             .get(if custom { "input" } else { "arguments" })
             .cloned()
             .unwrap_or(json!(""));
+        if let Some(extra_content) = call.get("extra_content") {
+            item["extra_content"] = extra_content.clone();
+        }
         context.restore_item(&mut item);
         output.push(item);
     }
