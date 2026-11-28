@@ -3509,7 +3509,13 @@
       "timeout": "授权超时，请点击",
       "timeoutRetry": "刷新授权链接",
       "reauthEmailLabel": "重新授权账号",
-      "reauthEmailChangeHint": "如果已更换登录邮箱，请在浏览器使用新邮箱登录。确认是同一用户和工作区后，Cockpit 会更新这条记录的邮箱。"
+      "reauthEmailChangeHint": "如果已更换登录邮箱，请在浏览器使用新邮箱登录。确认是同一用户和工作区后，Cockpit 会更新这条记录的邮箱。",
+      "browserMode": {
+        "title": "选择浏览器登录模式",
+        "warning": "非无痕模式登录会导致之前登录的账号被 OpenAI 退出，建议采用无痕模式。",
+        "normal": "非无痕模式",
+        "incognito": "无痕模式"
+      }
     },
     "token": {
       "importPartial": "导入完成。成功 {{success}} 个，失败 {{failed}} 个。{{errors}}",

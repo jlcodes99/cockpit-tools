@@ -1927,6 +1927,29 @@ export function useCodexAccountsOAuthController(context: Pick<ReturnType<typeof 
         );
       }
     };
+
+    const handleOpenOauthIncognitoBrowser = async () => {
+      if (!oauthUrl) return;
+      if (oauthProxyEnabled) {
+        await handleOpenOauthIncognitoWindow();
+        return;
+      }
+      setAddStatus("idle");
+      setAddMessage("");
+      try {
+        await codexService.openCodexOAuthIncognitoBrowser(oauthUrl);
+      } catch (error) {
+        await navigator.clipboard.writeText(oauthUrl).catch(() => {});
+        setOauthUrlCopied(true);
+        setTimeout(() => setOauthUrlCopied(false), 1200);
+        setAddStatus("error");
+        setAddMessage(
+          t("common.shared.oauth.failed", "授权失败") +
+            ": " +
+            describeOauthProxyError(error),
+        );
+      }
+    };
   
     const handleStartDeviceAuth = async () => {
       if (oauthProxyEnabled) {
@@ -2037,6 +2060,16 @@ export function useCodexAccountsOAuthController(context: Pick<ReturnType<typeof 
         setDeviceAuthError(String(error).replace(/^Error:\s*/, ""));
       }
     };
+
+    const handleOpenDeviceAuthIncognitoBrowser = async () => {
+      if (!deviceAuthInfo?.verificationUrl) return;
+      setDeviceAuthError(null);
+      try {
+        await codexService.openCodexOAuthIncognitoBrowser(deviceAuthInfo.verificationUrl);
+      } catch (error) {
+        setDeviceAuthError(String(error).replace(/^Error:\s*/, ""));
+      }
+    };
   
     const handleOpenCodexSecuritySettings = async () => {
       try {
@@ -2134,7 +2167,9 @@ export function useCodexAccountsOAuthController(context: Pick<ReturnType<typeof 
     handleCopyDeviceCode,
     handleCopyOauthUrl,
     handleOpenCodexSecuritySettings,
+    handleOpenDeviceAuthIncognitoBrowser,
     handleOpenDeviceAuthUrl,
+    handleOpenOauthIncognitoBrowser,
     handleOpenOauthIncognitoWindow,
     handleOpenOauthUrl,
     handleOauthProxyToggle,

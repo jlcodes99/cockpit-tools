@@ -2475,6 +2475,12 @@ pub fn codex_oauth_open_incognito_window(
     codex_oauth::open_incognito_oauth_window(&app_handle, &auth_url)
 }
 
+/// OAuth：使用系统浏览器无痕模式打开当前授权地址
+#[tauri::command]
+pub fn codex_oauth_open_incognito_browser(auth_url: String) -> Result<(), String> {
+    codex_oauth::open_incognito_oauth_browser(&auth_url)
+}
+
 /// OAuth：浏览器授权完成后按 loginId 完成登录
 #[tauri::command]
 pub async fn codex_oauth_login_completed(

@@ -3196,7 +3196,13 @@
       "timeout": "Uwierzytelnianie przekroczyło limit czasu. Kliknij",
       "timeoutRetry": "Odśwież link uwierzytelniania",
       "reauthEmailLabel": "Konto do ponownej autoryzacji",
-      "reauthEmailChangeHint": "Jeśli adres e-mail logowania się zmienił, użyj nowego adresu w przeglądarce. Cockpit zaktualizuje zapisany adres po potwierdzeniu tego samego użytkownika i obszaru roboczego."
+      "reauthEmailChangeHint": "Jeśli adres e-mail logowania się zmienił, użyj nowego adresu w przeglądarce. Cockpit zaktualizuje zapisany adres po potwierdzeniu tego samego użytkownika i obszaru roboczego.",
+      "browserMode": {
+        "title": "Wybierz tryb logowania przeglądarki",
+        "warning": "Logowanie poza trybem prywatnym może spowodować wylogowanie wcześniej zalogowanych kont przez OpenAI. Zalecamy tryb prywatny.",
+        "normal": "Tryb zwykły",
+        "incognito": "Tryb prywatny"
+      }
     },
     "token": {
       "importPartial": "Import zakończony. Udane: {{success}}, nieudane: {{failed}}. {{errors}}",

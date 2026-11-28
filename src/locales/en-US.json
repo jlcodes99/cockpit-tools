@@ -3509,7 +3509,13 @@
       "timeout": "Authentication timed out. Please click",
       "timeoutRetry": "Refresh Auth Link",
       "reauthEmailLabel": "Reauth account",
-      "reauthEmailChangeHint": "If your sign-in email has changed, use the new address in the browser. The saved address updates after Cockpit verifies the same user and workspace."
+      "reauthEmailChangeHint": "If your sign-in email has changed, use the new address in the browser. The saved address updates after Cockpit verifies the same user and workspace.",
+      "browserMode": {
+        "title": "Select Browser Login Mode",
+        "warning": "Signing in without incognito mode may cause OpenAI to sign out previously logged-in accounts. Incognito mode is recommended.",
+        "normal": "Non-Incognito Mode",
+        "incognito": "Incognito Mode"
+      }
     },
     "token": {
       "importPartial": "Import finished. Succeeded: {{success}}, failed: {{failed}}. {{errors}}",

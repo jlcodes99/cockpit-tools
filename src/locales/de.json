@@ -3196,7 +3196,13 @@
       "timeout": "Authentifizierung abgelaufen. Bitte klicken",
       "timeoutRetry": "Authentifizierungslink aktualisieren",
       "reauthEmailLabel": "Konto erneut autorisieren",
-      "reauthEmailChangeHint": "Wenn sich deine Anmelde-E-Mail geändert hat, verwende im Browser die neue Adresse. Cockpit aktualisiert die gespeicherte Adresse, sobald derselbe Nutzer und Arbeitsbereich bestätigt sind."
+      "reauthEmailChangeHint": "Wenn sich deine Anmelde-E-Mail geändert hat, verwende im Browser die neue Adresse. Cockpit aktualisiert die gespeicherte Adresse, sobald derselbe Nutzer und Arbeitsbereich bestätigt sind.",
+      "browserMode": {
+        "title": "Browser-Anmeldemodus wählen",
+        "warning": "Eine Anmeldung ohne Inkognitomodus kann dazu führen, dass OpenAI zuvor angemeldete Konten abmeldet. Der Inkognitomodus wird empfohlen.",
+        "normal": "Normaler Modus",
+        "incognito": "Inkognitomodus"
+      }
     },
     "token": {
       "importPartial": "Import abgeschlossen. Erfolgreich: {{success}}, fehlgeschlagen: {{failed}}. {{errors}}",

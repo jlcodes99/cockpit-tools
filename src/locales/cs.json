@@ -3196,7 +3196,13 @@
       "timeout": "Autentizace vypršela. Klikněte prosím",
       "timeoutRetry": "Aktualizovat odkaz pro ověření",
       "reauthEmailLabel": "Účet pro nové ověření",
-      "reauthEmailChangeHint": "Pokud se přihlašovací e-mail změnil, použijte v prohlížeči novou adresu. Cockpit aktualizuje uloženou adresu po ověření stejného uživatele a pracovního prostoru."
+      "reauthEmailChangeHint": "Pokud se přihlašovací e-mail změnil, použijte v prohlížeči novou adresu. Cockpit aktualizuje uloženou adresu po ověření stejného uživatele a pracovního prostoru.",
+      "browserMode": {
+        "title": "Vyberte režim přihlášení v prohlížeči",
+        "warning": "Přihlášení mimo anonymní režim může způsobit, že OpenAI odhlásí dříve přihlášené účty. Doporučujeme anonymní režim.",
+        "normal": "Běžný režim",
+        "incognito": "Anonymní režim"
+      }
     },
     "token": {
       "importPartial": "Import dokončen. Úspěšné: {{success}}, neúspěšné: {{failed}}. {{errors}}",

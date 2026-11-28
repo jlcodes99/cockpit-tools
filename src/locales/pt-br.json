@@ -3196,7 +3196,13 @@
       "timeout": "Autenticação expirou. Clique",
       "timeoutRetry": "Atualizar link de autenticação",
       "reauthEmailLabel": "Conta para reautorizar",
-      "reauthEmailChangeHint": "Se o e-mail de login mudou, use o novo endereço no navegador. O Cockpit atualizará o endereço salvo após confirmar que o usuário e o espaço de trabalho são os mesmos."
+      "reauthEmailChangeHint": "Se o e-mail de login mudou, use o novo endereço no navegador. O Cockpit atualizará o endereço salvo após confirmar que o usuário e o espaço de trabalho são os mesmos.",
+      "browserMode": {
+        "title": "Selecionar modo de login do navegador",
+        "warning": "Entrar sem o modo anônimo pode fazer com que a OpenAI desconecte contas conectadas anteriormente. Recomendamos o modo anônimo.",
+        "normal": "Modo normal",
+        "incognito": "Modo anônimo"
+      }
     },
     "token": {
       "importPartial": "Importação concluída. Sucessos: {{success}}, falhas: {{failed}}. {{errors}}",

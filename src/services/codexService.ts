@@ -639,6 +639,11 @@ export async function openCodexOAuthIncognitoWindow(authUrl: string): Promise<vo
   await invoke('codex_oauth_open_incognito_window', { authUrl });
 }
 
+/** 使用系统浏览器无痕模式打开 Codex OAuth 授权地址 */
+export async function openCodexOAuthIncognitoBrowser(authUrl: string): Promise<void> {
+  await invoke('codex_oauth_open_incognito_browser', { authUrl });
+}
+
 /** 新 OAuth 流程：完成登录 */
 export async function completeCodexOAuthLogin(
   loginId: string,
