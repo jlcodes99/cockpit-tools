@@ -1,7 +1,7 @@
 # Antigravity 按账号选择代理节点
 
 日期：2026-11-28
-状态：方案已选择，设计待用户确认
+状态：用户已批准设计并完成实现；验证结果与运行边界记录在 PR
 
 ## 意图
 
@@ -89,11 +89,12 @@
 - 资源的自动策略保留原策略语义，不在前端将策略拍平成第一节点。
 - 全局配置回退与旧 URL 兼容保持现有启动注入优先级。启动前解析/准备失败必须向上传递，不使用 .ok() 把错误吞成未配置。
 - macOS open --env、Windows 命令、Unix env 前缀继续使用安全参数构造与转义。
+- 跨账号无重启切换时，若当前或目标任一存在节点绑定（包括失效绑定），在写凭据之前拒绝并提示重启；不会擅自中断用户任务。新绑定提交与该切号门禁共用 single-flight，防止检查后并发绑定绕过限制。同账号换节点仍可热切。
 - Cockpit 关闭时沿用统一引擎关闭机制。本期保证同一宿主进程内端口稳定、热换节点以及跨宿主启动的端口预约记录；不承诺自动扫描/接管宿主重启前已存在的 Antigravity CLI/桌面进程。宿主重启后需通过 Cockpit 重新启动对应客户端，以完成入口恢复。端口恢复失败明确提示，不悄悄换端口骗运行中的客户端。此边界在 UI 提示和 PR 中说明。
 
 ## 工程隔离与 PR
 
-已在独立 worktree cockpit-tools-antigravity-nodes 建立 feat/antigravity-proxy-nodes；当前以旧 URL PR 为起点，实施前同步适配最新 origin/main，使最终 PR 仅含 Antigravity 功能和必要通用接入，不带 Gateway/Zcode WIP 或 CI 构建缓存。
+已在独立 worktree cockpit-tools-antigravity-nodes 建立 feat/antigravity-account-nodes，基于 origin/main a243d9415。主分支已包含旧 URL 能力，无需重复旧 PR 提交；新 PR 仅含账号节点能力与必要通用接入，不带 Gateway/Zcode WIP 或 CI 构建缓存。
 
 完成后使用已有 gh 认证推送至用户 fork，创建面向 jlcodes99/cockpit-tools main 的新 PR。未实际创建并取得 URL 不称「PR 已提交」。不自动合并。
 

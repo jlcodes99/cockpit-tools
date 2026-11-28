@@ -7,6 +7,8 @@ test('desktop switch errors use localized keys while path recovery remains intac
   const t = ((key: string, options?: { error: string }) => `localized:${key}${options ? ':' + options.error : ''}`) as TFunction;
   assert.equal(formatAntigravitySwitchError(t, new Error('ANTIGRAVITY_SWITCH_BUSY')), 'localized:messages.antigravitySwitchBusy');
   assert.equal(formatAntigravitySwitchError(t, 'ANTIGRAVITY_SWITCH_PREPARATION_TIMEOUT'), 'localized:messages.antigravitySwitchPrepareTimeout');
+  assert.equal(formatAntigravitySwitchError(t, 'ANTIGRAVITY_PROXY_RESTART_REQUIRED'), 'localized:antigravity.proxy.restartHint');
+  assert.equal(formatAntigravitySwitchError(t, 'ANTIGRAVITY_PROXY_STORAGE'), 'localized:codex.proxy.unified.errorFailed');
   assert.equal(formatAntigravitySwitchError(t, 'APP_PATH_NOT_FOUND:antigravity'), 'APP_PATH_NOT_FOUND:antigravity');
   assert.equal(formatAntigravitySwitchError(t, 'provider failed'), 'provider failed');
   assert.equal(formatAntigravitySwitchError(t, 'ANTIGRAVITY_WINDOWS_CREDENTIAL_STORE_CAPACITY'), 'localized:messages.antigravityWindowsCredentialStoreCapacity');

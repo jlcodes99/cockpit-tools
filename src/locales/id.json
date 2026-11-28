@@ -10126,7 +10126,8 @@
       "followHint": "Gunakan proxy global dari Pengaturan; jika nonaktif, jaringan bawaan yang digunakan.",
       "independentHint": "Hanya berlaku untuk akun ini dan menimpa proxy global.",
       "invalidUrl": "URL proxy tidak didukung. Hanya http, https, socks5, dan socks5h yang didukung.",
-      "restartHint": "Setelah mengikat, mengganti, atau menghapus proxy, mulai ulang Antigravity (desktop atau sesi CLI baru) untuk menerapkannya. Proxy yang gagal tidak dialihkan ke koneksi langsung."
+      "restartHint": "Mulai ulang Antigravity setelah pengikatan pertama, menghapus ikatan, atau mengganti akun. Kegagalan proxy tidak pernah beralih ke koneksi langsung.",
+      "hostHint": "Biarkan Cockpit tetap berjalan. Setelah memulai ulang Cockpit, jalankan kembali klien melalui Cockpit untuk memulihkan pintu masuk proxy."
     }
   }
 }

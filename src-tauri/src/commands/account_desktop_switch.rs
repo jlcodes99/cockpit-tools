@@ -23,6 +23,9 @@ pub(crate) async fn switch_account_desktop(
 ) -> Result<models::Account, String> {
     let permit =
         modules::account::try_begin_antigravity_switch(&modules::account::ANTIGRAVITY_SWITCH_GATE)?;
+    if !launch_on_switch {
+        modules::account::ensure_antigravity_proxy_no_restart_switch(&account_id).await?;
+    }
     modules::logger::log_info(&format!(
         "[Antigravity] 开始桌面切号: account_id={}, launch={}",
         account_id, launch_on_switch
@@ -33,6 +36,8 @@ pub(crate) async fn switch_account_desktop(
     )
     .await
     .map_err(|_| "ANTIGRAVITY_SWITCH_PREPARATION_TIMEOUT".to_string())??;
+    // Fail before closing a working client or injecting credentials if its route is unavailable.
+    let egress_proxy_url = modules::antigravity_proxy::launch_url(&account.id).await?;
 
     // Version probes, process control, credential access and disk writes must not
     // occupy a Tokio runtime thread. The blocking worker owns the single-flight
@@ -45,6 +50,7 @@ pub(crate) async fn switch_account_desktop(
                 modules::antigravity_shared_switch::SwitchTarget::Desktop,
                 launch_on_switch,
                 crate::commands::system::antigravity_ide_uses_shared_credentials(),
+                egress_proxy_url.as_deref(),
             )?;
             return Ok::<_, String>((account, launch_error, permit));
         }
@@ -89,7 +95,7 @@ pub(crate) async fn switch_account_desktop(
                 let pid = modules::process::start_antigravity_legacy_with_args_proxy(
                     "",
                     &args,
-                    account.egress_proxy_url.as_deref(),
+                    egress_proxy_url.as_deref(),
                 )?;
                 if let Err(error) =
                     modules::antigravity_legacy_instance::update_default_pid(Some(pid))

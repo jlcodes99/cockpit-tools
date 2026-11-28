@@ -204,8 +204,13 @@ pub async fn start_instance(instance_id: String) -> Result<InstanceProfileView, 
         let default_dir_str = default_dir.to_string_lossy().to_string();
         let default_settings = modules::instance::load_default_settings()?;
         let default_bind_account_id = resolve_default_account_id(&default_settings);
+        let egress_proxy_url = match default_bind_account_id.as_deref() {
+            Some(id) => modules::antigravity_proxy::launch_url(id).await?,
+            None => None,
+        };
         let _initialization = if default_bind_account_id.is_some() && !super::system::antigravity_ide_uses_shared_credentials() {
-            prepare_ide_for_start(&instance_id, default_dir.clone(), None, default_settings.last_pid, &default_settings.extra_args).await?
+            prepare_ide_for_start(&instance_id, default_dir.clone(), None, default_settings.last_pid,
+                &default_settings.extra_args, egress_proxy_url.clone()).await?
         } else { None };
         if let Some(pid) =
             modules::process::resolve_antigravity_pid(default_settings.last_pid, None)
@@ -222,10 +227,6 @@ pub async fn start_instance(instance_id: String) -> Result<InstanceProfileView, 
         if let Some(ref account_id) = default_bind_account_id {
             inject_instance_account(default_dir.clone(), account_id).await?;
         }
-        let egress_proxy_url = default_bind_account_id
-            .as_deref()
-            .and_then(|id| modules::account::load_account(id).ok())
-            .and_then(|account| account.egress_proxy_url);
         let extra_args = modules::process::parse_extra_args(&default_settings.extra_args);
         let pid = modules::process::start_antigravity_with_args_proxy(
             "",
@@ -257,9 +258,14 @@ pub async fn start_instance(instance_id: String) -> Result<InstanceProfileView, 
         .into_iter()
         .find(|item| item.id == instance_id)
         .ok_or("实例不存在")?;
+    let egress_proxy_url = match instance.bind_account_id.as_deref() {
+        Some(id) => modules::antigravity_proxy::launch_url(id).await?,
+        None => None,
+    };
     let _initialization = if instance.bind_account_id.is_some() && !super::system::antigravity_ide_uses_shared_credentials() {
         prepare_ide_for_start(&instance_id, std::path::PathBuf::from(&instance.user_data_dir),
-            Some(modules::instance::get_default_user_data_dir()?), instance.last_pid, &instance.extra_args).await?
+            Some(modules::instance::get_default_user_data_dir()?), instance.last_pid,
+            &instance.extra_args, egress_proxy_url.clone()).await?
     } else { None };
 
     if let Some(pid) =
@@ -280,11 +286,6 @@ pub async fn start_instance(instance_id: String) -> Result<InstanceProfileView, 
             .await?;
     }
 
-    let egress_proxy_url = instance
-        .bind_account_id
-        .as_deref()
-        .and_then(|id| modules::account::load_account(id).ok())
-        .and_then(|account| account.egress_proxy_url);
     let extra_args = modules::process::parse_extra_args(&instance.extra_args);
     let pid = modules::process::start_antigravity_with_args_proxy(
         &instance.user_data_dir,
@@ -307,6 +308,7 @@ async fn prepare_ide_for_start(
     copy_source: Option<std::path::PathBuf>,
     last_pid: Option<u32>,
     raw_args: &str,
+    egress_proxy_url: Option<String>,
 ) -> Result<Option<modules::client_initialization::StartupProgress>, String> {
     let args = modules::process::parse_extra_args(raw_args);
     let directory = (id != DEFAULT_INSTANCE_ID).then(|| root.to_string_lossy().into_owned());
@@ -319,7 +321,9 @@ async fn prepare_ide_for_start(
         },
         move || {
             if modules::process::resolve_antigravity_pid(last_pid, directory.as_deref()).is_none() {
-                modules::process::start_antigravity_with_args(directory.as_deref().unwrap_or(""), &args)?;
+                modules::process::start_antigravity_with_args_proxy(
+                    directory.as_deref().unwrap_or(""), &args, egress_proxy_url.as_deref(),
+                )?;
             }
             Ok(())
         },

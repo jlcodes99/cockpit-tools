@@ -72,9 +72,18 @@ pub(crate) async fn antigravity_ide_needs_initialization(
 #[tauri::command]
 pub(crate) async fn initialize_antigravity_ide(instance_id: String) -> Result<(), String> {
     let permit = account::try_begin_antigravity_switch(&account::ANTIGRAVITY_SWITCH_GATE)?;
+    let profile = tokio::task::spawn_blocking({
+        let instance_id = instance_id.clone();
+        move || load_profile(&instance_id)
+    })
+    .await
+    .map_err(|error| error.to_string())??;
+    let egress_proxy_url = match profile.bind_account_id.as_deref() {
+        Some(id) => crate::modules::antigravity_proxy::launch_url(id).await?,
+        None => None,
+    };
     tokio::task::spawn_blocking(move || {
         let _permit = permit;
-        let profile = load_profile(&instance_id)?;
         let default = instance_id == DEFAULT_INSTANCE_ID;
         let directory = profile.directory.to_string_lossy();
         let target_dir = (!default).then_some(directory.as_ref());
@@ -82,11 +91,6 @@ pub(crate) async fn initialize_antigravity_ide(instance_id: String) -> Result<()
             let _ = process::focus_antigravity_instance(Some(pid), target_dir);
             return Ok(());
         }
-        let egress_proxy_url = profile
-            .bind_account_id
-            .as_deref()
-            .and_then(|id| account::load_account(id).ok())
-            .and_then(|entry| entry.egress_proxy_url);
         let args = process::parse_extra_args(&profile.extra_args);
         let pid = process::start_antigravity_with_args_proxy(
             target_dir.unwrap_or(""),

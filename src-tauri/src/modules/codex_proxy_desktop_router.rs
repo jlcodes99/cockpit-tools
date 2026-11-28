@@ -469,7 +469,12 @@ async fn handle_connection(
     diagnostic: &diagnostics::Connection,
 ) -> Result<(), String> {
     diagnostic.phase("ingress_probe");
-    if tokio::time::timeout(CONNECT_TIMEOUT, request_routes::try_serve(&mut client, account_id))
+    let antigravity = super::antigravity_proxy::route_target(account_id).is_some();
+    if antigravity {
+        // Check platform ownership/staleness before any control endpoint or bypass policy.
+        codex_proxy_runtime::load(account_id).await?;
+    }
+    if !antigravity && tokio::time::timeout(CONNECT_TIMEOUT, request_routes::try_serve(&mut client, account_id))
         .await.map_err(|_| "PROXY_ENGINE_TIMEOUT")?? {
         return Ok(());
     }
@@ -546,9 +551,23 @@ async fn handle_connection(
     Ok(())
 }
 
+#[cfg(test)]
+mod antigravity_policy_tests {
+    use super::*;
+
+    #[test]
+    fn antigravity_entries_never_inherit_codex_direct_host_bypasses() {
+        let id = super::super::antigravity_proxy::route_id("fixture");
+        assert!(effective_direct_hosts_for_account(&id).is_empty());
+    }
+}
+
 /// 每条新连接都重新解析当前生效出口：换节点、换策略、解绑或统一代理变化都会在
 /// 下一批新连接上立即生效，不需要重启已经运行中的客户端。
 fn effective_direct_hosts_for_account(account_id: &str) -> Vec<String> {
+    if super::antigravity_proxy::route_target(account_id).is_some() {
+        return Vec::new();
+    }
     let direct_hosts = super::config::get_codex_proxy_direct_hosts();
     let Ok(store) = super::codex_instance::load_instance_store() else {
         return direct_hosts;

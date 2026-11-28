@@ -10126,7 +10126,8 @@
       "followHint": "Použije globální proxy z nastavení; při vypnutí se použije výchozí síť.",
       "independentHint": "Platí pouze pro tento účet a má přednost před globálním proxy.",
       "invalidUrl": "Nepodporovaná adresa proxy. Podporovány jsou pouze protokoly http, https, socks5 a socks5h.",
-      "restartHint": "Po navázání, změně nebo vymazání proxy restartujte Antigravity (desktopovou aplikaci nebo novou relaci CLI), aby se změna projevila. Selhávající proxy nepřechází na přímé připojení."
+      "restartHint": "Po prvním navázání, zrušení vazby nebo změně účtu restartujte Antigravity. Chyba proxy nikdy nepřejde na přímé připojení.",
+      "hostHint": "Nechte Cockpit spuštěný. Po jeho restartu spusťte klienta znovu přes Cockpit, aby se obnovil vstup proxy."
     }
   }
 }

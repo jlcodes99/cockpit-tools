@@ -880,6 +880,7 @@ pub fn delete_account(account_id: &str) -> Result<(), String> {
     }
 
     save_account_index_locked(&index)?;
+    modules::antigravity_proxy::account_deleted(account_id)?;
 
     let accounts_dir = get_accounts_dir()?;
     let account_path = accounts_dir.join(format!("{}.json", account_id));
@@ -911,6 +912,9 @@ pub fn delete_accounts(account_ids: &[String]) -> Result<(), String> {
     let accounts_dir = get_accounts_dir()?;
     let mut cleanup_error = None;
     for account_id in account_ids {
+        if let Err(error) = modules::antigravity_proxy::account_deleted(account_id) {
+            cleanup_error.get_or_insert(error);
+        }
         let path = accounts_dir.join(format!("{account_id}.json"));
         if let Err(error) = remove_deleted_account_file(&path) {
             cleanup_error.get_or_insert(error);
@@ -2824,8 +2828,9 @@ pub async fn switch_account_dual_no_restart(
         }
     };
 
+    let egress_proxy_url = modules::antigravity_proxy::launch_url(&account.id).await?;
     let was_started =
-        match ensure_antigravity_running_for_no_restart_switch(account.egress_proxy_url.as_deref())
+        match ensure_antigravity_running_for_no_restart_switch(egress_proxy_url.as_deref())
         {
         Ok(started_now) => started_now,
         Err(error) => {
@@ -2978,6 +2983,52 @@ pub async fn switch_account_dual_no_restart(
     }
 }
 
+/// A running process keeps the entry inherited at startup. A seamless account
+/// switch cannot safely adopt another account's managed route without a restart.
+fn antigravity_proxy_restart_required(
+    current_id: Option<&str>,
+    target_id: &str,
+    current_managed: bool,
+    target_managed: bool,
+) -> bool {
+    current_id != Some(target_id) && (current_managed || target_managed)
+}
+
+pub(crate) async fn ensure_antigravity_proxy_no_restart_switch(
+    target_id: &str,
+) -> Result<(), String> {
+    let current_id = tokio::task::spawn_blocking(get_current_account_id)
+        .await
+        .map_err(|error| error.to_string())??;
+    if current_id.as_deref() == Some(target_id) {
+        return Ok(());
+    }
+    let target_managed = modules::antigravity_proxy::has_managed_binding(target_id).await?;
+    let current_managed = match current_id.as_deref() {
+        Some(id) => modules::antigravity_proxy::has_managed_binding(id).await?,
+        None => false,
+    };
+    if antigravity_proxy_restart_required(current_id.as_deref(), target_id, current_managed, target_managed) {
+        return Err("ANTIGRAVITY_PROXY_RESTART_REQUIRED".into());
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod antigravity_proxy_switch_tests {
+    use super::antigravity_proxy_restart_required;
+
+    #[test]
+    fn managed_routes_require_restart_only_when_account_changes() {
+        assert!(!antigravity_proxy_restart_required(Some("same"), "same", true, true));
+        assert!(!antigravity_proxy_restart_required(Some("old"), "new", false, false));
+        assert!(antigravity_proxy_restart_required(Some("old"), "new", true, false));
+        assert!(antigravity_proxy_restart_required(Some("old"), "new", false, true));
+        assert!(antigravity_proxy_restart_required(None, "new", false, true));
+        assert!(!antigravity_proxy_restart_required(None, "new", false, false));
+    }
+}
+
 /// 本地切号（不关闭/不重启 Antigravity IDE）
 pub async fn switch_account_local_no_restart(account_id: &str) -> Result<Account, String> {
     switch_account_ide(account_id, false)
@@ -3007,6 +3058,13 @@ async fn perform_ide_switch(
     dual_no_restart: bool,
 ) -> Result<IdeSwitchResult, String> {
     let permit = try_begin_antigravity_switch(&ANTIGRAVITY_SWITCH_GATE)?;
+    if !launch {
+        ensure_antigravity_proxy_no_restart_switch(account_id).await?;
+    }
+    // Prepare the account route before initialization can launch a client, or any
+    // credentials are injected. Never block_on an async engine from this worker.
+    let egress_proxy_url = modules::antigravity_proxy::launch_url(account_id).await?;
+    let initialization_proxy_url = egress_proxy_url.clone();
     let (local_profile, initialization) = tokio::task::spawn_blocking(move || {
         if crate::commands::system::antigravity_ide_uses_shared_credentials() {
             return Ok((None, None));
@@ -3020,7 +3078,9 @@ async fn perform_ide_switch(
                 || {
                     if modules::process::resolve_antigravity_pid(settings.last_pid, None).is_none() {
                         let args = modules::process::parse_extra_args(&settings.extra_args);
-                        modules::process::start_antigravity_with_args("", &args)?;
+                        modules::process::start_antigravity_with_args_proxy(
+                            "", &args, initialization_proxy_url.as_deref(),
+                        )?;
                     }
                     Ok(())
                 },
@@ -3048,6 +3108,7 @@ async fn perform_ide_switch(
                 modules::antigravity_shared_switch::SwitchTarget::Ide,
                 launch || dual_no_restart,
                 true,
+                egress_proxy_url.as_deref(),
             )?;
             return Ok(IdeSwitchResult {
                 account,
@@ -3091,10 +3152,9 @@ async fn perform_ide_switch(
         }
 
         let launch_error = if launch {
-            let egress = account.egress_proxy_url.clone();
             let result = modules::instance::load_default_settings().and_then(|settings| {
                 let args = modules::process::parse_extra_args(&settings.extra_args);
-                modules::process::start_antigravity_with_args_proxy("", &args, egress.as_deref())
+                modules::process::start_antigravity_with_args_proxy("", &args, egress_proxy_url.as_deref())
             });
             match result {
                 Ok(pid) => {

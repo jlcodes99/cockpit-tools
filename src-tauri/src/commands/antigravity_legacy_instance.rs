@@ -241,6 +241,10 @@ pub async fn antigravity_legacy_start_instance(
         let default_dir_str = default_dir.to_string_lossy().to_string();
         let default_settings = modules::antigravity_legacy_instance::load_default_settings()?;
         let default_bind_account_id = resolve_default_account_id(&default_settings);
+        let egress_proxy_url = match default_bind_account_id.as_deref() {
+            Some(id) => modules::antigravity_proxy::launch_url(id).await?,
+            None => None,
+        };
         if let Some(pid) =
             modules::process::resolve_antigravity_legacy_pid(default_settings.last_pid, None)
         {
@@ -261,10 +265,6 @@ pub async fn antigravity_legacy_start_instance(
                 account_id,
             )?;
         }
-        let egress_proxy_url = default_bind_account_id
-            .as_deref()
-            .and_then(|id| modules::account::load_account(id).ok())
-            .and_then(|account| account.egress_proxy_url);
         let extra_args = modules::process::parse_extra_args(&default_settings.extra_args);
         let pid = modules::process::start_antigravity_legacy_with_args_proxy(
             "",
@@ -297,6 +297,10 @@ pub async fn antigravity_legacy_start_instance(
         .find(|item| item.id == instance_id)
         .ok_or("实例不存在")?;
 
+    let egress_proxy_url = match instance.bind_account_id.as_deref() {
+        Some(id) => modules::antigravity_proxy::launch_url(id).await?,
+        None => None,
+    };
     if let Some(pid) = modules::process::resolve_antigravity_legacy_pid(
         instance.last_pid,
         Some(&instance.user_data_dir),
@@ -320,11 +324,6 @@ pub async fn antigravity_legacy_start_instance(
         modules::antigravity_legacy_instance::inject_account_to_profile(&profile_dir, account_id)?;
     }
 
-    let egress_proxy_url = instance
-        .bind_account_id
-        .as_deref()
-        .and_then(|id| modules::account::load_account(id).ok())
-        .and_then(|account| account.egress_proxy_url);
     let extra_args = modules::process::parse_extra_args(&instance.extra_args);
     #[cfg(target_os = "macos")]
     let pid = modules::process::start_managed_antigravity_on_macos_for_account(

@@ -10126,7 +10126,8 @@
       "followHint": "Sử dụng proxy toàn cục trong Cài đặt; nếu tắt sẽ dùng mạng mặc định.",
       "independentHint": "Chỉ áp dụng cho tài khoản này và được ưu tiên hơn proxy toàn cục.",
       "invalidUrl": "URL proxy không được hỗ trợ. Chỉ hỗ trợ http, https, socks5 và socks5h.",
-      "restartHint": "Sau khi liên kết, thay đổi hoặc xóa proxy, hãy khởi động lại Antigravity (desktop hoặc phiên CLI mới) để áp dụng. Proxy lỗi sẽ không chuyển sang kết nối trực tiếp."
+      "restartHint": "Khởi động lại Antigravity sau khi liên kết lần đầu, xóa liên kết hoặc đổi tài khoản. Lỗi proxy không bao giờ chuyển sang kết nối trực tiếp.",
+      "hostHint": "Giữ Cockpit đang chạy. Sau khi khởi động lại Cockpit, hãy mở lại ứng dụng khách qua Cockpit để khôi phục cổng proxy."
     }
   }
 }

@@ -613,6 +613,16 @@ async fn source(id: &str) -> Result<Source, String> {
     })
     .await
 }
+/// Identity-only validation for snapshot consumers: refreshing parameters does not rebind an account.
+pub(crate) async fn reference_exists(source_id: &str, item_id: &str) -> Result<bool, String> {
+    let source = match source(source_id).await {
+        Ok(source) => source,
+        Err(error) if error == "CATALOG_NOT_FOUND" => return Ok(false),
+        Err(error) => return Err(error),
+    };
+    Ok(source.catalog.nodes.iter().any(|node| node.id == item_id)
+        || source.catalog.groups.iter().any(|group| group.id == item_id))
+}
 fn valid_name(name: &str) -> Result<String, String> {
     let name = name.trim();
     if name.is_empty()
@@ -1587,7 +1597,10 @@ pub async fn dependencies(source_id: String) -> Result<SourceDependenciesView, S
     })
     .await?;
     let unified = crate::modules::codex_unified_proxy::ensure_loaded().await?;
-    let client_targets = super::codex_client_proxy::dependencies(&source_id).await?;
+    let mut client_targets = super::codex_client_proxy::dependencies(&source_id).await?;
+    client_targets.extend(super::antigravity_proxy::dependencies(&source_id).await?.into_iter().map(|target| {
+        super::codex_client_proxy::Dependency { target_id: target.target_id, name: target.name }
+    }));
     let final_revision = source(&source_id).await?.revision;
     if final_revision != stored.revision {
         return Err("CATALOG_CHANGED".into());
@@ -2030,6 +2043,9 @@ pub async fn auto_refresh_loop() {
                 if refresh(uuid::Uuid::new_v4().to_string(), id).await.is_ok() {
                     // 统一代理引用同一来源时必须同步快照，否则自动刷新后账号仍走旧节点。
                     super::codex_unified_proxy::resync_source(&source_id, false).await;
+                    if super::antigravity_proxy::resync_source(&source_id, false).await.is_err() {
+                        super::logger::log_warn("[AntigravityProxy] source identity check failed");
+                    }
                     if super::codex_client_proxy::resync_source(&source_id, false)
                         .await
                         .is_err()

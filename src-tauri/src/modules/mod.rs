@@ -26,6 +26,7 @@ pub(crate) mod antigravity_composer_status;
 pub mod antigravity_credential;
 pub mod antigravity_legacy_instance;
 pub mod antigravity_paths;
+pub mod antigravity_proxy;
 pub(crate) mod antigravity_shared_switch;
 pub mod antigravity_switch_history;
 pub mod antigravity_token_usage;

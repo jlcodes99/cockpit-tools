@@ -575,11 +575,14 @@ async fn switch_account_legacy_antigravity(
 
 #[tauri::command]
 pub async fn antigravity_launch_current(runtime_target: Option<String>) -> Result<(), String> {
+    let account = tokio::task::spawn_blocking(modules::account::get_current_account)
+        .await
+        .map_err(|error| error.to_string())??;
+    let egress = match account {
+        Some(account) => modules::antigravity_proxy::launch_url(&account.id).await?,
+        None => None,
+    };
     tokio::task::spawn_blocking(move || {
-        let egress = modules::account::get_current_account()
-            .ok()
-            .flatten()
-            .and_then(|account| account.egress_proxy_url);
         if normalize_antigravity_runtime_target(runtime_target.as_deref()) == AntigravityRuntimeTarget::Legacy {
             let settings = modules::antigravity_legacy_instance::load_default_settings()?;
             let args = modules::process::parse_extra_args(&settings.extra_args);

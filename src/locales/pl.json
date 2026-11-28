@@ -10126,7 +10126,8 @@
       "followHint": "Używa globalnego proxy z ustawień; gdy wyłączone, używa sieci domyślnej.",
       "independentHint": "Dotyczy tylko tego konta i ma pierwszeństwo przed globalnym proxy.",
       "invalidUrl": "Nieobsługiwany adres proxy. Obsługiwane są tylko http, https, socks5 i socks5h.",
-      "restartHint": "Po powiązaniu, zmianie lub usunięciu proxy uruchom ponownie Antigravity (aplikację desktopową lub nową sesję CLI), aby zastosować zmiany. Niedziałające proxy nie przełącza się na połączenie bezpośrednie."
+      "restartHint": "Uruchom ponownie Antigravity po pierwszym powiązaniu, usunięciu powiązania lub zmianie konta. Błędy proxy nigdy nie powodują połączenia bezpośredniego.",
+      "hostHint": "Pozostaw Cockpit uruchomiony. Po jego ponownym uruchomieniu uruchom klienta przez Cockpit, aby przywrócić punkt wejścia proxy."
     }
   }
 }

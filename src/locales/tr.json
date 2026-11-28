@@ -10126,7 +10126,8 @@
       "followHint": "Ayarlar'daki global proxy'yi kullanır; devre dışıysa varsayılan ağı kullanır.",
       "independentHint": "Yalnızca bu hesap için geçerlidir ve global proxy'ye göre önceliklidir.",
       "invalidUrl": "Desteklenmeyen proxy URL'si. Yalnızca http, https, socks5 ve socks5h desteklenir.",
-      "restartHint": "Bağlama, değiştirme veya temizleme işleminden sonra Antigravity'yi (masaüstü veya yeni bir CLI oturumu) yeniden başlatın. Başarısız olan proxy doğrudan bağlantıya düşmez."
+      "restartHint": "İlk bağlamadan, bağlantıyı temizledikten veya hesap değiştirdikten sonra Antigravity’yi yeniden başlatın. Proxy hataları doğrudan bağlantıya geçmez.",
+      "hostHint": "Cockpit’i çalışır durumda tutun. Cockpit’i yeniden başlattıktan sonra proxy girişini geri yüklemek için istemciyi Cockpit üzerinden tekrar başlatın."
     }
   }
 }

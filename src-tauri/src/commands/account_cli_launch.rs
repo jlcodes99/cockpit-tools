@@ -21,13 +21,21 @@ pub(crate) async fn switch_antigravity_cli(
 ) -> Result<Account, String> {
     let permit =
         modules::account::try_begin_antigravity_switch(&modules::account::ANTIGRAVITY_SWITCH_GATE)?;
+    if !launch {
+        modules::account::ensure_antigravity_proxy_no_restart_switch(&account_id).await?;
+    }
     let account = tokio::time::timeout(
         Duration::from_secs(60),
         modules::account::prepare_account_for_injection(&account_id),
     )
     .await
     .map_err(|_| "ANTIGRAVITY_SWITCH_PREPARATION_TIMEOUT".to_string())??;
-    let egress_proxy_url = account.egress_proxy_url.clone();
+    // Resolve the stable account entry before credentials or terminal state change.
+    let egress_proxy_url = if launch {
+        modules::antigravity_proxy::launch_url(&account.id).await?
+    } else {
+        None
+    };
     let terminal_plan = if launch {
         Some(
             prepare_terminal(
@@ -49,6 +57,7 @@ pub(crate) async fn switch_antigravity_cli(
             modules::antigravity_shared_switch::SwitchTarget::Cli,
             false,
             super::super::system::antigravity_ide_uses_shared_credentials(),
+            egress_proxy_url.as_deref(),
         )?;
         modules::websocket::broadcast_account_switched(&account.id, &account.email);
         modules::websocket::broadcast_data_changed("switch_antigravity_cli");
@@ -69,10 +78,13 @@ pub(crate) async fn launch_antigravity_cli(
     terminal: Option<String>,
     custom_command: Option<String>,
 ) -> Result<(), String> {
-    let egress_proxy_url = modules::account::get_current_account()
-        .ok()
-        .flatten()
-        .and_then(|account| account.egress_proxy_url);
+    let account = tokio::task::spawn_blocking(modules::account::get_current_account)
+        .await
+        .map_err(|error| error.to_string())??;
+    let egress_proxy_url = match account {
+        Some(account) => modules::antigravity_proxy::launch_url(&account.id).await?,
+        None => None,
+    };
     let (terminal, plan) =
         prepare_terminal(working_dir, terminal, custom_command, egress_proxy_url).await?;
     tokio::task::spawn_blocking(move || {
@@ -396,6 +408,45 @@ mod tests {
             Path::new(path.trim_end()).canonicalize().unwrap(),
             dir.canonicalize().unwrap()
         );
+    }
+
+    #[test]
+    fn antigravity_cli_node_entry_is_injected_for_both_http_and_https() {
+        let sandbox = tempfile::tempdir().unwrap();
+        let entry = "http://127.0.0.1:40123";
+        let command = build_command_with_proxy(
+            Path::new("/bin/sh"),
+            sandbox.path(),
+            Some("printf '%s\\n' \"$HTTP_PROXY\" \"$HTTPS_PROXY\" \"$http_proxy\" \"$https_proxy\""),
+            Some(entry),
+        );
+        let output = Command::new("/bin/sh")
+            .args(["-c", &command])
+            .env_clear()
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+        let stdout = String::from_utf8(output.stdout).unwrap();
+        assert_eq!(stdout.lines().collect::<Vec<_>>(), vec![entry; 4]);
+    }
+
+    #[test]
+    fn antigravity_cli_proxy_env_values_are_shell_literals() {
+        let sandbox = tempfile::tempdir().unwrap();
+        let value = "http://user:p'ass;$(printf injected)@127.0.0.1:8080";
+        let command = build_command_with_env(
+            Path::new("/bin/sh"),
+            sandbox.path(),
+            Some("printf '%s' \"$HTTPS_PROXY\""),
+            Some(vec![("HTTPS_PROXY".to_owned(), value.to_owned())]),
+        );
+        let output = Command::new("/bin/sh")
+            .args(["-c", &command])
+            .env_clear()
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+        assert_eq!(String::from_utf8(output.stdout).unwrap(), value);
     }
 
     #[test]

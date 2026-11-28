@@ -526,6 +526,9 @@ async fn read_with_limit<T: Send + 'static>(
 }
 
 pub(crate) async fn load_stored(account_id: &str) -> Result<CodexAccount, String> {
+    if let Some(target) = super::antigravity_proxy::route_target(account_id) {
+        return Box::pin(super::antigravity_proxy::load_route(target)).await;
+    }
     if let Some(target) = super::codex_client_proxy::route_target(account_id) {
         return Box::pin(super::codex_client_proxy::load_route(target)).await;
     }
@@ -692,7 +695,11 @@ async fn ensure_target(
             value,
         ));
         // Serialize final validation/publication with durable binding updates.
-        let token_lock = codex_account::codex_token_lock_for(account_id);
+        let token_lock = if super::antigravity_proxy::route_target(account_id).is_some() {
+            super::antigravity_proxy::route_lock(account_id)
+        } else {
+            codex_account::codex_token_lock_for(account_id)
+        };
         let _token_guard = token_lock.lock().await;
         let latest = load(account_id).await?;
         if codex_account_proxy::configured_url(&latest)?
@@ -712,11 +719,13 @@ async fn ensure_target(
         guard.complete();
         drop(state);
         drop(old);
-        super::codex_proxy_activity::attach_if_enabled(
-            account_id,
-            if super::codex_client_proxy::route_target(account_id).is_some() { "desktop" } else { "account" },
-            candidate.controller(),
-        );
+        if super::antigravity_proxy::route_target(account_id).is_none() {
+            super::codex_proxy_activity::attach_if_enabled(
+                account_id,
+                if super::codex_client_proxy::route_target(account_id).is_some() { "desktop" } else { "account" },
+                candidate.controller(),
+            );
+        }
         // The stable entry and its observation endpoint survive engine replacement;
         // restarting the API gateway here would interrupt unrelated active requests.
         return Ok(Some((candidate.proxy_url().to_string(), Some(candidate))));
@@ -750,7 +759,7 @@ pub(crate) async fn publish_client_binding(id: &str, value: Option<&str>, candid
         drop(state);
         drop(old);
     }
-    if let Some(controller) = controller {
+    if let Some(controller) = controller.filter(|_| super::antigravity_proxy::route_target(id).is_none()) {
         super::codex_proxy_activity::attach_if_enabled(id, "desktop", controller);
     }
     Ok(())
@@ -967,7 +976,8 @@ pub async fn invalidate_changed_bindings() {
         };
         let previous_signature = state.signature.clone();
         drop(state);
-        let account = if super::codex_client_proxy::route_target(&account_id).is_some() {
+        let account = if super::codex_client_proxy::route_target(&account_id).is_some()
+            || super::antigravity_proxy::route_target(&account_id).is_some() {
             match load(&account_id).await { Ok(account) => Some(account), Err(_) => continue }
         } else {
             tauri::async_runtime::spawn_blocking({

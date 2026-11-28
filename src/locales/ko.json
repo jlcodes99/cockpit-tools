@@ -10126,7 +10126,8 @@
       "followHint": "설정의 전역 프록시를 사용합니다. 비활성화된 경우 기본 네트워크를 사용합니다.",
       "independentHint": "이 계정에만 적용되며 전역 프록시보다 우선합니다.",
       "invalidUrl": "지원되지 않는 프록시 URL입니다. http, https, socks5, socks5h만 지원합니다.",
-      "restartHint": "바인딩, 변경 또는 해제 후 Antigravity(데스크톱 또는 새 CLI 세션)를 다시 시작하면 적용됩니다. 프록시 실패 시 직접 연결로 대체되지 않습니다."
+      "restartHint": "최초 연결, 연결 해제 또는 계정 전환 후 Antigravity를 다시 시작하세요. 프록시 실패 시 직접 연결로 전환하지 않습니다.",
+      "hostHint": "Cockpit을 계속 실행하세요. Cockpit 재시작 후 프록시 진입점을 복원하려면 Cockpit에서 클라이언트를 다시 실행하세요."
     }
   }
 }

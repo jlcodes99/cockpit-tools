@@ -2,6 +2,8 @@ import type { TFunction } from 'i18next';
 
 export function formatAntigravitySwitchError(t: TFunction, error: unknown): string {
   const raw = String(error).replace(/^Error:\s*/, '').trim();
+  if (raw === 'ANTIGRAVITY_PROXY_RESTART_REQUIRED') return t('antigravity.proxy.restartHint');
+  if (/^ANTIGRAVITY_PROXY_(STORAGE|ACCOUNT_MISSING|TIMEOUT|BUSY|STALE)$/.test(raw)) return t('codex.proxy.unified.errorFailed');
   if (raw === 'ANTIGRAVITY_SWITCH_BUSY') return t('messages.antigravitySwitchBusy');
   if (raw === 'ANTIGRAVITY_SWITCH_PREPARATION_TIMEOUT') return t('messages.antigravitySwitchPrepareTimeout');
   if (raw === 'ANTIGRAVITY_WINDOWS_CREDENTIAL_STORE_CAPACITY') return t('messages.antigravityWindowsCredentialStoreCapacity');

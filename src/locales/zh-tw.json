@@ -10126,7 +10126,8 @@
       "followHint": "使用設定中的全域代理；未啟用時使用預設網路。",
       "independentHint": "只變更這個帳號，優先於全域代理。",
       "invalidUrl": "代理位址不支援，僅支援 http、https、socks5、socks5h 協定。",
-      "restartHint": "首次綁定、更換或清除代理後，重新啟動 Antigravity（桌面端或新開 CLI 會話）後生效。代理連線失敗時不會回退直連。"
+      "restartHint": "首次綁定、清除綁定或切換帳號後，請重新啟動 Antigravity。代理失敗不會回退直連。",
+      "hostHint": "請保持 Cockpit 執行。重新啟動 Cockpit 後，需透過 Cockpit 重新啟動用戶端以恢復代理入口。"
     }
   }
 }
