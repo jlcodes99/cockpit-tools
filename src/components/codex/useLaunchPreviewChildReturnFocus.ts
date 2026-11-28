@@ -1,3 +1,4 @@
+import { containsWithScrollbar } from '../../utils/scrollbarContainment';
 import { useCallback, useEffect, useRef, type RefObject } from 'react';
 
 /** WebKit mouse clicks and an inert parent do not reliably preserve activeElement. */
@@ -14,7 +15,7 @@ export function useLaunchPreviewChildReturnFocus(dialog: RefObject<HTMLElement |
     if (!closed) return;
     const target = opener.current;
     opener.current = null;
-    if (!target?.isConnected || !dialog.current?.contains(target) ||
+    if (!target?.isConnected || !containsWithScrollbar(dialog.current, target) ||
         (target as HTMLButtonElement).disabled) return;
     const active = document.activeElement;
     const foreground = active instanceof HTMLElement ? active.closest('[aria-modal="true"]') : null;

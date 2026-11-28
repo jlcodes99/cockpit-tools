@@ -15,6 +15,8 @@ import {
 import { setBootSplashStage } from "./utils/bootSplash";
 import { applyPlatformLayoutSnapshot, hydrateUiPreferences } from "./utils/uiPreferences";
 import { applyDurableUiSnapshot, hydrateDurableUiSettings } from "./utils/durableUiSettings";
+import { installAppScrollbars } from './utils/appScrollbars';
+import './styles/scrollbars.css';
 
 initErrorReporter();
 recordFrontendStage("script_loaded");
@@ -31,6 +33,8 @@ void (async () => {
 
   recordFrontendStage("react_mount_start");
   installTauriEventCleanupGuard();
+  const disposeScrollbars = installAppScrollbars();
+  import.meta.hot?.dispose(disposeScrollbars);
   ReactDOM.createRoot(rootElement).render(
     <React.StrictMode>
       <AppRuntimeGuard>

@@ -1,3 +1,4 @@
+import { containsWithScrollbar } from '../utils/scrollbarContainment';
 import { useLayoutEffect, useRef, useState, type CSSProperties, type RefObject } from 'react';
 
 const PANEL_GAP = 8;
@@ -28,7 +29,7 @@ export function useDropdownPanelPlacement(
       if (
         event?.type === 'scroll'
         && eventTarget instanceof Node
-        && panelElement.contains(eventTarget)
+        && containsWithScrollbar(panelElement, eventTarget)
       ) {
         return;
       }

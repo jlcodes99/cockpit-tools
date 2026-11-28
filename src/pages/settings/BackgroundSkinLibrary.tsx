@@ -1,3 +1,4 @@
+import { containsWithScrollbar } from '../../utils/scrollbarContainment';
 import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
@@ -30,7 +31,7 @@ export function BackgroundSkinCard({ skin, selected, disabled, onSelect, onRepla
   useEffect(() => {
     if (!menu) return;
     const outside = (event: PointerEvent) => {
-      if (!root.current?.contains(event.target as Node)) setMenu(false);
+      if (!containsWithScrollbar(root.current, event.target as Node)) setMenu(false);
     };
     document.addEventListener('pointerdown', outside);
     return () => document.removeEventListener('pointerdown', outside);

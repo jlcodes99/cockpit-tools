@@ -1,0 +1,44 @@
+@import 'overlayscrollbars/styles/overlayscrollbars.css' layer(overlay-scrollbars);
+
+@layer overlay-scrollbars {
+  /* The existing element remains the viewport. Keep its original positioning. */
+  [data-overlayscrollbars] { position: revert-layer; }
+  [data-overlayscrollbars-viewport] { overflow: revert-layer; }
+}
+
+.app-scrollbars {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483646;
+  pointer-events: none;
+}
+
+.app-scrollbar-slot {
+  position: absolute;
+  pointer-events: none;
+}
+
+/* The app-wide reset `* { padding: 0 }` outranks the library's layered rules. */
+.os-theme-cockpit.os-scrollbar-vertical {
+  padding: var(--os-padding-axis) var(--os-padding-perpendicular);
+}
+
+.os-theme-cockpit.os-scrollbar-horizontal {
+  padding: var(--os-padding-perpendicular) var(--os-padding-axis);
+}
+
+.os-theme-cockpit {
+  --os-size: 10px;
+  --os-padding-perpendicular: 3px;
+  --os-padding-axis: 3px;
+  /* Keep a slim handle but a wide, forgiving hit area. */
+  --os-handle-interactive-area-offset: 5px;
+  --os-track-border-radius: 999px;
+  --os-handle-border-radius: 999px;
+  --os-handle-bg: color-mix(in srgb, var(--text-muted, #94a3b8) 38%, transparent);
+  --os-handle-bg-hover: color-mix(in srgb, var(--text-secondary, #64748b) 62%, transparent);
+  --os-handle-bg-active: color-mix(in srgb, var(--primary, #1d4ed8) 90%, transparent);
+  --os-handle-min-size: 26px;
+  --os-handle-perpendicular-size-hover: calc(100% + 2px);
+  --os-handle-perpendicular-size-active: calc(100% + 2px);
+}

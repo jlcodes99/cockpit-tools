@@ -1,3 +1,4 @@
+import { containsWithScrollbar } from '../../utils/scrollbarContainment';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, ChevronDown, Gauge, Search, X } from 'lucide-react';
@@ -93,7 +94,7 @@ export function CodexProxySelect({ value, options, label, placeholder, searchPla
         left: Math.max(6, Math.min(rect.left, window.innerWidth - width - 6)), width });
     };
     const outside = (event: PointerEvent) => {
-      if (event.target instanceof Node && !menu.current?.contains(event.target) && !trigger.current?.contains(event.target)) setOpen(false);
+      if (event.target instanceof Node && !containsWithScrollbar(menu.current, event.target) && !containsWithScrollbar(trigger.current, event.target)) setOpen(false);
     };
     reposition();
     document.addEventListener('pointerdown', outside);
@@ -138,7 +139,7 @@ export function CodexProxySelect({ value, options, label, placeholder, searchPla
       }
     }}
     onBlur={(event) => {
-      if (event.relatedTarget instanceof Node && !menu.current?.contains(event.relatedTarget) && !trigger.current?.contains(event.relatedTarget)) setOpen(false);
+      if (event.relatedTarget instanceof Node && !containsWithScrollbar(menu.current, event.relatedTarget) && !containsWithScrollbar(trigger.current, event.relatedTarget)) setOpen(false);
     }}>
     <div className="codex-proxy-select-header">
       <label className="codex-proxy-select-search"><Search size={16} aria-hidden="true" />

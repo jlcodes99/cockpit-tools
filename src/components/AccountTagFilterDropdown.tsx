@@ -1,3 +1,4 @@
+import { containsWithScrollbar } from '../utils/scrollbarContainment';
 import { useEffect, useRef, useState } from 'react'
 import { Tag, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -44,7 +45,7 @@ export function AccountTagFilterDropdown({
     const handlePointerDown = (event: MouseEvent) => {
       const target = event.target as Node | null
       if (!target) return
-      if (rootRef.current?.contains(target)) return
+      if (containsWithScrollbar(rootRef.current, target)) return
       setOpen(false)
     }
     // 延迟绑定，避免与打开触发器的同一次点击立刻关闭

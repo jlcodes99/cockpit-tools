@@ -1,3 +1,4 @@
+import { containsWithScrollbar } from '../../utils/scrollbarContainment';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, ChevronDown, Pencil } from 'lucide-react';
@@ -65,7 +66,7 @@ export function PlatformGroupSwitcher({
 
     const handleMouseDown = (event: MouseEvent) => {
       const target = event.target as Node;
-      if (containerRef.current?.contains(target) || dropdownRef.current?.contains(target)) {
+      if (containsWithScrollbar(containerRef.current, target) || containsWithScrollbar(dropdownRef.current, target)) {
         return;
       }
       setOpen(false);

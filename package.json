@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "test": "node scripts/run_ts_tests.cjs",
+    "test:scrollbars": "node scripts/test-scrollbars-browser.cjs",
     "test:rust": "cargo test --package cockpit-tools --lib",
     "clean:rust:debug": "cargo clean --profile dev",
     "test:all": "npm test && npm run test:release && npm run test:rust",
@@ -45,6 +46,7 @@
     "lucide-react": "^0.562.0",
     "otpauth": "^9.5.0",
     "otplib": "^13.4.0",
+    "overlayscrollbars": "2.17.0",
     "protobufjs": "^8.7.1",
     "qrcode-generator": "2.0.4",
     "react": "^19.1.0",
