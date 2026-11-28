@@ -1,0 +1,59 @@
+{
+  "schema": 1,
+  "codeCommit": "c2e547de88d8a99f19708231a04703d856e73f1a",
+  "productionSourceUnchangedSince": "1cca4f015cf671348abc9a3baa299d7f9bf2291a",
+  "changedSourceFiles": [
+    "src-tauri/src/modules/codex_native_api/stream_recovery_http_tests.rs"
+  ],
+  "build": {
+    "run": "20261128-130253-build-cc6bb9bb",
+    "exitCode": 0,
+    "sourceStable": true,
+    "sourceFingerprint": "80DBFB726DCE4F7AC0589544E9FB3C9018B88058264517162845A3DBD44D7C3C",
+    "testArtifactSha256": "1090723F7F0BD1191714BA0E75787DEE81C7D110D9ABE17FA447584F92C7BF3E",
+    "testArtifactBytes": 228350976
+  },
+  "affectedTests": {
+    "run": "20261128-131147-run-cb140eb6",
+    "passed": 20,
+    "failed": 0,
+    "ignored": 0,
+    "seconds": 21.59,
+    "testNames": [
+      "modules::codex_native_api::stream_recovery_http_tests::cancelling_an_entered_recovery_releases_its_only_route_permit",
+      "modules::codex_native_api::stream_recovery_http_tests::concurrent_fixture_classifies_only_exact_known_content_markers",
+      "modules::codex_native_api::stream_recovery_http_tests::concurrent_fixture_enforces_its_small_body_limit",
+      "modules::codex_native_api::stream_recovery_http_tests::concurrent_fixture_rejects_duplicate_and_ambiguous_markers",
+      "modules::codex_native_api::stream_recovery_http_tests::concurrent_fixture_rejects_missing_wrong_and_escaped_markers",
+      "modules::codex_native_api::stream_recovery_http_tests::existing_bootstrap_retry_cannot_rearm_metadata_body_recovery",
+      "modules::codex_native_api::stream_recovery_http_tests::metadata_disconnect_nonstreaming_behavior_is_unchanged",
+      "modules::codex_native_api::stream_recovery_http_tests::native_conversion_cannot_hide_partial_or_conflicting_raw_business_frames",
+      "modules::codex_native_api::stream_recovery_http_tests::native_namespace_conversion_recovers_with_the_frozen_restore_context",
+      "modules::codex_native_api::stream_recovery_http_tests::one_concurrent_stream_recovers_without_interrupting_other_shared_client_streams",
+      "modules::codex_native_api::stream_recovery_http_tests::published_metadata_client_disconnect_drops_the_recovery_future",
+      "modules::codex_native_api::stream_recovery_http_tests::published_metadata_disconnect_replays_once_with_identical_large_input",
+      "modules::codex_native_api::stream_recovery_http_tests::published_metadata_eof_idle_timeout_and_completed_response_are_not_replayed",
+      "modules::codex_native_api::stream_recovery_http_tests::published_metadata_recovery_does_not_retry_its_http_or_sse_rejection",
+      "modules::codex_native_api::stream_recovery_http_tests::published_metadata_recovery_never_replenishes_after_second_disconnect",
+      "modules::codex_native_api::stream_recovery_http_tests::published_metadata_recovery_preserves_total_network_and_owner_fences",
+      "modules::codex_native_api::stream_recovery_http_tests::published_metadata_recovery_refuses_any_business_or_partial_frame",
+      "modules::codex_native_api::stream_recovery_http_tests::published_metadata_recovery_refuses_hosted_unknown_and_non_native_tools",
+      "modules::codex_native_api::stream_recovery_http_tests::published_metadata_recovery_renews_only_opening_and_keeps_authorization",
+      "modules::codex_native_api::stream_recovery_http_tests::recovered_final_response_continues_on_the_same_owner_with_complete_history"
+    ]
+  },
+  "originalChecks": {
+    "head": "1cca4f015cf671348abc9a3baa299d7f9bf2291a",
+    "success": 11,
+    "failure": 1,
+    "rule": "rust/unsafe-deserialization",
+    "queryPack": "codeql/rust-queries/0.1.48",
+    "missingConfiguration": "/language:go"
+  },
+  "limitations": [
+    "Original 144/1 result and upload crossovers remain historical evidence.",
+    "This is an additional affected-suite run, not a full-repository rerun.",
+    "Code scanning verdict for the follow-up must be read from GitHub; this local run does not prove scanner success.",
+    "No production installation or requests occurred during these tests."
+  ]
+}
