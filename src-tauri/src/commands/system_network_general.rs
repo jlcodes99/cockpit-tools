@@ -443,6 +443,7 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         ),
         minimax_code_region: user_config.minimax_code_region,
         workbuddy_share_sessions_on_switch: user_config.workbuddy_share_sessions_on_switch,
+        workbuddy_ai_share_sessions_on_switch: user_config.workbuddy_ai_share_sessions_on_switch,
         opencode_sync_on_switch: user_config.opencode_sync_on_switch,
         opencode_auth_overwrite_on_switch: user_config.opencode_auth_overwrite_on_switch,
         ghcp_opencode_sync_on_switch: user_config.ghcp_opencode_sync_on_switch,

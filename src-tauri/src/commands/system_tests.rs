@@ -520,8 +520,15 @@
 
     #[test]
     fn general_config_patch_persists_session_sharing_switches() {
+        // Legacy configs without the new international key deserialize to false while domestic stays true.
+        let deserialized: UserConfig = serde_json::from_str("{}").expect("legacy config");
+        assert!(deserialized.workbuddy_share_sessions_on_switch);
+        assert!(!deserialized.workbuddy_ai_share_sessions_on_switch);
+
         let mut config = UserConfig::default();
         assert!(!config.claude_share_code_sessions_on_switch);
+        assert!(config.workbuddy_share_sessions_on_switch);
+        assert!(!config.workbuddy_ai_share_sessions_on_switch);
         let updates = serde_json::json!({
             "claude_share_code_sessions_on_switch": true,
             "codebuddy_share_sessions_on_switch": true,
@@ -531,6 +538,7 @@
             "trae_cn_share_sessions_on_switch": true,
             "trae_solo_cn_share_sessions_on_switch": true,
             "workbuddy_share_sessions_on_switch": true,
+            "workbuddy_ai_share_sessions_on_switch": true,
         })
         .as_object()
         .expect("patch should be an object")
@@ -547,6 +555,50 @@
         assert!(config.trae_cn_share_sessions_on_switch);
         assert!(config.trae_solo_cn_share_sessions_on_switch);
         assert!(config.workbuddy_share_sessions_on_switch);
+        assert!(config.workbuddy_ai_share_sessions_on_switch);
+
+        let toggle_ai_off = serde_json::json!({ "workbuddy_ai_share_sessions_on_switch": false })
+            .as_object()
+            .expect("patch should be an object")
+            .clone();
+        apply_general_config_updates(&mut config, &toggle_ai_off)
+            .expect("toggling workbuddy_ai switch should succeed");
+        assert!(!config.workbuddy_ai_share_sessions_on_switch);
+        assert!(config.workbuddy_share_sessions_on_switch);
+
+        // workbuddy_ai_app_path follows the same normalization / Windows node.exe guard as domestic workbuddy_app_path.
+        #[cfg(target_os = "windows")]
+        {
+            let invalid_patch = serde_json::json!({
+                "workbuddy_ai_app_path": r"C:\Program Files\WorkBuddy AI\resources\node.exe",
+            })
+            .as_object()
+            .unwrap()
+            .clone();
+            assert!(apply_general_config_updates(&mut config, &invalid_patch).is_err());
+            assert!(config.workbuddy_ai_app_path.is_empty());
+
+            let valid_patch = serde_json::json!({
+                "workbuddy_ai_app_path": r"\\?\C:\Program Files\WorkBuddy AI\WorkBuddyAI.exe",
+            })
+            .as_object()
+            .unwrap()
+            .clone();
+            apply_general_config_updates(&mut config, &valid_patch)
+                .expect("valid WorkBuddyAI.exe patch should succeed");
+            assert_eq!(
+                config.workbuddy_ai_app_path,
+                r"C:\Program Files\WorkBuddy AI\WorkBuddyAI.exe"
+            );
+        }
+
+        let clear_patch = serde_json::json!({ "workbuddy_ai_app_path": "" })
+            .as_object()
+            .unwrap()
+            .clone();
+        apply_general_config_updates(&mut config, &clear_patch)
+            .expect("clearing workbuddy_ai_app_path should succeed");
+        assert!(config.workbuddy_ai_app_path.is_empty());
     }
 
     #[test]

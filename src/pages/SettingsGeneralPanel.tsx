@@ -1,7 +1,6 @@
 import { QoderLaunchPathFields } from '../components/QoderCnLaunchDialog';
 import { PlatformLaunchPathField } from '../components/PlatformLaunchPathField';
 import { AntigravityDesktopSettingsFields } from '../components/antigravity/AntigravityDesktopSettings';
-import { LaunchPathSettingsButton } from '../components/LaunchPathSettingsButton';
 import { MenuBarLeftClickSetting } from '../components/MenuBarLeftClickSetting';
 import { invoke } from '@tauri-apps/api/core';
 import { normalizeLanguage } from '../i18n';
@@ -316,12 +315,14 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
     setWindsurfQuotaAlertThreshold,
     setWindsurfQuotaAlertThresholdCustomMode,
     setWorkbuddyAppPath,
+    setWorkbuddyAiAppPath,
     setWorkbuddyAutoRefresh,
     setWorkbuddyAutoRefreshCustomMode,
     setWorkbuddyQuotaAlertEnabled,
     setWorkbuddyQuotaAlertThreshold,
     setWorkbuddyQuotaAlertThresholdCustomMode,
     setWorkbuddyShareSessionsOnSwitch,
+    setWorkbuddyAiShareSessionsOnSwitch,
     setZcodeAppPath,
     setZcodeAutoRefresh,
     setZcodeAutoRefreshCustomMode,
@@ -390,6 +391,7 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
     windsurfQuotaAlertThresholdCustomMode,
     windsurfQuotaAlertThresholdIsPreset,
     workbuddyAppPath,
+    workbuddyAiAppPath,
     workbuddyAutoRefresh,
     workbuddyAutoRefreshCustomMode,
     workbuddyAutoRefreshIsPreset,
@@ -398,6 +400,7 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
     workbuddyQuotaAlertThresholdCustomMode,
     workbuddyQuotaAlertThresholdIsPreset,
     workbuddyShareSessionsOnSwitch,
+    workbuddyAiShareSessionsOnSwitch,
     minimaxCodeAppPath,
     minimaxCodeAutoRefresh,
     minimaxCodeAutoRefreshCustomMode,
@@ -2882,7 +2885,6 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
               <PlatformSettingsSection platformId={'workbuddy'} order={platformSettingsOrder.workbuddy}>
                 <div className="group-title">{t('quickSettings.workbuddy.title', 'WorkBuddy 设置')}</div>
                 <div className="settings-group">
-                  <div className="settings-row"><LaunchPathSettingsButton app="workbuddy_ai" /></div>
                   <div className="settings-row">
                     <div className="row-label">
                       <div className="row-title">{t('settings.general.workbuddyAutoRefresh', 'WorkBuddy 自动刷新配额')}</div>
@@ -3053,6 +3055,57 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                       </div>
                     </div>
                   )}
+                </div>
+              </PlatformSettingsSection>
+
+              <PlatformSettingsSection platformId={'workbuddy_ai'} order={platformSettingsOrder.workbuddy_ai}>
+                <div className="group-title">{t('quickSettings.workbuddyAi.title', 'WorkBuddy AI 设置')}</div>
+                <div className="settings-group">
+                  {renderSessionSharingRow(
+                    'WorkBuddy AI',
+                    workbuddyAiShareSessionsOnSwitch,
+                    setWorkbuddyAiShareSessionsOnSwitch,
+                    true,
+                  )}
+
+                  <div className="settings-row">
+                    <div className="row-label">
+                      <div className="row-title">
+                        {t('appPath.missing.pathLabel', { app: 'WorkBuddy AI' })}
+                      </div>
+                      <div className="row-desc">
+                        {t('settings.general.workbuddyAppPathDesc', '留空则使用默认路径')}
+                      </div>
+                    </div>
+                    <div className="row-control row-control--grow">
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flex: 1 }}>
+                        <input
+                          type="text"
+                          className="settings-input settings-input--path"
+                          value={workbuddyAiAppPath}
+                          placeholder={t('settings.general.workbuddyAppPathPlaceholder', '默认路径')}
+                          onChange={(e) => setWorkbuddyAiAppPath(e.target.value)}
+                        />
+                        <button
+                          className="btn btn-secondary"
+                          onClick={() => handlePickAppPath('workbuddy_ai')}
+                          disabled={isAppPathResetDetecting('workbuddy_ai')}
+                        >
+                          {t('settings.general.workbuddyPathSelect', '选择')}
+                        </button>
+                        <button
+                          className="btn btn-secondary"
+                          onClick={() => handleResetAppPath('workbuddy_ai')}
+                          disabled={isAppPathResetDetecting('workbuddy_ai')}
+                        >
+                          <RefreshCw size={16} className={isAppPathResetDetecting('workbuddy_ai') ? 'spin' : undefined} />
+                          {isAppPathResetDetecting('workbuddy_ai')
+                            ? t('common.loading', '加载中...')
+                            : getResetLabelByTarget('workbuddy_ai')}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </PlatformSettingsSection>
 

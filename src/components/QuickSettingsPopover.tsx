@@ -166,7 +166,9 @@ interface GeneralConfig extends AntigravityDesktopSettings {
   trae_cn_app_scan_roots: string;
   trae_solo_cn_app_scan_roots: string;
   workbuddy_app_path: string;
+  workbuddy_ai_app_path: string;
   workbuddy_share_sessions_on_switch: boolean;
+  workbuddy_ai_share_sessions_on_switch: boolean;
   minimax_code_app_path: string;
   zed_app_path: string;
   opencode_sync_on_switch: boolean;
@@ -263,6 +265,7 @@ export type QuickSettingsType =
   | 'trae_cn'
   | 'trae_solo_cn'
   | 'workbuddy'
+  | 'workbuddy_ai'
   | 'minimaxcode'
   | 'zed';
 
@@ -286,6 +289,7 @@ type AppPathTarget =
   | 'trae_cn'
   | 'trae_solo_cn'
   | 'workbuddy'
+  | 'workbuddy_ai'
   | 'minimaxcode'
   | 'zed';
 
@@ -385,6 +389,8 @@ const getAppPathKeyForTarget = (target: AppPathTarget): keyof GeneralConfig => {
       return 'trae_solo_cn_app_path';
     case 'workbuddy':
       return 'workbuddy_app_path';
+    case 'workbuddy_ai':
+      return 'workbuddy_ai_app_path';
     case 'minimaxcode':
       return 'minimax_code_app_path';
     case 'zed':
@@ -402,7 +408,7 @@ const AUTO_SWITCH_SCOPE_SELECTED_ACCOUNTS: AutoSwitchAccountScopeMode = 'selecte
 const CURRENT_ACCOUNT_REFRESH_PRESETS = ['1', '2', '5', '10', '15'];
 const getCurrentAccountRefreshPlatformForType = (
   platformType: QuickSettingsType,
-): CurrentAccountRefreshPlatform => {
+): CurrentAccountRefreshPlatform | null => {
   switch (platformType) {
     case 'antigravity':
       return 'antigravity';
@@ -442,6 +448,8 @@ const getCurrentAccountRefreshPlatformForType = (
       return 'trae_solo_cn';
     case 'workbuddy':
       return 'workbuddy';
+    case 'workbuddy_ai':
+      return null;
     case 'minimaxcode':
       return 'minimaxcode';
     case 'zed':
@@ -1071,6 +1079,8 @@ export function QuickSettingsPopover({
           return t('nav.traeSoloCn');
         case 'workbuddy':
           return 'WorkBuddy';
+        case 'workbuddy_ai':
+          return 'WorkBuddy AI';
         case 'minimaxcode':
           return 'MiniMax Code';
         case 'zed':
@@ -1092,6 +1102,8 @@ export function QuickSettingsPopover({
         return 'Trae CN';
       case 'trae_solo_cn':
         return t('nav.traeSoloCn');
+      case 'workbuddy_ai':
+        return 'WorkBuddy AI';
       default:
         return '';
     }
@@ -1103,12 +1115,17 @@ export function QuickSettingsPopover({
     if (type === 'codebuddy_cn') {
       return config.codebuddy_cn_share_sessions_on_switch ?? false;
     }
+    if (type === 'workbuddy_ai') {
+      return config.workbuddy_ai_share_sessions_on_switch ?? false;
+    }
     return false;
   };
 
   const saveSessionSharingEnabled = (enabled: boolean) => {
     if (type === 'codebuddy_cn') {
       saveConfig({ codebuddy_cn_share_sessions_on_switch: enabled });
+    } else if (type === 'workbuddy_ai') {
+      saveConfig({ workbuddy_ai_share_sessions_on_switch: enabled });
     }
   };
 
@@ -1236,6 +1253,7 @@ export function QuickSettingsPopover({
       case 'trae_solo_cn':
         return t('quickSettings.refreshInterval', '配额自动刷新');
       case 'workbuddy':
+      case 'workbuddy_ai':
         return t('quickSettings.refreshInterval', '配额自动刷新');
       case 'minimaxcode':
         return t('quickSettings.refreshInterval', '配额自动刷新');
@@ -1290,6 +1308,8 @@ export function QuickSettingsPopover({
         return config.trae_solo_cn_app_path;
       case 'workbuddy':
         return config.workbuddy_app_path;
+      case 'workbuddy_ai':
+        return config.workbuddy_ai_app_path;
       case 'minimaxcode':
         return config.minimax_code_app_path;
       case 'zed':
@@ -1339,6 +1359,8 @@ export function QuickSettingsPopover({
         return t('quickSettings.traeSoloCn.appPath', 'TraeWork CN 路径');
       case 'workbuddy':
         return t('settings.general.workbuddyAppPath');
+      case 'workbuddy_ai':
+        return t('appPath.missing.pathLabel', { app: 'WorkBuddy AI' });
       case 'minimaxcode':
         return t('quickSettings.minimaxCode.appPath', 'MiniMax Code 路径');
       case 'zed':
@@ -1386,6 +1408,8 @@ export function QuickSettingsPopover({
         return 'trae_solo_cn';
       case 'workbuddy':
         return 'workbuddy';
+      case 'workbuddy_ai':
+        return 'workbuddy_ai';
       case 'minimaxcode':
         return 'minimaxcode';
       case 'zed':
@@ -1397,7 +1421,9 @@ export function QuickSettingsPopover({
   const isPreset = refreshPresets.includes(String(refreshValue));
   const showRefreshInput = refreshEditing;
   const currentAccountRefreshPlatform = getCurrentAccountRefreshPlatformForType(type);
-  const currentAccountRefreshValue = currentAccountRefreshMap[currentAccountRefreshPlatform] ?? 1;
+  const currentAccountRefreshValue = currentAccountRefreshPlatform
+    ? (currentAccountRefreshMap[currentAccountRefreshPlatform] ?? 1)
+    : 1;
   const isCurrentAccountRefreshAllowed = refreshValue > 0;
   const currentAccountRefreshDisplayValue = isCurrentAccountRefreshAllowed
     ? String(currentAccountRefreshValue)
@@ -1512,6 +1538,7 @@ export function QuickSettingsPopover({
   }, []);
 
   const saveCurrentAccountRefresh = (minutes: number) => {
+    if (!currentAccountRefreshPlatform) return;
     saveCurrentAccountRefreshMinutesMap({
       ...loadCurrentAccountRefreshMinutesMap(),
       [currentAccountRefreshPlatform]: minutes,
@@ -2276,7 +2303,7 @@ export function QuickSettingsPopover({
                 <T3codeNativeSettingsPanel compact />
               </div>
             )}
-            {type !== 't3code' && <>
+            {type !== 't3code' && type !== 'workbuddy_ai' && <>
             {/* ─── Refresh Interval ─── */}
             <div className="qs-section">
               <div className="qs-section-header">
@@ -2387,7 +2414,9 @@ export function QuickSettingsPopover({
                 </div>
               </div>
             </div>
+            </>}
 
+            {type !== 't3code' && (
             <div className="qs-section">
               <div className="qs-section-header">
                 <Settings size={15} />
@@ -2422,8 +2451,7 @@ export function QuickSettingsPopover({
                 )}
               </div>
             </div>
-
-            </>}
+            )}
 
             {type === 'antigravity' && config && (
               <div className="qs-section">
@@ -2780,7 +2808,7 @@ export function QuickSettingsPopover({
               </div>
             )}
 
-            {type === 'codebuddy_cn' && (
+            {(type === 'codebuddy_cn' || type === 'workbuddy_ai') && (
               <div className="qs-section">
                 <div className="qs-row qs-row--top">
                   <div className="qs-row-label">
@@ -3657,7 +3685,7 @@ export function QuickSettingsPopover({
                 </div>
               </div>
             )}
-            {type !== 'antigravity' && type !== 'zcode' && type !== 't3code' && (
+            {type !== 'antigravity' && type !== 'zcode' && type !== 't3code' && type !== 'workbuddy_ai' && (
               <div className="qs-section qs-section--highlight">
                 <div className="qs-section-header">
                   <Zap size={15} />
