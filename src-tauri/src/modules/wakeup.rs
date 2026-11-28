@@ -1359,7 +1359,8 @@ async fn trigger_wakeup_via_client_gateway_once(
         let started = post_gateway_json(
             &client,
             &format!("{}/StartCascade", service_base),
-            &json!({}),
+            // 携带 accountId 供网关精确匹配 prepareStartContext，避免串号
+            &json!({ "accountId": account_id }),
             "StartCascade",
             cancel_rx,
         )
