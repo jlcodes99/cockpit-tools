@@ -1,0 +1,13 @@
+import { installAppScrollbars } from '../../src/utils/appScrollbars';
+import '../../src/styles/scrollbars.css';
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+window.disposeScrollbars = installAppScrollbars();
+window.fixtureRoot = createRoot(document.querySelector('#react'));
+window.renderRows = (count) => window.fixtureRoot.render(React.createElement('div', { id: 'react-scroll', style: { height: 140, width: 220, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 4 } }, ...Array.from({ length: count }, (_, i) => React.createElement('button', { key: i, style: { flexShrink: 0, height: 42 } }, 'Row ' + i))));
+window.renderRows(20);
+import { SingleSelectDropdown } from '../../src/components/SingleSelectDropdown';
+const dropdown = document.createElement('div');
+Object.assign(dropdown.style, { position: 'fixed', top: '20px', left: '620px', width: '160px' });
+document.body.append(dropdown);
+createRoot(dropdown).render(React.createElement(SingleSelectDropdown, { value: '0', options: Array.from({ length: 50 }, (_, i) => ({ value: String(i), label: 'Option ' + i })), onChange: () => { }, menuMaxHeight: 150 }));
