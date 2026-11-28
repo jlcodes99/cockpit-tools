@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Codex quota sync** no longer scans or repairs the account store in the background when Codex is disabled in Platform Layout. [#3355](https://github.com/jlcodes99/cockpit-tools/issues/3355)
+
 ## [1.5.3] - 2026-11-27
 
 ### Added

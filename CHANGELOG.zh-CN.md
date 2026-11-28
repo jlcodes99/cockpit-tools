@@ -10,6 +10,10 @@
 
 ## [Unreleased]
 
+### 修复
+
+- **Codex 额度同步**在「平台布局」中禁用 Codex 后，不再于后台扫描或修复账号存储。 [#3355](https://github.com/jlcodes99/cockpit-tools/issues/3355)
+
 ## [1.5.3] - 2026-11-27
 
 ### 新增
