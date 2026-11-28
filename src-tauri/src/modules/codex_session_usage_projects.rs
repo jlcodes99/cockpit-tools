@@ -164,6 +164,7 @@ fn backfill_usage_projects(conn: &Connection) -> Result<bool, String> {
     };
     if batch.is_empty() {
         set_meta(conn, PROJECT_BACKFILL_COMPLETE, "1")?;
+        invalidate_usage_bucket_snapshot();
         return Ok(true);
     }
 
@@ -211,6 +212,7 @@ fn backfill_usage_projects(conn: &Connection) -> Result<bool, String> {
             break;
         }
     }
+    let had_updates = !updates.is_empty();
     let tx = conn
         .unchecked_transaction()
         .map_err(|error| error.to_string())?;
@@ -219,5 +221,8 @@ fn backfill_usage_projects(conn: &Connection) -> Result<bool, String> {
     }
     set_meta(&tx, PROJECT_BACKFILL_CURSOR, &next.to_string())?;
     tx.commit().map_err(|error| error.to_string())?;
+    if had_updates {
+        invalidate_usage_bucket_snapshot();
+    }
     Ok(false)
 }

@@ -26,7 +26,17 @@ fn ensure_rewrite_schema(conn: &Connection) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(test)]
 fn prepare_rewrite_batch(conn: &Connection, path: &str) -> Result<bool, String> {
+    prepare_rewrite_batch_limit(conn, path, INSERT_BATCH_SIZE)
+}
+
+fn prepare_rewrite_batch_limit(
+    conn: &Connection,
+    path: &str,
+    limit: usize,
+) -> Result<bool, String> {
+    let batch_limit = limit.max(1) as i64;
     let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
     let active: bool = tx
         .query_row(
@@ -36,7 +46,7 @@ fn prepare_rewrite_batch(conn: &Connection, path: &str) -> Result<bool, String> 
         )
         .map_err(|e| e.to_string())?;
     if !active {
-        let removed=tx.execute("DELETE FROM session_rewrite_events WHERE rowid IN (SELECT rowid FROM session_rewrite_events WHERE file_path=?1 LIMIT 32)",[path]).map_err(|e|e.to_string())?;
+        let removed=tx.execute("DELETE FROM session_rewrite_events WHERE rowid IN (SELECT rowid FROM session_rewrite_events WHERE file_path=?1 LIMIT ?2)",params![path, batch_limit]).map_err(|e|e.to_string())?;
         if removed > 0 {
             tx.commit().map_err(|e| e.to_string())?;
             return Ok(false);
@@ -56,7 +66,7 @@ fn prepare_rewrite_batch(conn: &Connection, path: &str) -> Result<bool, String> 
         .map_err(|e| e.to_string())?;
     let ready = match phase {
         0 => {
-            let next:Option<i64>=tx.query_row("SELECT MAX(source_id) FROM (SELECT rowid AS source_id FROM session_usage_events WHERE file_path=?1 AND rowid>?2 ORDER BY rowid LIMIT 32)",params![path,cursor],|r|r.get(0)).map_err(|e|e.to_string())?;
+            let next:Option<i64>=tx.query_row("SELECT MAX(source_id) FROM (SELECT rowid AS source_id FROM session_usage_events WHERE file_path=?1 AND rowid>?2 ORDER BY rowid LIMIT ?3)",params![path,cursor,batch_limit],|r|r.get(0)).map_err(|e|e.to_string())?;
             if let Some(next) = next {
                 tx.execute("INSERT OR IGNORE INTO session_rewrite_events SELECT * FROM session_usage_events WHERE file_path=?1 AND rowid>?2 AND rowid<=?3",params![path,cursor,next]).map_err(|e|e.to_string())?;
                 tx.execute(
@@ -74,7 +84,7 @@ fn prepare_rewrite_batch(conn: &Connection, path: &str) -> Result<bool, String> 
             false
         }
         1 => {
-            let removed=tx.execute("DELETE FROM session_usage_events WHERE rowid IN (SELECT rowid FROM session_usage_events WHERE file_path=?1 LIMIT 32)",[path]).map_err(|e|e.to_string())?;
+            let removed=tx.execute("DELETE FROM session_usage_events WHERE rowid IN (SELECT rowid FROM session_usage_events WHERE file_path=?1 LIMIT ?2)",params![path, batch_limit]).map_err(|e|e.to_string())?;
             if removed == 0 {
                 tx.execute(
                     "UPDATE session_rewrite_state SET phase=2 WHERE file_path=?1",

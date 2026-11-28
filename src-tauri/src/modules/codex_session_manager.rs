@@ -32,6 +32,8 @@ const CONTENT_SEARCH_CACHE_MAX_ENTRIES: usize = 512;
 
 static TOKEN_STATS_CACHE: LazyLock<Mutex<HashMap<PathBuf, TokenStatsCacheEntry>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
+static SESSION_ROLLOUT_PATH_CACHE: LazyLock<Mutex<HashMap<String, PathBuf>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
 static CONTENT_SEARCH_CACHE: LazyLock<Mutex<HashMap<ContentSearchCacheKey, bool>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
@@ -737,6 +739,52 @@ fn ascii_case_insensitive_contains(value: &[u8], query: &[u8]) -> bool {
     })
 }
 
+fn read_cached_token_stats_from_memory(rollout_path: &Path) -> Option<Option<(u64, u64, u64)>> {
+    let metadata = fs::metadata(rollout_path).ok()?;
+    let file_len = metadata.len();
+    let modified_at = metadata.modified().ok();
+    let cache = TOKEN_STATS_CACHE
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    cache.get(rollout_path).and_then(|entry| {
+        (entry.file_len == file_len && entry.modified_at == modified_at).then_some(entry.stats)
+    })
+}
+
+fn store_token_stats_in_memory(rollout_path: &Path, stats: Option<(u64, u64, u64)>) {
+    let Ok(metadata) = fs::metadata(rollout_path) else {
+        return;
+    };
+    let file_len = metadata.len();
+    let modified_at = metadata.modified().ok();
+    let mut cache = TOKEN_STATS_CACHE
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    cache.insert(
+        rollout_path.to_path_buf(),
+        TokenStatsCacheEntry {
+            file_len,
+            modified_at,
+            stats,
+        },
+    );
+}
+
+fn resolve_existing_rollout_path(path: PathBuf) -> Option<PathBuf> {
+    if path.is_file() {
+        return Some(path);
+    }
+    if !rollout_reader::is_compressed(&path) {
+        let mut compressed = path.as_os_str().to_os_string();
+        compressed.push(".zst");
+        let compressed_path = PathBuf::from(compressed);
+        if compressed_path.is_file() {
+            return Some(compressed_path);
+        }
+    }
+    None
+}
+
 pub fn get_session_token_stats_across_instances(
     session_ids: Vec<String>,
 ) -> Result<Vec<CodexSessionTokenStats>, String> {
@@ -749,36 +797,169 @@ pub fn get_session_token_stats_across_instances(
         return Ok(Vec::new());
     }
 
-    let instances = collect_instances()?;
-    let mut pending_ids = requested_ids.clone();
-    let mut stats_by_session_id = HashMap::<String, CodexSessionTokenStats>::new();
+    let mut pending_ids = requested_ids;
+    let mut resolved_paths = Vec::<(String, PathBuf)>::new();
 
-    for instance in &instances {
-        if pending_ids.is_empty() {
-            break;
+    // 1. Reuse session_id -> rollout_path cached during recent session listing.
+    if let Ok(path_cache) = SESSION_ROLLOUT_PATH_CACHE.lock() {
+        let mut hit_ids = Vec::new();
+        for session_id in &pending_ids {
+            if let Some(cached_path) = path_cache.get(session_id) {
+                if let Some(existing) = resolve_existing_rollout_path(cached_path.clone()) {
+                    resolved_paths.push((session_id.clone(), existing));
+                    hit_ids.push(session_id.clone());
+                }
+            }
+        }
+        for session_id in hit_ids {
+            pending_ids.remove(&session_id);
+        }
+    }
+
+    // 2. Resolve remaining IDs from state_5.sqlite before falling back to full directory scans.
+    if !pending_ids.is_empty() {
+        let instances = collect_instances()?;
+        for instance in &instances {
+            if pending_ids.is_empty() {
+                break;
+            }
+            if let Ok(heads) = rollout_reader::current_heads(&instance.data_dir) {
+                let mut hit_ids = Vec::new();
+                for session_id in &pending_ids {
+                    if let Some(head_path) = heads.get(session_id) {
+                        if let Some(existing) = resolve_existing_rollout_path(head_path.clone()) {
+                            resolved_paths.push((session_id.clone(), existing));
+                            hit_ids.push(session_id.clone());
+                        }
+                    }
+                }
+                for session_id in hit_ids {
+                    pending_ids.remove(&session_id);
+                }
+            }
         }
 
-        for snapshot in load_thread_snapshots(instance)? {
-            if !pending_ids.contains(&snapshot.id) {
-                continue;
+        for instance in &instances {
+            if pending_ids.is_empty() {
+                break;
             }
+            for snapshot in load_thread_snapshots(instance)? {
+                if pending_ids.remove(&snapshot.id) {
+                    resolved_paths.push((snapshot.id, snapshot.rollout_path));
+                }
+            }
+        }
+    }
 
-            let Some((input_tokens, output_tokens, total_tokens)) =
-                read_token_stats_from_rollout(&snapshot.rollout_path)
-            else {
-                continue;
+    // 3. Check in-memory cache -> persisted usage checkpoints -> parallel rollout scan fallback.
+    let mut stats_by_session_id = HashMap::<String, CodexSessionTokenStats>::new();
+    let mut need_db_or_file = Vec::<(String, PathBuf)>::new();
+
+    for (session_id, rollout_path) in resolved_paths {
+        if let Some(cached) = read_cached_token_stats_from_memory(&rollout_path) {
+            if let Some((input_tokens, output_tokens, total_tokens)) = cached {
+                stats_by_session_id.insert(
+                    session_id.clone(),
+                    CodexSessionTokenStats {
+                        session_id,
+                        input_tokens,
+                        output_tokens,
+                        total_tokens,
+                    },
+                );
+            }
+        } else {
+            need_db_or_file.push((session_id, rollout_path));
+        }
+    }
+
+    if !need_db_or_file.is_empty() {
+        let lookup_paths: Vec<PathBuf> = need_db_or_file
+            .iter()
+            .map(|(_, path)| path.clone())
+            .collect();
+        let persisted =
+            modules::codex_session_usage::lookup_cached_rollout_token_stats(&lookup_paths);
+        let mut need_rollout_read = Vec::<(String, PathBuf)>::new();
+
+        for (session_id, rollout_path) in need_db_or_file {
+            if let Some(&(input_tokens, output_tokens, total_tokens)) = persisted.get(&rollout_path)
+            {
+                store_token_stats_in_memory(
+                    &rollout_path,
+                    Some((input_tokens, output_tokens, total_tokens)),
+                );
+                stats_by_session_id.insert(
+                    session_id.clone(),
+                    CodexSessionTokenStats {
+                        session_id,
+                        input_tokens,
+                        output_tokens,
+                        total_tokens,
+                    },
+                );
+            } else {
+                need_rollout_read.push((session_id, rollout_path));
+            }
+        }
+
+        if !need_rollout_read.is_empty() {
+            let worker_count = std::thread::available_parallelism()
+                .map(|count| count.get())
+                .unwrap_or(2)
+                .clamp(1, 4)
+                .min(need_rollout_read.len());
+            let results: Vec<(String, (u64, u64, u64))> = if worker_count <= 1 {
+                need_rollout_read
+                    .into_iter()
+                    .filter_map(|(session_id, rollout_path)| {
+                        read_token_stats_from_rollout(&rollout_path)
+                            .map(|stats| (session_id, stats))
+                    })
+                    .collect()
+            } else {
+                let next_index = std::sync::atomic::AtomicUsize::new(0);
+                let slice = need_rollout_read.as_slice();
+                std::thread::scope(|scope| {
+                    let mut handles = Vec::with_capacity(worker_count);
+                    for _ in 0..worker_count {
+                        let next_index = &next_index;
+                        handles.push(scope.spawn(move || {
+                            let mut local = Vec::new();
+                            loop {
+                                let idx =
+                                    next_index.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                                let Some((session_id, rollout_path)) = slice.get(idx) else {
+                                    break;
+                                };
+                                if let Some(stats) = read_token_stats_from_rollout(rollout_path) {
+                                    local.push((session_id.clone(), stats));
+                                }
+                            }
+                            local
+                        }));
+                    }
+                    let mut combined = Vec::new();
+                    for handle in handles {
+                        if let Ok(local) = handle.join() {
+                            combined.extend(local);
+                        }
+                    }
+                    combined
+                })
             };
 
-            stats_by_session_id.insert(
-                snapshot.id.clone(),
-                CodexSessionTokenStats {
-                    session_id: snapshot.id.clone(),
-                    input_tokens,
-                    output_tokens,
-                    total_tokens,
-                },
-            );
-            pending_ids.remove(&snapshot.id);
+            for (session_id, (input_tokens, output_tokens, total_tokens)) in results {
+                stats_by_session_id.insert(
+                    session_id.clone(),
+                    CodexSessionTokenStats {
+                        session_id,
+                        input_tokens,
+                        output_tokens,
+                        total_tokens,
+                    },
+                );
+            }
         }
     }
 
@@ -2340,6 +2521,11 @@ fn scan_thread_snapshots(
                 .is_some_and(|head| rollout_reader::same_storage_path(head, &snapshot.rollout_path)));
         }
         Err(error) => modules::logger::log_warn(&format!("[Codex Session Manager] current rollout heads unavailable: {error}")),
+    }
+    if let Ok(mut path_cache) = SESSION_ROLLOUT_PATH_CACHE.lock() {
+        for snapshot in &snapshots {
+            path_cache.insert(snapshot.id.clone(), snapshot.rollout_path.clone());
+        }
     }
     Ok(snapshots)
 }

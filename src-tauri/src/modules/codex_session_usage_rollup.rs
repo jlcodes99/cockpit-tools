@@ -39,7 +39,11 @@ fn schedule_session_rollup_backfill(path: PathBuf) {
             if !cleanup_rewrite_batch(&conn)? {
                 return Ok(false);
             }
-            SESSION_USAGE_ROLLUP.batch(&conn).map_err(|e| e.to_string())
+            let done = SESSION_USAGE_ROLLUP.batch(&conn).map_err(|e| e.to_string())?;
+            if done {
+                invalidate_usage_bucket_snapshot();
+            }
+            Ok(done)
         },
     );
 }
