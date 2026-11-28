@@ -21,6 +21,68 @@ use std::{
 use tokio::sync::{Notify, Semaphore};
 
 const HOLD: Duration = Duration::from_millis(350);
+const MAX_CONCURRENT_FIXTURE_BYTES: usize = 16 * 1024;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ConcurrentFixture {
+    Fail,
+    HealthyA,
+    HealthyB,
+}
+
+impl ConcurrentFixture {
+    fn name(self) -> &'static str {
+        match self {
+            Self::Fail => "fail",
+            Self::HealthyA => "healthy-a",
+            Self::HealthyB => "healthy-b",
+        }
+    }
+}
+
+// Classify only this test's compact, synthetic request markers. This is not a
+// general JSON validator: the test constructs the JSON, and the loopback server
+// only needs one of three known labels. Never build a JSON tree from its input.
+fn concurrent_fixture_case(bytes: &[u8]) -> Option<ConcurrentFixture> {
+    if bytes.len() > MAX_CONCURRENT_FIXTURE_BYTES
+        || bytes.first() != Some(&b'{')
+        || bytes.last() != Some(&b'}')
+    {
+        return None;
+    }
+    let field = b"\"content\":";
+    if bytes
+        .windows(field.len())
+        .filter(|window| *window == field)
+        .take(2)
+        .count()
+        != 1
+    {
+        return None;
+    }
+    let mut selected = None;
+    for (case, marker) in [
+        (ConcurrentFixture::Fail, b"\"content\":\"fail\"".as_slice()),
+        (
+            ConcurrentFixture::HealthyA,
+            b"\"content\":\"healthy-a\"".as_slice(),
+        ),
+        (
+            ConcurrentFixture::HealthyB,
+            b"\"content\":\"healthy-b\"".as_slice(),
+        ),
+    ] {
+        for _ in bytes
+            .windows(marker.len())
+            .filter(|window| *window == marker)
+        {
+            if selected.replace(case).is_some() {
+                return None;
+            }
+        }
+    }
+    selected
+}
 
 struct Source {
     requests: Mutex<Vec<Vec<u8>>>,
@@ -37,25 +99,35 @@ struct Source {
 }
 
 async fn upstream(State(source): State<Arc<Source>>, bytes: Bytes) -> Response {
-    let attempt = {
+    let concurrent = if source.concurrent.load(Ordering::SeqCst) {
+        match concurrent_fixture_case(&bytes) {
+            Some(case) => Some(case),
+            None => {
+                return Response::builder()
+                    .status(400)
+                    .body(Body::from("invalid concurrent fixture request"))
+                    .unwrap();
+            }
+        }
+    } else {
+        None
+    };
+    let (attempt, occurrence) = {
         let mut requests = source.requests.lock().unwrap();
+        // Count and append under the same lock, including a recovery arriving
+        // while either healthy request remains in flight.
+        let occurrence = concurrent.map_or(0, |case| {
+            requests
+                .iter()
+                .filter(|bytes| concurrent_fixture_case(bytes) == Some(case))
+                .count()
+                + 1
+        });
         requests.push(bytes.to_vec());
-        requests.len()
+        (requests.len(), occurrence)
     };
     let id = format!("resp_fixture_{attempt}");
-    if source.concurrent.load(Ordering::SeqCst) {
-        let body: Value = serde_json::from_slice(&bytes).unwrap();
-        let name = body["input"][0]["content"].as_str().unwrap();
-        let occurrence = source
-            .requests
-            .lock()
-            .unwrap()
-            .iter()
-            .filter(|bytes| {
-                let request: Value = serde_json::from_slice(bytes).unwrap();
-                request["input"][0]["content"] == name
-            })
-            .count();
+    if let Some(case) = concurrent {
         if occurrence == 1 {
             source.arrivals.fetch_add(1, Ordering::SeqCst);
             loop {
@@ -71,7 +143,7 @@ async fn upstream(State(source): State<Arc<Source>>, bytes: Bytes) -> Response {
             "data: {}\n\n",
             json!({"type":"response.created","response":{"id":id,"status":"in_progress","output":[]}})
         );
-        let should_fail = name == "fail" && occurrence == 1;
+        let should_fail = case == ConcurrentFixture::Fail && occurrence == 1;
         let ending = if should_fail {
             None
         } else {
@@ -713,14 +785,18 @@ async fn one_concurrent_stream_recovers_without_interrupting_other_shared_client
     let fixture = Fixture::new(String::new(), false, policy(), false, true).await;
     fixture.host.permits.add_permits(2);
     fixture.source.concurrent.store(true, Ordering::SeqCst);
-    let requests: Vec<Value> = ["fail", "healthy-a", "healthy-b"]
-        .into_iter()
-        .map(|name| {
-            let mut request = body();
-            request["input"][0]["content"] = json!(name);
-            request
-        })
-        .collect();
+    let requests: Vec<Value> = [
+        ConcurrentFixture::Fail,
+        ConcurrentFixture::HealthyA,
+        ConcurrentFixture::HealthyB,
+    ]
+    .into_iter()
+    .map(|case| {
+        let mut request = body();
+        request["input"][0]["content"] = json!(case.name());
+        request
+    })
+    .collect();
     let outputs =
         futures_util::future::join_all(requests.iter().map(|body| fixture.request(body))).await;
     assert!(
@@ -733,15 +809,24 @@ async fn one_concurrent_stream_recovers_without_interrupting_other_shared_client
     {
         let seen = fixture.source.requests.lock().unwrap();
         assert_eq!(seen.len(), 4);
-        for name in ["fail", "healthy-a", "healthy-b"] {
+        for case in [
+            ConcurrentFixture::Fail,
+            ConcurrentFixture::HealthyA,
+            ConcurrentFixture::HealthyB,
+        ] {
             let matching: Vec<_> = seen
                 .iter()
-                .filter(|bytes| {
-                    let request: Value = serde_json::from_slice(bytes).unwrap();
-                    request["input"][0]["content"] == name
-                })
+                .filter(|bytes| concurrent_fixture_case(bytes) == Some(case))
                 .collect();
-            assert_eq!(matching.len(), if name == "fail" { 2 } else { 1 }, "{name}");
+            assert_eq!(
+                matching.len(),
+                if case == ConcurrentFixture::Fail {
+                    2
+                } else {
+                    1
+                },
+                "{case:?}"
+            );
             if matching.len() == 2 {
                 assert_eq!(matching[0], matching[1]);
             }
@@ -753,6 +838,61 @@ async fn one_concurrent_stream_recovers_without_interrupting_other_shared_client
     );
     assert_eq!(fixture.host.permits.available_permits(), 3);
     fixture.shutdown().await;
+}
+
+#[test]
+fn concurrent_fixture_classifies_only_exact_known_content_markers() {
+    for case in [
+        ConcurrentFixture::Fail,
+        ConcurrentFixture::HealthyA,
+        ConcurrentFixture::HealthyB,
+    ] {
+        let mut request = body();
+        request["input"][0]["content"] = json!(case.name());
+        let bytes = serde_json::to_vec(&request).unwrap();
+        assert_eq!(concurrent_fixture_case(&bytes), Some(case));
+    }
+}
+
+#[test]
+fn concurrent_fixture_rejects_missing_wrong_and_escaped_markers() {
+    for bytes in [
+        b"".as_slice(),
+        b"not JSON",
+        br#""content":"fail""#,
+        br#"{"content":"unknown"}"#,
+        br#"{"content":"failure"}"#,
+        br#"{"not_content":"fail"}"#,
+        br#"{"content":["fail"]}"#,
+        br#"{"text":"\"content\":\"fail\""}"#,
+    ] {
+        assert_eq!(concurrent_fixture_case(bytes), None, "{bytes:?}");
+    }
+}
+
+#[test]
+fn concurrent_fixture_rejects_duplicate_and_ambiguous_markers() {
+    for bytes in [
+        br#"{"input":[{"content":"fail"},{"content":"fail"}]}"#.as_slice(),
+        br#"{"input":[{"content":"fail"},{"content":"healthy-a"}]}"#,
+        br#"{"input":[{"content":"healthy-a"},{"content":"healthy-b"}]}"#,
+        br#"{"input":[{"content":"fail"},{"content":"unknown"}]}"#,
+    ] {
+        assert_eq!(concurrent_fixture_case(bytes), None);
+    }
+}
+
+#[test]
+fn concurrent_fixture_enforces_its_small_body_limit() {
+    let mut bytes = br#"{"content":"fail""#.to_vec();
+    bytes.resize(MAX_CONCURRENT_FIXTURE_BYTES - 1, b' ');
+    bytes.push(b'}');
+    assert_eq!(
+        concurrent_fixture_case(&bytes),
+        Some(ConcurrentFixture::Fail)
+    );
+    bytes.insert(bytes.len() - 1, b' ');
+    assert_eq!(concurrent_fixture_case(&bytes), None);
 }
 
 fn namespace_body() -> Value {
