@@ -530,6 +530,7 @@ async fn forward_with_policy(
         let fence = super::bootstrap::Fence::new(
             !prepared.route.chatgpt_plan || policy.continuous_overload_retry,
         );
+        let stream_recovery = super::stream_recovery::Fence::new(tracker.stream_recovery.take());
         let stream_state = StreamingResponse {
             state,
             prepared,
@@ -542,6 +543,7 @@ async fn forward_with_policy(
             },
             tracker,
             fence,
+            stream_recovery,
             recovery_generation: 0,
             finished: false,
             sequence: 0,
@@ -654,7 +656,32 @@ async fn forward_with_policy(
                             return None;
                         }
                     }
-                    Err(error) => {
+                    Err(mut error) => {
+                        if let Some(candidate) = current.stream_recovery.take(
+                            &error, &current.decoder, current.tracker.upstream_attempt_count(),
+                        ) {
+                            // The failed response and its connection are no longer
+                            // needed while the same-account permit is reacquired.
+                            current.upstream = stream::empty().boxed();
+                            match Box::pin(candidate.reopen(&current.state, &mut current.prepared,
+                                &mut current.tracker, &error, &current.policy, current.deadline)).await {
+                                Ok(opened) => {
+                                    current.recovery_generation = current.recovery_generation.saturating_add(1);
+                                    current.upstream = opened.bytes;
+                                    current.decoder = SseDecoder::new(current.state.options.max_event_bytes);
+                                    current.wire = super::response_wire::ResponseWire::default();
+                                    // This one-shot dispatch must not start a new
+                                    // structured rejection/account retry round.
+                                    current.fence = super::bootstrap::Fence::new(false);
+                                    current.observation = ResponseObservation {
+                                        retry_after: retry_after_headers(&opened.headers), ..Default::default()
+                                    };
+                                    current.idle_deadline = tokio::time::Instant::now() + current.policy.idle_timeout;
+                                    continue;
+                                }
+                                Err(failure) => error = failure,
+                            }
+                        }
                         current.finished = true;
                         current.tracker.fail(&error).await;
                         let codex =
@@ -897,7 +924,7 @@ pub(super) async fn open_response_stream(
         let mut stop = state.stop.clone();
         let mut upstream = tokio::select! {
             _ = stop.wait() => Err(stopping_error()),
-            result = deadline::timeout_at(deadline, super::upstream::canonical_stream(state, response, &prepared.route, compact, prepared.grok_context.clone(), prepared.plan_tools_context.clone(), prepared.multi_agent_context.clone(), &prepared.body, super::anthropic_search_cache::scope(prepared), policy.idle_timeout)) => result.map_err(|_| super::retry::total_timeout()).and_then(|value| value),
+            result = deadline::timeout_at(deadline, super::upstream::canonical_stream(state, response, &prepared.route, compact, prepared.grok_context.clone(), prepared.plan_tools_context.clone(), prepared.multi_agent_context.clone(), &prepared.body, super::anthropic_search_cache::scope(prepared), policy.idle_timeout, tracker.stream_recovery.as_ref().and_then(|candidate| candidate.raw_proof.clone()))) => result.map_err(|_| super::retry::total_timeout()).and_then(|value| value),
         }?;
         if upstream.is_sse && status.is_success() && client_stream {
             match prefetch(state, upstream.bytes, policy, deadline).await {
@@ -943,6 +970,7 @@ struct StreamingResponse {
     tracker: RequestTracker,
     finished: bool,
     fence: super::bootstrap::Fence,
+    stream_recovery: super::stream_recovery::Fence,
     recovery_generation: u64,
     sequence: u64,
     pending_error: Option<ServiceError>,
@@ -957,6 +985,8 @@ impl StreamingResponse {
     async fn observe_frames(&mut self, frames: Vec<SseFrame>) -> Result<Bytes, ServiceError> {
         let mut bytes = Vec::new();
         for mut frame in frames {
+            // Observe original SSE names and payload before public normalization.
+            self.stream_recovery.observe(&frame);
             if self.prepared.route.chatgpt_plan {
                 let mut normalized = false;
                 if let Some(event) = frame.value.as_mut() {
@@ -1088,7 +1118,7 @@ impl StreamingResponse {
     }
 }
 
-async fn read_bounded(
+pub(super) async fn read_bounded(
     state: &AppState,
     mut stream: super::upstream::ByteStream,
     tracker: &mut RequestTracker,

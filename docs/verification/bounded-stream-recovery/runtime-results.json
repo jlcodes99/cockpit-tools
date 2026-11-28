@@ -1,0 +1,748 @@
+{
+  "schema": 1,
+  "baselineCommit": "a243d9415da9a45a61dc9f98451c615bfad4ffcd",
+  "environment": {
+    "os": "Windows x86_64",
+    "profile": "debug",
+    "rust": "1.99.1",
+    "testThreads": 1,
+    "threadStackOverride": false,
+    "productionRequests": false
+  },
+  "build": {
+    "run": "20261128-112650-build-faa15284",
+    "exitCode": 0,
+    "sourceStable": true,
+    "sourceFingerprint": "764FE37A3FCB1901A06E64F478027E696A313392B49A793456CB3C19B80ABE4C",
+    "testArtifactSha256": "D6A074A68402BC5BA7CFAF4C8DA45D86353BA127A053526DE90825F9F300DB8B",
+    "testArtifactBytes": 228219392
+  },
+  "disjointTargetedResults": {
+    "passed": 144,
+    "failed": 1,
+    "ignored": 0,
+    "total": 145
+  },
+  "groups": [
+    {
+      "run": "20261128-113407-run-b9e2765f",
+      "filter": "modules::codex_native_api::stream_recovery::",
+      "exitCode": 0,
+      "sourceStable": true,
+      "summary": "test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 5792 filtered out; finished in 0.01s",
+      "tests": [
+        {
+          "name": "modules::codex_native_api::stream_recovery::tests::client_execution_admission_fails_closed",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::stream_recovery::tests::only_complete_matching_control_frames_pass",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::stream_recovery::tests::raw_proof_requires_the_source_failure_and_the_entire_batch_boundary",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::stream_recovery::tests::recovery_candidate_stays_off_the_inline_stream_state",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::stream_recovery::tests::replay_body_cannot_be_cloned_by_the_http_client",
+          "status": "ok"
+        }
+      ]
+    },
+    {
+      "run": "20261128-113413-run-dc66eaac",
+      "filter": "modules::codex_native_api::execution::layout_tests::protocol_entry_futures_fit_the_default_runtime_stack",
+      "exitCode": 0,
+      "sourceStable": true,
+      "summary": "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 5796 filtered out; finished in 0.00s",
+      "tests": [
+        {
+          "name": "modules::codex_native_api::execution::layout_tests::protocol_entry_futures_fit_the_default_runtime_stack",
+          "status": "ok"
+        }
+      ]
+    },
+    {
+      "run": "20261128-113419-run-a10fd33b",
+      "filter": "modules::codex_native_api::stream_recovery_cli_tests::public_wire_decoder::tests::",
+      "exitCode": 0,
+      "sourceStable": true,
+      "summary": "test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 5793 filtered out; finished in 0.12s",
+      "tests": [
+        {
+          "name": "modules::codex_native_api::stream_recovery_cli_tests::public_wire_decoder::tests::chunked_gzip_and_identity_decode",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::stream_recovery_cli_tests::public_wire_decoder::tests::chunked_zstd_extensions_and_trailers_decode",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::stream_recovery_cli_tests::public_wire_decoder::tests::decompression_size_limit_is_enforced_for_gzip_and_zstd",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::stream_recovery_cli_tests::public_wire_decoder::tests::truncated_headers_chunks_trailers_and_compression_are_rejected",
+          "status": "ok"
+        }
+      ]
+    },
+    {
+      "run": "20261128-113424-run-a8402ffd",
+      "filter": "modules::codex_native_api::stream_recovery_http_tests::",
+      "exitCode": 0,
+      "sourceStable": true,
+      "summary": "test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 5781 filtered out; finished in 21.64s",
+      "tests": [
+        {
+          "name": "modules::codex_native_api::stream_recovery_http_tests::cancelling_an_entered_recovery_releases_its_only_route_permit",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::stream_recovery_http_tests::existing_bootstrap_retry_cannot_rearm_metadata_body_recovery",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::stream_recovery_http_tests::metadata_disconnect_nonstreaming_behavior_is_unchanged",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::stream_recovery_http_tests::native_conversion_cannot_hide_partial_or_conflicting_raw_business_frames",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::stream_recovery_http_tests::native_namespace_conversion_recovers_with_the_frozen_restore_context",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::stream_recovery_http_tests::one_concurrent_stream_recovers_without_interrupting_other_shared_client_streams",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::stream_recovery_http_tests::published_metadata_client_disconnect_drops_the_recovery_future",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::stream_recovery_http_tests::published_metadata_disconnect_replays_once_with_identical_large_input",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::stream_recovery_http_tests::published_metadata_eof_idle_timeout_and_completed_response_are_not_replayed",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::stream_recovery_http_tests::published_metadata_recovery_does_not_retry_its_http_or_sse_rejection",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::stream_recovery_http_tests::published_metadata_recovery_never_replenishes_after_second_disconnect",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::stream_recovery_http_tests::published_metadata_recovery_preserves_total_network_and_owner_fences",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::stream_recovery_http_tests::published_metadata_recovery_refuses_any_business_or_partial_frame",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::stream_recovery_http_tests::published_metadata_recovery_refuses_hosted_unknown_and_non_native_tools",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::stream_recovery_http_tests::published_metadata_recovery_renews_only_opening_and_keeps_authorization",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::stream_recovery_http_tests::recovered_final_response_continues_on_the_same_owner_with_complete_history",
+          "status": "ok"
+        }
+      ]
+    },
+    {
+      "run": "20261128-113451-run-16455d23",
+      "filter": "modules::codex_native_api::tls_recovery_http_tests::",
+      "exitCode": 0,
+      "sourceStable": true,
+      "summary": "test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 5783 filtered out; finished in 7.57s",
+      "tests": [
+        {
+          "name": "modules::codex_native_api::tls_recovery_http_tests::http2_tls_decrypt_after_tool_output_never_replays",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::tls_recovery_http_tests::http2_tls_decrypt_before_output_recovers_same_account",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::tls_recovery_http_tests::http2_tls_decrypt_through_chat_adapter_recovers_next_request",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::tls_recovery_http_tests::http2_tls_decrypt_through_plan_adapter_recovers_next_request",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::tls_recovery_http_tests::native_network_disconnect_after_tool_output_retires_pool_without_replay",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::tls_recovery_http_tests::native_network_disconnect_before_first_event_refreshes_the_same_account",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::tls_recovery_http_tests::native_network_disconnect_keeps_the_official_fallback_owner",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::tls_recovery_http_tests::native_network_disconnect_through_chat_adapter_recovers_next_request",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::tls_recovery_http_tests::native_tls_metadata_disconnect_recovers_once_over_http1_and_http2",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::tls_recovery_http_tests::official_fallback_tls_decrypt_refresh_keeps_local_namespace_when_official_recovers",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::tls_recovery_http_tests::tls_decrypt_after_native_tool_output_retires_only_transport_without_replaying",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::tls_recovery_http_tests::tls_decrypt_before_first_event_refreshes_same_transport_with_single_route_permit",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::tls_recovery_http_tests::tls_decrypt_survives_chat_canonical_stream_and_next_request_recovers",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::tls_recovery_http_tests::tls_decrypt_survives_plan_canonical_stream_and_next_request_recovers",
+          "status": "ok"
+        }
+      ]
+    },
+    {
+      "run": "20261128-113524-cli-8b5d1834",
+      "filter": "modules::codex_native_api::stream_recovery_cli_tests::",
+      "exitCode": 0,
+      "sourceStable": true,
+      "summary": "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 5795 filtered out; finished in 23.76s",
+      "tests": [
+        {
+          "name": "modules::codex_native_api::stream_recovery_cli_tests::actual_cli_zero_retries_accepts_two_response_ids_after_one_gateway_replay",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::stream_recovery_cli_tests::actual_cli_zero_retries_observes_terminal_network_budget_without_reposting",
+          "status": "ok"
+        }
+      ]
+    },
+    {
+      "run": "20261128-113622-run-9bdcec5e",
+      "filter": "modules::codex_native_api::bootstrap::tests::",
+      "exitCode": 0,
+      "sourceStable": true,
+      "summary": "test result: ok. 42 passed; 0 failed; 0 ignored; 0 measured; 5755 filtered out; finished in 109.16s",
+      "tests": [
+        {
+          "name": "modules::codex_native_api::bootstrap::tests::comments_or_partial_json_do_not_spend_the_response_id_hold_budget",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::bootstrap::tests::empty_incomplete_requires_explicit_zero_and_is_not_an_interrupt",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::bootstrap::tests::input_faults_win_over_capacity_and_quota_hints",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::bootstrap::tests::network_recovery_http_tests::network_recovery_auth_and_quota_do_not_arm_transport_budget",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::bootstrap::tests::network_recovery_http_tests::network_recovery_can_succeed_before_exhaustion",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::bootstrap::tests::network_recovery_http_tests::network_recovery_cancel_releases_global_and_account_slots",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::bootstrap::tests::network_recovery_http_tests::network_recovery_deadline_also_bounds_stalled_replacement_routing",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::bootstrap::tests::network_recovery_http_tests::network_recovery_deadline_interrupts_retry_waiting_for_headers",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::bootstrap::tests::network_recovery_http_tests::network_recovery_does_not_truncate_successful_long_stream",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::bootstrap::tests::network_recovery_http_tests::network_recovery_new_request_gets_a_fresh_budget",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::bootstrap::tests::network_recovery_http_tests::network_recovery_quota_response_clears_timer_before_slow_healthy_route",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::bootstrap::tests::network_recovery_http_tests::network_recovery_stops_45_candidates_at_shared_failure_cap",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::bootstrap::tests::network_recovery_http_tests::network_recovery_valid_auth_response_ends_previous_network_episode",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::bootstrap::tests::network_recovery_http_tests::network_recovery_window_is_not_a_healthy_first_attempt_deadline",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::bootstrap::tests::no_replay_after_output_or_handshake_limit",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::bootstrap::tests::nonofficial_pre_business_http_tests::nonofficial_http_late_quota_excludes_all_exhausted_accounts_beyond_credential_budget",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::bootstrap::tests::nonofficial_pre_business_http_tests::nonofficial_http_quota_recovery_for_oauth_and_api_key_long_history",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::bootstrap::tests::overload_http_tests::capacity_aliases_are_explicit_and_input_faults_take_precedence",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::bootstrap::tests::overload_http_tests::capacity_does_not_replay_execution_input_faults_long_retry_after_or_revoked_access",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::bootstrap::tests::overload_http_tests::capacity_exhaustion_keeps_error_and_never_restarts_budget_after_metadata",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::bootstrap::tests::overload_http_tests::capacity_recovery_window_bounds_a_stalled_retry_with_no_total_request_limit",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::bootstrap::tests::overload_http_tests::continuous_capacity_cancels_backoff_when_client_disconnects",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::bootstrap::tests::overload_http_tests::continuous_capacity_hides_rejections_and_counts_every_upstream_attempt",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::bootstrap::tests::overload_http_tests::continuous_capacity_recovers_after_responsesapi_and_subscription_usage_metadata",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::bootstrap::tests::overload_http_tests::continuous_capacity_recovers_chatgpt_plan_http_and_sse_overloads",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::bootstrap::tests::overload_http_tests::continuous_capacity_recovers_large_echoed_handshake_and_compact_requests",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::bootstrap::tests::overload_http_tests::continuous_capacity_reselects_the_same_owner_after_temporary_contention",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::bootstrap::tests::overload_http_tests::disconnect_during_capacity_backoff_stops_upstream_retries",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::bootstrap::tests::overload_http_tests::safety_tests::available_alternate_wins_before_capacity_fallback_for_http_and_sse",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::bootstrap::tests::overload_http_tests::safety_tests::configured_status_budget_is_retained_before_normal_failover",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::bootstrap::tests::overload_http_tests::safety_tests::execution_evidence_blocks_status_retries_and_account_failover",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::bootstrap::tests::overload_http_tests::safety_tests::http_503_with_executed_tool_never_replays",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::bootstrap::tests::overload_http_tests::safety_tests::response_configuration_and_tool_declarations_do_not_block_failover",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::bootstrap::tests::overload_http_tests::safety_tests::same_account_fallback_does_not_pin_a_later_available_alternate",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::bootstrap::tests::overload_http_tests::safety_tests::sse_execution_and_unknown_tool_state_disable_every_replay",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::bootstrap::tests::overload_http_tests::safety_tests::tool_started_on_capacity_retry_cannot_trigger_a_third_send",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::bootstrap::tests::overload_http_tests::shutdown_interrupts_capacity_backoff_without_another_send",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::bootstrap::tests::overload_http_tests::single_account_capacity_recovers_before_and_after_metadata_visibility",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::bootstrap::tests::published_created_retains_pre_business_recovery_after_visibility_budget",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::bootstrap::tests::same_account_status_budget_recovers_without_rotating_ids",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::bootstrap::tests::unlimited_credential_count_stops_when_pool_is_exhausted",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::bootstrap::tests::zero_tries_all_distinct_accounts_positive_limits_include_first_for_stream_and_json",
+          "status": "ok"
+        }
+      ]
+    },
+    {
+      "run": "20261128-113836-run-ff4f6e27",
+      "filter": "modules::codex_native_api::lifecycle::tests::",
+      "exitCode": 0,
+      "sourceStable": true,
+      "summary": "test result: ok. 26 passed; 0 failed; 0 ignored; 0 measured; 5771 filtered out; finished in 0.05s",
+      "tests": [
+        {
+          "name": "modules::codex_native_api::lifecycle::tests::failure_feedback_marker_is_scoped_to_one_dispatch_and_never_serialized",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::lifecycle::tests::native_lifecycle_cancelled_unsent_candidate_releases_permits_without_records",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::lifecycle::tests::native_lifecycle_conversion_failure_keeps_usage_tier_and_successful_upstream_attempt",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::lifecycle::tests::native_lifecycle_dispatch_evidence_does_not_depend_on_diagnostic_capture",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::lifecycle::tests::native_lifecycle_downstream_drop_cancels_only_successful_upstream_requests",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::lifecycle::tests::native_lifecycle_downstream_success_is_deferred_without_holding_inference_capacity",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::lifecycle::tests::native_lifecycle_first_connect_failure_can_retry_without_a_phantom_attempt",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::lifecycle::tests::native_lifecycle_first_connect_failure_then_termination_is_unrecorded",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::lifecycle::tests::native_lifecycle_first_dispatch_commits_only_the_selected_candidate",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::lifecycle::tests::native_lifecycle_local_fallback_and_handshake_do_not_create_attempts",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::lifecycle::tests::native_lifecycle_local_quota_checks_are_not_inference_dispatch",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::lifecycle::tests::native_lifecycle_new_turn_resets_upstream_dispatch_evidence",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::lifecycle::tests::native_lifecycle_quota_is_observed_before_completion_and_ignores_outgoing_headers",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::lifecycle::tests::native_lifecycle_real_429_survives_rejected_or_cancelled_next_candidate",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::lifecycle::tests::native_lifecycle_rebuild_abort_follows_attempt_failure_drop_and_success",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::lifecycle::tests::native_lifecycle_records_last_reasoning_configuration_update",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::lifecycle::tests::native_lifecycle_stop_settles_pending_adapter_without_waiting_for_guard_drop",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::lifecycle::tests::native_lifecycle_tracker_stack_state_stays_bounded",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::lifecycle::tests::native_lifecycle_transport_failure_records_sanitized_source_and_phase_with_usage",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::lifecycle::tests::native_lifecycle_unsent_connect_rollback_preserves_previous_real_429",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::lifecycle::tests::native_lifecycle_unsent_preparation_failures_have_no_upstream_outcome",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::lifecycle::tests::native_lifecycle_unsettled_adapter_has_a_bounded_deadline",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::lifecycle::tests::native_network_deadlines_retire_the_failed_pool_without_refreshing_credentials",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::lifecycle::tests::native_network_recovery_does_not_retire_pools_for_upstream_rejections_or_cancellation",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::lifecycle::tests::payload_formatting_is_lazy_without_room_for_capture",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::lifecycle::tests::quota_protection_fences_the_pending_candidate_without_committing_a_send",
+          "status": "ok"
+        }
+      ]
+    },
+    {
+      "run": "20261128-113843-run-f9b62897",
+      "filter": "modules::codex_native_api::response_wire::tests::",
+      "exitCode": 0,
+      "sourceStable": true,
+      "summary": "test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 5790 filtered out; finished in 0.02s",
+      "tests": [
+        {
+          "name": "modules::codex_native_api::response_wire::tests::explicit_parallel_false_survives_http_and_websocket",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::response_wire::tests::failure_uses_turn_identity_timestamp_and_sequence",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::response_wire::tests::private_events_are_filtered_for_each_client_without_losing_errors",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::response_wire::tests::queued_and_empty_frames_keep_recovery_but_generated_content_disarms_it",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::response_wire::tests::repairs_keep_sse_framing_and_do_not_rewrite_metadata",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::response_wire::tests::tool_search_ids_are_portable_collision_free_and_idempotent",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::response_wire::tests::transient_admission_codes_do_not_override_explicit_quota_errors",
+          "status": "ok"
+        }
+      ]
+    },
+    {
+      "run": "20261128-113849-run-996b68e5",
+      "filter": "modules::codex_native_api::tests::request_upload_http_tests::",
+      "exitCode": 101,
+      "sourceStable": true,
+      "summary": "test result: FAILED. 9 passed; 1 failed; 0 ignored; 0 measured; 5787 filtered out; finished in 20.96s",
+      "tests": [
+        {
+          "name": "modules::codex_native_api::tests::request_upload_http_tests::upload_http_cancel_drops_the_inflight_body_without_retry",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::tests::request_upload_http_tests::upload_http_early_headers_do_not_park_the_remaining_request_body",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::tests::request_upload_http_tests::upload_http_fast_body_does_not_buy_a_slow_response_header_budget",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::tests::request_upload_http_tests::upload_http_headers_end_opening_and_do_not_limit_successful_stream",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::tests::request_upload_http_tests::upload_http_only_validated_encoding_rejection_replays_plain_body",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::tests::request_upload_http_tests::upload_http_real_gateway_uses_progress_before_first_response",
+          "status": "FAILED"
+        },
+        {
+          "name": "modules::codex_native_api::tests::request_upload_http_tests::upload_http_real_slow_receiver_red_green_http1_and_http2",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::tests::request_upload_http_tests::upload_http_reqwest_timeout_and_redirect_policy_are_preserved",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::tests::request_upload_http_tests::upload_http_stalled_receiver_and_hard_cap_still_stop",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::tests::request_upload_http_tests::upload_http_total_and_existing_network_recovery_override_progress",
+          "status": "ok"
+        }
+      ]
+    },
+    {
+      "run": "20261128-113940-run-564be9ab",
+      "filter": "modules::codex_native_api::tests::request_upload_nack_tests::",
+      "exitCode": 0,
+      "sourceStable": true,
+      "summary": "test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 5793 filtered out; finished in 0.74s",
+      "tests": [
+        {
+          "name": "modules::codex_native_api::tests::request_upload_nack_tests::upload_nack_explicit_request_timeout_still_bounds_headers",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::tests::request_upload_nack_tests::upload_nack_refused_stream_and_goaway_preserve_reqwest_baseline",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::tests::request_upload_nack_tests::upload_nack_small_body_does_not_stack_an_extra_retry_budget",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::tests::request_upload_nack_tests::upload_nack_three_refusals_stop_and_other_failures_never_replay",
+          "status": "ok"
+        }
+      ]
+    },
+    {
+      "run": "20261128-113947-run-7bd8f137",
+      "filter": "modules::codex_native_api::http_compression::large_compression_tests::",
+      "exitCode": 0,
+      "sourceStable": true,
+      "summary": "test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 5790 filtered out; finished in 12.87s",
+      "tests": [
+        {
+          "name": "modules::codex_native_api::http_compression::large_compression_tests::cancelled_compression_waiter_drops_its_body_after_worker_completion",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::http_compression::large_compression_tests::duplicate_inline_images_keep_the_existing_compression_exclusion",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::http_compression::large_compression_tests::five_mebibyte_image_history_roundtrips_with_original_plain_fallback",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::http_compression::large_compression_tests::one_hundred_ten_mebibyte_image_history_roundtrips_with_original_plain_fallback",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::http_compression::large_compression_tests::small_missing_and_streaming_bodies_keep_their_original_content",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::http_compression::large_compression_tests::thirty_mebibyte_image_history_roundtrips_with_original_plain_fallback",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::http_compression::large_compression_tests::uncompressible_body_is_preserved_without_an_encoding_or_fallback",
+          "status": "ok"
+        }
+      ]
+    },
+    {
+      "run": "20261128-114024-run-e73df598",
+      "filter": "modules::codex_native_api::events::tests::",
+      "exitCode": 0,
+      "sourceStable": true,
+      "summary": "test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 5790 filtered out; finished in 0.01s",
+      "tests": [
+        {
+          "name": "modules::codex_native_api::events::tests::declared_failures_preserve_original_classification_and_native_wire_bytes",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::events::tests::done_event_requires_a_completed_response",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::events::tests::first_terminal_event_cannot_be_reversed_by_a_later_completion",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::events::tests::oversized_or_truncated_events_are_not_success",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::events::tests::retry_hints_preserve_nested_seconds_and_take_the_longest_delay",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::events::tests::split_crlf_events_preserve_unknown_response_fields",
+          "status": "ok"
+        },
+        {
+          "name": "modules::codex_native_api::events::tests::wrapped_rate_limit_exposes_status_and_retry_after",
+          "status": "ok"
+        }
+      ]
+    }
+  ],
+  "standaloneUpload": {
+    "run": "20261128-113317-run-30b6fd3d",
+    "passed": 1,
+    "failed": 0,
+    "note": "Same final artifact and original parameters; does not erase full-module failure."
+  },
+  "standaloneStackRegression": {
+    "run": "20261128-113301-run-a24abb06",
+    "passed": 1,
+    "failed": 0,
+    "note": "Already counted in bootstrap module; default thread stack."
+  },
+  "frontendGuard": {
+    "run": "20261128-112300-guard-4f509a4b",
+    "passed": 6,
+    "failed": 0,
+    "note": "Earlier run with unchanged guard source; no release EXE or WebView acceptance performed."
+  },
+  "limitations": [
+    "Not the full repository suite.",
+    "One existing upload test fails in the full module; see baseline comparison.",
+    "Synthetic loopback upstream; no claim of production account or video-task recovery."
+  ]
+}
