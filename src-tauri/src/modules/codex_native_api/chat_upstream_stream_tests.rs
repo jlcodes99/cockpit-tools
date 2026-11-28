@@ -12,6 +12,48 @@ fn tool_chunk(arguments: &str, custom: bool, reason: Option<&str>) -> Value {
     json!({"id":"reply","choices":[{"index":0,"delta":{"tool_calls":[call]},"finish_reason":reason}]})
 }
 
+#[test]
+fn streamed_gemini_thought_signature_survives_provider_extra_content() {
+    let signature = json!({"google":{"thought_signature":"opaque-signature"}});
+    let mut adapter = ResponsesStreamAdapter::new("gemini-3.5-flash-lite".into());
+    adapter
+        .push(
+            &json!({"id":"reply","choices":[{"index":0,"delta":{"tool_calls":[{
+                "index":0,"id":"call","type":"function",
+                "function":{"name":"lookup","arguments":"{}"},
+                "extra_content":signature
+            }]},"finish_reason":"tool_calls"}]}),
+        )
+        .unwrap();
+    let events = adapter.finish_done().unwrap();
+    let item = events
+        .iter()
+        .find(|event| event["type"] == "response.output_item.done")
+        .unwrap();
+    assert_eq!(item["item"]["extra_content"], signature);
+    assert_eq!(
+        events.last().unwrap()["response"]["output"][0]["extra_content"],
+        signature
+    );
+}
+
+#[test]
+fn streamed_gemini_thought_signature_survives_when_extra_content_arrives_later() {
+    let signature = json!({"google":{"thought_signature":"late-signature"}});
+    let mut adapter = ResponsesStreamAdapter::new("gemini-3.5-flash-lite".into());
+    adapter.push(&tool_chunk("{}", false, None)).unwrap();
+    adapter
+        .push(&json!({"choices":[{"index":0,"delta":{"tool_calls":[{
+            "index":0,"extra_content":signature
+        }]},"finish_reason":"tool_calls"}]}))
+        .unwrap();
+    let events = adapter.finish_done().unwrap();
+    assert_eq!(
+        events.last().unwrap()["response"]["output"][0]["extra_content"],
+        signature
+    );
+}
+
 fn close(adapter: &mut ResponsesStreamAdapter, done: bool) -> Result<Vec<Value>, ServiceError> {
     if done {
         adapter.finish_done()

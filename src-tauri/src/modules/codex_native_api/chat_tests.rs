@@ -55,6 +55,59 @@ fn deepseek_chat_replays_reasoning_with_the_tool_call_on_the_next_turn() {
     assert_eq!(messages[2]["tool_call_id"], "read-1");
 }
 
+#[test]
+fn gemini_thought_signature_survives_nonstream_response_and_history_replay() {
+    let signature = json!({"google":{"thought_signature":"opaque-signature"}});
+    let upstream = json!({
+        "id":"gemini-response",
+        "choices":[{"message":{"role":"assistant","tool_calls":[{
+            "id":"call-1",
+            "type":"function",
+            "function":{"name":"exec_command","arguments":r#"{"cmd":"git status"}"#},
+            "extra_content":signature
+        }]},"finish_reason":"tool_calls"}]
+    });
+    let response = chat_upstream::chat_to_response(&upstream, "gemini-3.5-flash-lite").unwrap();
+    assert_eq!(response["output"][0]["extra_content"], signature);
+    let next_request = json!({"input":[
+        {"role":"user","content":"Check the working tree."},
+        response["output"][0],
+        {"type":"function_call_output","call_id":"call-1","output":"clean"}
+    ]});
+    let wire = chat_upstream::responses_to_chat(&next_request).unwrap();
+    assert_eq!(
+        wire["messages"][1]["tool_calls"][0]["extra_content"],
+        signature
+    );
+}
+
+#[test]
+fn gemini_parallel_tool_signatures_stay_on_their_original_calls() {
+    let signature = json!({"google":{"thought_signature":"first-call-signature"}});
+    let upstream = json!({
+        "choices":[{"message":{"role":"assistant","tool_calls":[
+            {"id":"call-1","type":"function","function":{"name":"first","arguments":"{}"},"extra_content":signature},
+            {"id":"call-2","type":"function","function":{"name":"second","arguments":"{}"}}
+        ]},"finish_reason":"tool_calls"}]
+    });
+    let response = chat_upstream::chat_to_response(&upstream, "gemini-3.5-flash-lite").unwrap();
+    let next_request = json!({"input":[
+        {"role":"user","content":"Run both tools."},
+        response["output"][0],
+        response["output"][1],
+        {"type":"function_call_output","call_id":"call-1","output":"first done"},
+        {"type":"function_call_output","call_id":"call-2","output":"second done"}
+    ]});
+    let wire = chat_upstream::responses_to_chat(&next_request).unwrap();
+    assert_eq!(
+        wire["messages"][1]["tool_calls"][0]["extra_content"],
+        signature
+    );
+    assert!(wire["messages"][1]["tool_calls"][1]
+        .get("extra_content")
+        .is_none());
+}
+
 use crate::modules::codex_native_api::chat_upstream::{self, ResponsesStreamAdapter};
 use serde_json::json;
 fn ctx() -> ChatContext {

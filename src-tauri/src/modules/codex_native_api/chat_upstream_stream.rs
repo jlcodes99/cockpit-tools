@@ -7,6 +7,7 @@ struct Tool {
     id: String,
     name: String,
     args: String,
+    extra_content: Option<Value>,
     custom: bool,
     wrapped: bool,
     wire_args: String,
@@ -141,6 +142,9 @@ impl ResponsesStreamAdapter {
             .unwrap_or("");
         let tool = self.tools.get_mut(&index).unwrap();
         tool.custom |= custom;
+        if let Some(extra_content) = call.get("extra_content") {
+            tool.extra_content = Some(extra_content.clone());
+        }
         if let Some(id) = call["id"].as_str().filter(|s| !s.is_empty()) {
             if tool.id.is_empty() {
                 tool.id = id.to_string();
@@ -172,6 +176,9 @@ impl ResponsesStreamAdapter {
             && !self.context.pending_name(&tool.name)
         {
             let mut item = json!({"id":format!("fc_{}",uuid::Uuid::now_v7()),"type":if tool.custom{"custom_tool_call"}else{"function_call"},"status":"in_progress","call_id":tool.id,"name":tool.name});
+            if let Some(extra_content) = &tool.extra_content {
+                item["extra_content"] = extra_content.clone();
+            }
             self.context.restore_item(&mut item);
             item[if tool.custom { "input" } else { "arguments" }] = json!("");
             self.output[tool.output] = item.clone();
@@ -189,6 +196,9 @@ impl ResponsesStreamAdapter {
             self.output[tool.output]["name"] = json!(self.context.identity(&tool.name).0);
             self.output[tool.output][if tool.custom { "input" } else { "arguments" }] =
                 json!(tool.args);
+            if let Some(extra_content) = &tool.extra_content {
+                self.output[tool.output]["extra_content"] = extra_content.clone();
+            }
         }
         for event in raw {
             events.push(self.event(event));
